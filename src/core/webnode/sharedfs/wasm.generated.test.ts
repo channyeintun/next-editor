@@ -134,6 +134,8 @@ describe("the contract in Rust and in TypeScript", () => {
       len: OFFSET.len,
       aux: OFFSET.aux,
       events_dropped: OFFSET.eventsDropped,
+      privileged: OFFSET.privileged,
+      umask: OFFSET.umask,
       stat: OFFSET.stat,
       args: OFFSET.args,
     });

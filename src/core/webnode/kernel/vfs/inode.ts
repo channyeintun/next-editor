@@ -1,13 +1,16 @@
 // The filesystem's nodes (regular files, directories, symbolic links), how a
 // node reports itself to `stat`, and the byte-level edits of a file's data.
 // Nothing here knows about paths, times policy or watchers.
-import { S_IFDIR, S_IFLNK, S_IFREG, type StatData } from "./types";
+import { GID, UID } from "../../process/platform";
+import { ROOT_ID, S_IFDIR, S_IFLNK, S_IFREG, type StatData } from "./types";
 
 /** Fields every node has. `parent`/`name` locate its primary link; null once detached. */
 export interface InodeBase {
   ino: number;
   /** Permission bits only (`0o7777`); the type bits come from `kind`. */
   perm: number;
+  /** Root's rather than the user's (`VfsApi.giveToRoot`). */
+  rootOwned: boolean;
   nlink: number;
   atimeMs: number;
   mtimeMs: number;
@@ -44,8 +47,6 @@ export const EMPTY_BYTES = new Uint8Array(0);
 export const MAX_FILE_SIZE = 2 ** 32;
 
 const DEV = 1;
-const UID = 1;
-const GID = 1;
 const BLKSIZE = 4096;
 const DIR_SIZE = 4096;
 
@@ -68,8 +69,8 @@ export function statOf(node: Inode): StatData {
     ino: node.ino,
     mode,
     nlink: node.nlink,
-    uid: UID,
-    gid: GID,
+    uid: node.rootOwned ? ROOT_ID : UID,
+    gid: node.rootOwned ? ROOT_ID : GID,
     rdev: 0,
     size,
     blksize: BLKSIZE,
@@ -128,7 +129,8 @@ function reserve(file: FileNode, needed: number): void {
   file.data = next;
 }
 
-function utf8Length(text: string): number {
+/** How many bytes `text` takes as UTF-8 (a lone surrogate as three, as TextEncoder writes it). */
+export function utf8Length(text: string): number {
   let length = 0;
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
@@ -136,7 +138,7 @@ function utf8Length(text: string): number {
       length += 1;
     } else if (code < 0x800) {
       length += 2;
-    } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
+    } else if (code >= 0xd800 && code <= 0xdbff && isLowSurrogate(text.charCodeAt(i + 1))) {
       length += 4;
       i++;
     } else {
@@ -144,4 +146,8 @@ function utf8Length(text: string): number {
     }
   }
   return length;
+}
+
+function isLowSurrogate(code: number): boolean {
+  return code >= 0xdc00 && code <= 0xdfff;
 }

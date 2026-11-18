@@ -16,6 +16,14 @@
 //!   a directory, the same events in the order of the names.
 //!
 //! A failed call may read the clock; nothing else of it shows.
+//!
+//! The permission checks are part of it: modes are random, some stretches run
+//! unchecked as the kernel's own calls do, and every fourth sequence starts
+//! with an `rm -r` that removes part of a tree and is then refused, which
+//! must come out the same however little memory there is. Masks are random
+//! too: stretches run as a caller whose file mode creation mask takes bits,
+//! the owner's among them, off what the calls create. With `COUNTS` set the
+//! test prints how often each of these happened.
 use super::*;
 use crate::abi::Errno;
 use std::cell::Cell;
@@ -90,13 +98,27 @@ enum Op {
     Copy(String, String, u32),
     Truncate(String, f64),
     Mkdtemp(String),
-    Chmod(String),
+    Chmod(String, u32),
     Utimes(String),
     ReadFile(String),
     Readdir(String),
     Realpath(String),
     ClearEvents,
+    /// Turns the permission checks on or off for the calls that follow.
+    Checking(bool),
+    /// Sets the file mode creation mask of the calls that follow.
+    Umask(u32),
 }
+
+/// What a random `Umask` sets: usual masks, and ones that take the owner's
+/// own bits off what is created.
+const UMASKS: [u32; 8] = [0o077, 0o027, 0, 0o022, 0o277, 0o300, 0o777, 0o002];
+
+/// What a random `chmod` sets: half of them take away reading, writing or
+/// searching.
+const CHMOD_MODES: [u32; 10] = [
+    0o600, 0o500, 0o300, 0o000, 0o700, 0o755, 0o400, 0o100, 0o755, 0o700,
+];
 
 struct Rng(u64);
 impl Rng {
@@ -136,7 +158,7 @@ fn op(r: &mut Rng) -> Op {
     ];
     let len = [0usize, 1, 3, 17, 100, 5000][r.below(6) as usize];
     let pos = [f64::NAN, 0.0, 2.0, 50.0, 9000.0][r.below(5) as usize];
-    match r.below(23) {
+    match r.below(30) {
         0 | 1 | 2 => Op::WriteFile(path(r), flags[r.below(6) as usize], len),
         3 | 4 => Op::Open(path(r), flags[r.below(6) as usize]),
         5 | 6 => Op::HWrite(r.below(4) as u32, len, pos),
@@ -154,14 +176,20 @@ fn op(r: &mut Rng) -> Op {
         19 => Op::Truncate(path(r), [0.0, 2.0, 8000.0][r.below(3) as usize]),
         20 => Op::Mkdtemp(path(r)),
         21 => [
-            Op::Chmod(path(r)),
             Op::Utimes(path(r)),
             Op::ReadFile(path(r)),
             Op::Readdir(path(r)),
             Op::Realpath(path(r)),
-        ][r.below(5) as usize]
+        ][r.below(4) as usize]
             .clone(),
-        _ => Op::ClearEvents,
+        22 => Op::ClearEvents,
+        23 | 24 | 25 | 26 => Op::Chmod(
+            path(r),
+            CHMOD_MODES[r.below(CHMOD_MODES.len() as u64) as usize],
+        ),
+        27 => Op::Checking(r.below(3) != 0),
+        28 => Op::Umask(UMASKS[r.below(UMASKS.len() as u64) as usize]),
+        _ => Op::Rm(path(r), true, r.below(2) == 0),
     }
 }
 
@@ -197,8 +225,8 @@ fn run(fs: &mut F, o: &Op, i: usize) -> core::result::Result<String, Failure> {
         Op::Copy(a, b, m) => format!("{:?}", fs.copy_file(a.as_bytes(), b.as_bytes(), *m)?),
         Op::Truncate(p, n) => format!("{:?}", fs.truncate(p.as_bytes(), *n)?),
         Op::Mkdtemp(p) => format!("{:?}", fs.mkdtemp(p.as_bytes())?),
-        Op::Chmod(p) => format!("{:?}", fs.chmod(p.as_bytes(), 0o600, true)?),
-        Op::Utimes(p) => format!("{:?}", fs.utimes(p.as_bytes(), 5.0, 6.0, true)?),
+        Op::Chmod(p, mode) => format!("{:?}", fs.chmod(p.as_bytes(), *mode, true)?),
+        Op::Utimes(p) => format!("{:?}", fs.utimes(p.as_bytes(), Some(5.0), Some(6.0), true)?),
         Op::ReadFile(p) => format!("{:?}", fs.read_file(p.as_bytes())?),
         Op::Readdir(p) => {
             let (l, n) = fs.readdir(p.as_bytes())?;
@@ -207,6 +235,14 @@ fn run(fs: &mut F, o: &Op, i: usize) -> core::result::Result<String, Failure> {
         Op::Realpath(p) => format!("{:?}", fs.realpath(p.as_bytes())?.to_vec()),
         Op::ClearEvents => {
             fs.clear_events();
+            String::new()
+        }
+        Op::Checking(on) => {
+            fs.checking = *on;
+            String::new()
+        }
+        Op::Umask(mask) => {
+            fs.umask = *mask;
             String::new()
         }
     })
@@ -383,6 +419,13 @@ fn running_out_at_any_point_of_random_operations_changes_nothing() {
     let mut fails: Map<String, (usize, String)> = Map::new();
     let mut enospc_ok = 0usize;
     let mut success_ok = 0usize;
+    // Calls the permissions refused, calls made unchecked, and refused
+    // `rm -r` calls that had removed something first (with memory to spare).
+    let mut refused = 0usize;
+    let mut unchecked = 0usize;
+    let mut partial_removals = 0usize;
+    // Calls that made something under a mask other than the default.
+    let mut masked = 0usize;
     for seed in 1..=seeds {
         let mut r = Rng(seed.wrapping_mul(0x9E3779B97F4A7C15) | 1);
         // A seeded prefix that makes a populated tree.
@@ -395,18 +438,47 @@ fn running_out_at_any_point_of_random_operations_changes_nothing() {
             Op::Open("/a".into(), O_RDWR),
             Op::Open("/d/b".into(), O_RDWR | O_APPEND),
             Op::Unlink("/d/b".into()),
+            // A tree `rm -r /d` removes part of: `a` goes, then `e`, which
+            // comes after it, may not be emptied.
+            Op::WriteFile("/d/a".into(), O_WRONLY | O_CREAT | O_TRUNC, 1),
+            Op::WriteFile("/d/e/a".into(), O_WRONLY | O_CREAT | O_TRUNC, 1),
+            Op::Chmod("/d/e".into(), 0o555),
         ];
+        // Every third sequence runs under a mask from its start.
+        if seed % 3 == 0 {
+            ops.push(Op::Umask(UMASKS[(seed / 3) as usize % UMASKS.len()]));
+        }
+        let prefix = ops.len();
+        if seed % 4 == 1 {
+            ops.push(Op::Rm("/d".into(), true, seed % 8 == 1));
+        }
         for _ in 0..len {
             ops.push(op(&mut r));
         }
-        for i in 8..ops.len() {
+        for i in prefix..ops.len() {
             // How many questions does this op ask with unlimited space?
             let (mut fs, b, _) = replay(&ops[..i]);
             fs.trim_scratch();
+            let entries_before = snap(&fs).tree.len();
+            if !fs.checking {
+                unchecked += 1;
+            }
             b.asked.set(0);
             let reference = run(&mut fs, &ops[i], i);
             let ref_snap = snap(&fs);
+            if fs.umask != DEFAULT_UMASK
+                && reference.is_ok()
+                && ref_snap.tree.len() > entries_before
+            {
+                masked += 1;
+            }
             let asked = b.asked.get();
+            if matches!(&reference, Err(f) if f.errno == Errno::Eacces) {
+                refused += 1;
+                if matches!(ops[i], Op::Rm(_, true, _)) && ref_snap.tree.len() < entries_before {
+                    partial_removals += 1;
+                }
+            }
             let single = std::env::var("SINGLE").is_ok();
             for k in 0..=asked {
                 let (mut fs, b, _) = replay(&ops[..i]);
@@ -508,6 +580,20 @@ fn running_out_at_any_point_of_random_operations_changes_nothing() {
         enospc_ok > 100 && success_ok > 1000,
         "enospc_ok={enospc_ok} success_ok={success_ok}"
     );
+    // And the permissions were part of it: calls refused, calls unchecked, and
+    // at least the removal every fourth sequence starts with.
+    assert!(
+        refused > 100 && unchecked > 100 && partial_removals as u64 >= (seeds + 3) / 4,
+        "refused={refused} unchecked={unchecked} partial_removals={partial_removals}"
+    );
+    // And so were the masks.
+    assert!(masked > 50, "masked={masked}");
+    if std::env::var("COUNTS").is_ok() {
+        std::eprintln!(
+            "enospc_ok={enospc_ok} success_ok={success_ok} refused={refused} \
+             unchecked={unchecked} partial_removals={partial_removals} masked={masked}"
+        );
+    }
 }
 
 fn put(fs: &mut F, p: &str, n: usize, flags: u32) -> Result<()> {

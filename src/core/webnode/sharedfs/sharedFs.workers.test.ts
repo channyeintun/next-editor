@@ -78,6 +78,60 @@ import(workerData.url).then(({ SharedFs }) => {
     return;
   }
 
+  if (role === "page") {
+    // The page's calls, as the kernel makes them for it: unchecked.
+    const page = fs.privileged;
+    let calls = 0;
+    const failures = [];
+    const made = (call) => {
+      calls++;
+      try {
+        return call();
+      } catch (error) {
+        failures.push(String(error?.message ?? error));
+        return undefined;
+      }
+    };
+    while (!stopped()) {
+      const secret = made(() => decoder.decode(page.readFile("/locked/secret")));
+      if (secret !== undefined && secret !== "page") failures.push("read " + secret);
+      made(() => page.writeFile("/locked/secret", encoder.encode("page"), ${WRITE}, 0));
+      made(() => page.writeFile("/locked/ro/in", encoder.encode("page"), ${WRITE}, 0o644));
+      made(() => page.readdir("/locked/ro"));
+      tick();
+    }
+    parentPort.postMessage({ calls, failures: failures.slice(0, 5), failed: failures.length });
+    return;
+  }
+
+  if (role === "intruder") {
+    // A process's calls on what its permissions close: each must be refused.
+    let refused = 0;
+    const leaks = [];
+    const attempt = (what, call) => {
+      try {
+        call();
+        leaks.push(what + " went through");
+      } catch (error) {
+        if (error?.code === "EACCES") refused++;
+        else leaks.push(what + ": " + String(error?.message ?? error));
+      }
+    };
+    for (let n = 0; !stopped(); n++) {
+      attempt("readFile", () => fs.readFile("/locked/secret"));
+      attempt("writeFile", () =>
+        fs.writeFile("/locked/secret", encoder.encode("process"), ${WRITE}, 0o644));
+      attempt("create", () =>
+        fs.writeFile("/locked/ro/stolen" + index, encoder.encode("process"), ${WRITE}, 0o644));
+      attempt("unlink", () => fs.unlink("/locked/ro/in"));
+      attempt("rename", () => fs.rename("/locked/ro/in", "/locked/ro/moved" + index));
+      attempt("readdir", () => fs.readdir("/locked/closed"));
+      tick();
+    }
+    parentPort.postMessage({ refused, leaks: leaks.slice(0, 5), leaked: leaks.length });
+    return;
+  }
+
   if (role === "spinner") {
     let announced = false;
     for (let i = 0; ; i++) {
@@ -159,14 +213,18 @@ function startRun(): Run {
   };
 }
 
-/** A worker running WORKER_SOURCE, and its first message (or its failure). */
+/**
+ * A worker running WORKER_SOURCE, and its first message (or its failure). The
+ * kernel and the page call through an instance without a slot, as the
+ * kernel's own; every other role is a process, admitted to one.
+ */
 function spawn(
   run: Run,
-  role: "hammer" | "kernel" | "spinner",
+  role: "hammer" | "kernel" | "spinner" | "page" | "intruder",
   index: number,
   options: { churn?: boolean } = {},
 ): { worker: Worker; slot: number; message: Promise<unknown> } {
-  const entry = role === "kernel" ? undefined : run.shared.admit();
+  const entry = role === "kernel" || role === "page" ? undefined : run.shared.admit();
   if (entry === null) {
     throw new Error("no free slot");
   }
@@ -296,6 +354,62 @@ describe("SharedFs across worker threads", () => {
       Atomics.store(run.stop, 0, 1);
       Atomics.store(run.stop, 1, 1);
       await Promise.all([...hammers, kernel].map(({ worker }) => worker.terminate()));
+    }
+  }, 60_000);
+
+  it("checks every call of a process while the page's go unchecked beside it", async () => {
+    // Whose call it is, is said in the shared block: said outside the lock,
+    // another worker's word would decide, and a process would get through
+    // what is closed to it while the page was refused.
+    const run = startRun();
+    const page = run.shared.fs.privileged;
+    const put = (path: string, mode: number) =>
+      page.writeFile(path, new TextEncoder().encode("page"), WRITE, mode);
+    page.mkdir("/locked/ro", true, 0o755);
+    page.mkdir("/locked/closed", false, 0o755);
+    put("/locked/secret", 0);
+    put("/locked/ro/in", 0o644);
+    page.chmod("/locked/ro", 0o555, true);
+    page.chmod("/locked/closed", 0o300, true);
+    const pages = [spawn(run, "page", 1), spawn(run, "page", 2)];
+    const intruders = [3, 4, 5].map((index) => spawn(run, "intruder", index));
+    try {
+      await expectProgress(run, [1, 2, 3, 4, 5], "before the calls met");
+      await sleep(1500);
+      await expectProgress(run, [1, 2, 3, 4, 5], "while the calls met");
+      Atomics.store(run.stop, 0, 1);
+      const reports = await watchdog(
+        Promise.all([...pages, ...intruders].map(({ message }) => message)),
+        30_000,
+        "the pages and the processes",
+      );
+      const pageReports = reports.slice(0, pages.length) as {
+        calls: number;
+        failed: number;
+        failures: string[];
+      }[];
+      const intruderReports = reports.slice(pages.length) as {
+        refused: number;
+        leaked: number;
+        leaks: string[];
+      }[];
+      for (const report of intruderReports) {
+        expect(report.leaks).toEqual([]);
+        expect(report.leaked).toBe(0);
+        expect(report.refused).toBeGreaterThan(1000);
+      }
+      for (const report of pageReports) {
+        expect(report.failures).toEqual([]);
+        expect(report.failed).toBe(0);
+        expect(report.calls).toBeGreaterThan(1000);
+      }
+      expect(lockWord(run)).toBe(0);
+      expect(run.shared.fs.check()).toBe(0);
+      expect(new TextDecoder().decode(page.readFile("/locked/secret"))).toBe("page");
+      expect(page.readdir("/locked/ro").map((entry) => entry.name)).toEqual(["in"]);
+    } finally {
+      Atomics.store(run.stop, 0, 1);
+      await Promise.all([...pages, ...intruders].map(({ worker }) => worker.terminate()));
     }
   }, 60_000);
 

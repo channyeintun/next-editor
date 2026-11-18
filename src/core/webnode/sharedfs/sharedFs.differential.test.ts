@@ -8,6 +8,21 @@
 // It runs twice: on the kernel's instance, and the way a process works
 // (processBackend.ts): paths on an instance of its own in a slot, open files
 // and watches on the kernel's, which is told when events were left for it.
+//
+// Modes are random too, so the permission checks refuse many calls: every
+// EACCES must be the same on both. What a step took bits away from is asked
+// for again and again afterwards, itself and what it holds, so that each
+// check is the one thing that decides some call. Some steps are made through
+// the `privileged` view (the page's, unchecked), which also opens up what
+// earlier modes closed; the trees are compared through it.
+//
+// Some nodes are given to root (`giveToRoot`), mostly through the unchecked
+// view, so that what the others' bits allow and the owner alone may do
+// (chmod, utimes) is compared on them too.
+//
+// Masks are random as well: many steps are made as a caller with a file mode
+// creation mask of its own (`withUmask`), so that what each side creates under
+// it, and what its bits then refuse, is compared too.
 import { isDeepStrictEqual } from "node:util";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SystemError } from "../errors";
@@ -22,6 +37,7 @@ import {
   O_TRUNC,
   O_WRONLY,
   type OpenFile,
+  type PermissionedVfs,
   type VfsApi,
 } from "../kernel/vfs/types";
 import { Vfs } from "../kernel/vfs/vfs";
@@ -64,23 +80,66 @@ class Random {
   }
 }
 
-// Astral (😀) and high-BMP (ｱ) names sort differently as UTF-8 bytes than as
-// JavaScript strings, which the binding must hide.
+// Astral (😀) and high-BMP (ｱ) names sort differently as UTF-8 bytes (and by
+// code point) than as JavaScript strings: both filesystems list and remove by
+// code point.
 const NAMES = ["a", "b", "c", "a", "b", "é", "😀", "ｱ"];
 const SPECIAL_COMPONENTS = [".", "..", ""];
 
 const MODES = [0o777, 0o644, 0o700, 0o755, 0o4755, -1, NaN, 1.5, 2 ** 40 + 0o755, 0o20000000000];
-const CHMOD_MODES = [0o600, 0o755, 0o7777, 0, -1, NaN, 2 ** 33 + 5, 1.9];
+const CHMOD_MODES = [
+  0o600,
+  0o755,
+  0o7777,
+  0,
+  -1,
+  NaN,
+  2 ** 33 + 5,
+  1.9,
+  0o555,
+  0o311,
+  0o644,
+  0o444,
+  0o222,
+];
+/**
+ * Modes that take reading, writing or searching away, one or two at a time:
+ * a directory that can be searched but not changed, changed but not listed,
+ * and so on. What a step sets one of these on is remembered (`Paths.closed`).
+ */
+const CLOSING_MODES = [0o555, 0o555, 0o500, 0o311, 0o300, 0o444, 0o400, 0o100, 0o666, 0o222, 0];
+/** What a privileged chmod sets, to open up what the random modes closed. */
+const OPEN_MODES = [0o755, 0o777, 0o700];
+/**
+ * Masks a step is made under: usual ones, ones that take the owner's own
+ * bits off what is created, and numbers that are no mask, of which both
+ * sides must keep the same permission bits.
+ */
+const UMASKS = [
+  0o077,
+  0o027,
+  0o002,
+  0,
+  0o022,
+  0o277,
+  0o300,
+  0o111,
+  0o777,
+  0o7022,
+  -1,
+  NaN,
+  1.5,
+  2 ** 32 + 0o077,
+];
 const TIMES = [0, -5, 1.5, NaN, Infinity, -Infinity, 1e15, -0];
+/** A path's times may also be null (now), which needs only write permission when both are. */
+const PATH_TIMES = [...TIMES, null, null, null, null, null, null];
 const LENGTHS = [-1, NaN, 1.5, 0, 1, 3, 7, 100, 2 ** 32 + 1, Infinity, -Infinity];
 const TRUNCATE_LENGTHS = [-1, NaN, Infinity, 0, 1, 2.7, 5, 1000, 2 ** 32 + 1];
 const READ_POSITIONS = [null, null, 0, 1, 2, 1.5, -1, -3, NaN, 1000, Infinity, -Infinity];
 /** Positions vfs.ts handles as defined behaviour; others are below (NEGATIVE_POSITIONS). */
 const WRITE_POSITIONS = [null, null, null, 0, 1, 3, 7, 40, 2 ** 32, 2 ** 33, Infinity];
-/**
- * vfs.ts throws a RangeError for these (Node rejects them before), the module
- * EINVAL: only that both throw, and leave the same tree, is compared.
- */
+/** Node rejects these before they reach a filesystem; both refuse them with EINVAL. */
 const NEGATIVE_POSITIONS = [-1, -4];
 const ACCESS_MODES = [0, 1, 2, 4, 7, -1, NaN];
 const COPY_MODES = [0, 1, 3, -1, 2];
@@ -93,6 +152,8 @@ interface Paths {
   file: string[];
   dir: string[];
   link: string[];
+  /** Those a step set a closing mode on. */
+  closed: string[];
 }
 
 type Made = "file" | "dir" | "link";
@@ -103,6 +164,11 @@ type Made = "file" | "dir" | "link";
  * otherwise a new one, remembered.
  */
 function pickPath(random: Random, paths: Paths, kind?: Made): string {
+  if (paths.closed.length > 0 && random.chance(15)) {
+    // What the permission checks decide: something closed, or an entry of it.
+    const closed = random.pick(paths.closed);
+    return random.chance(35) ? closed : `${closed === "/" ? "" : closed}/${random.pick(NAMES)}`;
+  }
   if (kind !== undefined && paths[kind].length > 0 && random.chance(60)) {
     return random.pick(paths[kind]);
   }
@@ -181,21 +247,81 @@ function pickData(random: Random): string {
 interface Step {
   op: string;
   args: (string | number | boolean | null)[];
+  /** Made through the unchecked view, as the page's requests are. */
+  privileged?: boolean;
+  /** Made as a caller with this file mode creation mask (`withUmask`). */
+  umask?: number;
 }
 
+/** The operations that can make a file or a directory, whose mode a mask cuts. */
+const CREATING = ["writeFile", "mkdir", "mkdtemp", "open"];
+
 function pickStep(random: Random, paths: Paths): Step {
+  const step = pickCheckedStep(random, paths);
+  // A path call made as the page makes it; the descriptor and watch calls stay
+  // checked (the page opens no descriptors).
+  if (!step.op.startsWith("file.") && step.op !== "unwatch" && random.chance(12)) {
+    step.privileged = true;
+  }
+  // Under a mask: the calls that create mostly, any other now and then (a
+  // mask changes nothing of theirs), a privileged one too (it keeps the
+  // default mask).
+  if (random.chance(CREATING.includes(step.op) ? 45 : 5)) {
+    step.umask = random.pick(UMASKS);
+  }
+  if (random.chance(4)) {
+    return {
+      op: "chmod",
+      args: [pickPath(random, paths), random.pick(OPEN_MODES), true],
+      privileged: true,
+    };
+  }
+  if (random.chance(3)) {
+    return { op: "giveToRoot", args: [pickPath(random, paths)], privileged: random.chance(70) };
+  }
+  return step;
+}
+
+function pickCheckedStep(random: Random, paths: Paths): Step {
   const path = (kind?: Made) => pickPath(random, paths, kind);
   const made = (kind: Made) => pickNew(random, paths, kind);
-  const roll = random.int(100);
+  /** The second path of a two-path step: now and then the first again. */
+  const other = (first: string, pick: () => string) => (random.chance(8) ? first : pick());
   const step = (op: string, ...args: Step["args"]): Step => ({ op, args });
+  const closing = random.int(100);
+  if (closing < 6) {
+    const closed = path();
+    paths.closed.push(closed);
+    return step("chmod", closed, random.pick(CLOSING_MODES), true);
+  }
+  if (closing < 9) {
+    return step("rm", path(random.chance(60) ? "dir" : undefined), true, random.chance(50));
+  }
+  const roll = random.int(100);
   if (roll < 9) {
     const flags = random.chance(70) ? random.pick(WRITE_FLAGS) : pickFlags(random);
     return step("writeFile", made("file"), pickData(random), flags, random.pick(MODES));
   }
-  if (roll < 17) return step("mkdir", made("dir"), random.chance(50), random.pick(MODES));
+  if (roll < 17) {
+    const dir = made("dir");
+    // Now and then with a floor: the text up to one of its slashes.
+    const slashes = [...dir.matchAll(/\//g)].map((match) => match.index);
+    const floor = random.chance(30) ? dir.slice(0, random.pick(slashes) + 1) : null;
+    return step("mkdir", dir, random.chance(50), random.pick(MODES), floor);
+  }
   if (roll < 23) return step("symlink", pickTarget(random, paths), made("link"));
-  if (roll < 29) return step("rename", path(), path());
-  if (roll < 32) return step("link", path("file"), made("file"));
+  if (roll < 29) {
+    const from = path();
+    return step("rename", from, other(from, path));
+  }
+  if (roll < 32) {
+    const existing = path("file");
+    return step(
+      "link",
+      existing,
+      other(existing, () => made("file")),
+    );
+  }
   if (roll < 36) return step("stat", path(), random.chance(50));
   if (roll < 38) return step("exists", path());
   if (roll < 41) return step("readdir", path("dir"));
@@ -206,10 +332,20 @@ function pickStep(random: Random, paths: Paths): Step {
   if (roll < 53) return step("realpath", path());
   if (roll < 55) return step("chmod", path(), random.pick(CHMOD_MODES), random.chance(50));
   if (roll < 57) {
-    return step("utimes", path(), random.pick(TIMES), random.pick(TIMES), random.chance(50));
+    return step(
+      "utimes",
+      path(),
+      random.pick(PATH_TIMES),
+      random.pick(PATH_TIMES),
+      random.chance(50),
+    );
   }
   if (roll < 59) return step("truncate", path("file"), random.pick(TRUNCATE_LENGTHS));
-  if (roll < 61) return step("copyFile", path("file"), made("file"), random.pick(COPY_MODES));
+  if (roll < 61) {
+    const source = path("file");
+    const destination = other(source, () => made("file"));
+    return step("copyFile", source, destination, random.pick(COPY_MODES));
+  }
   if (roll < 62) return step("access", path(), random.pick(ACCESS_MODES));
   if (roll < 64) return step("mkdtemp", path("dir"), random.int(2 ** 30));
   if (roll < 67) return step("readFile", path("file"));
@@ -233,7 +369,7 @@ function pickStep(random: Random, paths: Paths): Step {
 
 /** One filesystem under test, with its clock and what its watches saw. */
 interface Side {
-  fs: VfsApi & { totals(): { inodes: number; bytes: number } };
+  fs: PermissionedVfs & { totals(): { inodes: number; bytes: number } };
   clock: { reads: number };
   files: OpenFile[];
   stops: (() => void)[];
@@ -246,8 +382,11 @@ interface Pair {
   sharedFs: SharedFs;
 }
 
-/** How often each operation succeeded and failed on both sides, over the whole run. */
-const outcomes = new Map<string, { ok: number; failed: number }>();
+/**
+ * How often each operation succeeded, failed, and was refused (EACCES) on
+ * both sides, and how often it succeeded under a mask of its own.
+ */
+const outcomes = new Map<string, { ok: number; failed: number; refused: number; masked: number }>();
 
 /** What `crypto.getRandomValues` gives mkdtemp: two values, so names collide often. */
 let mkdtempRandom = new Random(1);
@@ -278,6 +417,15 @@ function processView(booted: SharedFilesystem, now: () => number): Side["fs"] {
     get(target, key) {
       if (key === "open" || key === "watch") {
         return Reflect.get(kernel, key).bind(kernel);
+      }
+      // A process has no unchecked calls: the page's go to the kernel.
+      if (key === "privileged") {
+        return kernel.privileged;
+      }
+      // The kernel opens a process's files under the process's mask.
+      if (key === "withUmask") {
+        return <T>(umask: number, create: () => T): T =>
+          target.withUmask(umask, () => kernel.withUmask(umask, create));
       }
       const member: unknown = Reflect.get(target, key);
       if (typeof member !== "function") {
@@ -320,7 +468,13 @@ function makePair(caller: Caller): Pair {
 
 /** Runs one step on one side and returns what it gave: a value, or what it threw. */
 function apply(side: Side, step: Step, watchId: number): unknown {
-  const fs = side.fs;
+  return step.umask === undefined
+    ? applyCall(side, step, watchId)
+    : side.fs.withUmask(step.umask, () => applyCall(side, step, watchId));
+}
+
+function applyCall(side: Side, step: Step, watchId: number): unknown {
+  const fs = step.privileged === true ? side.fs.privileged : side.fs;
   const a = step.args;
   const file = () => side.files[(a[0] as number) % side.files.length];
   switch (step.op) {
@@ -332,7 +486,12 @@ function apply(side: Side, step: Step, watchId: number): unknown {
         a[3] as number,
       );
     case "mkdir":
-      return fs.mkdir(a[0] as string, a[1] as boolean, a[2] as number);
+      return fs.mkdir(
+        a[0] as string,
+        a[1] as boolean,
+        a[2] as number,
+        (a[3] as string | null) ?? undefined,
+      );
     case "symlink":
       return fs.symlink(a[0] as string, a[1] as string);
     case "rename":
@@ -358,7 +517,14 @@ function apply(side: Side, step: Step, watchId: number): unknown {
     case "chmod":
       return fs.chmod(a[0] as string, a[1] as number, a[2] as boolean);
     case "utimes":
-      return fs.utimes(a[0] as string, a[1] as number, a[2] as number, a[3] as boolean);
+      return fs.utimes(
+        a[0] as string,
+        a[1] as number | null,
+        a[2] as number | null,
+        a[3] as boolean,
+      );
+    case "giveToRoot":
+      return fs.giveToRoot(a[0] as string);
     case "truncate":
       return fs.truncate(a[0] as string, a[1] as number);
     case "copyFile":
@@ -436,15 +602,20 @@ function join(dir: string, name: string): string {
   return dir === "/" ? `/${name}` : `${dir}/${name}`;
 }
 
-/** Compares both trees from the root: listings, lstat, link targets, contents, totals. */
+/**
+ * Compares both trees from the root: listings, lstat, link targets, contents,
+ * totals. Through the unchecked views, so that the modes hide nothing.
+ */
 function compareTrees(pair: Pair): string | null {
+  const reference = pair.reference.fs.privileged;
+  const shared = pair.shared.fs.privileged;
   const pending = ["/"];
   while (pending.length > 0) {
     const dir = pending.pop() as string;
     const probes: [string, (fs: VfsApi) => unknown][] = [
       [`readdir ${dir}`, (fs) => fs.readdir(dir)],
     ];
-    const listing = pair.reference.fs.readdir(dir);
+    const listing = reference.readdir(dir);
     for (const entry of listing) {
       const path = join(dir, entry.name);
       probes.push([`lstat ${path}`, (fs) => fs.stat(path, false)]);
@@ -457,8 +628,8 @@ function compareTrees(pair: Pair): string | null {
       }
     }
     for (const [label, probe] of probes) {
-      const left = attemptProbe(pair.reference.fs, probe);
-      const right = attemptProbe(pair.shared.fs, probe);
+      const left = attemptProbe(reference, probe);
+      const right = attemptProbe(shared, probe);
       if (!isDeepStrictEqual(left, right)) {
         return `${label}: ${show(left)} vs ${show(right)}`;
       }
@@ -492,13 +663,7 @@ function run(steps: readonly Step[], caller: Caller): { at: number; difference: 
     }
     const left = attempt(pair.reference, step, i);
     const right = attempt(pair.shared, step, i);
-    const lenient =
-      step.op === "file.write" && typeof step.args[2] === "number" && step.args[2] < 0;
-    const same = lenient
-      ? (left.error === undefined) === (right.error === undefined) &&
-        isDeepStrictEqual(left.value, right.value)
-      : isDeepStrictEqual(left, right);
-    if (!same) {
+    if (!isDeepStrictEqual(left, right)) {
       return { at: i, difference: `result: ${show(left)} vs ${show(right)}` };
     }
     if (pair.reference.clock.reads !== pair.shared.clock.reads) {
@@ -513,8 +678,14 @@ function run(steps: readonly Step[], caller: Caller): { at: number; difference: 
         difference: `events: ${show(pair.reference.events)} vs ${show(pair.shared.events)}`,
       };
     }
-    const tally = outcomes.get(step.op) ?? { ok: 0, failed: 0 };
+    const tally = outcomes.get(step.op) ?? { ok: 0, failed: 0, refused: 0, masked: 0 };
     tally[left.error === undefined ? "ok" : "failed"]++;
+    if (left.error === undefined && step.umask !== undefined && step.privileged !== true) {
+      tally.masked++;
+    }
+    if ((left.error as { code?: string } | undefined)?.code === "EACCES") {
+      tally.refused++;
+    }
     outcomes.set(step.op, tally);
     pair.reference.events.length = 0;
     pair.shared.events.length = 0;
@@ -558,7 +729,7 @@ function show(value: unknown): string {
 
 function sequence(seed: number): Step[] {
   const random = new Random(seed);
-  const paths: Paths = { any: [], file: [], dir: [], link: [] };
+  const paths: Paths = { any: [], file: [], dir: [], link: [], closed: [] };
   return Array.from({ length: STEPS }, () => pickStep(random, paths));
 }
 
@@ -589,7 +760,12 @@ describe("SharedFs against Vfs", () => {
         if (failed !== null) {
           const minimal = shrink(steps.slice(0, failed.at + 1), caller);
           const last = run(minimal, caller);
-          const lines = minimal.map((step, i) => `  ${i}: ${step.op}${show(step.args)}`);
+          const lines = minimal.map(
+            (step, i) =>
+              `  ${i}: ${step.privileged ? "privileged " : ""}${step.op}${show(step.args)}${
+                step.umask === undefined ? "" : ` under umask ${show(step.umask)}`
+              }`,
+          );
           throw new Error(
             `seed ${seed} differs at step ${last?.at}: ${last?.difference}\n${lines.join("\n")}`,
           );
@@ -610,6 +786,7 @@ describe("SharedFs against Vfs", () => {
         "realpath",
         "chmod",
         "utimes",
+        "giveToRoot",
         "truncate",
         "copyFile",
         "access",
@@ -632,6 +809,16 @@ describe("SharedFs against Vfs", () => {
         // Only these two cannot fail: every other operation's errors were compared too.
         const canFail = op !== "exists" && op !== "unwatch";
         expect(outcomes.get(op)?.failed ?? 0, `${op} failed`).toBeGreaterThan(canFail ? 50 : -1);
+        // Every path operation was refused by the permission checks too. An
+        // open file is checked when it is opened, not after.
+        const canBeRefused = canFail && !op.startsWith("file.");
+        expect(outcomes.get(op)?.refused ?? 0, `${op} refused`).toBeGreaterThan(
+          canBeRefused ? 10 : -1,
+        );
+        // Each call that creates did so under masks of its own, many times.
+        expect(outcomes.get(op)?.masked ?? 0, `${op} under a mask`).toBeGreaterThan(
+          CREATING.includes(op) ? 500 : -1,
+        );
       }
     },
     600_000,

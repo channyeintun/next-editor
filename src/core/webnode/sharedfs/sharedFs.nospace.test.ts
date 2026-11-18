@@ -68,7 +68,8 @@ function expectHealthy(fs: SharedFs): void {
   expect(fs.check()).toBe(0);
 }
 
-describe("SharedFs when memory runs out", () => {
+// Each case fills the memory to its limit, seconds of work on a busy machine.
+describe("SharedFs when memory runs out", { timeout: 60_000 }, () => {
   it("fails a write with ENOSPC and keeps everything written before", () => {
     const fs = boot();
     fs.mkdir("/data", false, 0o755);

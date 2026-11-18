@@ -217,6 +217,51 @@ fn normalizes_slashes_dots_and_dot_dots() {
 }
 
 #[test]
+fn looks_dot_up_in_a_directory_that_must_be_there() {
+    // As Linux: `name/.` walks through `name`, so nothing is made at, or
+    // moved to, a missing `name` spelled that way; `name/` only asks for a
+    // directory. A link that leads nowhere is walked through the same way.
+    let mut fs = setup();
+    mkdir(&mut fs, "/d");
+    put(&mut fs, "/f", "x");
+    symlink(&mut fs, "nowhere", "/dangling");
+    assert_eq!(failure(fs.mkdir(b"/n1/.", false, 0o777 as f64)).0, Enoent);
+    assert_eq!(failure(fs.mkdir(b"/n1/./", false, 0o777 as f64)).0, Enoent);
+    assert_eq!(
+        failure(fs.mkdir(b"/dangling/.", false, 0o777 as f64)).0,
+        Enoent
+    );
+    assert_eq!(
+        failure(try_put(&mut fs, "/n2/.", b"x", WRITE, 0o644 as f64)).0,
+        Enoent
+    );
+    assert_eq!(
+        failure(fs.open(b"/n2/.", O_WRONLY | O_CREAT | O_EXCL, 0o644 as f64)).0,
+        Enoent
+    );
+    assert_eq!(failure(fs.rename(b"/d", b"/n3/.")).0, Enoent);
+    assert_eq!(failure(fs.rename(b"/f", b"/n3/.")).0, Enoent);
+    assert_eq!(failure(fs.copy_file(b"/f", b"/n4/.", 0)).0, Enoent);
+    assert_eq!(failure(fs.symlink(b"x", b"/n5/.")).0, Enoent);
+    assert_eq!(failure(fs.link(b"/f", b"/n6/.")).0, Enoent);
+    assert_eq!(failure(fs.stat(b"/n7/.", true)).0, Enoent);
+    assert!(!exists(&fs, "/n7/."));
+    let names: Vec<String> = listing(&mut fs, "/")
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(names, ["d", "dangling", "f"]);
+    // What is there is still what it was.
+    assert_eq!(failure(fs.mkdir(b"/d/.", false, 0o777 as f64)).0, Eexist);
+    assert_eq!(failure(fs.mkdir(b"/f/.", false, 0o777 as f64)).0, Enotdir);
+    // `mkdir -p` goes on to the name itself, and says so.
+    assert_eq!(mkdir_p(&mut fs, "/p1/./p2").as_deref(), Some("/p1"));
+    assert_eq!(mkdir_p(&mut fs, "/p3/.").as_deref(), Some("/p3"));
+    assert_eq!(kind_of(&stat(&fs, "/p1/p2", true)), S_IFDIR);
+    assert!(fs.check());
+}
+
+#[test]
 fn requires_a_directory_for_a_trailing_slash() {
     let mut fs = setup();
     put(&mut fs, "/f", "x");
@@ -280,16 +325,84 @@ fn creates_files_with_the_umask_applied() {
     assert_eq!(stat(&fs, "/h", true)[MODE] as u32, S_IFREG | 0o644);
 }
 
+/// The permission bits of `path` itself (not what a link there leads to).
+fn perm(fs: &TestFs, path: &str) -> u32 {
+    stat(fs, path, false)[MODE] as u32 & 0o7777
+}
+
+#[test]
+fn takes_the_mask_off_what_a_call_creates() {
+    let mut fs = setup();
+    fs.umask = 0o077;
+    put(&mut fs, "/f", "x");
+    try_put(&mut fs, "/x", b"", WRITE, 0o777 as f64).unwrap();
+    let handle = open(&mut fs, "/o", O_WRONLY | O_CREAT, 0o666 as f64);
+    close(&mut fs, handle);
+    mkdir(&mut fs, "/d");
+    assert_eq!(mkdir_p(&mut fs, "/r/s/t").as_deref(), Some("/r"));
+    assert!(fs.mkdtemp(b"/t-abcdef").unwrap());
+    let made = ["/f", "/x", "/o", "/d", "/r", "/r/s", "/r/s/t", "/t-abcdef"];
+    assert_eq!(
+        made.map(|path| perm(&fs, path)),
+        [0o600, 0o700, 0o600, 0o700, 0o700, 0o700, 0o700, 0o700]
+    );
+    fs.umask = 0o277;
+    assert!(fs.mkdtemp(b"/u-abcdef").unwrap());
+    assert_eq!(perm(&fs, "/u-abcdef"), 0o500);
+    fs.umask = 0;
+    put(&mut fs, "/all", "");
+    mkdir(&mut fs, "/alld");
+    assert_eq!([perm(&fs, "/all"), perm(&fs, "/alld")], [0o666, 0o777]);
+}
+
+#[test]
+fn a_mask_changes_nothing_but_new_files_and_directories() {
+    let mut fs = setup();
+    put(&mut fs, "/src", "data");
+    fs.chmod(b"/src", 0o777, true).unwrap();
+    put(&mut fs, "/there", "old");
+    fs.chmod(b"/there", 0o666, true).unwrap();
+    put(&mut fs, "/kept", "old");
+    mkdir(&mut fs, "/d");
+    fs.umask = 0o077;
+    symlink(&mut fs, "/src", "/link");
+    fs.link(b"/src", b"/hard").unwrap();
+    // libuv gives the copy the source's mode with fchmod, whatever the mask.
+    fs.copy_file(b"/src", b"/copy", 0).unwrap();
+    fs.copy_file(b"/src", b"/there", 0).unwrap();
+    put(&mut fs, "/kept", "new");
+    assert_eq!(mkdir_p(&mut fs, "/d"), None);
+    fs.chmod(b"/d", 0o775, true).unwrap();
+    let paths = ["/link", "/hard", "/copy", "/there", "/kept", "/d"];
+    assert_eq!(
+        paths.map(|path| perm(&fs, path)),
+        [0o777, 0o777, 0o777, 0o777, 0o644, 0o775]
+    );
+}
+
+#[test]
+fn a_mask_is_its_permission_bits_and_leaves_the_bits_above_them() {
+    let mut fs = setup();
+    fs.umask = 0o7027;
+    try_put(&mut fs, "/f", b"", WRITE, 0o7777 as f64).unwrap();
+    assert_eq!(perm(&fs, "/f"), 0o7750);
+    fs.umask = 0o777;
+    try_put(&mut fs, "/g", b"", WRITE, 0o4755 as f64).unwrap();
+    fs.mkdir(b"/d", false, 0o1777 as f64).unwrap();
+    assert_eq!([perm(&fs, "/g"), perm(&fs, "/d")], [0o4000, 0o1000]);
+}
+
 #[test]
 fn creation_mode_follows_javascript_numbers() {
-    assert_eq!(creation_mode(0o777 as f64, 1), 0o755);
-    assert_eq!(creation_mode(-1.0, 1), 1);
-    assert_eq!(creation_mode(f64::NAN, 1), 1);
-    assert_eq!(creation_mode(f64::INFINITY, 1), 1);
-    assert_eq!(creation_mode(1.5, 1), 1);
-    assert_eq!(creation_mode(2147483648.0 + 0o640 as f64, 1), 0o640);
-    assert_eq!(creation_mode(4294967296.0 + 0o700 as f64, 1), 0o700);
-    assert_eq!(creation_mode(1e300, 1), 0);
+    assert_eq!(creation_mode(0o777 as f64, 1, 0o022), 0o755);
+    assert_eq!(creation_mode(-1.0, 0o666, 0o022), 0o644);
+    assert_eq!(creation_mode(f64::NAN, 0o777, 0o027), 0o750);
+    assert_eq!(creation_mode(f64::INFINITY, 0o666, 0), 0o666);
+    assert_eq!(creation_mode(1.5, 0o666, 0o777), 0);
+    assert_eq!(creation_mode(2147483648.0 + 0o640 as f64, 1, 0o022), 0o640);
+    assert_eq!(creation_mode(4294967296.0 + 0o700 as f64, 1, 0o022), 0o700);
+    assert_eq!(creation_mode(1e300, 1, 0o022), 0);
+    assert_eq!(creation_mode(0o7777 as f64, 1, 0o7077), 0o7700);
     assert_eq!(js::to_int32(1e20), 1661992960);
     assert_eq!(js::to_int32(-1.0), -1);
     assert_eq!(js::to_int32(-2.5), -2);
@@ -749,7 +862,7 @@ fn updates_times_as_vfs_ts_does() {
     );
 
     let t = tick(&mut fs, 5.0);
-    fs.utimes(b"/f", 111.0, 222.0, true).unwrap();
+    fs.utimes(b"/f", Some(111.0), Some(222.0), true).unwrap();
     let s = stat(&fs, "/f", true);
     assert_eq!((s[ATIME], s[MTIME], s[CTIME]), (111.0, 222.0, t));
 
@@ -778,11 +891,11 @@ fn sets_a_symlinks_own_times_when_not_following() {
     let mut fs = setup();
     put(&mut fs, "/f", "");
     symlink(&mut fs, "/f", "/link");
-    fs.utimes(b"/link", 1.0, 2.0, false).unwrap();
+    fs.utimes(b"/link", Some(1.0), Some(2.0), false).unwrap();
     assert_eq!(stat(&fs, "/link", false)[MTIME], 2.0);
     assert_eq!(stat(&fs, "/f", true)[MTIME], 1000.0);
     assert_eq!(
-        failure(fs.utimes(b"/nope", 1.0, 2.0, true)),
+        failure(fs.utimes(b"/nope", Some(1.0), Some(2.0), true)),
         (Enoent, Syscall::Utime, PATH_FIRST)
     );
 }
@@ -1092,6 +1205,21 @@ fn removes_with_rm() {
     );
     fs.rm(b"/nope", false, true).unwrap();
     fs.rm(b"/no/such/deep", true, true).unwrap();
+    // A path through something that is no directory is missing too, under
+    // force: as GNU `rm -f` and Node's rmSync with `force` take it.
+    symlink(&mut fs, "/f2", "/l");
+    put(&mut fs, "/f2", "x");
+    for path in ["/f2/below", "/f2/below/deeper", "/f2/", "/f2/.", "/l/below"] {
+        assert_eq!(
+            failure(fs.rm(path.as_bytes(), true, false)),
+            (Enotdir, Syscall::Rm, PATH_FIRST),
+            "{path}"
+        );
+        fs.rm(path.as_bytes(), true, true).unwrap();
+        fs.rm(path.as_bytes(), false, true).unwrap();
+    }
+    assert_eq!(read(&mut fs, "/f2"), "x");
+    assert_eq!(fs.readlink(b"/l").unwrap(), b"/f2");
     assert_eq!(
         failure(fs.rm(b"rel", true, true)),
         (Einval, Syscall::Rm, PATH_FIRST)
@@ -1798,7 +1926,7 @@ fn logs_changes_to_a_file() {
     fs.watching = true;
     put(&mut fs, "/f", "x");
     fs.chmod(b"/f", 0o600, true).unwrap();
-    fs.utimes(b"/f", 1.0, 2.0, true).unwrap();
+    fs.utimes(b"/f", Some(1.0), Some(2.0), true).unwrap();
     fs.truncate(b"/f", 0.0).unwrap();
     // O_TRUNC reports even on an empty file, as Linux does.
     put(&mut fs, "/f", "");
@@ -1826,7 +1954,7 @@ fn logs_changes_through_handles_and_at_directories() {
     close(&mut fs, file);
     fs.chmod(b"/", 0o755, true).unwrap();
     fs.chmod(b"/d/.", 0o755, true).unwrap();
-    fs.utimes(b"/d/..", 1.0, 1.0, true).unwrap();
+    fs.utimes(b"/d/..", Some(1.0), Some(1.0), true).unwrap();
     assert_eq!(
         take_events(&mut fs),
         vec![
@@ -1974,7 +2102,7 @@ fn stays_consistent_through_a_mixed_sequence() {
 fn truncates_an_empty_file_on_open_with_new_times_and_an_event() {
     let mut fs = setup();
     put(&mut fs, "/e", "");
-    fs.utimes(b"/e", 1.0, 1.0, true).unwrap();
+    fs.utimes(b"/e", Some(1.0), Some(1.0), true).unwrap();
     fs.watching = true;
     let t = tick(&mut fs, 1.0);
     put(&mut fs, "/e", "");
@@ -2017,4 +2145,91 @@ fn renames_only_a_directory_to_a_name_with_a_trailing_slash() {
     assert!(!exists(&fs, "/nf"));
     fs.rename(b"/d", b"/nd/").unwrap();
     assert!(exists(&fs, "/nd"));
+}
+
+#[test]
+fn presence_tells_a_broken_link_from_nothing() {
+    let mut fs = setup();
+    mkdir(&mut fs, "/d");
+    put(&mut fs, "/d/f", "x");
+    symlink(&mut fs, "f", "/d/to-file");
+    symlink(&mut fs, "nowhere", "/d/dangling");
+    symlink(&mut fs, "loop", "/d/loop");
+    let presence = |fs: &TestFs, path: &str| fs.presence(path.as_bytes());
+    for path in ["/d", "/d/f", "/d/to-file", "/d/"] {
+        assert_eq!(presence(&fs, path), PRESENT, "{path}");
+    }
+    for path in ["/d/dangling", "/d/loop", "/d/loop/x"] {
+        assert_eq!(presence(&fs, path), BROKEN_LINK, "{path}");
+    }
+    for path in ["/d/missing", "/d/f/x", "/d/dangling/x", "/missing/x", ""] {
+        assert_eq!(presence(&fs, path), ABSENT, "{path}");
+    }
+}
+
+#[test]
+fn mkdir_keeps_only_the_permission_bits_and_the_sticky_bit() {
+    let mut fs = setup();
+    fs.umask = 0o022;
+    for (mode, kept) in [
+        (0o4755, 0o755),
+        (0o2775, 0o755),
+        (0o1777, 0o1755),
+        (0o7777, 0o1755),
+    ] {
+        let path = std::format!("/d{mode:o}");
+        fs.mkdir(path.as_bytes(), false, mode as f64).unwrap();
+        assert_eq!(
+            stat(&fs, &path, false)[MODE] as u32 & 0o7777,
+            kept,
+            "{path}"
+        );
+        let deep = std::format!("/p{mode:o}/q");
+        fs.mkdir(deep.as_bytes(), true, mode as f64).unwrap();
+        assert_eq!(
+            stat(&fs, &deep, false)[MODE] as u32 & 0o7777,
+            kept,
+            "{deep}"
+        );
+    }
+    let handle = open(&mut fs, "/f", O_WRONLY | O_CREAT, 0o4755 as f64);
+    close(&mut fs, handle);
+    assert_eq!(stat(&fs, "/f", false)[MODE] as u32 & 0o7777, 0o4755);
+}
+
+#[test]
+fn mkdir_p_makes_nothing_at_or_above_its_floor() {
+    let mut fs = setup();
+    mkdir_p(&mut fs, "/w/app");
+    let floor = "/w/app/".len();
+    // Below a floor that is there, as without one.
+    let first = fs
+        .mkdir_above(b"/w/app/a/b", true, 0o777 as f64, floor)
+        .unwrap();
+    assert_eq!(first, Some(&b"/w/app/a"[..]));
+    assert_eq!(
+        fs.mkdir_above(b"/w/app/a/b", true, 0o777 as f64, floor)
+            .unwrap(),
+        None
+    );
+    // Where the floor itself is gone, nothing is made.
+    fs.rmdir(b"/w/app/a/b").unwrap();
+    fs.rmdir(b"/w/app/a").unwrap();
+    fs.rmdir(b"/w/app").unwrap();
+    assert_eq!(
+        failure(fs.mkdir_above(b"/w/app/a/b", true, 0o777 as f64, floor)),
+        (Enoent, Syscall::Mkdir, PATH_FIRST)
+    );
+    fs.rmdir(b"/w").unwrap();
+    assert_eq!(
+        failure(fs.mkdir_above(b"/w/app/a", true, 0o777 as f64, floor)),
+        (Enoent, Syscall::Mkdir, PATH_FIRST)
+    );
+    assert!(!fs.exists(b"/w"));
+    // A floor of 0 is none.
+    assert_eq!(
+        fs.mkdir_above(b"/w/app/a", true, 0o777 as f64, 0).unwrap(),
+        Some(&b"/w"[..])
+    );
+    assert!(fs.check());
 }

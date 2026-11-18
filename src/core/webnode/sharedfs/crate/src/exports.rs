@@ -3,7 +3,10 @@
 //! filesystem, and writes the outcome back into the block.
 use core::mem::MaybeUninit;
 
-use crate::abi::{Errno, Shared, Syscall, ARGS_CAPACITY, PATH_NONE};
+use crate::abi::{
+    Errno, Shared, Syscall, ARGS_CAPACITY, PATH_NONE, UTIME_ATIME_NOW, UTIME_FOLLOW,
+    UTIME_MTIME_NOW,
+};
 use crate::fs::{Clock, Failure, Fs, Space, Stat};
 use crate::heap::Heap;
 
@@ -78,6 +81,8 @@ fn run(syscall: u32, op: impl FnOnce(&mut SharedFs) -> Result<i32, Failure>) -> 
         // The caller copied the last call's bytes out before this one began.
         fs.trim_scratch();
         fs.watching = (*block).watching != 0;
+        fs.checking = (*block).privileged == 0;
+        fs.umask = (*block).umask;
         let result = op(fs);
         (*block).events_len = fs.events().len() as u32;
         (*block).events_dropped = fs.events_dropped() as u32;
@@ -161,7 +166,7 @@ pub extern "C" fn fs_stat(a: u32, follow: u32) -> i32 {
 #[no_mangle]
 pub extern "C" fn fs_exists(a: u32) -> i32 {
     run(Syscall::Stat as u32, |fs| {
-        Ok(fs.exists(path(a, Syscall::Stat)?) as i32)
+        Ok(fs.presence(path(a, Syscall::Stat)?) as i32)
     })
 }
 
@@ -176,9 +181,14 @@ pub extern "C" fn fs_readdir(a: u32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn fs_mkdir(a: u32, recursive: u32, mode: f64) -> i32 {
+pub extern "C" fn fs_mkdir(a: u32, recursive: u32, mode: f64, floor: u32) -> i32 {
     run(Syscall::Mkdir as u32, |fs| {
-        match fs.mkdir(path(a, Syscall::Mkdir)?, recursive != 0, mode)? {
+        match fs.mkdir_above(
+            path(a, Syscall::Mkdir)?,
+            recursive != 0,
+            mode,
+            floor as usize,
+        )? {
             Some(first) => {
                 set_bytes(first);
                 set_aux(1);
@@ -283,9 +293,24 @@ pub extern "C" fn fs_chmod(a: u32, mode: u32, follow: u32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn fs_utimes(a: u32, atime: f64, mtime: f64, follow: u32) -> i32 {
+pub extern "C" fn fs_utimes(a: u32, atime: f64, mtime: f64, flags: u32) -> i32 {
     run(Syscall::Utime as u32, |fs| {
-        fs.utimes(path(a, Syscall::Utime)?, atime, mtime, follow != 0)?;
+        let atime = (flags & UTIME_ATIME_NOW == 0).then_some(atime);
+        let mtime = (flags & UTIME_MTIME_NOW == 0).then_some(mtime);
+        fs.utimes(
+            path(a, Syscall::Utime)?,
+            atime,
+            mtime,
+            flags & UTIME_FOLLOW != 0,
+        )?;
+        Ok(0)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn fs_give_to_root(a: u32) -> i32 {
+    run(Syscall::Chown as u32, |fs| {
+        fs.give_to_root(path(a, Syscall::Chown)?)?;
         Ok(0)
     })
 }

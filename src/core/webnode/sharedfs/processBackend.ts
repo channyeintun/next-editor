@@ -1,8 +1,12 @@
 // A process's own way into the shared filesystem. The path operations become
 // calls into the module on the shared memory; everything that belongs to the
 // kernel stays a call to the kernel: file descriptors (it owns them all),
-// watching (it delivers the events) and the device paths under /dev.
+// watching (it delivers the events) and the device paths under /dev. What a
+// path call creates is masked by the process's file mode creation mask, as
+// the kernel masks what it creates for the process.
+import { ROOT_ID, S_IFLNK, S_IFMT, type StatData } from "../kernel/vfs/types";
 import type { FsBackend } from "../process/runtime";
+import { BROKEN_LINK, PRESENT } from "./abi";
 import { SharedFs } from "./sharedFs";
 
 /** What the kernel gives a worker it admitted to the shared filesystem (boot.ts). */
@@ -43,6 +47,18 @@ export function kernelPathOf(path: string): string | null {
 }
 
 /**
+ * Whether `stat`, of an entry whose last link was not followed (lstat), is
+ * one of the kernel's devices as the tree holds it: a symbolic link root
+ * owns. The kernel makes each device's entry so (kernel.ts), and nothing
+ * else in the tree is a link of root's. A path that names the entry through
+ * a link (`r/dev/null` with `r` a link to /) then gets the device's answer,
+ * as the plain spelling does.
+ */
+export function isDeviceEntry(stat: StatData): boolean {
+  return (stat.mode & S_IFMT) === S_IFLNK && stat.uid === ROOT_ID;
+}
+
+/**
  * Whether the filesystem refused `error` as a loop of links. The kernel keeps
  * each of its device paths as a link to itself (kernel.ts), so a path that
  * reaches a device through a link, or through a directory linked to /dev,
@@ -57,13 +73,15 @@ function isLinkLoop(error: unknown): boolean {
  * `kernel` with its path operations answered by the shared filesystem. A call
  * that changes the tree while something watches it may leave events in the
  * shared log; `notifyChanged` then tells the kernel to deliver them, once for a
- * whole burst. Returns `kernel` itself when this worker cannot join (the module
- * fails to instantiate), so the process still runs.
+ * whole burst. `umask` reads the process's file mode creation mask, which a
+ * call that creates is made under. Returns `kernel` itself when this worker
+ * cannot join (the module fails to instantiate), so the process still runs.
  */
 export function withDirectPaths(
   kernel: FsBackend,
   admission: SharedFsAdmission,
   notifyChanged: () => void,
+  umask: () => number,
 ): FsBackend {
   let fs: SharedFs;
   try {
@@ -82,6 +100,17 @@ export function withDirectPaths(
   const changing = <T>(run: () => T): T => {
     try {
       return run();
+    } finally {
+      if (fs.takeEventsPending()) {
+        notifyChanged();
+      }
+    }
+  };
+
+  /** `changing`, for a call that may make a file or a directory: under the process's mask. */
+  const creating = <T>(create: () => T): T => {
+    try {
+      return fs.withUmask(umask(), create);
     } finally {
       if (fs.takeEventsPending()) {
         notifyChanged();
@@ -119,15 +148,21 @@ export function withDirectPaths(
       route(
         path,
         () => kernel.stat(path, follow),
-        () => fs.stat(path, follow),
+        () => {
+          const stat = fs.stat(path, follow);
+          return !follow && isDeviceEntry(stat) ? kernel.stat(path, follow) : stat;
+        },
       ),
     exists: (path) =>
       route(
         path,
         () => kernel.exists(path),
         // Missing, or a link (perhaps to a device): only the second asks the
-        // kernel. A miss is the common answer, so it must stay cheap.
-        () => fs.exists(path) || (fs.isBrokenLink(path) && kernel.exists(path)),
+        // kernel. A miss is the common answer, so it must stay one call.
+        () => {
+          const presence = fs.presence(path);
+          return presence === PRESENT || (presence === BROKEN_LINK && kernel.exists(path));
+        },
       ),
     readdir: (path) =>
       route(
@@ -139,7 +174,12 @@ export function withDirectPaths(
       route(
         path,
         () => kernel.readlink(path),
-        () => fs.readlink(path),
+        // A link into /dev may be a device's own entry (`isDeviceEntry`),
+        // which the kernel answers for.
+        () => {
+          const target = fs.readlink(path);
+          return kernelPathOf(target) !== null ? kernel.readlink(path) : target;
+        },
       ),
     realpath: (path) =>
       route(
@@ -159,11 +199,11 @@ export function withDirectPaths(
         () => kernel.readFile(path),
         () => fs.readFile(path),
       ),
-    mkdir: (path, recursive, mode) =>
+    mkdir: (path, recursive, mode, floor) =>
       route(
         path,
-        () => kernel.mkdir(path, recursive, mode),
-        () => changing(() => fs.mkdir(path, recursive, mode)),
+        () => kernel.mkdir(path, recursive, mode, floor),
+        () => creating(() => fs.mkdir(path, recursive, mode, floor)),
       ),
     rmdir: (path) =>
       route(
@@ -232,13 +272,13 @@ export function withDirectPaths(
       route(
         prefix,
         () => kernel.mkdtemp(prefix),
-        () => changing(() => fs.mkdtemp(prefix)),
+        () => creating(() => fs.mkdtemp(prefix)),
       ),
     writeFile: (path, data, flags, mode) =>
       route(
         path,
         () => kernel.writeFile(path, data, flags, mode),
-        () => changing(() => fs.writeFile(path, data, flags, mode)),
+        () => creating(() => fs.writeFile(path, data, flags, mode)),
       ),
   };
 }

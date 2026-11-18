@@ -11,7 +11,7 @@ pub const PROCESS_SLOTS: usize = 1024;
 ///
 /// Offsets (bytes): lock 0, poisoned 4, watching 8, events_len 12, slots 16,
 /// errno 4112, syscall 4116, path_mode 4120, ptr 4124, len 4128, aux 4132,
-/// events_dropped 4136, stat 4144, args 4256.
+/// events_dropped 4136, privileged 4140, umask 4144, stat 4152, args 4264.
 #[repr(C)]
 pub struct Shared {
     /// The mutex word. Only JavaScript reads or writes it (Atomics).
@@ -41,7 +41,14 @@ pub struct Shared {
     pub aux: u32,
     /// Non-zero once the event log was full and events were dropped.
     pub events_dropped: u32,
-    pub reserved: u32,
+    /// Non-zero when the call is the kernel's privileged one, which the
+    /// permission bits do not apply to (the page's requests, the kernel's
+    /// setup). The caller sets it before every call, under the lock.
+    pub privileged: u32,
+    /// The file mode creation mask of the caller: the permission bits taken
+    /// off the mode of what the call creates. The caller sets it before
+    /// every call, under the lock.
+    pub umask: u32,
     /// A `stat` record: dev, ino, mode, nlink, uid, gid, rdev, size, blksize,
     /// blocks, atimeMs, mtimeMs, ctimeMs, birthtimeMs.
     pub stat: [f64; 14],
@@ -65,8 +72,10 @@ const _: () = {
     assert!(offset_of!(Shared, len) == 4128);
     assert!(offset_of!(Shared, aux) == 4132);
     assert!(offset_of!(Shared, events_dropped) == 4136);
-    assert!(offset_of!(Shared, stat) == 4144);
-    assert!(offset_of!(Shared, args) == 4256);
+    assert!(offset_of!(Shared, privileged) == 4140);
+    assert!(offset_of!(Shared, umask) == 4144);
+    assert!(offset_of!(Shared, stat) == 4152);
+    assert!(offset_of!(Shared, args) == 4264);
     assert!(core::mem::align_of::<Shared>() == 8);
 };
 
@@ -122,11 +131,19 @@ pub enum Syscall {
     Futime = 24,
     Close = 25,
     Watch = 26,
+    Chown = 27,
 }
 
 /// A slot whose worker is inside a call that the kernel retires when the call
 /// ends (`i32::MIN`, as the slot words are read signed).
 pub const SLOT_RETIRING: i32 = i32::MIN;
+
+/// `fs_utimes`'s flags: follow a final link.
+pub const UTIME_FOLLOW: u32 = 1;
+/// `fs_utimes`'s flags: set the access time to now, not to the number given.
+pub const UTIME_ATIME_NOW: u32 = 2;
+/// `fs_utimes`'s flags: set the modification time to now, not to the number given.
+pub const UTIME_MTIME_NOW: u32 = 4;
 
 /// `path_mode`: the error names no path.
 pub const PATH_NONE: u32 = 0;
@@ -134,6 +151,12 @@ pub const PATH_NONE: u32 = 0;
 pub const PATH_FIRST: u32 = 1;
 /// `path_mode`: the error names both paths, as `path` and `dest`.
 pub const PATH_BOTH: u32 = 2;
+
+/// What `fs_exists` answers: nothing at the path, something, or a symbolic
+/// link that leads nowhere or into a loop.
+pub const ABSENT: u32 = 0;
+pub const PRESENT: u32 = 1;
+pub const BROKEN_LINK: u32 = 2;
 
 /// Entry kinds in a listing.
 pub const KIND_FILE: u8 = 0;

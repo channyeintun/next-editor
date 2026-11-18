@@ -86,7 +86,9 @@ function prepare(fs: SharedFs): void {
   fs.writeFile("/work/r0", text, O_WRONLY_CREAT_TRUNC, 0o644);
 }
 
-describe("a caller that runs out of stack", () => {
+// Each case recurses to the end of the stack dozens of times, seconds of work
+// on a busy machine.
+describe("a caller that runs out of stack", { timeout: 60_000 }, () => {
   const shared = createSharedFilesystem();
   if (shared === null) {
     throw new Error("no shared memory in this environment");

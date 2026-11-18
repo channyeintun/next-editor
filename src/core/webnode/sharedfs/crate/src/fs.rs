@@ -10,10 +10,11 @@
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
+use core::ops::Bound;
 
 use crate::abi::{
-    Errno, Syscall, EVENT_CHANGE, EVENT_RENAME, KIND_DIR, KIND_FILE, KIND_SYMLINK, PATH_BOTH,
-    PATH_FIRST, PATH_NONE,
+    Errno, Syscall, ABSENT, BROKEN_LINK, EVENT_CHANGE, EVENT_RENAME, KIND_DIR, KIND_FILE,
+    KIND_SYMLINK, PATH_BOTH, PATH_FIRST, PATH_NONE, PRESENT,
 };
 
 #[cfg(test)]
@@ -24,6 +25,8 @@ mod js;
 #[cfg(test)]
 mod nospace_tests;
 mod path;
+#[cfg(test)]
+mod permission_tests;
 #[cfg(test)]
 mod tests;
 
@@ -40,7 +43,19 @@ pub const O_APPEND: u32 = 0o2000;
 pub const O_DIRECTORY: u32 = 0o200000;
 pub const O_NOFOLLOW: u32 = 0o400000;
 pub const X_OK: u32 = 1;
+pub const W_OK: u32 = 2;
+pub const R_OK: u32 = 4;
 pub const COPYFILE_EXCL: u32 = 1;
+
+/// The owner's permission bits (`OWNER_*` in types.ts). A file belongs to the
+/// one user every process runs as, or to root when the kernel gave it so
+/// (`give_to_root`). For the user's own files these decide, as on Linux for
+/// a user who is not root; for root's, the others' bits do (`Inode::bits`).
+pub const OWNER_R: u32 = 0o400;
+pub const OWNER_W: u32 = 0o200;
+pub const OWNER_X: u32 = 0o100;
+/// What adding, removing or renaming an entry needs on its directory.
+const OWNER_WX: u32 = OWNER_W | OWNER_X;
 
 pub const S_IFREG: u32 = 0o100000;
 pub const S_IFDIR: u32 = 0o040000;
@@ -50,9 +65,23 @@ pub const S_IFLNK: u32 = 0o120000;
 pub const MAX_FILE_SIZE: f64 = 4294967296.0;
 /// Linux's limit on symbolic links followed while resolving one path.
 const MAX_LINKS: u32 = 40;
-const UMASK: u32 = 0o022;
-const DEFAULT_FILE_MODE: u32 = 0o644;
-const DEFAULT_DIR_MODE: u32 = 0o755;
+/// The mask a filesystem starts with (`DEFAULT_UMASK` in umask.ts); every
+/// call of the binding names the caller's own.
+pub const DEFAULT_UMASK: u32 = 0o022;
+/// The permission bits: all a mask can take off a mode.
+const UMASK_BITS: u32 = 0o777;
+/// The mode a file or a directory is created with when the caller names
+/// none, before the mask.
+const DEFAULT_FILE_MODE: u32 = 0o666;
+const DEFAULT_DIR_MODE: u32 = 0o777;
+/// The root directory's mode.
+const ROOT_MODE: u32 = 0o755;
+/// The mode mkdtemp(3) asks for, before the mask.
+const TEMP_DIR_MODE: u32 = 0o700;
+/// What mkdir(2) keeps of the mode it is given: the permission bits and the
+/// sticky bit, never set-user-ID or set-group-ID (Linux's `S_IRWXUGO |
+/// S_ISVTX`). A file keeps all twelve; chmod sets any of them.
+const DIR_CREATION_BITS: u32 = 0o1777;
 /// Past this the event log drops events and says so (`events_dropped`).
 pub const EVENT_LOG_LIMIT: usize = 64 << 20;
 /// The most of the log's buffer kept once it is emptied.
@@ -61,8 +90,12 @@ const EVENTS_KEPT: usize = 64 << 10;
 const SCRATCH_KEPT: usize = 64 << 10;
 
 const DEV: f64 = 1.0;
+/// The one user every process runs as and that user's group: the numbers of
+/// `process/platform.ts` (`UID`, `GID`), which `sharedFs.test.ts` holds this to.
 const UID: f64 = 1.0;
 const GID: f64 = 1.0;
+/// The user and group of a file root owns (`ROOT_ID` in types.ts).
+const ROOT_ID: f64 = 0.0;
 const BLKSIZE: f64 = 4096.0;
 const DIR_SIZE: usize = 4096;
 
@@ -216,6 +249,8 @@ struct Inode {
     ino: u64,
     /// Permission bits only (`0o7777`); the type bits come from `kind`.
     perm: u32,
+    /// Root's rather than the user's (`give_to_root`).
+    root_owned: bool,
     nlink: u32,
     atime: f64,
     mtime: f64,
@@ -244,6 +279,46 @@ impl Inode {
 
     fn is_symlink(&self) -> bool {
         matches!(self.kind, Kind::Symlink(_))
+    }
+
+    /// The permission bits that decide for the user, in the owner's places
+    /// (`callerBits` in types.ts): the owner's, or for a file root owns the
+    /// others', as Linux's `acl_permission_check` takes them for a user who
+    /// is neither the owner nor in the group.
+    fn bits(&self) -> u32 {
+        if self.root_owned {
+            (self.perm & 0o7) << 6
+        } else {
+            self.perm
+        }
+    }
+}
+
+/// How `resolve` takes a symbolic link in the path's last part (vfs.ts
+/// `LastLink`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Last {
+    /// Follows it.
+    Follow,
+    /// Names the link, unless a trailing slash asks for a directory
+    /// (lstat(2), readlink(2), `O_NOFOLLOW`).
+    Link,
+    /// Names the link, slash or not. The calls that make, remove or move a
+    /// name look up its directory and the name in it (Linux's
+    /// `filename_parentat`), so a trailing slash does not follow the name
+    /// there: `rmdir("link/")` is ENOTDIR and `mkdir("link/")` EEXIST. A last
+    /// part of `.` after the name still follows it, as any directory on the
+    /// way is.
+    Entry,
+}
+
+impl Last {
+    fn of(follow: bool) -> Self {
+        if follow {
+            Last::Follow
+        } else {
+            Last::Link
+        }
     }
 }
 
@@ -357,12 +432,15 @@ struct Handle {
     offset: f64,
 }
 
-/// A caller-supplied creation mode with the umask applied, or the default.
-pub fn creation_mode(mode: f64, fallback: u32) -> u32 {
-    if !js::is_integer(mode) || mode < 0.0 {
-        return fallback;
-    }
-    (js::to_int32(mode) as u32) & 0o7777 & !UMASK
+/// The mode something is created with: the caller's `mode`, or `fallback`
+/// when that is no mode, less the permission bits of `umask`.
+pub fn creation_mode(mode: f64, fallback: u32, umask: u32) -> u32 {
+    let asked = if js::is_integer(mode) && mode >= 0.0 {
+        (js::to_int32(mode) as u32) & 0o7777
+    } else {
+        fallback
+    };
+    asked & !(umask & UMASK_BITS)
 }
 
 /// Grows a file's buffer to hold at least `needed` bytes, doubling as
@@ -409,6 +487,13 @@ pub struct Fs<C: Clock, S: Space = Unlimited> {
     pub space: S,
     /// Whether any watch exists (`watchers.active`): events are logged only then.
     pub watching: bool,
+    /// Whether calls are checked against the permission bits (`checking` in
+    /// vfs.ts): false for the kernel's privileged calls.
+    pub checking: bool,
+    /// The file mode creation mask of the caller whose call this is (`umask`
+    /// in vfs.ts): what it creates gets its mode less the mask's permission
+    /// bits.
+    pub umask: u32,
     inodes: Vec<Option<Inode>>,
     /// Its capacity is kept at least the table's length less the root, so
     /// that freeing a slot never allocates.
@@ -440,6 +525,8 @@ impl<C: Clock, S: Space> Fs<C, S> {
             clock,
             space,
             watching: false,
+            checking: true,
+            umask: DEFAULT_UMASK,
             inodes: Vec::new(),
             free_inodes: Vec::new(),
             root: 0,
@@ -454,7 +541,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
             out: Vec::new(),
         };
         let t = fs.clock.now();
-        let root = fs.new_dir(DEFAULT_DIR_MODE, t);
+        let root = fs.new_dir(ROOT_MODE, t);
         fs.node_mut(root).parent = Some(root);
         fs.root = root;
         fs
@@ -481,22 +568,44 @@ impl<C: Clock, S: Space> Fs<C, S> {
         } else {
             Syscall::Lstat
         };
-        let node = self.existing(path, follow, syscall)?;
+        let node = self.existing(path, Last::of(follow), syscall)?;
         Ok(self.stat_of(node))
     }
 
     pub fn exists(&self, path: &[u8]) -> bool {
-        matches!(self.resolve(path, true), Ok(Lookup { node: Some(_), .. }))
+        matches!(
+            self.resolve(path, Last::Follow),
+            Ok(Lookup { node: Some(_), .. })
+        )
     }
 
-    /// The listing (`[kind][length u32 LE][name]` per entry) and how many entries it has.
+    /// `exists`, and on a miss whether the last part is a symbolic link that
+    /// leads nowhere or into a loop (`BROKEN_LINK`: lstat(2) finds it, or
+    /// finds the loop) rather than nothing (`ABSENT`). One call answers what
+    /// a process asks on every miss, with no error made.
+    pub fn presence(&self, path: &[u8]) -> u32 {
+        match self.resolve(path, Last::Follow) {
+            Ok(Lookup { node: Some(_), .. }) => PRESENT,
+            _ => match self.resolve(path, Last::Link) {
+                Ok(Lookup { node: Some(_), .. }) | Err(Errno::Eloop) => BROKEN_LINK,
+                _ => ABSENT,
+            },
+        }
+    }
+
+    /// The listing (`[kind][length u32 LE][name]` per entry) and how many
+    /// entries it has. The entries come in the order of their names' bytes,
+    /// the map's: the order of their code points, in which vfs.ts lists.
     pub fn readdir(&mut self, path: &[u8]) -> Result<(&[u8], u32)> {
-        let node = self.existing(path, true, Syscall::Scandir)?;
+        let node = self.existing(path, Last::Follow, Syscall::Scandir)?;
+        if !self.node(node).is_dir() {
+            return fail(Errno::Enotdir, Syscall::Scandir, PATH_FIRST);
+        }
+        self.permit(node, OWNER_R, Syscall::Scandir, PATH_FIRST)?;
         let mut out = core::mem::take(&mut self.out);
         out.clear();
         let Kind::Dir(entries) = &self.node(node).kind else {
-            self.out = out;
-            return fail(Errno::Enotdir, Syscall::Scandir, PATH_FIRST);
+            unreachable!("a directory");
         };
         let count = entries.len() as u32;
         for (name, entry) in entries {
@@ -520,9 +629,24 @@ impl<C: Clock, S: Space> Fs<C, S> {
 
     /// Returns the first directory it created when `recursive`, else None.
     pub fn mkdir(&mut self, path: &[u8], recursive: bool, mode: f64) -> Result<Option<&[u8]>> {
-        let perm = creation_mode(mode, DEFAULT_DIR_MODE);
+        self.mkdir_above(path, recursive, mode, 0)
+    }
+
+    /// `mkdir`, where a recursive one makes nothing `floor` bytes long or
+    /// shorter: `path` begins with the directory `floor` names, and where
+    /// that directory (or anything above it) would have to be made the call
+    /// fails with ENOENT instead (`floor` in `VfsApi.mkdir`, types.ts). A
+    /// floor of 0 is none.
+    pub fn mkdir_above(
+        &mut self,
+        path: &[u8],
+        recursive: bool,
+        mode: f64,
+        floor: usize,
+    ) -> Result<Option<&[u8]>> {
+        let perm = creation_mode(mode, DEFAULT_DIR_MODE, self.umask) & DIR_CREATION_BITS;
         if !recursive {
-            let found = self.lookup(path, false, Syscall::Mkdir, PATH_FIRST)?;
+            let found = self.lookup(path, Last::Entry, Syscall::Mkdir, PATH_FIRST)?;
             self.create_dir(found, perm, Syscall::Mkdir)?;
             return Ok(None);
         }
@@ -532,7 +656,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
         if self.out.try_reserve(path.len()).is_err() {
             return fail(Errno::Enospc, Syscall::Mkdir, PATH_FIRST);
         }
-        let Some(first) = self.mkdirp(path::trim_trailing_slashes(path), perm)? else {
+        let Some(first) = self.mkdirp(path::trim_trailing_slashes(path), perm, floor)? else {
             return Ok(None);
         };
         self.out.extend_from_slice(first);
@@ -540,7 +664,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
     }
 
     pub fn rmdir(&mut self, path: &[u8]) -> Result<()> {
-        let found = self.lookup(path, false, Syscall::Rmdir, PATH_FIRST)?;
+        let found = self.lookup(path, Last::Entry, Syscall::Rmdir, PATH_FIRST)?;
         let Some(node) = found.node else {
             return fail(Errno::Enoent, Syscall::Rmdir, PATH_FIRST);
         };
@@ -557,6 +681,8 @@ impl<C: Clock, S: Space> Fs<C, S> {
         let Some(parent) = found.parent else {
             return fail(Errno::Einval, Syscall::Rmdir, PATH_FIRST);
         };
+        // Linux's `may_delete`: the directory's permission first, then the kind.
+        self.may_remove(parent, Some(node), Syscall::Rmdir, PATH_FIRST)?;
         let Kind::Dir(entries) = &self.node(node).kind else {
             return fail(Errno::Enotdir, Syscall::Rmdir, PATH_FIRST);
         };
@@ -568,22 +694,55 @@ impl<C: Clock, S: Space> Fs<C, S> {
     }
 
     pub fn unlink(&mut self, path: &[u8]) -> Result<()> {
-        let found = self.lookup(path, false, Syscall::Unlink, PATH_FIRST)?;
+        let found = self.lookup(path, Last::Entry, Syscall::Unlink, PATH_FIRST)?;
         let Some(node) = found.node else {
             return fail(Errno::Enoent, Syscall::Unlink, PATH_FIRST);
         };
-        let parent = match found.parent {
-            Some(parent) if !self.node(node).is_dir() => parent,
-            _ => return fail(Errno::Eisdir, Syscall::Unlink, PATH_FIRST),
+        let Some(parent) = found.parent else {
+            return fail(Errno::Eisdir, Syscall::Unlink, PATH_FIRST);
         };
+        // Linux's `unlinkat` with a trailing slash: no permission is asked.
+        if found.dir_tail {
+            let errno = if self.node(node).is_dir() {
+                Errno::Eisdir
+            } else {
+                Errno::Enotdir
+            };
+            return fail(errno, Syscall::Unlink, PATH_FIRST);
+        }
+        self.may_remove(parent, Some(node), Syscall::Unlink, PATH_FIRST)?;
+        if self.node(node).is_dir() {
+            return fail(Errno::Eisdir, Syscall::Unlink, PATH_FIRST);
+        }
         self.remove_entry(parent, &found.name, node, true);
         Ok(())
     }
 
     pub fn rm(&mut self, path: &[u8], recursive: bool, force: bool) -> Result<()> {
-        let found = match self.resolve(path, false) {
+        let mut resolved = self.resolve(path, Last::Entry);
+        // A trailing slash after a name that is no directory. `force` passes
+        // it over as what stat(2) finds missing or below no directory (`f/`,
+        // a link to a file or to nothing); a link to a directory is there,
+        // but is no directory itself, and is refused.
+        if let Ok(Lookup {
+            node: Some(node),
+            dir_tail: true,
+            ..
+        }) = resolved
+        {
+            if !self.node(node).is_dir() {
+                if self.node(node).is_symlink() && self.is_dir_followed(path) {
+                    return fail(Errno::Enotdir, Syscall::Rm, PATH_FIRST);
+                }
+                resolved = Err(Errno::Enotdir);
+            }
+        }
+        let found = match resolved {
             Ok(found) => found,
-            Err(Errno::Enoent) if force => return Ok(()),
+            // What `force` passes over as not there: a missing name, and a
+            // name below something that is no directory (as GNU `rm -f` and
+            // Node's rmSync take it).
+            Err(Errno::Enoent | Errno::Enotdir) if force => return Ok(()),
             Err(code) => return fail(code, Syscall::Rm, PATH_FIRST),
         };
         let Some(node) = found.node else {
@@ -602,28 +761,39 @@ impl<C: Clock, S: Space> Fs<C, S> {
             if found.parent.is_none() {
                 return fail(Errno::Einval, Syscall::Rm, PATH_FIRST);
             }
+            // A tree that may all go goes in one walk; else as far as it may,
+            // which fails part way (see `removable`).
+            if self.checking && !self.removable(node) {
+                self.remove_until_refused(node)?;
+            }
             self.remove_tree(node);
         }
         let Some(parent) = found.parent else {
             return fail(Errno::Einval, Syscall::Rm, PATH_FIRST);
         };
+        // As Node's rm: a tree's contents go first, then its own entry, which
+        // its directory may still refuse.
+        self.may_remove(parent, Some(node), Syscall::Rm, PATH_FIRST)?;
         self.remove_entry(parent, &found.name, node, true);
         Ok(())
     }
 
     pub fn rename(&mut self, from: &[u8], to: &[u8]) -> Result<()> {
         const RENAME: Syscall = Syscall::Rename;
-        let source = self.lookup(from, false, RENAME, PATH_BOTH)?;
+        let source = self.lookup(from, Last::Entry, RENAME, PATH_BOTH)?;
         let Some(node) = source.node else {
             return fail(Errno::Enoent, RENAME, PATH_BOTH);
         };
+        if source.dir_tail && !self.node(node).is_dir() {
+            return fail(Errno::Enotdir, RENAME, PATH_BOTH);
+        }
         if node == self.root {
             return fail(Errno::Ebusy, RENAME, PATH_BOTH);
         }
         let Some(source_parent) = source.parent else {
             return fail(Errno::Einval, RENAME, PATH_BOTH);
         };
-        let target = self.lookup(to, false, RENAME, PATH_BOTH)?;
+        let target = self.lookup(to, Last::Entry, RENAME, PATH_BOTH)?;
         if target.node == Some(self.root) {
             return fail(Errno::Ebusy, RENAME, PATH_BOTH);
         }
@@ -642,17 +812,33 @@ impl<C: Clock, S: Space> Fs<C, S> {
         if moving_dir && self.is_within(target_parent, node) {
             return fail(Errno::Einval, RENAME, PATH_BOTH);
         }
+        // Linux's rename, before it asks about any permission: a target the
+        // source lies in cannot be replaced, whatever the source is.
         let replaced = target.node;
         if let Some(replaced) = replaced {
-            match &self.node(replaced).kind {
-                Kind::Dir(entries) if moving_dir => {
-                    if !entries.is_empty() {
-                        return fail(Errno::Enotempty, RENAME, PATH_BOTH);
-                    }
-                }
-                _ if moving_dir => return fail(Errno::Enotdir, RENAME, PATH_BOTH),
-                Kind::Dir(_) => return fail(Errno::Eisdir, RENAME, PATH_BOTH),
+            if self.node(replaced).is_dir() && self.is_within(source_parent, replaced) {
+                return fail(Errno::Enotempty, RENAME, PATH_BOTH);
+            }
+        }
+        // Linux's `vfs_rename`: both directories, then the kinds, then a moved
+        // directory itself (its `..` changes), then whether the target is empty.
+        self.may_remove(source_parent, Some(node), RENAME, PATH_BOTH)?;
+        self.may_remove(target_parent, replaced, RENAME, PATH_BOTH)?;
+        if let Some(replaced) = replaced {
+            match (moving_dir, self.node(replaced).is_dir()) {
+                (true, false) => return fail(Errno::Enotdir, RENAME, PATH_BOTH),
+                (false, true) => return fail(Errno::Eisdir, RENAME, PATH_BOTH),
                 _ => {}
+            }
+        }
+        if moving_dir && source_parent != target_parent {
+            self.permit(node, OWNER_W, RENAME, PATH_BOTH)?;
+        }
+        if let Some(replaced) = replaced {
+            if let Kind::Dir(entries) = &self.node(replaced).kind {
+                if !entries.is_empty() {
+                    return fail(Errno::Enotempty, RENAME, PATH_BOTH);
+                }
             }
         }
         let old_path = if self.watching {
@@ -700,20 +886,22 @@ impl<C: Clock, S: Space> Fs<C, S> {
 
     pub fn link(&mut self, existing_path: &[u8], new_path: &[u8]) -> Result<()> {
         const LINK: Syscall = Syscall::Link;
-        let source = self.lookup(existing_path, false, LINK, PATH_BOTH)?;
+        let source = self.lookup(existing_path, Last::Link, LINK, PATH_BOTH)?;
         let Some(node) = source.node else {
             return fail(Errno::Enoent, LINK, PATH_BOTH);
         };
-        if self.node(node).is_dir() {
-            return fail(Errno::Eperm, LINK, PATH_BOTH);
-        }
-        let target = self.lookup(new_path, false, LINK, PATH_BOTH)?;
+        // Linux's order: the new name, its directory's permission, then the kind.
+        let target = self.lookup(new_path, Last::Entry, LINK, PATH_BOTH)?;
         let parent = match target.parent {
             Some(parent) if target.node.is_none() => parent,
             _ => return fail(Errno::Eexist, LINK, PATH_BOTH),
         };
         if target.dir_tail {
             return fail(Errno::Enoent, LINK, PATH_BOTH);
+        }
+        self.permit(parent, OWNER_WX, LINK, PATH_BOTH)?;
+        if self.node(node).is_dir() {
+            return fail(Errno::Eperm, LINK, PATH_BOTH);
         }
         self.room(LINK, PATH_BOTH)?;
         let key = boxed(&target.name).map_err(|_| no_space(LINK, PATH_BOTH))?;
@@ -738,7 +926,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
 
     /// Creates `path` as a link to `target`.
     pub fn symlink(&mut self, target: &[u8], path: &[u8]) -> Result<()> {
-        let found = self.lookup(path, false, Syscall::Symlink, PATH_BOTH)?;
+        let found = self.lookup(path, Last::Entry, Syscall::Symlink, PATH_BOTH)?;
         let parent = match found.parent {
             Some(parent) if found.node.is_none() => parent,
             _ => return fail(Errno::Eexist, Syscall::Symlink, PATH_BOTH),
@@ -746,6 +934,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
         if found.dir_tail || target.is_empty() {
             return fail(Errno::Enoent, Syscall::Symlink, PATH_BOTH);
         }
+        self.permit(parent, OWNER_WX, Syscall::Symlink, PATH_BOTH)?;
         let named = self.prepare(&found.name, Syscall::Symlink, PATH_BOTH)?;
         let target = boxed(target).map_err(|_| no_space(Syscall::Symlink, PATH_BOTH))?;
         let t = self.clock.now();
@@ -755,7 +944,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
     }
 
     pub fn readlink(&self, path: &[u8]) -> Result<&[u8]> {
-        let node = self.existing(path, false, Syscall::Readlink)?;
+        let node = self.existing(path, Last::Link, Syscall::Readlink)?;
         match &self.node(node).kind {
             Kind::Symlink(target) => Ok(target),
             _ => fail(Errno::Einval, Syscall::Readlink, PATH_FIRST),
@@ -763,7 +952,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
     }
 
     pub fn realpath(&mut self, path: &[u8]) -> Result<&[u8]> {
-        let found = self.lookup(path, true, Syscall::Realpath, PATH_FIRST)?;
+        let found = self.lookup(path, Last::Follow, Syscall::Realpath, PATH_FIRST)?;
         let Some(node) = found.node else {
             return fail(Errno::Enoent, Syscall::Realpath, PATH_FIRST);
         };
@@ -771,7 +960,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
     }
 
     pub fn chmod(&mut self, path: &[u8], mode: u32, follow: bool) -> Result<()> {
-        let found = self.lookup(path, follow, Syscall::Chmod, PATH_FIRST)?;
+        let found = self.lookup(path, Last::of(follow), Syscall::Chmod, PATH_FIRST)?;
         let Some(node) = found.node else {
             return fail(Errno::Enoent, Syscall::Chmod, PATH_FIRST);
         };
@@ -779,29 +968,62 @@ impl<C: Clock, S: Space> Fs<C, S> {
             // Linux cannot change a link's own mode (fchmodat AT_SYMLINK_NOFOLLOW).
             return fail(Errno::Enotsup, Syscall::Chmod, PATH_FIRST);
         }
+        self.owned(node, Syscall::Chmod, PATH_FIRST)?;
         self.set_mode(node, mode);
         self.emit_found(EVENT_CHANGE, &found);
         Ok(())
     }
 
-    pub fn utimes(&mut self, path: &[u8], atime: f64, mtime: f64, follow: bool) -> Result<()> {
-        let found = self.lookup(path, follow, Syscall::Utime, PATH_FIRST)?;
+    /// `None` for a time sets it to now (`utimes` in types.ts).
+    pub fn utimes(
+        &mut self,
+        path: &[u8],
+        atime: Option<f64>,
+        mtime: Option<f64>,
+        follow: bool,
+    ) -> Result<()> {
+        let found = self.lookup(path, Last::of(follow), Syscall::Utime, PATH_FIRST)?;
         let Some(node) = found.node else {
             return fail(Errno::Enoent, Syscall::Utime, PATH_FIRST);
         };
+        if atime.is_none() && mtime.is_none() {
+            // utimensat(2) with both UTIME_NOW: the owner, or whoever may write the file.
+            if self.node(node).root_owned {
+                self.permit(node, OWNER_W, Syscall::Utime, PATH_FIRST)?;
+            }
+        } else {
+            self.owned(node, Syscall::Utime, PATH_FIRST)?;
+        }
         self.set_times(node, atime, mtime);
         self.emit_found(EVENT_CHANGE, &found);
         Ok(())
     }
 
+    /// Gives what `path` names (a final link itself) to root (`giveToRoot` in
+    /// types.ts). A checked call fails with EPERM, as chown(2) does for a user
+    /// who is not root.
+    pub fn give_to_root(&mut self, path: &[u8]) -> Result<()> {
+        let node = self.existing(path, Last::Link, Syscall::Chown)?;
+        if self.checking {
+            return fail(Errno::Eperm, Syscall::Chown, PATH_FIRST);
+        }
+        let t = self.clock.now();
+        let given = self.node_mut(node);
+        given.root_owned = true;
+        given.ctime = t;
+        Ok(())
+    }
+
     pub fn truncate(&mut self, path: &[u8], length: f64) -> Result<()> {
-        let found = self.lookup(path, true, Syscall::Open, PATH_FIRST)?;
+        let found = self.lookup(path, Last::Follow, Syscall::Open, PATH_FIRST)?;
         let Some(node) = found.node else {
             return fail(Errno::Enoent, Syscall::Open, PATH_FIRST);
         };
         if self.node(node).is_dir() {
             return fail(Errno::Eisdir, Syscall::Open, PATH_FIRST);
         }
+        // Node truncates by path through `open(path, 'r+')`.
+        self.permit(node, OWNER_R | OWNER_W, Syscall::Open, PATH_FIRST)?;
         if !self.node(node).is_file() || length < 0.0 || !length.is_finite() {
             return fail(Errno::Einval, Syscall::Ftruncate, PATH_NONE);
         }
@@ -816,22 +1038,23 @@ impl<C: Clock, S: Space> Fs<C, S> {
     /// `mode` is `COPYFILE_EXCL` or 0.
     pub fn copy_file(&mut self, source: &[u8], destination: &[u8], mode: u32) -> Result<()> {
         const COPY: Syscall = Syscall::Copyfile;
-        let from = self.lookup(source, true, COPY, PATH_BOTH)?;
+        let from = self.lookup(source, Last::Follow, COPY, PATH_BOTH)?;
         let Some(node) = from.node else {
             return fail(Errno::Enoent, COPY, PATH_BOTH);
         };
-        let Kind::File(file) = &self.node(node).kind else {
-            return fail(Errno::Eisdir, COPY, PATH_BOTH);
-        };
-        let size = file.size;
-        let perm = self.node(node).perm;
+        // libuv opens the source for reading, then the destination for
+        // writing, and finds a source that is no file only when it reads it:
+        // whatever refuses the destination comes first. (libuv has made or
+        // emptied the destination by then and removes it; here it is left as
+        // it was.)
+        self.permit(node, OWNER_R, COPY, PATH_BOTH)?;
         let exclusive = mode & COPYFILE_EXCL != 0;
-        let to = self.lookup(destination, !exclusive, COPY, PATH_BOTH)?;
+        let to = self.lookup(destination, Last::of(!exclusive), COPY, PATH_BOTH)?;
         if to.node.is_some() && exclusive {
             return fail(Errno::Eexist, COPY, PATH_BOTH);
         }
-        if to.node == Some(node) {
-            return Ok(());
+        if to.node == Some(node) && self.node(node).is_file() {
+            return self.permit(node, OWNER_W, COPY, PATH_BOTH);
         }
         let parent = match to.parent {
             Some(parent) if !to.node.is_some_and(|existing| self.node(existing).is_dir()) => parent,
@@ -841,6 +1064,8 @@ impl<C: Clock, S: Space> Fs<C, S> {
             if to.dir_tail {
                 return fail(Errno::Eisdir, COPY, PATH_BOTH);
             }
+            self.permit(parent, OWNER_WX, COPY, PATH_BOTH)?;
+            let (size, perm) = self.copied(node)?;
             // The room for the copy is made before anything changes, so that
             // running out of memory leaves no half-made file behind.
             let named = self.prepare(&to.name, COPY, PATH_BOTH)?;
@@ -858,6 +1083,8 @@ impl<C: Clock, S: Space> Fs<C, S> {
         if !self.node(existing).is_file() {
             return fail(Errno::Einval, COPY, PATH_BOTH);
         }
+        self.permit(existing, OWNER_W, COPY, PATH_BOTH)?;
+        let (size, perm) = self.copied(node)?;
         // As above: once the destination is emptied the copy must not fail.
         if size > self.file(existing).data.len() {
             self.grow_data(existing, size)
@@ -871,9 +1098,24 @@ impl<C: Clock, S: Space> Fs<C, S> {
         Ok(())
     }
 
+    /// The size and mode `copy_file` copies from `source`, once the
+    /// destination may take them: EISDIR when it is no file.
+    fn copied(&self, source: Idx) -> Result<(usize, u32)> {
+        let from = self.node(source);
+        match &from.kind {
+            Kind::File(file) => Ok((file.size, from.perm)),
+            _ => fail(Errno::Eisdir, Syscall::Copyfile, PATH_BOTH),
+        }
+    }
+
     /// `mode` is a mask of `F_OK`, `R_OK`, `W_OK`, `X_OK`.
     pub fn access(&self, path: &[u8], mode: u32) -> Result<()> {
-        let node = self.node(self.existing(path, true, Syscall::Access)?);
+        let found = self.existing(path, Last::Follow, Syscall::Access)?;
+        if self.checking {
+            return self.permit(found, access_bits(mode), Syscall::Access, PATH_FIRST);
+        }
+        // Unchecked is root's answer: a file runs only when some x bit is set.
+        let node = self.node(found);
         if mode & X_OK != 0 && node.is_file() && node.perm & 0o111 == 0 {
             return fail(Errno::Eacces, Syscall::Access, PATH_FIRST);
         }
@@ -885,7 +1127,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
     /// returns false when the name is taken. Errors name the caller's
     /// `prefixXXXXXX`, given as the first path.
     pub fn mkdtemp(&mut self, path: &[u8]) -> Result<bool> {
-        let found = match self.resolve(path, false) {
+        let found = match self.resolve(path, Last::Entry) {
             Ok(found) => found,
             Err(code) => return fail(code, Syscall::Mkdtemp, PATH_FIRST),
         };
@@ -895,13 +1137,15 @@ impl<C: Clock, S: Space> Fs<C, S> {
         if found.parent.is_none() {
             return fail(Errno::Eexist, Syscall::Mkdtemp, PATH_FIRST);
         }
-        self.create_dir(found, 0o700, Syscall::Mkdtemp)?;
+        let perm = TEMP_DIR_MODE & !(self.umask & UMASK_BITS);
+        self.create_dir(found, perm, Syscall::Mkdtemp)?;
         Ok(true)
     }
 
     /// The whole file, in the file's own buffer.
     pub fn read_file(&mut self, path: &[u8]) -> Result<&[u8]> {
-        let node = self.existing(path, true, Syscall::Open)?;
+        let node = self.existing(path, Last::Follow, Syscall::Open)?;
+        self.permit(node, OWNER_R, Syscall::Open, PATH_FIRST)?;
         match self.node(node).kind {
             Kind::Dir(_) => return fail(Errno::Eisdir, Syscall::Read, PATH_NONE),
             Kind::Symlink(_) => return fail(Errno::Einval, Syscall::Read, PATH_NONE),
@@ -953,10 +1197,12 @@ impl<C: Clock, S: Space> Fs<C, S> {
 
     /// The path a watch on `path` follows: where it really is.
     pub fn watch_path(&mut self, path: &[u8]) -> Result<&[u8]> {
-        let found = self.lookup(path, true, Syscall::Watch, PATH_FIRST)?;
+        let found = self.lookup(path, Last::Follow, Syscall::Watch, PATH_FIRST)?;
         let Some(node) = found.node else {
             return fail(Errno::Enoent, Syscall::Watch, PATH_FIRST);
         };
+        // inotify needs read permission on what it watches.
+        self.permit(node, OWNER_R, Syscall::Watch, PATH_FIRST)?;
         self.found_path(&found, node, Syscall::Watch)
     }
 
@@ -1021,6 +1267,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
 
     pub fn handle_chmod(&mut self, number: u32, mode: u32) -> Result<()> {
         let handle = self.handle(number, Syscall::Fchmod)?;
+        self.owned(handle.node, Syscall::Fchmod, PATH_NONE)?;
         self.set_mode(handle.node, mode);
         self.emit_node(EVENT_CHANGE, handle.node);
         Ok(())
@@ -1028,7 +1275,8 @@ impl<C: Clock, S: Space> Fs<C, S> {
 
     pub fn handle_utimes(&mut self, number: u32, atime: f64, mtime: f64) -> Result<()> {
         let handle = self.handle(number, Syscall::Futime)?;
-        self.set_times(handle.node, atime, mtime);
+        self.owned(handle.node, Syscall::Futime, PATH_NONE)?;
+        self.set_times(handle.node, Some(atime), Some(mtime));
         self.emit_node(EVENT_CHANGE, handle.node);
         Ok(())
     }
@@ -1065,14 +1313,18 @@ impl<C: Clock, S: Space> Fs<C, S> {
     // ---- path resolution ----
 
     /// Walks `path` from the root, following symbolic links in every
-    /// intermediate component and in the last one when `follow_last` (or when
-    /// a trailing slash demands a directory). `..` is resolved physically,
+    /// intermediate component, and in the last one as `last_link` says
+    /// (`Last`). `..` is resolved physically,
     /// after links. A followed link's target is spliced in front of the rest
     /// of the path, as vfs.ts does with its parts, so this is a loop.
+    ///
+    /// When checking, every directory a name (`.` and `..` included) is
+    /// looked up in must be searchable, as Linux's `may_lookup` requires
+    /// before each component: `/` alone, and a trailing `/`, look nothing up.
     fn resolve<'p>(
         &self,
         path: &'p [u8],
-        follow_last: bool,
+        last_link: Last,
     ) -> core::result::Result<Lookup<'p>, Errno> {
         if path.is_empty() {
             return Err(Errno::Enoent);
@@ -1080,6 +1332,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
         if path[0] != SLASH {
             return Err(Errno::Einval);
         }
+        let checking = self.checking;
         let mut spliced: Option<Vec<u8>> = None;
         let mut dir = self.root;
         let mut links = 0;
@@ -1088,31 +1341,72 @@ impl<C: Clock, S: Space> Fs<C, S> {
             let last = path::last_component(text);
             let mut at = 0;
             let next = loop {
-                let Some((end_start, end_stop)) = last else {
-                    return Ok(Lookup::at_dir(dir));
+                let end_start = match last {
+                    Some((end_start, _)) if at <= end_start => end_start,
+                    // Only `` and `.` are left; a `.` is looked up in `dir`.
+                    _ => {
+                        if checking && !self.searchable(dir) && path::has_dot_part(text, at) {
+                            return Err(Errno::Eacces);
+                        }
+                        return Ok(Lookup::at_dir(dir));
+                    }
                 };
-                if at > end_start {
-                    return Ok(Lookup::at_dir(dir));
-                }
+                let end_stop = last.map_or(0, |(_, stop)| stop);
                 let stop = path::part_end(text, at);
                 let name = &text[at..stop];
                 let following = stop + 1;
-                if name.is_empty() || name == b"." {
+                if name.is_empty() {
+                    at = following;
+                    continue;
+                }
+                // One lookup of the directory serves the check and the entry.
+                let here = self.node(dir);
+                if checking && here.bits() & OWNER_X == 0 {
+                    return Err(Errno::Eacces);
+                }
+                if name == b"." {
                     at = following;
                     continue;
                 }
                 if name == b".." {
-                    dir = self.node(dir).parent.unwrap_or(dir);
+                    dir = here.parent.unwrap_or(dir);
                     at = following;
                     continue;
                 }
-                let node = self.entries(dir).get(name).map(|entry| entry.node);
+                let Kind::Dir(entries) = &here.kind else {
+                    unreachable!("not a directory");
+                };
+                let node = entries.get(name).map(|entry| entry.node);
                 let link = node.filter(|&found| self.node(found).is_symlink());
                 if at == end_start {
                     let dir_tail = end_stop < text.len();
-                    if link.is_none() || !(follow_last || dir_tail) {
-                        if dir_tail && node.is_some_and(|found| !self.node(found).is_dir()) {
+                    // `name/.` looks `.` up in `name`, as in any directory on
+                    // the way.
+                    let dot_after = dir_tail && path::has_dot_part(text, end_stop + 1);
+                    let follow = link.is_some()
+                        && (last_link == Last::Follow
+                            || (dir_tail && last_link == Last::Link)
+                            || dot_after);
+                    if !follow {
+                        // The calls that name an entry decide what a bare
+                        // trailing slash after a name that is no directory
+                        // means.
+                        if dir_tail
+                            && (last_link != Last::Entry || dot_after)
+                            && node.is_some_and(|found| !self.node(found).is_dir())
+                        {
                             return Err(Errno::Enotdir);
+                        }
+                        // `name/.` needs the directory `name` there, and
+                        // searchable.
+                        if dot_after {
+                            match node {
+                                None => return Err(Errno::Enoent),
+                                Some(found) if checking && !self.searchable(found) => {
+                                    return Err(Errno::Eacces)
+                                }
+                                Some(_) => {}
+                            }
                         }
                         let name = match spliced {
                             Some(text) => Name::Spliced(text, at..stop),
@@ -1168,11 +1462,11 @@ impl<C: Clock, S: Space> Fs<C, S> {
     fn lookup<'p>(
         &self,
         path: &'p [u8],
-        follow_last: bool,
+        last_link: Last,
         syscall: Syscall,
         path_mode: u32,
     ) -> Result<Lookup<'p>> {
-        self.resolve(path, follow_last).map_err(|errno| Failure {
+        self.resolve(path, last_link).map_err(|errno| Failure {
             errno,
             syscall,
             path_mode,
@@ -1180,10 +1474,102 @@ impl<C: Clock, S: Space> Fs<C, S> {
     }
 
     /// The node `path` names, or ENOENT.
-    fn existing(&self, path: &[u8], follow_last: bool, syscall: Syscall) -> Result<Idx> {
-        match self.lookup(path, follow_last, syscall, PATH_FIRST)?.node {
+    fn existing(&self, path: &[u8], last_link: Last, syscall: Syscall) -> Result<Idx> {
+        match self.lookup(path, last_link, syscall, PATH_FIRST)?.node {
             Some(node) => Ok(node),
             None => fail(Errno::Enoent, syscall, PATH_FIRST),
+        }
+    }
+
+    // ---- permissions ----
+
+    /// Fails with EACCES unless the owner has every one of `bits` on `node`
+    /// (or nothing is checked), as Linux's `inode_permission` does for a user
+    /// who is not root.
+    fn permit(&self, node: Idx, bits: u32, syscall: Syscall, path_mode: u32) -> Result<()> {
+        if self.checking && self.node(node).bits() & bits != bits {
+            return fail(Errno::Eacces, syscall, path_mode);
+        }
+        Ok(())
+    }
+
+    /// Fails with EACCES unless the user may take the entry naming `node`
+    /// (none: a new name) out of `parent` (`mayRemove` in vfs.ts), as Linux's
+    /// `may_delete` asks: write and search on the directory. The entry of a
+    /// node root owns stays, whatever path reaches it: on Linux such an entry
+    /// is in a directory of root's (/dev in /), which the user may not change.
+    fn may_remove(
+        &self,
+        parent: Idx,
+        node: Option<Idx>,
+        syscall: Syscall,
+        path_mode: u32,
+    ) -> Result<()> {
+        self.permit(parent, OWNER_WX, syscall, path_mode)?;
+        if self.checking && node.is_some_and(|node| self.node(node).root_owned) {
+            return fail(Errno::Eacces, syscall, path_mode);
+        }
+        Ok(())
+    }
+
+    /// Fails with EPERM unless the user owns `node` (or nothing is checked):
+    /// what chmod(2) and utimes(2) with times ask (`inode_owner_or_capable`).
+    fn owned(&self, node: Idx, syscall: Syscall, path_mode: u32) -> Result<()> {
+        if self.checking && self.node(node).root_owned {
+            return fail(Errno::Eperm, syscall, path_mode);
+        }
+        Ok(())
+    }
+
+    /// Whether names can be looked up in the directory `dir`.
+    fn searchable(&self, dir: Idx) -> bool {
+        self.node(dir).bits() & OWNER_X != 0
+    }
+
+    /// Whether `rm -r` may remove everything below `top` (`removable` in
+    /// vfs.ts): every directory readable, every one that is not empty
+    /// writable and searchable, and no entry one of a node root owns. A walk down and back up by the parent links,
+    /// as `remove_tree` does, which allocates nothing: a directory is entered
+    /// once, and left for its next subdirectory by its name.
+    fn removable(&self, top: Idx) -> bool {
+        let mut dir = top;
+        // The subdirectory of `dir` to go on after, when coming back up.
+        let mut after: Option<&[u8]> = None;
+        loop {
+            let entries = self.entries(dir);
+            if after.is_none() {
+                let perm = self.node(dir).bits();
+                if perm & OWNER_R == 0 || (!entries.is_empty() && perm & OWNER_WX != OWNER_WX) {
+                    return false;
+                }
+                // An entry of a node root owns stays (`may_remove`).
+                if entries
+                    .values()
+                    .any(|entry| self.node(entry.node).root_owned)
+                {
+                    return false;
+                }
+            }
+            let rest = match after {
+                None => entries.range::<[u8], _>((Bound::Unbounded, Bound::Unbounded)),
+                Some(name) => entries.range::<[u8], _>((Bound::Excluded(name), Bound::Unbounded)),
+            };
+            let mut subdirs = rest.filter(|(_, entry)| self.node(entry.node).is_dir());
+            match subdirs.next() {
+                Some((_, entry)) => {
+                    dir = entry.node;
+                    after = None;
+                }
+                None if dir == top => return true,
+                None => {
+                    let left = self.node(dir);
+                    let Some(parent) = left.parent else {
+                        unreachable!("a directory in the tree has a parent");
+                    };
+                    after = Some(&left.name);
+                    dir = parent;
+                }
+            }
         }
     }
 
@@ -1212,6 +1598,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
         let inode = Inode {
             ino,
             perm,
+            root_owned: false,
             nlink,
             atime: t,
             mtime: t,
@@ -1380,6 +1767,52 @@ impl<C: Clock, S: Space> Fs<C, S> {
         }
     }
 
+    /// Removes what is below `top` up to the first entry the permissions
+    /// refuse, then fails with EACCES, for a tree `removable` said no to
+    /// (`removeUntilRefused` in vfs.ts): as Node's rm (std::filesystem::
+    /// remove_all on Linux) walks, entry by entry in the order readdir lists
+    /// them, a directory's contents before its own entry. Opening a directory
+    /// needs read on it and search on its parent; removing an entry, write
+    /// and search on its directory. A loop down and back up by the parent
+    /// links, as `remove_tree` is, that allocates nothing: each step takes
+    /// the first name left in a map, so the order is always that of the
+    /// names' bytes, as in vfs.ts.
+    fn remove_until_refused(&mut self, top: Idx) -> Result<()> {
+        self.permit(top, OWNER_R, Syscall::Rm, PATH_FIRST)?;
+        let mut dir = top;
+        loop {
+            let first = self
+                .entries(dir)
+                .first_key_value()
+                .map(|(_, entry)| entry.node);
+            match first {
+                Some(child) if self.node(child).is_dir() => {
+                    self.permit(dir, OWNER_X, Syscall::Rm, PATH_FIRST)?;
+                    self.permit(child, OWNER_R, Syscall::Rm, PATH_FIRST)?;
+                    dir = child;
+                }
+                Some(child) => {
+                    self.may_remove(dir, Some(child), Syscall::Rm, PATH_FIRST)?;
+                    let Some((name, entry)) = self.entries_mut(dir).pop_first() else {
+                        unreachable!("the entry just looked at");
+                    };
+                    self.remove_entry(dir, &name, entry.node, true);
+                }
+                None if dir == top => return Ok(()),
+                None => {
+                    let Some(parent) = self.node(dir).parent else {
+                        unreachable!("a directory in the tree has a parent");
+                    };
+                    self.may_remove(parent, Some(dir), Syscall::Rm, PATH_FIRST)?;
+                    // Its name is taken, not copied: the node is freed with it.
+                    let name = core::mem::take(&mut self.node_mut(dir).name);
+                    self.remove_entry(parent, &name, dir, true);
+                    dir = parent;
+                }
+            }
+        }
+    }
+
     /// Moves `dir`'s entries out of its map into a new level, sorted in the
     /// order they were made, when the memory for it can be had; else leaves
     /// `levels` and the map as they are, and `remove_tree` takes the entries
@@ -1426,6 +1859,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
             Some(parent) if found.node.is_none() => parent,
             _ => return fail(Errno::Eexist, syscall, PATH_FIRST),
         };
+        self.permit(parent, OWNER_WX, syscall, PATH_FIRST)?;
         let named = self.prepare(&found.name, syscall, PATH_FIRST)?;
         let t = self.clock.now();
         let dir = self.new_dir(perm, t);
@@ -1444,7 +1878,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
     /// ENOSPC leaves everything as it was. How many directories a call makes
     /// is not known up front (it climbs through `..` and symbolic links), so
     /// their memory cannot all be had first.
-    fn mkdirp<'p>(&mut self, path: &'p [u8], perm: u32) -> Result<Option<&'p [u8]>> {
+    fn mkdirp<'p>(&mut self, path: &'p [u8], perm: u32, floor: usize) -> Result<Option<&'p [u8]>> {
         let no_space = || no_space(Syscall::Mkdir, PATH_FIRST);
         let mark = self.mark();
         // The paths still to make, the requested one first.
@@ -1453,7 +1887,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
         let mut made: Vec<Made> = Vec::new();
         let mut current = path;
         let first = loop {
-            let resolved = self.resolve(current, true);
+            let resolved = self.resolve(current, Last::Follow);
             if !matches!(&resolved, Ok(Lookup { node: Some(_), .. })) && self.is_link(current) {
                 // A symbolic link that leads nowhere: mkdir(2) does not make
                 // its target, so `mkdir -p` stops here, as on Linux.
@@ -1466,6 +1900,10 @@ impl<C: Clock, S: Space> Fs<C, S> {
                             break None;
                         }
                         return fail(not_a_dir(pending.is_empty()), Syscall::Mkdir, PATH_FIRST);
+                    }
+                    // The floor and what is above it are never made.
+                    if current.len() <= floor {
+                        return fail(Errno::Enoent, Syscall::Mkdir, PATH_FIRST);
                     }
                     // Room for every directory the way down may make.
                     if made.try_reserve_exact(pending.len() + 1).is_err() {
@@ -1508,10 +1946,19 @@ impl<C: Clock, S: Space> Fs<C, S> {
         Ok(first)
     }
 
+    /// Whether `path` names a directory, a link in its last part followed
+    /// only for a trailing slash (lstat(2)).
+    fn is_dir_followed(&self, path: &[u8]) -> bool {
+        matches!(
+            self.resolve(path, Last::Link),
+            Ok(Lookup { node: Some(node), .. }) if self.node(node).is_dir()
+        )
+    }
+
     /// Whether `path` itself (its last part, not followed) is a symbolic link.
     fn is_link(&self, path: &[u8]) -> bool {
         matches!(
-            self.resolve(path, false),
+            self.resolve(path, Last::Entry),
             Ok(Lookup { node: Some(node), .. }) if self.node(node).is_symlink()
         )
     }
@@ -1525,7 +1972,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
         perm: u32,
         made: &mut Vec<Made>,
     ) -> Result<bool> {
-        let again = self.lookup(path, true, Syscall::Mkdir, PATH_FIRST)?;
+        let again = self.lookup(path, Last::Follow, Syscall::Mkdir, PATH_FIRST)?;
         if let Some(node) = again.node {
             if !self.node(node).is_dir() {
                 return fail(not_a_dir(requested), Syscall::Mkdir, PATH_FIRST);
@@ -1610,7 +2057,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
         let create = flags & O_CREAT != 0;
         let exclusive = create && flags & O_EXCL != 0;
         let no_follow = flags & O_NOFOLLOW != 0;
-        let found = self.lookup(path, !no_follow && !exclusive, OPEN, PATH_FIRST)?;
+        let found = self.lookup(path, Last::of(!no_follow && !exclusive), OPEN, PATH_FIRST)?;
         let accmode = flags & O_ACCMODE;
         // The checks: what the open will do, or its error.
         let target = match found.node {
@@ -1622,7 +2069,11 @@ impl<C: Clock, S: Space> Fs<C, S> {
                     return fail(Errno::Einval, OPEN, PATH_FIRST);
                 }
                 match found.parent {
-                    Some(parent) if !found.dir_tail => Target::Create(parent),
+                    Some(parent) if !found.dir_tail => {
+                        // A new file is not checked against its own mode, only its directory.
+                        self.permit(parent, OWNER_WX, OPEN, PATH_FIRST)?;
+                        Target::Create(parent)
+                    }
                     _ => return fail(Errno::Eisdir, OPEN, PATH_FIRST),
                 }
             }
@@ -1636,11 +2087,13 @@ impl<C: Clock, S: Space> Fs<C, S> {
                         if accmode != O_RDONLY || create || flags & O_TRUNC != 0 {
                             return fail(Errno::Eisdir, OPEN, PATH_FIRST);
                         }
+                        self.permit(node, OWNER_R, OPEN, PATH_FIRST)?;
                     }
                     Kind::File(_) => {
                         if flags & O_DIRECTORY != 0 {
                             return fail(Errno::Enotdir, OPEN, PATH_FIRST);
                         }
+                        self.permit(node, open_bits(flags), OPEN, PATH_FIRST)?;
                     }
                 }
                 Target::Existing(node)
@@ -1666,7 +2119,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
                 }
                 let named = self.prepare(&found.name, OPEN, PATH_FIRST)?;
                 let t = self.clock.now();
-                let perm = creation_mode(mode, DEFAULT_FILE_MODE);
+                let perm = creation_mode(mode, DEFAULT_FILE_MODE, self.umask);
                 let node = self.new_inode(perm, t, 1, Kind::File(FileData { data, size: 0 }));
                 self.add_entry(parent, &found.name, named, node, t);
                 node
@@ -1808,11 +2261,12 @@ impl<C: Clock, S: Space> Fs<C, S> {
         changed.ctime = t;
     }
 
-    fn set_times(&mut self, node: Idx, atime: f64, mtime: f64) {
+    /// Sets the times, `None` to now; the change time is now.
+    fn set_times(&mut self, node: Idx, atime: Option<f64>, mtime: Option<f64>) {
         let t = self.clock.now();
         let changed = self.node_mut(node);
-        changed.atime = atime;
-        changed.mtime = mtime;
+        changed.atime = atime.unwrap_or(t);
+        changed.mtime = mtime.unwrap_or(t);
         changed.ctime = t;
     }
 
@@ -2153,8 +2607,8 @@ impl<C: Clock, S: Space> Fs<C, S> {
             inode.ino as f64,
             (kind | inode.perm) as f64,
             inode.nlink as f64,
-            UID,
-            GID,
+            if inode.root_owned { ROOT_ID } else { UID },
+            if inode.root_owned { ROOT_ID } else { GID },
             0.0,
             size as f64,
             BLKSIZE,
@@ -2332,6 +2786,36 @@ fn filled<T: Clone>(length: usize, value: T) -> Option<Vec<T>> {
     vec.try_reserve_exact(length).ok()?;
     vec.resize(length, value);
     Some(vec)
+}
+
+/// The owner bits `access(mode)` asks for (`R_OK`, `W_OK`, `X_OK`).
+fn access_bits(mode: u32) -> u32 {
+    let mut bits = 0;
+    if mode & R_OK != 0 {
+        bits |= OWNER_R;
+    }
+    if mode & W_OK != 0 {
+        bits |= OWNER_W;
+    }
+    if mode & X_OK != 0 {
+        bits |= OWNER_X;
+    }
+    bits
+}
+
+/// The owner bits opening an existing file with `flags` needs: its access
+/// mode (the reserved mode 3 asks for both, as on Linux), and write to
+/// truncate.
+fn open_bits(flags: u32) -> u32 {
+    let mut bits = match flags & O_ACCMODE {
+        O_RDONLY => OWNER_R,
+        O_WRONLY => OWNER_W,
+        _ => OWNER_R | OWNER_W,
+    };
+    if flags & O_TRUNC != 0 {
+        bits |= OWNER_W;
+    }
+    bits
 }
 
 /// The error mkdir -p raises for a non-directory: EEXIST at the path asked

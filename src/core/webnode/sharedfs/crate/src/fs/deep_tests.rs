@@ -108,7 +108,8 @@ fn fill_log(fs: &mut SwitchFs) {
     let filler = format!("/{}", "z".repeat(60_000));
     put(fs, &filler, b"");
     while fs.events().len() + filler.len() + 5 <= EVENT_LOG_LIMIT {
-        fs.utimes(filler.as_bytes(), 1.0, 1.0, true).unwrap();
+        fs.utimes(filler.as_bytes(), Some(1.0), Some(1.0), true)
+            .unwrap();
     }
     fs.unlink(filler.as_bytes()).unwrap();
 }

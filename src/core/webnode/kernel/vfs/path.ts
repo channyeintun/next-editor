@@ -52,6 +52,43 @@ function isNormal(path: string): boolean {
   return !(path === "." || path === ".." || path.startsWith("./") || path.startsWith("../"));
 }
 
+/** A UTF-16 unit that is half of a code point past U+FFFF. */
+const SURROGATE = /[\ud800-\udfff]/;
+
+/**
+ * Whether JavaScript's own order of strings may put `name` elsewhere than
+ * `compareNames` does: only a name with a code point past U+FFFF, which
+ * UTF-16 spells with two units from below U+E000.
+ */
+export function ordersByCodePointOnly(name: string): boolean {
+  return SURROGATE.test(name);
+}
+
+/** A UTF-16 unit's place among code points: the surrogates go after U+FFFF. */
+function codePointRank(unit: number): number {
+  if (unit < 0xd800) {
+    return unit;
+  }
+  return unit < 0xe000 ? unit + 0x2000 : unit - 0x800;
+}
+
+/**
+ * Orders two entry names by code point, which is the order of their UTF-8
+ * bytes: the order a directory lists its names in, on both filesystems
+ * (sharedfs keeps them as UTF-8 in a sorted map).
+ */
+export function compareNames(left: string, right: string): number {
+  const shared = Math.min(left.length, right.length);
+  for (let i = 0; i < shared; i++) {
+    const a = left.charCodeAt(i);
+    const b = right.charCodeAt(i);
+    if (a !== b) {
+      return codePointRank(a) - codePointRank(b);
+    }
+  }
+  return left.length - right.length;
+}
+
 /** The index of the last component that is not empty or `.`, or -1. */
 export function lastComponentIndex(parts: readonly string[]): number {
   let end = parts.length - 1;

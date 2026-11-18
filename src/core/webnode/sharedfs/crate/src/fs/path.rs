@@ -11,6 +11,20 @@ pub fn part_end(text: &[u8], start: usize) -> usize {
     }
 }
 
+/// Whether a part from `start` on is `.` (`parts.includes(".", i)`): `start`
+/// is where a part begins, and may be past the end, where there is none.
+pub fn has_dot_part(text: &[u8], start: usize) -> bool {
+    let mut at = start;
+    while at <= text.len() {
+        let stop = part_end(text, at);
+        if &text[at..stop] == b"." {
+            return true;
+        }
+        at = stop + 1;
+    }
+    false
+}
+
 /// The byte range of the last part that is not empty or `.`
 /// (`lastComponentIndex`), or None when there is none.
 pub fn last_component(text: &[u8]) -> Option<(usize, usize)> {

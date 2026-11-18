@@ -4,17 +4,35 @@
 // release. The kernel's instance also delivers watch events; a process's
 // instance only says when it left some for the kernel (README.md).
 import { createSystemError, type ErrnoCode } from "../errors";
-import type { DirEntry, OpenFile, StatData, VfsApi, VfsWatchEvent } from "../kernel/vfs/types";
+import { utf8Length } from "../kernel/vfs/inode";
+import { trimTrailingSlashes } from "../kernel/vfs/path";
+import { privilegedView } from "../kernel/vfs/privileged";
+import type {
+  DirEntry,
+  OpenFile,
+  PermissionedVfs,
+  StatData,
+  VfsApi,
+  VfsWatchEvent,
+} from "../kernel/vfs/types";
 import { WatchRegistry } from "../kernel/vfs/watchers";
+import { DEFAULT_UMASK, umaskBits } from "../umask";
 import {
+  ABSENT,
   ARGS_CAPACITY,
+  BROKEN_LINK,
   ENTRY_KINDS,
   ERRNO_CODES,
   EVENT_TYPES,
   OFFSET,
   PATH_BOTH,
   PATH_FIRST,
+  PRESENT,
   SYSCALL_NAMES,
+  UTIME_ATIME_NOW,
+  UTIME_FOLLOW,
+  UTIME_MTIME_NOW,
+  type Presence,
 } from "./abi";
 import { acquireLock, releaseLock } from "./lock";
 
@@ -29,7 +47,7 @@ interface Exports {
   fs_stat(a: number, follow: number): number;
   fs_exists(a: number): number;
   fs_readdir(a: number): number;
-  fs_mkdir(a: number, recursive: number, mode: number): number;
+  fs_mkdir(a: number, recursive: number, mode: number, floor: number): number;
   fs_rmdir(a: number): number;
   fs_unlink(a: number): number;
   fs_rm(a: number, recursive: number, force: number): number;
@@ -42,6 +60,7 @@ interface Exports {
   fs_watch_path(a: number): number;
   fs_chmod(a: number, mode: number, follow: number): number;
   fs_utimes(a: number, atime: number, mtime: number, follow: number): number;
+  fs_give_to_root(a: number): number;
   fs_truncate(a: number, length: number): number;
   fs_access(a: number, mode: number): number;
   fs_mkdtemp(a: number): number;
@@ -158,9 +177,14 @@ function park(): never {
 }
 
 /** The filesystem on the shared memory: see the file comment. */
-export class SharedFs implements VfsApi {
+export class SharedFs implements PermissionedVfs {
   /** The shared block's address (boot.ts gives out its slots). */
   readonly base: number;
+  /**
+   * This instance's calls without the permission checks: the kernel's, for
+   * the page's requests and its own setup. A process never uses it.
+   */
+  readonly privileged: VfsApi;
   private readonly memory: WebAssembly.Memory;
   private readonly x: Exports;
   private readonly deliversEvents: boolean;
@@ -179,6 +203,8 @@ export class SharedFs implements VfsApi {
   private readonly lenIndex: number;
   private readonly auxIndex: number;
   private readonly eventsDroppedIndex: number;
+  private readonly privilegedIndex: number;
+  private readonly umaskIndex: number;
   /** The shared block's words, the stat record and the argument area. They lie in the
    * static area, inside the memory's initial pages, so these views never go stale. */
   private readonly words: Int32Array;
@@ -196,6 +222,13 @@ export class SharedFs implements VfsApi {
   private inModule = false;
   /** The error this binding is throwing on purpose; anything else thrown inside a call is a trap. */
   private failure: Error | null = null;
+  /** Whether calls are checked against the permission bits; off inside `privileged`. */
+  private checking = true;
+  /** The floor `floorBytes` last measured, and its length in bytes. */
+  private lastFloor = "";
+  private lastFloorBytes = 0;
+  /** The mask of the caller the current call creates for (`withUmask`). */
+  private umask = DEFAULT_UMASK;
 
   constructor(options: SharedFsOptions) {
     this.memory = options.memory;
@@ -239,6 +272,8 @@ export class SharedFs implements VfsApi {
     this.lenIndex = word(OFFSET.len);
     this.auxIndex = word(OFFSET.aux);
     this.eventsDroppedIndex = word(OFFSET.eventsDropped);
+    this.privilegedIndex = word(OFFSET.privileged);
+    this.umaskIndex = word(OFFSET.umask);
     this.slotIndex = options.entry === undefined ? -1 : word(OFFSET.slots) + options.entry.slot;
     this.token = options.entry?.token ?? 0;
     this.handleHost = {
@@ -257,6 +292,31 @@ export class SharedFs implements VfsApi {
         this.call("futime", () => this.ok(this.x.fs_handle_utimes(handle, atimeMs, mtimeMs))),
       close: (handle) => this.call("close", () => this.ok(this.x.fs_handle_close(handle))),
     };
+    this.privileged = privilegedView(this, (run) => this.unchecked(run));
+  }
+
+  /** Runs `run` with the permission checks off and the default mask (`privileged`). */
+  private unchecked<T>(run: () => T): T {
+    const was = this.checking;
+    const mask = this.umask;
+    this.checking = false;
+    this.umask = DEFAULT_UMASK;
+    try {
+      return run();
+    } finally {
+      this.checking = was;
+      this.umask = mask;
+    }
+  }
+
+  withUmask<T>(umask: number, create: () => T): T {
+    const was = this.umask;
+    this.umask = umaskBits(umask);
+    try {
+      return create();
+    } finally {
+      this.umask = was;
+    }
   }
 
   /** Makes the root directory the first time any instance calls it (boot.ts does). */
@@ -305,51 +365,69 @@ export class SharedFs implements VfsApi {
   }
 
   exists(path: string): boolean {
-    return this.call("stat", () => {
-      const a = writeText(path, this.args, 0);
-      // Nothing in the tree has a path that long, as vfs.ts would find.
-      if (a < 0) {
-        return false;
-      }
-      return this.ok(this.x.fs_exists(a), path) === 1;
-    });
+    return this.presence(path) === PRESENT;
   }
 
   /**
    * Whether a path that `exists` reports missing is a symbolic link that
-   * leads nowhere or into a loop, rather than nothing at all. It raises no
-   * error: a process asks this on every miss (module resolution misses far
-   * more often than it hits), and making an error costs ten times the call.
+   * leads nowhere or into a loop, rather than nothing at all.
    */
   isBrokenLink(path: string): boolean {
-    return this.call("lstat", () => {
+    return this.presence(path) === BROKEN_LINK;
+  }
+
+  /**
+   * `exists`, and on a miss whether the path is a symbolic link that leads
+   * nowhere or into a loop (`BROKEN_LINK`) rather than nothing (`ABSENT`):
+   * one call, which raises no error. A process asks this on every miss
+   * (module resolution misses far more often than it hits), and making an
+   * error costs ten times the call.
+   */
+  presence(path: string): Presence {
+    return this.call("stat", () => {
       const a = writeText(path, this.args, 0);
+      // Nothing in the tree has a path that long, as vfs.ts would find.
       if (a < 0) {
-        return false;
+        return ABSENT;
       }
-      if (this.x.fs_stat(a, 0) >= 0) {
-        return true;
-      }
-      return ERRNO_CODES[this.unsigned[this.errnoIndex]] === "ELOOP";
+      return this.ok(this.x.fs_exists(a), path) as Presence;
     });
   }
 
+  /**
+   * The module lists a directory's names by their UTF-8 bytes, which is the
+   * order vfs.ts gives (by code point: kernel/vfs/path.ts, `compareNames`).
+   */
   readdir(path: string): DirEntry[] {
-    const entries = this.call("scandir", () => {
+    return this.call("scandir", () => {
       const a = this.putFirst(path, "scandir");
       this.ok(this.x.fs_readdir(a), path);
       return this.parseListing(this.copyResult(), this.unsigned[this.auxIndex]);
     });
-    // The order vfs.ts gives: JavaScript's default sort of the names.
-    return entries.sort((left, right) => (left.name < right.name ? -1 : 1));
   }
 
-  mkdir(path: string, recursive: boolean, mode: number): string | undefined {
+  mkdir(path: string, recursive: boolean, mode: number, floor?: string): string | undefined {
     return this.call("mkdir", () => {
       const a = this.putFirst(path, "mkdir");
-      this.ok(this.x.fs_mkdir(a, recursive ? 1 : 0, mode), path);
+      this.ok(this.x.fs_mkdir(a, recursive ? 1 : 0, mode, this.floorBytes(floor)), path);
       return this.unsigned[this.auxIndex] === 0 ? undefined : this.resultText();
     });
+  }
+
+  /**
+   * The length in bytes of `floor`, a prefix of a path (`VfsApi.mkdir`), as
+   * the module takes it; 0 for none. The last one is kept: a process asks
+   * with its working directory, again and again.
+   */
+  private floorBytes(floor: string | undefined): number {
+    if (floor === undefined) {
+      return 0;
+    }
+    if (floor !== this.lastFloor) {
+      this.lastFloor = floor;
+      this.lastFloorBytes = utf8Length(trimTrailingSlashes(floor));
+    }
+    return this.lastFloorBytes;
   }
 
   rmdir(path: string): void {
@@ -413,10 +491,25 @@ export class SharedFs implements VfsApi {
     });
   }
 
-  utimes(path: string, atimeMs: number, mtimeMs: number, followSymlinks: boolean): void {
+  utimes(
+    path: string,
+    atimeMs: number | null,
+    mtimeMs: number | null,
+    followSymlinks: boolean,
+  ): void {
     this.call("utime", () => {
       const a = this.putFirst(path, "utime");
-      this.ok(this.x.fs_utimes(a, atimeMs, mtimeMs, followSymlinks ? 1 : 0), path);
+      const flags =
+        (followSymlinks ? UTIME_FOLLOW : 0) |
+        (atimeMs === null ? UTIME_ATIME_NOW : 0) |
+        (mtimeMs === null ? UTIME_MTIME_NOW : 0);
+      this.ok(this.x.fs_utimes(a, atimeMs ?? 0, mtimeMs ?? 0, flags), path);
+    });
+  }
+
+  giveToRoot(path: string): void {
+    this.call("chown", () => {
+      this.ok(this.x.fs_give_to_root(this.putFirst(path, "chown")), path);
     });
   }
 
@@ -560,6 +653,10 @@ export class SharedFs implements VfsApi {
       if (words[this.poisonedIndex] !== 0) {
         throw createSystemError("EIO", syscall);
       }
+      // Every instance shares these words: each call says whose it is, and
+      // the mask of what it creates.
+      words[this.privilegedIndex] = this.checking ? 0 : 1;
+      words[this.umaskIndex] = this.umask;
       const before = words[this.eventsLengthIndex];
       const lostBefore = words[this.eventsDroppedIndex];
       try {

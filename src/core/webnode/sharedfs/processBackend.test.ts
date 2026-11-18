@@ -1,8 +1,9 @@
 // @vitest-environment node
 // A process's path calls on the shared filesystem: which go to the kernel (the
 // /dev paths under any spelling, and whatever reaches a device through a link),
-// that a call which changes a watched tree tells the kernel, and that a worker
-// whose module does not instantiate still works through the kernel.
+// that a call which changes a watched tree tells the kernel, that what a call
+// creates is masked by the process's own mask, and that a worker whose module
+// does not instantiate still works through the kernel.
 import { afterEach, describe, expect, it } from "vitest";
 import type { FsBackend } from "../process/runtime";
 import { Kernel } from "../kernel/kernel";
@@ -11,6 +12,7 @@ import { O_CREAT, O_TRUNC, O_WRONLY } from "../kernel/vfs/types";
 import { createSharedFilesystem } from "./boot";
 import type { SharedFilesystem } from "./boot";
 import { kernelPathOf, normalizePath, withDirectPaths } from "./processBackend";
+import { createUmaskCell, DEFAULT_UMASK, readUmask, writeUmask } from "../umask";
 
 const WRITE = O_WRONLY | O_CREAT | O_TRUNC;
 const encoder = new TextEncoder();
@@ -41,7 +43,8 @@ afterEach(() => {
 function boot(): {
   shared: SharedFilesystem;
   kernel: Kernel;
-  join: (kernel: FsBackend) => FsBackend;
+  /** A process's backend over `kernel`, with the mask `umask` reads (022 by default). */
+  join: (kernel: FsBackend, umask?: () => number) => FsBackend;
 } {
   const shared = createSharedFilesystem();
   if (shared === null) {
@@ -54,7 +57,7 @@ function boot(): {
   };
   const kernel = new Kernel(shared.fs, host, "app");
   stopped.push(() => kernel.dispose());
-  const join = (backend: FsBackend) => {
+  const join = (backend: FsBackend, umask = () => DEFAULT_UMASK) => {
     const entry = shared.admit();
     if (entry === null) {
       throw new Error("no slot");
@@ -63,17 +66,21 @@ function boot(): {
       backend,
       { module: shared.module, memory: shared.memory, ...entry },
       () => {},
+      umask,
     );
   };
   return { shared, kernel, join };
 }
 
-/** The kernel's own answers to path calls, as a process with no open files gets them. */
-function kernelSide(kernel: Kernel): FsBackend {
+/**
+ * The kernel's own answers to path calls, as a process with no open files
+ * gets them. `umask` is the process's mask as the kernel holds it.
+ */
+function kernelSide(kernel: Kernel, umask = createUmaskCell(DEFAULT_UMASK)): FsBackend {
   const handlers = (
     kernel as unknown as { handlers: Record<string, (...args: unknown[]) => unknown> }
   ).handlers;
-  const proc = { pid: 1, fds: new Map(), owner: null, terminal: null };
+  const proc = { pid: 1, fds: new Map(), owner: null, terminal: null, umask };
   return new Proxy({} as FsBackend, {
     get:
       (_target, name) =>
@@ -167,6 +174,23 @@ describe("withDirectPaths", () => {
     expect(fs.exists("/tmp/loop")).toBe(false);
   });
 
+  it("gives a device's own entry the device's answer by a path through a link", () => {
+    const { kernel, join } = boot();
+    const fs = join(kernelSide(kernel));
+    fs.symlink("/", "/tmp/root");
+    fs.symlink("/dev", "/tmp/dev-link");
+    fs.symlink("/dev/null", "/tmp/null-link");
+    const kind = (path: string) => fs.stat(path, false).mode & 0o170000;
+    for (const prefix of ["", "/tmp/root", "/tmp/dev-link/.."]) {
+      expect(kind(`${prefix}/dev/fd`)).toBe(0o040000);
+      expect(kind(`${prefix}/dev/null`)).toBe(0o020000);
+      expect(() => fs.readlink(`${prefix}/dev/stdout`)).toThrow(/EINVAL/);
+    }
+    // A link of the user's to a device stays a link.
+    expect(kind("/tmp/null-link")).toBe(0o120000);
+    expect(fs.readlink("/tmp/null-link")).toBe("/dev/null");
+  });
+
   it("tells the kernel when a call changed a watched tree", () => {
     const { shared } = boot();
     shared.fs.mkdir("/w", true, 0o755);
@@ -178,6 +202,7 @@ describe("withDirectPaths", () => {
       backend,
       { module: shared.module, memory: shared.memory, ...entry },
       () => (notified += 1),
+      () => DEFAULT_UMASK,
     );
     fs.writeFile("/w/a.txt", encoder.encode("a"), WRITE, 0o644);
     expect(notified).toBe(1);
@@ -194,7 +219,57 @@ describe("withDirectPaths", () => {
       backend,
       { module: empty, memory: shared.memory, slot: 0, token: 0 },
       () => {},
+      () => DEFAULT_UMASK,
     );
     expect(fs).toBe(backend);
+  });
+
+  it("creates under the process's mask, as it is at each call", () => {
+    const { shared, kernel, join } = boot();
+    const cell = createUmaskCell(0o077);
+    const perm = (path: string) => shared.fs.stat(path, false).mode & 0o7777;
+    const viaKernel = kernelSide(kernel, cell);
+    const fs = join(viaKernel, () => readUmask(cell));
+    fs.writeFile("/tmp/f", encoder.encode("x"), WRITE, 0o666);
+    fs.mkdir("/tmp/d", false, 0o777);
+    expect(fs.mkdir("/tmp/r/s", true, 0o777)).toBe("/tmp/r");
+    const temp = fs.mkdtemp("/tmp/t-");
+    // A descriptor is the kernel's to open, and it reads the same mask.
+    viaKernel.open("/tmp/o", O_WRONLY | O_CREAT, 0o666);
+    expect(["/tmp/f", "/tmp/d", "/tmp/r", "/tmp/r/s", temp, "/tmp/o"].map(perm)).toEqual([
+      0o600, 0o700, 0o700, 0o700, 0o700, 0o600,
+    ]);
+    // Set again, the next call is under the new one.
+    writeUmask(cell, 0o002);
+    fs.writeFile("/tmp/g", encoder.encode("x"), WRITE, 0o666);
+    viaKernel.open("/tmp/o2", O_WRONLY | O_CREAT, 0o666);
+    expect([perm("/tmp/g"), perm("/tmp/o2")]).toEqual([0o664, 0o664]);
+    // mkdtemp asks for 0700, which only a mask on the owner's bits shows.
+    writeUmask(cell, 0o277);
+    expect(perm(fs.mkdtemp("/tmp/u-"))).toBe(0o500);
+    // A copy keeps its source's mode, and a link is 0777, whatever the mask.
+    writeUmask(cell, 0o777);
+    fs.chmod("/tmp/f", 0o755, true);
+    fs.copyFile("/tmp/f", "/tmp/copy", 0);
+    fs.symlink("/tmp/f", "/tmp/link");
+    expect([perm("/tmp/copy"), perm("/tmp/link")]).toEqual([0o755, 0o777]);
+  });
+
+  it("keeps each caller's mask its own on the one shared memory", () => {
+    const { shared, kernel, join } = boot();
+    const perm = (path: string) => shared.fs.stat(path, false).mode & 0o7777;
+    const strict = join(kernelSide(kernel), () => 0o077);
+    const open = join(kernelSide(kernel), () => 0);
+    strict.writeFile("/tmp/s1", encoder.encode("x"), WRITE, 0o666);
+    open.writeFile("/tmp/o1", encoder.encode("x"), WRITE, 0o666);
+    // The kernel's instance, for the page: the default mask, whoever called last.
+    shared.fs.privileged.writeFile("/tmp/page", encoder.encode("x"), WRITE, 0o644);
+    shared.fs.privileged.mkdir("/tmp/pagedir", false, 0o755);
+    strict.mkdir("/tmp/s2", false, 0o777);
+    shared.fs.writeFile("/tmp/kernel", encoder.encode("x"), WRITE, 0o666);
+    open.mkdir("/tmp/o2", false, 0o777);
+    expect(
+      ["s1", "o1", "page", "pagedir", "s2", "kernel", "o2"].map((name) => perm(`/tmp/${name}`)),
+    ).toEqual([0o600, 0o666, 0o644, 0o755, 0o700, 0o644, 0o777]);
   });
 });

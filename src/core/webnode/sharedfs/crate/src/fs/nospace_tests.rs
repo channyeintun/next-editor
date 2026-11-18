@@ -341,7 +341,7 @@ fn removes_closes_truncates_and_reads_with_no_memory_at_all() {
         .unwrap()
         .copy_from_slice(b"xyz");
     fs.chmod(b"/d/f", 0o600, true).unwrap();
-    fs.utimes(b"/d/f", 1.0, 2.0, true).unwrap();
+    fs.utimes(b"/d/f", Some(1.0), Some(2.0), true).unwrap();
     // Their events had no room: dropped, and said so.
     assert!(fs.events_dropped());
 

@@ -22,6 +22,7 @@ import {
   S_IFMT,
   S_IFREG,
   X_OK,
+  type PermissionedVfs,
   type VfsApi,
   type VfsWatchEvent,
 } from "./types";
@@ -66,7 +67,7 @@ function watchAll(vfs: VfsApi, path: string, recursive: boolean): VfsWatchEvent[
 }
 
 /** A filesystem under test: the contract plus `totals`, which both have. */
-type TestFs = VfsApi & { totals(): { inodes: number; bytes: number } };
+type TestFs = PermissionedVfs & { totals(): { inodes: number; bytes: number } };
 
 const IMPLEMENTATIONS: [name: string, create: (now: () => number) => TestFs][] = [
   ["Vfs", (now) => new Vfs({ now })],
@@ -154,6 +155,37 @@ describe.each(IMPLEMENTATIONS)("%s", (_name, create) => {
       expect(failure(() => vfs.readFile("/f/."))).toMatchObject({ code: "ENOTDIR" });
       vfs.mkdir("/d", false, 0o777);
       expect(vfs.stat("/d/", true).mode & S_IFMT).toBe(S_IFDIR);
+    });
+
+    it("looks `.` up in a directory that must be there", () => {
+      // As Linux: `name/.` walks through `name`, so nothing is made at, or
+      // moved to, a missing `name` spelled that way; `name/` only asks for a
+      // directory. A link that leads nowhere is walked through the same way.
+      const { vfs } = setup();
+      vfs.mkdir("/d", false, 0o777);
+      put(vfs, "/f", "x");
+      vfs.symlink("nowhere", "/dangling");
+      const code = (action: () => unknown) => failure(action).code;
+      expect(code(() => vfs.mkdir("/n1/.", false, 0o777))).toBe("ENOENT");
+      expect(code(() => vfs.mkdir("/n1/./", false, 0o777))).toBe("ENOENT");
+      expect(code(() => vfs.mkdir("/dangling/.", false, 0o777))).toBe("ENOENT");
+      expect(code(() => put(vfs, "/n2/.", "x"))).toBe("ENOENT");
+      expect(code(() => vfs.open("/n2/.", O_WRONLY | O_CREAT | O_EXCL, 0o644))).toBe("ENOENT");
+      expect(code(() => vfs.rename("/d", "/n3/."))).toBe("ENOENT");
+      expect(code(() => vfs.rename("/f", "/n3/."))).toBe("ENOENT");
+      expect(code(() => vfs.copyFile("/f", "/n4/.", 0))).toBe("ENOENT");
+      expect(code(() => vfs.symlink("x", "/n5/."))).toBe("ENOENT");
+      expect(code(() => vfs.link("/f", "/n6/."))).toBe("ENOENT");
+      expect(code(() => vfs.stat("/n7/.", true))).toBe("ENOENT");
+      expect(vfs.exists("/n7/.")).toBe(false);
+      expect(vfs.readdir("/").map((entry) => entry.name)).toEqual(["d", "dangling", "f"]);
+      // What is there is still what it was.
+      expect(code(() => vfs.mkdir("/d/.", false, 0o777))).toBe("EEXIST");
+      expect(code(() => vfs.mkdir("/f/.", false, 0o777))).toBe("ENOTDIR");
+      // `mkdir -p` goes on to the name itself, and says so.
+      expect(vfs.mkdir("/p1/./p2", true, 0o777)).toBe("/p1");
+      expect(vfs.mkdir("/p3/.", true, 0o777)).toBe("/p3");
+      expect(vfs.stat("/p1/p2", true).mode & S_IFMT).toBe(S_IFDIR);
     });
 
     it("reports ENOTDIR when a middle component is a file", () => {
@@ -286,16 +318,26 @@ describe.each(IMPLEMENTATIONS)("%s", (_name, create) => {
       });
     });
 
-    it("reads a 1 MB file quickly", () => {
+    it("reads a 1 MB file in the time of a copy of it", () => {
       const { vfs } = setup();
       const data = new Uint8Array(1024 * 1024).fill(7);
       vfs.writeFile("/big", data, WRITE, 0o644);
       vfs.readFile("/big");
-      const start = performance.now();
-      for (let i = 0; i < 20; i++) {
+      // A read is one copy of the bytes, so it is timed against one: a loop
+      // over the bytes costs some twenty copies. The fastest of many runs of
+      // each, taken in turn: a run the scheduler interrupted says nothing
+      // about what a read costs, and both see the same machine.
+      let read = Infinity;
+      let copy = Infinity;
+      for (let i = 0; i < 50; i++) {
+        let start = performance.now();
         vfs.readFile("/big");
+        read = Math.min(read, performance.now() - start);
+        start = performance.now();
+        data.slice();
+        copy = Math.min(copy, performance.now() - start);
       }
-      expect((performance.now() - start) / 20).toBeLessThan(1);
+      expect(read).toBeLessThan(copy * 5);
       expect(vfs.readFile("/big")).toEqual(data);
     });
   });
@@ -834,6 +876,99 @@ describe.each(IMPLEMENTATIONS)("%s", (_name, create) => {
       expect(failure(() => vfs.open("/nf/", WRITE, 0o666))).toMatchObject({ code: "EISDIR" });
     });
 
+    /** `/ls` with `dir` (`f`, `sub/`), `empty`, and links to them, to `dir/f` and to nothing. */
+    function linkTree(vfs: TestFs): () => string {
+      vfs.mkdir("/ls/dir/sub", true, 0o777);
+      put(vfs, "/ls/dir/f", "x");
+      vfs.mkdir("/ls/empty", false, 0o777);
+      vfs.symlink("dir", "/ls/link");
+      vfs.symlink("empty", "/ls/elink");
+      vfs.symlink("dir/f", "/ls/flink");
+      vfs.symlink("nowhere", "/ls/dangling");
+      const names = (path: string) => vfs.readdir(path).map((entry) => entry.name);
+      return () => `${names("/ls").join(" ")} | ${names("/ls/dir").join(" ")}`;
+    }
+    const WHOLE = "dangling dir elink empty flink link | f sub";
+
+    it("a trailing slash after a link does not follow it for the calls that remove or move", () => {
+      const { vfs } = setup();
+      const left = linkTree(vfs);
+      const calls: [string, () => unknown, string][] = [
+        ["rmdir", () => vfs.rmdir("/ls/elink/"), "/ls/elink/"],
+        ["rmdir", () => vfs.rmdir("/ls/link/"), "/ls/link/"],
+        ["rmdir", () => vfs.rmdir("/ls/link//"), "/ls/link//"],
+        ["unlink", () => vfs.unlink("/ls/link/"), "/ls/link/"],
+        ["unlink", () => vfs.unlink("/ls/flink/"), "/ls/flink/"],
+        ["unlink", () => vfs.unlink("/ls/elink/"), "/ls/elink/"],
+        ["unlink", () => vfs.unlink("/ls/dangling/"), "/ls/dangling/"],
+        ["rm", () => vfs.rm("/ls/link/", true, false), "/ls/link/"],
+        ["rm", () => vfs.rm("/ls/elink/", true, false), "/ls/elink/"],
+        ["rename", () => vfs.rename("/ls/link/", "/ls/moved"), "/ls/link/"],
+        ["rename", () => vfs.rename("/ls/elink/", "/ls/moved/"), "/ls/elink/"],
+      ];
+      for (const [syscall, call, path] of calls) {
+        expect(failure(call)).toMatchObject({ code: "ENOTDIR", syscall, path });
+      }
+      // `force` does not pass over a link to a directory, which is there; a
+      // link to a file or to nothing it takes as missing, as `f/` for a file.
+      expect(failure(() => vfs.rm("/ls/link/", true, true))).toMatchObject({
+        code: "ENOTDIR",
+        syscall: "rm",
+      });
+      vfs.rm("/ls/flink/", true, true);
+      vfs.rm("/ls/dangling/", true, true);
+      // A directory moved onto `link/` meets the link, which is no directory.
+      expect(failure(() => vfs.rename("/ls/empty", "/ls/link/"))).toMatchObject({
+        code: "ENOTDIR",
+        syscall: "rename",
+      });
+      expect(left()).toBe(WHOLE);
+      // The calls that only look still follow `link/`.
+      expect(vfs.stat("/ls/link/", true).mode & S_IFMT).toBe(S_IFDIR);
+      expect(vfs.stat("/ls/link/", false).mode & S_IFMT).toBe(S_IFDIR);
+      expect(vfs.readdir("/ls/link/").map((entry) => entry.name)).toEqual(["f", "sub"]);
+      expect(vfs.realpath("/ls/link/")).toBe("/ls/dir");
+      // `link/.` names the directory itself, through the link.
+      expect(failure(() => vfs.rmdir("/ls/elink/."))).toMatchObject({ code: "EINVAL" });
+      // A directory's own trailing slash: unlink says EISDIR, rmdir removes it.
+      expect(failure(() => vfs.unlink("/ls/dir/"))).toMatchObject({ code: "EISDIR" });
+      vfs.rmdir("/ls/empty/");
+      expect(vfs.exists("/ls/empty")).toBe(false);
+    });
+
+    it("unlink of `name/` asks no permission, as Linux's unlinkat", () => {
+      const { vfs } = setup();
+      linkTree(vfs);
+      vfs.chmod("/ls", 0o555, true);
+      expect(failure(() => vfs.unlink("/ls/link/"))).toMatchObject({ code: "ENOTDIR" });
+      expect(failure(() => vfs.unlink("/ls/dir/"))).toMatchObject({ code: "EISDIR" });
+    });
+
+    it("mkdir at a link is EEXIST, slash or not, and never makes the link's target", () => {
+      const { vfs } = setup();
+      const left = linkTree(vfs);
+      put(vfs, "/ls/file", "");
+      const paths = ["/ls/dangling", "/ls/dangling/", "/ls/dangling//", "/ls/link/", "/ls/file/"];
+      for (const path of paths) {
+        expect(failure(() => vfs.mkdir(path, false, 0o777))).toEqual({
+          code: "EEXIST",
+          syscall: "mkdir",
+          path,
+          dest: undefined,
+        });
+      }
+      for (const path of ["/ls/dangling/", "/ls/file/"]) {
+        expect(failure(() => vfs.mkdir(path, true, 0o777))).toMatchObject({ code: "EEXIST", path });
+      }
+      expect(vfs.mkdir("/ls/link/", true, 0o777)).toBeUndefined();
+      expect(failure(() => vfs.symlink("x", "/ls/dangling/"))).toMatchObject({ code: "EEXIST" });
+      expect(failure(() => vfs.link("/ls/file", "/ls/dangling/"))).toMatchObject({
+        code: "EEXIST",
+      });
+      expect(vfs.exists("/ls/nowhere")).toBe(false);
+      expect(left()).toBe("dangling dir elink empty file flink link | f sub");
+    });
+
     it("rmdir of a last part `.` is EINVAL and of `..` is ENOTEMPTY", () => {
       const { vfs } = setup();
       vfs.mkdir("/t5", false, 0o777);
@@ -899,6 +1034,24 @@ describe.each(IMPLEMENTATIONS)("%s", (_name, create) => {
       });
       vfs.rm("/nope", false, true);
       vfs.rm("/no/such/deep", true, true);
+    });
+
+    it("takes a path through something that is no directory as missing, under force", () => {
+      // As GNU `rm -f` and Node's rmSync with `force` do: nothing is there.
+      const { vfs } = setup();
+      put(vfs, "/f", "x");
+      vfs.symlink("/f", "/l");
+      for (const path of ["/f/below", "/f/below/deeper", "/f/", "/f/.", "/l/below"]) {
+        expect(failure(() => vfs.rm(path, true, false))).toMatchObject({
+          code: "ENOTDIR",
+          syscall: "rm",
+          path,
+        });
+        vfs.rm(path, true, true);
+        vfs.rm(path, false, true);
+      }
+      expect(read(vfs, "/f")).toBe("x");
+      expect(vfs.readlink("/l")).toBe("/f");
     });
 
     it("raises EISDIR from a non-recursive rm of a directory", () => {
@@ -1429,6 +1582,191 @@ describe.each(IMPLEMENTATIONS)("%s", (_name, create) => {
     });
   });
 
+  describe("umask", () => {
+    const perm = (vfs: VfsApi, path: string) => vfs.stat(path, false).mode & 0o7777;
+
+    it("takes the mask's bits off the mode of what a call under it creates", () => {
+      const { vfs } = setup();
+      vfs.withUmask(0o077, () => {
+        vfs.writeFile("/f", bytes("x"), WRITE, 0o666);
+        vfs.writeFile("/x", bytes(""), WRITE, 0o777);
+        vfs.open("/o", O_WRONLY | O_CREAT, 0o666).close();
+        vfs.mkdir("/d", false, 0o777);
+        expect(vfs.mkdir("/r/s/t", true, 0o777)).toBe("/r");
+      });
+      expect(perm(vfs, "/f")).toBe(0o600);
+      expect(perm(vfs, "/x")).toBe(0o700);
+      expect(perm(vfs, "/o")).toBe(0o600);
+      expect(perm(vfs, "/d")).toBe(0o700);
+      expect([perm(vfs, "/r"), perm(vfs, "/r/s"), perm(vfs, "/r/s/t")]).toEqual([
+        0o700, 0o700, 0o700,
+      ]);
+      vfs.withUmask(0o027, () => {
+        vfs.writeFile("/g", bytes(""), WRITE, 0o666);
+        vfs.mkdir("/e", false, 0o777);
+      });
+      expect([perm(vfs, "/g"), perm(vfs, "/e")]).toEqual([0o640, 0o750]);
+      vfs.withUmask(0, () => {
+        vfs.writeFile("/all", bytes(""), WRITE, 0o666);
+        vfs.mkdir("/alld", false, 0o777);
+      });
+      expect([perm(vfs, "/all"), perm(vfs, "/alld")]).toEqual([0o666, 0o777]);
+    });
+
+    it("mkdir keeps only the permission bits and the sticky bit; a new file keeps all twelve", () => {
+      const { vfs } = setup();
+      vfs.withUmask(0o022, () => {
+        vfs.mkdir("/u", false, 0o4755);
+        vfs.mkdir("/g", false, 0o2775);
+        vfs.mkdir("/t", false, 0o1777);
+        vfs.mkdir("/all", false, 0o7777);
+        expect(vfs.mkdir("/p/q", true, 0o6777)).toBe("/p");
+        vfs.open("/fu", O_WRONLY | O_CREAT, 0o4755).close();
+        vfs.writeFile("/fg", bytes(""), WRITE, 0o2644);
+        vfs.open("/ft", O_WRONLY | O_CREAT, 0o7777).close();
+      });
+      expect([perm(vfs, "/u"), perm(vfs, "/g"), perm(vfs, "/t"), perm(vfs, "/all")]).toEqual([
+        0o755, 0o755, 0o1755, 0o1755,
+      ]);
+      expect([perm(vfs, "/p"), perm(vfs, "/p/q")]).toEqual([0o755, 0o755]);
+      expect([perm(vfs, "/fu"), perm(vfs, "/fg"), perm(vfs, "/ft")]).toEqual([
+        0o4755, 0o2644, 0o7755,
+      ]);
+      expect(
+        perm(
+          vfs,
+          vfs.withUmask(0o022, () => vfs.mkdtemp("/u/x-")),
+        ),
+      ).toBe(0o700);
+      // chmod afterwards sets any bit.
+      vfs.chmod("/u", 0o7755, true);
+      expect(perm(vfs, "/u")).toBe(0o7755);
+      vfs.open("/u", O_RDONLY, 0).chmod(0o6700);
+      expect(perm(vfs, "/u")).toBe(0o6700);
+    });
+
+    it("masks the directory mkdtemp makes, as mkdtemp(3)'s mkdir is masked", () => {
+      const { vfs } = setup();
+      vfs.mkdir("/tmp", false, 0o777);
+      expect(perm(vfs, vfs.mkdtemp("/tmp/a-"))).toBe(0o700);
+      expect(
+        perm(
+          vfs,
+          vfs.withUmask(0o277, () => vfs.mkdtemp("/tmp/b-")),
+        ),
+      ).toBe(0o500);
+      expect(
+        perm(
+          vfs,
+          vfs.withUmask(0o777, () => vfs.mkdtemp("/tmp/c-")),
+        ),
+      ).toBe(0);
+    });
+
+    it("masks the default mode a call without a usable mode gets", () => {
+      const { vfs } = setup();
+      vfs.withUmask(0o027, () => {
+        vfs.writeFile("/f", bytes(""), WRITE, -1);
+        vfs.mkdir("/d", false, NaN);
+      });
+      expect([perm(vfs, "/f"), perm(vfs, "/d")]).toEqual([0o640, 0o750]);
+    });
+
+    it("leaves the bits above the permission bits to the caller", () => {
+      const { vfs } = setup();
+      vfs.withUmask(0o777, () => {
+        vfs.writeFile("/f", bytes(""), WRITE, 0o4755);
+        vfs.mkdir("/d", false, 0o1777);
+      });
+      expect([perm(vfs, "/f"), perm(vfs, "/d")]).toEqual([0o4000, 0o1000]);
+    });
+
+    it("keeps only the permission bits of the mask it is given", () => {
+      const { vfs } = setup();
+      vfs.withUmask(0o7027, () => vfs.writeFile("/f", bytes(""), WRITE, 0o7777));
+      expect(perm(vfs, "/f")).toBe(0o7750);
+      vfs.withUmask(2 ** 32 + 0o077, () => vfs.mkdir("/d", false, 0o777));
+      expect(perm(vfs, "/d")).toBe(0o700);
+    });
+
+    it("does not mask symbolic links, hard links or what copyFile makes", () => {
+      const { vfs } = setup();
+      put(vfs, "/src", "data");
+      vfs.chmod("/src", 0o777, true);
+      put(vfs, "/there", "old");
+      vfs.chmod("/there", 0o666, true);
+      vfs.withUmask(0o077, () => {
+        vfs.symlink("/src", "/link");
+        vfs.link("/src", "/hard");
+        vfs.copyFile("/src", "/copy", 0);
+        vfs.copyFile("/src", "/there", 0);
+      });
+      expect(perm(vfs, "/link")).toBe(0o777);
+      expect(perm(vfs, "/hard")).toBe(0o777);
+      // libuv gives the copy the source's mode with fchmod, whatever the mask.
+      expect(perm(vfs, "/copy")).toBe(0o777);
+      expect(perm(vfs, "/there")).toBe(0o777);
+    });
+
+    it("changes nothing about a file that is already there", () => {
+      const { vfs } = setup();
+      put(vfs, "/f", "old");
+      vfs.mkdir("/d", false, 0o777);
+      vfs.withUmask(0o077, () => {
+        vfs.writeFile("/f", bytes("new"), WRITE, 0o666);
+        vfs.open("/f", O_RDWR | O_CREAT, 0o666).close();
+        vfs.mkdir("/d", true, 0o777);
+        vfs.chmod("/d", 0o775, true);
+      });
+      expect(read(vfs, "/f")).toBe("new");
+      expect([perm(vfs, "/f"), perm(vfs, "/d")]).toEqual([0o644, 0o775]);
+    });
+
+    it("lasts for the calls made under it, and gives the mask before it back", () => {
+      const { vfs } = setup();
+      const made = vfs.withUmask(0o077, () => {
+        vfs.withUmask(0o002, () => vfs.writeFile("/inner", bytes(""), WRITE, 0o666));
+        vfs.writeFile("/outer", bytes(""), WRITE, 0o666);
+        return "value";
+      });
+      expect(made).toBe("value");
+      expect(
+        failure(() => vfs.withUmask(0o077, () => vfs.mkdir("/missing/d", false, 0o777))),
+      ).toMatchObject({ code: "ENOENT" });
+      put(vfs, "/after", "");
+      vfs.mkdir("/afterd", false, 0o777);
+      expect(["/inner", "/outer", "/after", "/afterd"].map((path) => perm(vfs, path))).toEqual([
+        0o664, 0o600, 0o644, 0o755,
+      ]);
+    });
+
+    it("creates with the default mask through the privileged view, whatever the caller's", () => {
+      const { vfs } = setup();
+      vfs.withUmask(0o077, () => {
+        vfs.privileged.writeFile("/f", bytes(""), WRITE, 0o644);
+        vfs.privileged.mkdir("/d/e", true, 0o755);
+        vfs.privileged.open("/o", O_WRONLY | O_CREAT, 0o666).close();
+        // The caller's own calls keep its mask after a privileged one.
+        vfs.writeFile("/mine", bytes(""), WRITE, 0o666);
+      });
+      expect(["/f", "/d", "/d/e", "/o", "/mine"].map((path) => perm(vfs, path))).toEqual([
+        0o644, 0o755, 0o755, 0o644, 0o600,
+      ]);
+    });
+
+    it("refuses what the new modes refuse", () => {
+      const { vfs } = setup();
+      vfs.withUmask(0o300, () => vfs.mkdir("/d", false, 0o777));
+      expect(perm(vfs, "/d")).toBe(0o477);
+      expect(failure(() => put(vfs, "/d/f", ""))).toMatchObject({ code: "EACCES" });
+      // A new file is not checked against its own mode: it is written, then closed to its owner.
+      vfs.withUmask(0o777, () => vfs.writeFile("/closed", bytes("kept"), WRITE, 0o666));
+      expect(perm(vfs, "/closed")).toBe(0);
+      expect(failure(() => vfs.readFile("/closed"))).toMatchObject({ code: "EACCES" });
+      expect(text(vfs.privileged.readFile("/closed"))).toBe("kept");
+    });
+  });
+
   describe("watch", () => {
     it("reports create, write and delete in a watched directory", () => {
       const { vfs } = setup();
@@ -1590,6 +1928,30 @@ describe.each(IMPLEMENTATIONS)("%s", (_name, create) => {
       expect(vfs.totals()).toEqual({ inodes: 4, bytes: 5 });
       vfs.unlink("/a");
       expect(vfs.totals()).toEqual({ inodes: 3, bytes: 0 });
+    });
+  });
+
+  describe("depth", () => {
+    // A tree deeper than a JavaScript stack holds calls: making it, walking
+    // it for what may be removed, removing it up to a refusal, and removing
+    // it all, are loops. Paths this long cost seconds of walking.
+    it("makes and removes a tree 15,000 directories deep", { timeout: 120_000 }, () => {
+      const { vfs } = setup();
+      const deepest = "/d".repeat(15_000);
+      expect(vfs.mkdir(deepest, true, 0o777)).toBe("/d");
+      put(vfs, `${deepest}/f`, "x");
+      // What the deepest directory holds may not be removed: the walk gets
+      // there, is refused, and has removed nothing.
+      vfs.chmod(deepest, 0o555, true);
+      expect(failure(() => vfs.rm("/d", true, false))).toMatchObject({
+        code: "EACCES",
+        syscall: "rm",
+        path: "/d",
+      });
+      expect(read(vfs, `${deepest}/f`)).toBe("x");
+      vfs.chmod(deepest, 0o755, true);
+      vfs.rm("/d", true, false);
+      expect(vfs.totals()).toEqual({ inodes: 1, bytes: 0 });
     });
   });
 

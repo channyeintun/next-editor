@@ -105,9 +105,13 @@ kernel worker                      process worker (one per process)
   map as it goes: sorted into the order they were made (the order the
   TypeScript filesystem removes in) when the memory for that can be had, and
   straight from the map, in the order of their names, when it cannot. Only
-  then do the events of that one removal come in another order.
+  then do the events of that one removal come in another order. A tree the
+  permissions do not let go of entirely is removed the second way, in the
+  order a listing gives the names in both filesystems, up to the first
+  refusal: what was removed before it stays removed.
 - Recursion is bounded: an operation whose depth depends on the data (removing
-  a tree, `mkdir -p`, following links) is written as a loop.
+  a tree, checking that a tree may be removed, `mkdir -p`, following links) is
+  written as a loop.
 - The Rust mirrors `kernel/vfs/vfs.ts` function for function, including where
   it reads the clock: a test runs the same operations on both and compares the
   results, the errors, the timestamps and the events.
@@ -115,6 +119,26 @@ kernel worker                      process worker (one per process)
 ## The contract (`abi.ts`, `crate/src/abi.rs`)
 
 `fs_base()` returns the address of the shared block. Its layout is in `abi.rs`.
+
+Every call is checked against the permission bits (the owner's: a file
+belongs to the one user every process runs as, or, once `fs_give_to_root` gave
+it so, to root, whose files the others' bits decide, only root changes the
+mode or times of (setting both times to now needs only write permission),
+and whose entries only root removes or renames), as `kernel/vfs/vfs.ts`
+checks them. The block's
+`privileged` word says whose call it is: the binding writes it before every
+call, under the lock, 1 for the kernel's privileged calls (the page's requests
+and the kernel's setup, `SharedFs.privileged`) and 0 for every other. A
+process's instance never writes 1.
+
+What a call creates (`fs_open` and `fs_write_file` with `O_CREAT`, `fs_mkdir`,
+`fs_mkdtemp`) gets its mode less the caller's file mode creation mask, the
+block's `umask` word, as `kernel/vfs/vfs.ts` masks it. The binding writes that
+word before every call too, under the lock: the mask of the caller its call is
+made for (`SharedFs.withUmask`: the process's own in a process, the mask of
+the process it acts for in the kernel), and `DEFAULT_UMASK` (022, `umask.ts`)
+outside one and for every privileged call. A symbolic link is 0777 and a copy
+(`fs_copy_file`) has its source's mode, whatever the mask.
 
 A call passes its paths as UTF-8 in the argument area: the first at `args[0..a]`,
 the second at `args[a..a+b]`; `a` and `b` are parameters. Every export returns an
@@ -124,39 +148,43 @@ the second at `args[a..a+b]`; `a` and `b` are parameters. Every export returns a
 JavaScript does not keep to 32 bits (a length, a position, a mode, a time) are
 `f64`; a position of `NaN` means "at the file offset".
 
-| Export                                                                     | Success                                                                                           |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `fs_base()`                                                                | the shared block's address                                                                        |
-| `fs_init()`                                                                | makes the root directory the first time it is called                                              |
-| `fs_stat(a, follow)`                                                       | `stat` holds the record                                                                           |
-| `fs_exists(a)`                                                             | 1 or 0; never fails                                                                               |
-| `fs_readdir(a)`                                                            | `ptr`/`len`: the listing; `aux`: how many entries                                                 |
-| `fs_mkdir(a, recursive, mode: f64)`                                        | when recursive and a directory was made: `aux` 1 and `ptr`/`len` the first one made; else `aux` 0 |
-| `fs_rmdir(a)` `fs_unlink(a)` `fs_rm(a, recursive, force)`                  |                                                                                                   |
-| `fs_rename(a, b)` `fs_link(a, b)` `fs_copy_file(a, b, mode)`               |                                                                                                   |
-| `fs_symlink(a, b)`                                                         | `a` is the target, `b` the path                                                                   |
-| `fs_readlink(a)` `fs_realpath(a)` `fs_watch_path(a)`                       | `ptr`/`len`: the path                                                                             |
-| `fs_chmod(a, mode, follow)` `fs_utimes(a, atime: f64, mtime: f64, follow)` |                                                                                                   |
-| `fs_truncate(a, length: f64)` `fs_access(a, mode)`                         |                                                                                                   |
-| `fs_mkdtemp(a)`                                                            | `a` is one candidate path: 1 made, 0 the name is taken                                            |
-| `fs_read_file(a)`                                                          | `ptr`/`len`: the file's bytes                                                                     |
-| `fs_write_file(a, flags, mode: f64, length)`                               | `ptr`: where the caller copies `length` bytes                                                     |
-| `fs_open(a, flags, mode: f64)`                                             | a handle                                                                                          |
-| `fs_handle_read(h, length: f64, position: f64)`                            | `ptr`/`len`: the bytes read                                                                       |
-| `fs_handle_write(h, length, position: f64)`                                | `ptr`: where the caller copies `length` bytes                                                     |
-| `fs_handle_stat(h)`                                                        | `stat` holds the record                                                                           |
-| `fs_handle_truncate(h, length: f64)` `fs_handle_chmod(h, mode)`            |                                                                                                   |
-| `fs_handle_utimes(h, atime: f64, mtime: f64)` `fs_handle_close(h)`         |                                                                                                   |
-| `fs_events()`                                                              | `ptr`/`len`: the event log                                                                        |
-| `fs_events_clear()`                                                        | empties the log                                                                                   |
-| `fs_totals()`                                                              | `stat[0]`: live inodes; `stat[1]`: bytes of file data                                             |
-| `fs_check()`                                                               | 0 when the heap and the tree are consistent; -1 when not; 1 when there was no memory to look      |
+| Export                                                                    | Success                                                                                                                                                                                        |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fs_base()`                                                               | the shared block's address                                                                                                                                                                     |
+| `fs_init()`                                                               | makes the root directory the first time it is called                                                                                                                                           |
+| `fs_stat(a, follow)`                                                      | `stat` holds the record                                                                                                                                                                        |
+| `fs_exists(a)`                                                            | 1 there; 0 nothing; 2 a symbolic link that leads nowhere or into a loop; never fails                                                                                                           |
+| `fs_readdir(a)`                                                           | `ptr`/`len`: the listing; `aux`: how many entries                                                                                                                                              |
+| `fs_mkdir(a, recursive, mode: f64, floor)`                                | when recursive and a directory was made: `aux` 1 and `ptr`/`len` the first one made; else `aux` 0. A recursive one makes nothing `floor` bytes long or shorter (ENOENT instead); 0 is no floor |
+| `fs_rmdir(a)` `fs_unlink(a)` `fs_rm(a, recursive, force)`                 |                                                                                                                                                                                                |
+| `fs_rename(a, b)` `fs_link(a, b)` `fs_copy_file(a, b, mode)`              |                                                                                                                                                                                                |
+| `fs_symlink(a, b)`                                                        | `a` is the target, `b` the path                                                                                                                                                                |
+| `fs_readlink(a)` `fs_realpath(a)` `fs_watch_path(a)`                      | `ptr`/`len`: the path                                                                                                                                                                          |
+| `fs_chmod(a, mode, follow)` `fs_utimes(a, atime: f64, mtime: f64, flags)` | EPERM on a node root owns, when checked; `flags`: `UTIME_FOLLOW`, and `UTIME_ATIME_NOW`/`UTIME_MTIME_NOW` to set that time to now (both: EACCES unless writable instead)                       |
+| `fs_give_to_root(a)`                                                      | the node (a final link itself) is root's; EPERM when checked                                                                                                                                   |
+| `fs_truncate(a, length: f64)` `fs_access(a, mode)`                        |                                                                                                                                                                                                |
+| `fs_mkdtemp(a)`                                                           | `a` is one candidate path: 1 made, 0 the name is taken                                                                                                                                         |
+| `fs_read_file(a)`                                                         | `ptr`/`len`: the file's bytes                                                                                                                                                                  |
+| `fs_write_file(a, flags, mode: f64, length)`                              | `ptr`: where the caller copies `length` bytes                                                                                                                                                  |
+| `fs_open(a, flags, mode: f64)`                                            | a handle                                                                                                                                                                                       |
+| `fs_handle_read(h, length: f64, position: f64)`                           | `ptr`/`len`: the bytes read                                                                                                                                                                    |
+| `fs_handle_write(h, length, position: f64)`                               | `ptr`: where the caller copies `length` bytes                                                                                                                                                  |
+| `fs_handle_stat(h)`                                                       | `stat` holds the record                                                                                                                                                                        |
+| `fs_handle_truncate(h, length: f64)` `fs_handle_chmod(h, mode)`           |                                                                                                                                                                                                |
+| `fs_handle_utimes(h, atime: f64, mtime: f64)` `fs_handle_close(h)`        |                                                                                                                                                                                                |
+| `fs_events()`                                                             | `ptr`/`len`: the event log                                                                                                                                                                     |
+| `fs_events_clear()`                                                       | empties the log                                                                                                                                                                                |
+| `fs_totals()`                                                             | `stat[0]`: live inodes; `stat[1]`: bytes of file data                                                                                                                                          |
+| `fs_check()`                                                              | 0 when the heap and the tree are consistent; -1 when not; 1 when there was no memory to look                                                                                                   |
 
 Bytes at `ptr` are valid until the lock is released: the caller copies them out,
 or in, before it lets go.
 
-A listing is entries of `[kind: u8][length: u32 LE][name bytes]`, in no
-particular order: the binding sorts by name as JavaScript does. The event log
+A listing is entries of `[kind: u8][length: u32 LE][name bytes]`, in the order
+of the names' bytes. That is the order of their code points, in which
+`kernel/vfs/vfs.ts` lists too, so the binding passes the listing on as it
+comes. (JavaScript's own order of strings is another: it puts a name with a
+code point past U+FFFF before one with U+E000 to U+FFFF.) The event log
 is entries of `[type: u8][length: u32 LE][path bytes]`, oldest first. An event
 that does not fit (the log stops at 64 MiB, and never takes memory the tree
 needs) is dropped and `events_dropped` is set; nothing more is logged until
@@ -198,13 +226,18 @@ module was not rebuilt. To type-check the wasm side alone:
 ## Tests
 
 - `cargo test` in `crate/`: the allocator and the filesystem, natively.
+  `fs/permission_tests.rs` has the permission rules (the same cases as
+  `kernel/vfs/vfs.permissions.test.ts`).
   `fs/nospace_tests.rs` runs every adding operation out of memory at each
-  point inside it; `fs/atomic_tests.rs` does so on random trees and compares
-  everything observable before and after; `fs/deep_tests.rs` covers a tree
-  60,000 deep on the module's 1 MiB stack, removal with every allocation
-  failing, and the time large removals take.
+  point inside it; `fs/atomic_tests.rs` does so on random trees, under random
+  modes and masks, and compares everything observable before and after;
+  `fs/deep_tests.rs` covers a tree 60,000 deep on the module's 1 MiB stack,
+  removal with every allocation failing, and the time large removals take.
 - `kernel/vfs/vfs.test.ts` runs against both filesystems.
-- `sharedFs.differential.test.ts`: random operations on both, compared.
+- `sharedFs.differential.test.ts`: random operations on both, compared, with
+  random modes, so refusals (EACCES) are compared too, some calls made
+  through the privileged view, and many under a random file mode creation
+  mask.
 - `sharedFs.workers.test.ts`: several worker threads on one memory, and busy
   workers retired inside and outside a call.
 - `sharedFs.stack.test.ts`: a program that runs out of stack does not poison.

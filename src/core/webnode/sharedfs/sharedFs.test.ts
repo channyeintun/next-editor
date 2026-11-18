@@ -13,7 +13,9 @@ import {
   O_WRONLY,
   type VfsWatchEvent,
 } from "../kernel/vfs/types";
-import { ARGS_CAPACITY, OFFSET, PROCESS_SLOTS } from "./abi";
+import { Vfs } from "../kernel/vfs/vfs";
+import { GID, UID } from "../process/platform";
+import { ABSENT, ARGS_CAPACITY, BROKEN_LINK, OFFSET, PRESENT, PROCESS_SLOTS } from "./abi";
 import { createSharedFilesystem, type SharedFilesystem } from "./boot";
 import { SharedFs } from "./sharedFs";
 
@@ -59,6 +61,31 @@ afterEach(() => {
 });
 
 describe("instances on one memory", () => {
+  it("gives every file to the one user every process runs as", () => {
+    // The crate writes the numbers itself (crate/src/fs.rs); they are
+    // process/platform.ts's, which `process.getuid()` and `os.userInfo()` report.
+    const shared = boot();
+    const fs = shared.fs;
+    fs.mkdir("/d", false, 0o755);
+    fs.writeFile("/d/f", encoder.encode("x"), WRITE, 0o644);
+    fs.symlink("f", "/d/l");
+    const owners = [
+      fs.stat("/", true),
+      fs.stat("/d", true),
+      fs.stat("/d/f", true),
+      fs.stat("/d/l", false),
+    ].map((stat) => [stat.uid, stat.gid]);
+    expect(owners).toEqual([
+      [UID, GID],
+      [UID, GID],
+      [UID, GID],
+      [UID, GID],
+    ]);
+    const reference = new Vfs();
+    reference.mkdir("/d", false, 0o755);
+    expect([reference.stat("/d", true).uid, reference.stat("/d", true).gid]).toEqual([UID, GID]);
+  });
+
   it("see each other's changes at once", () => {
     const shared = boot();
     const process = join(shared);
@@ -103,11 +130,14 @@ describe("a path that does not exist", () => {
     for (const path of ["/d/dangling", "/d/loop", "/d/loop/below"]) {
       expect(fs.exists(path)).toBe(false);
       expect(fs.isBrokenLink(path)).toBe(true);
+      expect(fs.presence(path)).toBe(BROKEN_LINK);
     }
     for (const path of ["/d/missing", "/missing/too", "/d/file/below", "x".repeat(70_000)]) {
       expect(fs.exists(path)).toBe(false);
       expect(fs.isBrokenLink(path)).toBe(false);
+      expect(fs.presence(path)).toBe(ABSENT);
     }
+    expect(fs.presence("/d/file")).toBe(PRESENT);
   });
 });
 
