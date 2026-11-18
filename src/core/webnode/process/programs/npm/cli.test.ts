@@ -27,6 +27,37 @@ describe("parseArgs", () => {
     expect(command("npm")).toEqual({ kind: "help" });
   });
 
+  it("reads a version flag after other options before the command", () => {
+    // npm 11.20, pnpm 9.12.1 and bun 1.4 print their version for each of these.
+    for (const argv of [
+      ["npm", "-s", "--version"],
+      ["npm", "--silent", "--version"],
+      ["npm", "--loglevel", "silent", "--version"],
+      ["npm", "--loglevel=silent", "--version"],
+      ["npm", "-s", "-v"],
+      ["npm", "-q", "--version"],
+      ["npm", "-g", "--version"],
+      ["npm", "--prefix", ".", "-v"],
+      ["npm", "-h", "-v"],
+      ["pnpm", "-s", "--version"],
+      ["pnpm", "-C", ".", "-v"],
+      ["bun", "--silent", "--version"],
+    ]) {
+      expect(command(...argv)).toEqual({ kind: "version" });
+    }
+    expect(parseArgs(["npm", "-s", "--version"]).loglevel).toBe("silent");
+    // The first of the two wins for pnpm and bun; npm still prints its help
+    // for a help flag with no version flag.
+    expect(command("pnpm", "-h", "-v")).toEqual({ kind: "help" });
+    expect(command("bun", "-h", "-v")).toEqual({ kind: "help" });
+    expect(command("npm", "-s", "-h")).toEqual({ kind: "help" });
+    expect(command("npm", "-h", "ls")).toEqual({ kind: "help" });
+    expect(command("npm", "-s")).toEqual({ kind: "help" });
+    expect(command("npm", "-s", "ls")).toMatchObject({ kind: "ls" });
+    expect(command("npm", "--silent", "run", "x")).toMatchObject({ kind: "run", script: "x" });
+    expect(command("npm", "--loglevel=warn", "run", "x")).toMatchObject({ kind: "run" });
+  });
+
   it("parses install and its aliases", () => {
     for (const argv of [
       ["npm", "i"],

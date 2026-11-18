@@ -206,18 +206,25 @@ export function parseArgs(argv: string[]): Invocation {
     }
   };
 
-  // Global options before the command.
+  // Global options before the command. A version flag among them names the
+  // version command whatever options come before it (`npm -s --version`). For
+  // pnpm, yarn and bun the first of a help and a version flag wins; npm prints
+  // its version even after a help flag (`npm -h -v`).
   let index = 0;
+  let helpAsked = false;
   while (index < rest.length && rest[index].startsWith("-") && rest[index] !== "--") {
     const arg = rest[index];
     const name = flagName(arg);
-    if ((name === "-v" || name === "--version") && index === 0) {
+    if (name === "-v" || name === "--version") {
       invocation.command = { kind: "version" };
       return invocation;
     }
     if (name === "-h" || name === "--help") {
-      invocation.command = { kind: "help" };
-      return invocation;
+      if (tool !== "npm") {
+        invocation.command = { kind: "help" };
+        return invocation;
+      }
+      helpAsked = true;
     }
     if (name === "-g" || name === "--global") {
       global = true;
@@ -238,6 +245,10 @@ export function parseArgs(argv: string[]): Invocation {
       readLoglevel(name, null);
     }
     index++;
+  }
+  if (helpAsked) {
+    invocation.command = { kind: "help" };
+    return invocation;
   }
   const commandName = rest[index];
   const args = rest.slice(index + 1);
