@@ -8,6 +8,7 @@ Structure code to mirror who changes it. This repository is changed by one autho
 - **Dependencies point inward.** `src/core` never imports from the app layer (`src/storage`, `src/utils`, `src/components`, `src/types`, `src/contexts`). Move what core needs into core and re-export it from the app path if the app still uses it.
 - **One rule, one home.** When two domains need the same rule or constant, give it one owner and import it; do not copy it.
 - **Split by reason to change.** When a file mixes concerns that different people or agents change for different reasons, split it along those domains (no catch-all barrels) rather than letting it grow.
+- **webnode is scope-frozen.** A change to `src/core/webnode` needs a lesson, starter or user report that fails, or a measured speed or memory gain on one (install time, time to the first preview, peak memory). No conformance-only work: nothing to match Node, bash or Linux beyond that. See "Scope" in `src/core/webnode/README.md`.
 
 ## Studio Lessons (agent-authorable)
 

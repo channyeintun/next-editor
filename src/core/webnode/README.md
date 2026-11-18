@@ -9,6 +9,53 @@ through a service worker.
 It is an engine, like `src/core/x86`: nothing here imports from the app layer.
 The app wires it in from `src/runtime/webcontainer/engine.ts`.
 
+## Scope
+
+The scope is frozen (2026-11-19). webnode exists to run this project's runtime
+lessons and starters. Its three goals, in this order:
+
+1. **It runs the lessons and starters.**
+2. **It is fast.**
+3. **It uses little memory.**
+
+The bar for 2 and 3 is WebContainer on the same lesson (`?runtime=webcontainer`).
+
+**Supported: what the lessons and starters run.** Each one runs its install
+command, then its run command, and shows a preview or a program's output.
+Nothing else is typed into a lesson's runtime.
+
+- **Package manager:** `pnpm install` and `pnpm dev` (a package script), from
+  the npm registry, without a lockfile.
+- **Lessons** (284, in 18 dependency setups):
+  - the Vite 5.4 dev server, alone or with TypeScript 6, esbuild, React 19,
+    Tailwind 4 (`@tailwindcss/vite`), `dom-accessibility-api`, `tabbable`,
+    `axe-core`, `ms` or `zod`;
+  - the Vite 7.3 dev server with Vitest 5 started through its Node API inside
+    it, alone or with happy-dom and Testing Library (DOM, React, user-event,
+    jest-dom), ESLint 10, `@vitest/coverage-istanbul` or `fast-check`;
+  - the Vite 7.3 dev server with `@vitejs/plugin-rsc` (React Server Components);
+  - concept lessons with no dependencies, whose `pnpm dev` is an `echo`.
+- **Starters** (11): Vite 8 with TanStack Start and Nitro (React), with Vue,
+  Solid, Svelte, plain HTML/CSS, or Kite (`vite-plugin-kite`); Express 5 under
+  `node server.js` (HTMX, Alpine AJAX); Express 5 under `tsx watch`;
+  `node main.js`; `tsx main.ts`.
+
+**Not a goal:** matching Node.js, bash or Linux beyond what those setups need.
+A difference from Node that no lesson, starter or user report hits is left
+alone. No conformance-only work and no whole-engine reviews.
+
+**The rule for a change:** it needs a real lesson, starter or user report that
+breaks, or a measured gain in speed or memory on a real lesson or starter
+(install time, time to the first preview, peak memory). No change may make
+those numbers worse. A fix that would be large (a new subsystem, more than
+about a day) goes to the owner first.
+
+**WebContainer stays as the fallback.** `?runtime=webcontainer` opts a browser
+out (and is remembered), WebContainer is the default outside Chromium and for
+a lesson embedded on another site, and a webnode that fails to start falls
+back to it for that page load. If the upkeep grows, making WebContainer the
+default again is the cheap exit.
+
 ## How it is built
 
 ```
