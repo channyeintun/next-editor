@@ -21,6 +21,22 @@ describe("Breadcrumb", () => {
     expect(trail.querySelector("[lang]")).toBeNull();
   });
 
+  it("links back to the given parent instead of the gallery", () => {
+    render(
+      <MemoryRouter>
+        <Breadcrumb
+          title="Your first Go program"
+          parent={{ to: "/learn/playlist/go-course", label: "Go ကို စတင်လေ့လာခြင်း" }}
+        />
+      </MemoryRouter>,
+    );
+
+    const parent = screen.getByRole("link", { name: "Go ကို စတင်လေ့လာခြင်း" });
+    expect(parent).toHaveAttribute("href", "/learn/playlist/go-course");
+    expect(parent.querySelector('span[lang="my"]')).not.toBeNull();
+    expect(screen.queryByRole("link", { name: "Lessons" })).toBeNull();
+  });
+
   it("marks the Burmese part of the lesson title as lang=my", () => {
     renderBreadcrumb("Next Editor ကို မိတ်ဆက်ခြင်း");
 
