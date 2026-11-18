@@ -1,10 +1,14 @@
 // `fs.Dirent` (a directory entry with its type) and `fs.Dir` (the handle
 // `opendir` returns). A Dir lists its directory when it is opened and hands the
 // entries out one by one; with `recursive` it lists each subdirectory when it
-// reaches it.
+// reaches it. Its asynchronous reads arrive when Node's do: Node reads a
+// directory `bufferSize` entries at a time from the event loop and hands out
+// the entries a read brought beyond its own without waiting.
 import type { DirEntry, DirEntryType } from "../../../kernel/vfs/types";
+import { nextTick } from "../eventLoop";
 import { validateFunction } from "../internalErrors";
 import path from "../path";
+import { complete } from "./completion";
 import {
   UV_DIRENT_BLOCK,
   UV_DIRENT_CHAR,
@@ -30,17 +34,19 @@ export function direntType(type: DirEntryType): number {
   }
 }
 
-/** `fs.Dirent`. */
+/**
+ * `fs.Dirent`, as Node 26 makes it: `name` and `parentPath` (the directory as
+ * the call spelled it). Node 22's deprecated `path`, the same as `parentPath`,
+ * is gone.
+ */
 export class Dirent {
   name: string | Uint8Array;
   parentPath: string;
-  path: string;
   declare [kType]: number;
 
-  constructor(name: string | Uint8Array, type: number, path: string) {
+  constructor(name: string | Uint8Array, type: number, parentPath: string) {
     this.name = name;
-    this.parentPath = path;
-    this.path = path;
+    this.parentPath = parentPath;
     this[kType] = type;
   }
 
@@ -86,12 +92,27 @@ export class Dir {
   #closed = false;
   #recursive: boolean;
   #source: DirSource;
+  #bufferSize: number;
+  /** How many more entries the last read of the directory brought with it. */
+  #buffered = 0;
+  /**
+   * What was asked while a read of the directory is on its way from the event
+   * loop; null when none is. It runs on the tick after that read's answer.
+   */
+  #behind: (() => void)[] | null = null;
 
   /** @internal Built by `opendir`, with the directory's first listing. */
-  constructor(dirPath: string, entries: DirEntry[], source: DirSource, recursive: boolean) {
+  constructor(
+    dirPath: string,
+    entries: DirEntry[],
+    source: DirSource,
+    recursive: boolean,
+    bufferSize: number,
+  ) {
     this.#path = dirPath;
     this.#source = source;
     this.#recursive = recursive;
+    this.#bufferSize = bufferSize;
     this.#pending = entries.map(
       (entry) => new Dirent(source.encodeName(entry.name), direntType(entry.type), dirPath),
     );
@@ -110,23 +131,57 @@ export class Dir {
     }
     if (callback === undefined) {
       return new Promise((resolve, reject) => {
-        try {
-          resolve(this.#next());
-        } catch (error) {
-          reject(error);
-        }
+        this.#read(false, (error, dirent) =>
+          error === null ? resolve(dirent ?? null) : reject(error),
+        );
       });
     }
     validateFunction(callback, "callback");
-    let result: Dirent | null;
-    try {
-      result = this.#next();
-    } catch (error) {
-      queueMicrotask(() => callback(error as Error));
-      return undefined;
-    }
-    queueMicrotask(() => callback(null, result));
+    this.#read(true, callback);
     return undefined;
+  }
+
+  /**
+   * Answers `callback` with the next entry when Node would: from the event
+   * loop when the directory has to be read, and otherwise at once, or on the
+   * next tick when `deferred` (the callback form, which never calls back
+   * inside the call).
+   */
+  #read(deferred: boolean, callback: (error: Error | null, dirent?: Dirent | null) => void): void {
+    if (this.#behind !== null) {
+      this.#behind.push(() => this.#read(deferred, callback));
+      return;
+    }
+    let dirent: Dirent | null = null;
+    let failure: Error | null = null;
+    try {
+      dirent = this.#next();
+    } catch (error) {
+      failure = error as Error;
+    }
+    const answer = () => (failure === null ? callback(null, dirent) : callback(failure));
+    if (this.#buffered > 0) {
+      this.#buffered -= 1;
+      if (deferred) {
+        nextTick(answer);
+      } else {
+        answer();
+      }
+      return;
+    }
+    this.#buffered = Math.min(this.#bufferSize - 1, this.#pending.length);
+    // What is asked until the answer has run waits for the tick after it.
+    this.#behind = [];
+    complete(() => {
+      nextTick(() => {
+        const behind = this.#behind ?? [];
+        this.#behind = null;
+        for (const ask of behind) {
+          ask();
+        }
+      });
+      answer();
+    });
   }
 
   /** `dir.readSync()`. */
@@ -143,17 +198,25 @@ export class Dir {
       if (this.#closed) {
         return Promise.reject(dirClosed());
       }
-      this.#closed = true;
-      return Promise.resolve();
+      return new Promise((resolve) => this.#close(() => resolve()));
     }
     validateFunction(callback, "callback");
     if (this.#closed) {
-      queueMicrotask(() => callback(dirClosed()));
+      nextTick(callback, dirClosed());
       return undefined;
     }
-    this.#closed = true;
-    queueMicrotask(() => callback(null));
+    this.#close(callback);
     return undefined;
+  }
+
+  /** Closes from the event loop, behind a read that is on its way. */
+  #close(callback: (error: Error | null) => void): void {
+    if (this.#behind !== null) {
+      this.#behind.push(() => this.#close(callback));
+      return;
+    }
+    this.#closed = true;
+    complete(() => callback(null));
   }
 
   /** `dir.closeSync()`. */

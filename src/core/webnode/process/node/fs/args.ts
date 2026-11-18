@@ -165,8 +165,13 @@ export function toAbsolute(path: string): string {
   if (path.charCodeAt(0) === SLASH || path === "") {
     return path;
   }
+  return workingDirectoryPrefix() + path;
+}
+
+/** What `toAbsolute` puts in front of a relative path: the working directory and a slash. */
+export function workingDirectoryPrefix(): string {
   const cwd = runtime().cwd;
-  return cwd === "/" ? `/${path}` : `${cwd}/${path}`;
+  return cwd === "/" ? cwd : `${cwd}/`;
 }
 
 /** `isInt32`: what `readFile`/`writeFile` treat as a file descriptor. */
@@ -474,11 +479,4 @@ export function encodeData(data: string | ArrayBufferView, encoding: unknown): U
     return encodeUtf8(data);
   }
   return Buffer.from(data, encoding as BufferEncoding);
-}
-
-/** Runs `callback(...args)` later, never synchronously. */
-export function defer(callback: (...args: never[]) => unknown, ...args: unknown[]): void {
-  queueMicrotask(() => {
-    (callback as (...values: unknown[]) => unknown)(...args);
-  });
 }

@@ -43,8 +43,16 @@ import {
 } from "./args";
 import { COPYFILE_FICLONE_FORCE } from "./constants";
 import { Dir, Dirent, direntType } from "./dirent";
-import { codedError, fileTooLarge, nodeSystemError, notImplemented, restate } from "./errors";
+import {
+  codedError,
+  fileTooLarge,
+  nodeSystemError,
+  notImplemented,
+  restate,
+  rmSyncError,
+} from "./errors";
 import { createSystemError } from "../../../errors";
+import { UID } from "../../platform";
 import { makeStats, StatFs, type BigIntStats, type Stats } from "./stats";
 
 const kMaxUserId = 2 ** 32 - 1;
@@ -285,9 +293,8 @@ export function readdirSync(file: unknown, options?: unknown): (string | Buffer)
     validateBoolean(opts.recursive, "options.recursive");
   }
   const encoding = opts.encoding;
-  const list = (dir: string) => onPath(dir, (absolute) => backend().readdir(absolute));
   if (opts.recursive !== true) {
-    const entries = list(shown);
+    const entries = onPath(shown, (absolute) => backend().readdir(absolute));
     if (opts.withFileTypes) {
       return entries.map(
         (entry) => new Dirent(encodeText(entry.name, encoding), direntType(entry.type), shown),
@@ -295,6 +302,22 @@ export function readdirSync(file: unknown, options?: unknown): (string | Buffer)
     }
     return entries.map((entry) => encodeText(entry.name, encoding));
   }
+  // Node 26 reads each directory below the start by `path.join` (which is
+  // also its entries' `parentPath`), and names one that fails as the start
+  // as spelled with the names below it appended: './a/nr' from '.',
+  // 'a/../nr' from 'a/..'.
+  const below = (relative: string, name: string) =>
+    relative === "" ? name : `${relative}/${name}`;
+  const list = (dir: string, relative: string) => {
+    const absolute = toAbsolute(dir);
+    try {
+      return backend().readdir(absolute);
+    } catch (error) {
+      const named =
+        relative === "" || shown.endsWith("/") ? shown + relative : `${shown}/${relative}`;
+      throw restate(error, { absolute, shown: named });
+    }
+  };
   // Node descends into every entry that stats as a directory, so a link to a
   // directory is followed.
   const descends = (type: string, child: string): boolean => {
@@ -307,98 +330,39 @@ export function readdirSync(file: unknown, options?: unknown): (string | Buffer)
       return false;
     }
   };
+  /** Each directory to read: as `path.join` spells it, and its names below the start. */
+  const queue: { dir: string; relative: string }[] = [{ dir: shown, relative: "" }];
   if (opts.withFileTypes) {
     const results: Dirent[] = [];
-    const queue = [shown];
     for (let i = 0; i < queue.length; i++) {
-      const dir = queue[i];
-      for (const entry of list(dir)) {
+      const { dir, relative } = queue[i];
+      for (const entry of list(dir, relative)) {
         results.push(new Dirent(encodeText(entry.name, encoding), direntType(entry.type), dir));
         const child = path.join(dir, entry.name);
         if (descends(entry.type, child)) {
-          queue.push(child);
+          queue.push({ dir: child, relative: below(relative, entry.name) });
         }
       }
     }
     return results;
   }
   const results: (string | Buffer)[] = [];
-  const queue: { dir: string; prefix: string }[] = [{ dir: shown, prefix: "" }];
   for (let i = 0; i < queue.length; i++) {
-    const { dir, prefix } = queue[i];
-    for (const entry of list(dir)) {
-      const relative = prefix + entry.name;
-      results.push(encodeText(relative, encoding));
+    const { dir, relative } = queue[i];
+    for (const entry of list(dir, relative)) {
+      const name = below(relative, entry.name);
+      results.push(encodeText(name, encoding));
       const child = path.join(dir, entry.name);
       if (descends(entry.type, child)) {
-        queue.push({ dir: child, prefix: `${relative}/` });
+        queue.push({ dir: child, relative: name });
       }
     }
   }
   return results;
 }
 
-function trimTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 1 && value.charCodeAt(end - 1) === 47) {
-    end--;
-  }
-  return value.slice(0, end);
-}
-
-/** The first directory `mkdir -p` created, spelled the way the caller spelled the path. */
-function shownFirstCreated(shown: string, absolute: string, first: string): string {
-  if (shown === absolute) {
-    return first;
-  }
-  const shownTrimmed = trimTrailingSlashes(shown);
-  const absoluteTrimmed = trimTrailingSlashes(absolute);
-  const cwdPart = absoluteTrimmed.length - shownTrimmed.length;
-  if (!absoluteTrimmed.startsWith(first) || first.length <= cwdPart) {
-    return first;
-  }
-  return shownTrimmed.slice(0, first.length - cwdPart);
-}
-
-/** `fs.mkdirSync(path, mode | { recursive, mode })`. */
-export function mkdirSync(file: unknown, options?: unknown): string | undefined {
-  let mode = 0o777;
-  let recursive: unknown = false;
-  if (typeof options === "number" || typeof options === "string") {
-    mode = parseFileMode(options, "mode");
-  } else if (options) {
-    const opts = options as { recursive?: unknown; mode?: unknown };
-    if (opts.recursive !== undefined) {
-      recursive = opts.recursive;
-    }
-    if (opts.mode !== undefined) {
-      mode = parseFileMode(opts.mode, "options.mode");
-    }
-  }
-  validateBoolean(recursive, "options.recursive");
-  const shown = getValidatedPath(file);
-  const absolute = toAbsolute(shown);
-  let first: string | undefined;
-  try {
-    first = backend().mkdir(absolute, recursive, mode);
-  } catch (error) {
-    // The filesystem refuses to make a directory through a dangling symbolic
-    // link with EEXIST, as mkdir(2) does. Node's mkdir -p then stats the path
-    // and reports what that fails with (ENOENT), so this does too.
-    if (recursive && (error as { code?: unknown }).code === "EEXIST") {
-      try {
-        backend().stat(absolute, true);
-      } catch (statError) {
-        throw restate(statError, { absolute, shown, syscall: "mkdir" });
-      }
-    }
-    throw restate(error, { absolute, shown });
-  }
-  if (!recursive || first === undefined) {
-    return undefined;
-  }
-  return shownFirstCreated(shown, absolute, first);
-}
+/** `fs.mkdirSync`: with `fs.mkdir`'s other forms in ./mkdir. */
+export { mkdirSync } from "./mkdir";
 
 /** `fs.mkdtempSync(prefix, options)`. */
 export function mkdtempSync(prefix: unknown, options?: unknown): string | Buffer {
@@ -464,18 +428,22 @@ function validateRmdirOptions(options: unknown, defaults: RmOptions): RmOptions 
 }
 
 /**
- * `validateRmOptionsSync`: the options with defaults, after the `lstat` Node
- * makes to refuse a directory without `recursive`. False when `expectDir` and
- * the path is not a directory.
+ * `validateRmOptionsSync` and, for the callback and promise forms,
+ * `validateRmOptions`: the options with defaults, after the `lstat` Node makes
+ * to refuse a directory without `recursive`. The sync form leaves the `lstat`
+ * out when nothing could be refused; the others always make it, and so report
+ * whatever it fails with but a missing path under `force`. False when
+ * `expectDir` and the path is not a directory.
  */
 export function validateRmOptions(
   shown: string,
   options: unknown,
   expectDir: boolean,
+  form: "sync" | "async" = "sync",
 ): RmOptions | false {
   const opts = validateRmdirOptions(options, DEFAULT_RM_OPTIONS);
   validateBoolean(opts.force, "options.force");
-  if (!opts.force || expectDir || !opts.recursive) {
+  if (form === "async" || !opts.force || expectDir || !opts.recursive) {
     const stats = lstatSync(shown, { throwIfNoEntry: !opts.force });
     const isDirectory = stats?.isDirectory();
     if (expectDir && !isDirectory) {
@@ -493,9 +461,18 @@ export function validateRmOptions(
   return opts;
 }
 
-/** One removal attempt of `shown` with validated options. */
-export function removeOnce(shown: string, opts: RmOptions): void {
-  onPath(shown, (absolute) => backend().rm(absolute, opts.recursive, opts.force));
+/**
+ * One removal attempt of `shown` with validated options, as `rmSync` makes it
+ * (std::filesystem in Node's C++): a refusal names the path given, whichever
+ * entry below it was refused (`rmSyncError`).
+ */
+function removeOnce(shown: string, opts: RmOptions): void {
+  const absolute = toAbsolute(shown);
+  try {
+    backend().rm(absolute, opts.recursive, opts.force);
+  } catch (error) {
+    throw rmSyncError(restate(error, { absolute, shown }), shown);
+  }
 }
 
 /** True when a failed removal is one Node retries. */
@@ -527,8 +504,23 @@ export function rmSync(file: unknown, options?: unknown): void {
   removeTree(shown, opts);
 }
 
-/** `fs.opendirSync(path, { encoding, bufferSize, recursive })`. */
+/**
+ * `fs.opendirSync(path, { encoding, bufferSize, recursive })`. Its error names
+ * no path, as Node's sync form.
+ */
 export function opendirSync(file: unknown, options?: unknown): Dir {
+  return openDirectory(file, options, "sync");
+}
+
+/**
+ * `fs.opendir`'s work for its callback and promise forms, whose error names
+ * the directory as the caller spelled it.
+ */
+export function opendirAsync(file: unknown, options?: unknown): Dir {
+  return openDirectory(file, options, "async");
+}
+
+function openDirectory(file: unknown, options: unknown, form: "sync" | "async"): Dir {
   const shown = getValidatedPath(file);
   const opts = getOptions(options, { encoding: "utf8" as unknown });
   const bufferSize = opts.bufferSize ?? 32;
@@ -540,7 +532,12 @@ export function opendirSync(file: unknown, options?: unknown): Dir {
   try {
     entries = backend().readdir(absolute);
   } catch (error) {
-    throw restate(error, { syscall: "opendir", dropPath: true });
+    throw restate(
+      error,
+      form === "sync"
+        ? { syscall: "opendir", dropPath: true }
+        : { syscall: "opendir", absolute, shown },
+    );
   }
   const encoding = opts.encoding;
   return new Dir(
@@ -551,6 +548,7 @@ export function opendirSync(file: unknown, options?: unknown): Dir {
       encodeName: (name) => encodeText(name, encoding),
     },
     recursive,
+    bufferSize as number,
   );
 }
 
@@ -698,29 +696,56 @@ function validateIds(uid: unknown, gid: unknown): void {
   validateInteger(gid, "gid", -1, kMaxUserId);
 }
 
-// Ownership is not modelled: every file belongs to the one user. The chown
-// family validates its arguments and checks the target exists, then succeeds
-// without effect.
+// A file belongs to the one user every process runs as, who is not root, or
+// to root. As chown(2) answers such a user: on the user's own file, asking
+// for the owner and group it has already succeeds without effect; on root's,
+// only -1 for both (leave them as they are) does; any other id is refused
+// with EPERM.
 
-/** `fs.chownSync(path, uid, gid)`: succeeds without effect (see above). */
+/**
+ * Refuses a change of owner or group the one user may not make (see above).
+ * `path` is the file's absolute path, for the calls that name one.
+ */
+function checkOwner(
+  stat: StatData,
+  uid: unknown,
+  gid: unknown,
+  syscall: string,
+  path?: string,
+): void {
+  const own = stat.uid === UID;
+  if ((uid !== -1 && (!own || uid !== stat.uid)) || (gid !== -1 && (!own || gid !== stat.gid))) {
+    throw createSystemError("EPERM", syscall, path);
+  }
+}
+
+/** `fs.chownSync(path, uid, gid)`. */
 export function chownSync(file: unknown, uid: unknown, gid: unknown): void {
   const shown = getValidatedPath(file);
   validateIds(uid, gid);
-  onPath(shown, (absolute) => backend().stat(absolute, true), "chown");
+  onPath(
+    shown,
+    (absolute) => checkOwner(backend().stat(absolute, true), uid, gid, "chown", absolute),
+    "chown",
+  );
 }
 
-/** `fs.lchownSync(path, uid, gid)`: succeeds without effect. */
+/** `fs.lchownSync(path, uid, gid)`: the link itself. */
 export function lchownSync(file: unknown, uid: unknown, gid: unknown): void {
   const shown = getValidatedPath(file);
   validateIds(uid, gid);
-  onPath(shown, (absolute) => backend().stat(absolute, false), "lchown");
+  onPath(
+    shown,
+    (absolute) => checkOwner(backend().stat(absolute, false), uid, gid, "lchown", absolute),
+    "lchown",
+  );
 }
 
-/** `fs.fchownSync(fd, uid, gid)`: succeeds without effect. */
+/** `fs.fchownSync(fd, uid, gid)`. */
 export function fchownSync(fd: unknown, uid: unknown, gid: unknown): void {
   const descriptor = getValidatedFd(fd);
   validateIds(uid, gid);
-  onFd(() => backend().fstat(descriptor), "fchown");
+  onFd(() => checkOwner(backend().fstat(descriptor), uid, gid, "fchown"), "fchown");
 }
 
 /** `fs.utimesSync(path, atime, mtime)`. */

@@ -4,6 +4,7 @@
 // backpressure, events and counters.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import webnodeFs from "../fs";
+import { createProcess } from "../process";
 import { makeSides, runAsync, scenarioDirs, type AnyFs, type Sides } from "./compare.testkit";
 
 const fs = webnodeFs as unknown as AnyFs;
@@ -253,4 +254,66 @@ describe("stream specifics", () => {
     });
     expect(error.name).toBe("AbortError");
   });
+
+  it("reports a failed read of a stream that does not destroy itself, whatever the program made of queueMicrotask", async () => {
+    fs.writeFileSync("/work/e", "data");
+    const failing = {
+      open: fs.open,
+      close: fs.close,
+      read: (...args: unknown[]) =>
+        (args[args.length - 1] as (error: Error) => void)(
+          Object.assign(new Error("EIO: i/o error, read"), { code: "EIO" }),
+        ),
+    };
+    // Without autoClose a file stream does not destroy itself on an error.
+    const stream = fs.createReadStream("/work/e", { fs: failing, autoClose: false } as never);
+    const real = globalThis.queueMicrotask;
+    // What a test's fake timers leave: jobs that wait for a clock nobody advances.
+    const faked: unknown[] = [];
+    globalThis.queueMicrotask = (job) => void faked.push(job);
+    let outcome;
+    try {
+      outcome = await Promise.race([
+        new Promise((resolve) =>
+          stream.on("error", (error: Error & { code?: string }) => resolve(error.code)),
+        ),
+        new Promise((resolve) => stream.on("data", resolve)),
+        new Promise((resolve) => setTimeout(() => resolve("no error event"), 200)),
+      ]);
+    } finally {
+      globalThis.queueMicrotask = real;
+    }
+    expect(outcome).toBe("EIO");
+    expect(faked).toEqual([]);
+    // As Node's errorOrDestroy leaves a stream it did not destroy.
+    expect([stream.destroyed, stream.errored?.message]).toEqual([false, "EIO: i/o error, read"]);
+    stream.destroy();
+  });
+
+  for (const side of ["node", "ours"] as const) {
+    it(`${side}: close(callback) on a closed WriteStream calls back on the next tick`, async () => {
+      const { fs: sideFs, root } = sides[side];
+      if (side === "ours") {
+        // A process: ticks then run in Node's order.
+        createProcess({ loadBuiltin: () => undefined, ipc: null });
+      }
+      const stream = sideFs.createWriteStream(`${root}/w`);
+      await new Promise((resolve) => stream.end(resolve));
+      await new Promise((resolve) => (stream.closed ? resolve(null) : stream.on("close", resolve)));
+      const order: string[] = [];
+      await new Promise<void>((resolve) => {
+        // In a callback from the event loop, where a tick runs before a promise job.
+        sideFs.stat(root, () => {
+          void Promise.resolve().then(() => order.push("promise"));
+          stream.close(() => {
+            order.push("close callback");
+            resolve();
+          });
+          order.push("after close call");
+        });
+      });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      expect(order).toEqual(["after close call", "close callback", "promise"]);
+    });
+  }
 });

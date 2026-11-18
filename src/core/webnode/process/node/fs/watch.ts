@@ -2,7 +2,9 @@
 // filesystem), `fs.watchFile`/`unwatchFile` → `StatWatcher` (stat polling, the
 // way libuv's fs_poll compares records), and `fs.promises.watch` (an async
 // iterator). A watcher that keeps the process alive holds one `runtime().ref()`
-// until it is closed or unref'd. Events are delivered asynchronously.
+// until it is closed or unref'd. Events are delivered asynchronously, when
+// Node's are (lib/internal/fs/watchers.js): 'change' as a macrotask of the
+// event loop, 'close' and 'stop' from a tick.
 import EventEmitter from "../events";
 import type { EventEmitter as EventEmitterType } from "../events";
 import {
@@ -19,14 +21,17 @@ import path from "../path";
 import { errnoOf, type ErrnoCode } from "../../../errors";
 import type { StatData } from "../../../kernel/vfs/types";
 import { runtime } from "../../runtime";
+import { nextTick, runMacrotask } from "../eventLoop";
 import { encodeText, getOptions, getValidatedPath, toAbsolute } from "./args";
 import { restate } from "./errors";
 import { makeStats, ZERO_STAT } from "./stats";
 
 // Native timers, taken before any process code can replace the globals: a
-// poll must not count as a pending timer of the process.
+// poll must not count as a pending timer of the process, and a change must be
+// reported whatever a program has made of `queueMicrotask`.
 const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
 const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
+const nativeQueueMicrotask = globalThis.queueMicrotask.bind(globalThis);
 
 const EmitterBase = EventEmitter as unknown as new () => EventEmitterType;
 
@@ -54,12 +59,15 @@ export class FSWatcher extends EmitterBase {
   /** @internal Starts watching; `fs.watch` calls it. */
   start(filename: unknown, persistent: boolean, recursive: boolean, encoding: unknown): void {
     const shown = getValidatedPath(filename, "filename");
+    const emitChange = (eventType: "rename" | "change", name: string) => {
+      if (this.#stop !== null) {
+        this.emit("change", eventType, encodeText(name, encoding));
+      }
+    };
     this.#stop = startWatch(shown, recursive, (eventType, name) => {
-      queueMicrotask(() => {
-        if (this.#stop !== null) {
-          this.emit("change", eventType, encodeText(name, encoding));
-        }
-      });
+      // Never inside the call that made the change; then as Node's inotify
+      // callback, a macrotask, whose listeners' ticks run before their promise jobs.
+      nativeQueueMicrotask(() => runMacrotask(() => emitChange(eventType, name)));
     });
     if (persistent) {
       this.ref();
@@ -74,7 +82,7 @@ export class FSWatcher extends EmitterBase {
     this.#stop();
     this.#stop = null;
     this.unref();
-    queueMicrotask(() => this.emit("close"));
+    nextTick(() => this.emit("close"));
   }
 
   /** Keeps the process alive while the watcher is open. */
@@ -122,7 +130,7 @@ export function watch(filename: unknown, options?: unknown, listener?: unknown):
   const signal = opts.signal;
   if (signal) {
     if (signal.aborted) {
-      queueMicrotask(() => watcher.close());
+      nextTick(() => watcher.close());
     } else {
       const onAbort = () => watcher.close();
       signal.addEventListener("abort", onAbort);
@@ -177,12 +185,14 @@ export class StatWatcher extends EmitterBase {
       }
       this.#poll(absolute);
       if (this.#active) {
-        this.#timer = nativeSetTimeout(poll, interval);
+        this.#timer = nativeSetTimeout(pollTask, interval);
       }
     };
+    // Each poll is a macrotask, as libuv's fs_poll callback is.
+    const pollTask = () => runMacrotask(poll);
     // The first stat runs asynchronously too, as libuv's does, so listeners
     // added right after `watchFile` returns see its result.
-    this.#timer = nativeSetTimeout(poll, 0);
+    this.#timer = nativeSetTimeout(pollTask, 0);
   }
 
   /** Stops polling; `stop` is emitted on the next tick. */
@@ -197,7 +207,7 @@ export class StatWatcher extends EmitterBase {
     }
     this.#refs = 0;
     this.#syncRef();
-    queueMicrotask(() => this.emit("stop"));
+    nextTick(() => this.emit("stop"));
   }
 
   ref(): this {

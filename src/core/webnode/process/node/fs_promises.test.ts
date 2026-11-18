@@ -362,21 +362,22 @@ describe("webnode specifics", () => {
   it("rm retries after retryDelay", async () => {
     fs.mkdirSync("/work/busy");
     let calls = 0;
-    const original = sides.runtime.fs.rm;
-    sides.runtime.fs.rm = (path, recursive, force) => {
+    // Node's asynchronous rm removes an empty directory with rmdir (rimraf).
+    const original = sides.runtime.fs.rmdir;
+    sides.runtime.fs.rmdir = (path) => {
       calls++;
       if (calls < 3) {
-        const error = new Error("EBUSY: resource busy or locked, rm") as Error & {
+        const error = new Error("EBUSY: resource busy or locked, rmdir") as Error & {
           code: string;
           syscall: string;
           errno: number;
         };
         error.code = "EBUSY";
-        error.syscall = "rm";
+        error.syscall = "rmdir";
         error.errno = -16;
         throw error;
       }
-      original(path, recursive, force);
+      original(path);
     };
     const started = Date.now();
     await fsPromises.rm("/work/busy", { recursive: true, maxRetries: 3, retryDelay: 5 });
@@ -387,6 +388,40 @@ describe("webnode specifics", () => {
       code: "ENOENT",
       syscall: "lstat",
     });
+  });
+
+  it("rm retries on the platform's clock, whatever the program made of setTimeout", async () => {
+    fs.mkdirSync("/work/busy");
+    let calls = 0;
+    const original = sides.runtime.fs.rmdir;
+    sides.runtime.fs.rmdir = (path) => {
+      calls++;
+      if (calls < 2) {
+        throw Object.assign(new Error("EBUSY: resource busy or locked, rmdir"), {
+          code: "EBUSY",
+          syscall: "rmdir",
+          errno: -16,
+        });
+      }
+      original(path);
+    };
+    const real = globalThis.setTimeout;
+    // What a test's fake timers leave: a setTimeout that never fires.
+    globalThis.setTimeout = (() => 0) as unknown as typeof setTimeout;
+    let removal;
+    try {
+      removal = fsPromises.rm("/work/busy", { recursive: true, maxRetries: 1, retryDelay: 1 });
+      // The retry is asked for while the program's setTimeout is the fake.
+      await Promise.resolve();
+    } finally {
+      globalThis.setTimeout = real;
+    }
+    const outcome = await Promise.race([
+      removal.then(() => "removed"),
+      new Promise((resolve) => real(() => resolve("never retried"), 200)),
+    ]);
+    expect(outcome).toBe("removed");
+    expect(calls).toBe(2);
   });
 
   it("Symbol.asyncDispose closes a FileHandle", async () => {

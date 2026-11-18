@@ -36,6 +36,7 @@ import { settledLater, settleLater } from "./completion";
 import { constants } from "./constants";
 import { cpAsync } from "./cp";
 import { fileClosed, fileTooLarge, invalidState, notImplemented, restate } from "./errors";
+import { mkdirAsync } from "./mkdir";
 import {
   createReadStream,
   createWriteStream,
@@ -539,7 +540,7 @@ export async function appendFile(path: unknown, data: unknown, options?: unknown
 /** `fsPromises.rm(path, options)`, waiting `retryDelay` between retries. */
 export async function rm(path: unknown, options?: unknown): Promise<void> {
   const shown = getValidatedPath(path);
-  const opts = sync.validateRmOptions(shown, options, false) as RmOptions;
+  const opts = sync.validateRmOptions(shown, options, false, "async") as RmOptions;
   await removeWithRetries(shown, opts);
 }
 
@@ -640,12 +641,12 @@ export const promises = {
   cp: looped(cp),
   glob,
   open: looped(open),
-  opendir: promised("opendir", sync.opendirSync),
+  opendir: promised("opendir", sync.opendirAsync),
   rename: promised("rename", sync.renameSync),
   truncate: promised("truncate", (path: unknown, len?: unknown) => sync.truncateSync(path, len)),
   rm: looped(rm),
   rmdir: promised("rmdir", sync.rmdirSync),
-  mkdir: promised("mkdir", sync.mkdirSync),
+  mkdir: promised("mkdir", mkdirAsync),
   readdir: promised("readdir", sync.readdirSync),
   readlink: promised("readlink", sync.readlinkSync),
   symlink: promised("symlink", sync.symlinkSync),

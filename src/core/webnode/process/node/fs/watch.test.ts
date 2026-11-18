@@ -8,6 +8,8 @@ import { setRuntime } from "../../runtime";
 import type * as nodeFs from "node:fs";
 import webnodeFs from "../fs";
 import fsPromises from "../fs_promises";
+import { runMacrotask } from "../eventLoop";
+import { createProcess } from "../process";
 
 const fs = webnodeFs as unknown as typeof nodeFs;
 
@@ -113,6 +115,25 @@ describe("fs.watch", () => {
     watcher.close();
     await tick();
     expect(events).toEqual([]);
+  });
+
+  it("reports a change whatever the program made of queueMicrotask", async () => {
+    const events: unknown[] = [];
+    const watcher = fs.watch("/work", (eventType, filename) => events.push([eventType, filename]));
+    const real = globalThis.queueMicrotask;
+    // What a test's fake timers leave: jobs that wait for a clock nobody advances.
+    const faked: unknown[] = [];
+    globalThis.queueMicrotask = (job) => void faked.push(job);
+    try {
+      fs.writeFileSync("/work/made", "");
+      expect(events).toEqual([]);
+      await tick();
+    } finally {
+      globalThis.queueMicrotask = real;
+    }
+    expect(events).toEqual([["rename", "made"]]);
+    expect(faked).toEqual([]);
+    watcher.close();
   });
 
   it("closes on an AbortSignal", async () => {
@@ -224,5 +245,91 @@ describe("fs.watchFile", () => {
     fs.unwatchFile("/work");
     expect(first.listenerCount("change")).toBe(0);
     expect(runtime.refCount).toBe(0);
+  });
+});
+
+// Each order below is what real Node v26 prints for the same program: a
+// listener logs itself, then queues a tick (">t") and a promise job (">p").
+describe("when watchers emit, as Node's", () => {
+  const order: string[] = [];
+  let proc: ReturnType<typeof createProcess>;
+
+  beforeEach(() => {
+    proc = createProcess({ loadBuiltin: () => undefined, ipc: null });
+    order.length = 0;
+  });
+
+  function mark(tag: string): void {
+    order.push(tag);
+    proc.nextTick(() => order.push(`${tag}>t`));
+    void Promise.resolve().then(() => order.push(`${tag}>p`));
+  }
+
+  function callerQueues(): void {
+    proc.nextTick(() => order.push("caller>t"));
+    void Promise.resolve().then(() => order.push("caller>p"));
+  }
+
+  async function until(count: number): Promise<void> {
+    for (let i = 0; i < 200 && order.length < count; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+  }
+
+  it("runs a 'change' listener as a macrotask: its ticks before its promise jobs", async () => {
+    const watcher = fs.watch("/work", () => {
+      if (order.length === 0) {
+        mark("change");
+      }
+    });
+    runMacrotask(() => fs.writeFileSync("/work/changed", "x"));
+    await until(3);
+    watcher.close();
+    expect(order).toEqual(["change", "change>t", "change>p"]);
+  });
+
+  it("emits 'close' from a tick", async () => {
+    const watcher = fs.watch("/work");
+    watcher.on("close", () => mark("close"));
+    runMacrotask(() => {
+      watcher.close();
+      callerQueues();
+    });
+    await until(5);
+    expect(order).toEqual(["close", "caller>t", "close>t", "caller>p", "close>p"]);
+  });
+
+  it("closes for a signal already aborted from a tick, then emits 'close' from another", async () => {
+    runMacrotask(() => {
+      const controller = new AbortController();
+      controller.abort();
+      fs.watch("/work", { signal: controller.signal }).on("close", () => mark("close"));
+      callerQueues();
+    });
+    await until(5);
+    expect(order).toEqual(["caller>t", "close", "close>t", "caller>p", "close>p"]);
+  });
+
+  it("emits 'stop' from a tick", async () => {
+    const listener = () => {};
+    fs.watchFile("/work", { interval: 1000 }, listener).on("stop", () => mark("stop"));
+    runMacrotask(() => {
+      fs.unwatchFile("/work", listener);
+      callerQueues();
+    });
+    await until(5);
+    expect(order).toEqual(["stop", "caller>t", "stop>t", "caller>p", "stop>p"]);
+  });
+
+  it("polls in a macrotask: a 'change' listener's ticks run before its promise jobs", async () => {
+    fs.writeFileSync("/work/polled", "a");
+    fs.watchFile("/work/polled", { interval: 5 }, () => {
+      mark("change");
+      fs.unwatchFile("/work/polled");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    fs.writeFileSync("/work/polled", "bb");
+    await until(3);
+    expect(order).toEqual(["change", "change>t", "change>p"]);
   });
 });

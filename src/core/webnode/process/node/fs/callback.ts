@@ -4,6 +4,7 @@
 // other failure goes to the callback. `read`/`write` keep Node's overloads and
 // their `util.promisify` shapes; `rm` waits `retryDelay` between retries.
 import { Buffer } from "../buffer";
+import { setTimeout } from "../timers";
 import {
   AbortError,
   kValidateObjectAllowNullable,
@@ -31,6 +32,8 @@ import {
 import { complete } from "./completion";
 import { cpAsync } from "./cp";
 import { isArgumentError, notImplemented } from "./errors";
+import { mkdirAsync } from "./mkdir";
+import { rimrafOnce } from "./rimraf";
 import { runtime } from "../../runtime";
 import * as sync from "./sync";
 import type { RmOptions } from "./sync";
@@ -133,10 +136,10 @@ export const lchown = callbackFrom("lchown", 3, sync.lchownSync, true);
 export const link = callbackFrom("link", 2, sync.linkSync, true);
 export const lstat = callbackFrom("lstat", 2, sync.lstatSync, false);
 export const lutimes = callbackFrom("lutimes", 3, sync.lutimesSync, true);
-export const mkdir = callbackFrom("mkdir", 2, sync.mkdirSync, false);
+export const mkdir = callbackFrom("mkdir", 2, mkdirAsync, false);
 export const mkdtemp = callbackFrom("mkdtemp", 2, sync.mkdtempSync, false);
 export const open = callbackFrom("open", 3, sync.openSync, false);
-export const opendir = callbackFrom("opendir", 2, sync.opendirSync, false);
+export const opendir = callbackFrom("opendir", 2, sync.opendirAsync, false);
 export const readdir = callbackFrom("readdir", 2, sync.readdirSync, false);
 const readFileNow = callbackWithSignal("readFile", sync.readFileSync, 1, false);
 
@@ -466,13 +469,17 @@ function definePromisified(fn: AnyCallback, fields: [string, string]): void {
 definePromisified(readv as AnyCallback, ["bytesRead", "buffers"]);
 definePromisified(writev as AnyCallback, ["bytesWritten", "buffers"]);
 
-/** Removes with `opts`, waiting `retryDelay * attempt` before each retry, as Node's rimraf does. */
+/**
+ * Removes with `opts`, waiting `retryDelay * attempt` before each retry, as
+ * Node's rimraf does: on the timers module's clock, not on whatever a program
+ * has made of the global `setTimeout`.
+ */
 export function removeWithRetries(shown: string, opts: RmOptions): Promise<void> {
   return new Promise((resolve, reject) => {
     let attempt = 0;
     const tryOnce = () => {
       try {
-        sync.removeOnce(shown, opts);
+        rimrafOnce(shown);
         resolve();
       } catch (error) {
         if (attempt < opts.maxRetries && sync.isRetryableRm(error)) {
@@ -499,7 +506,7 @@ export function rm(path: unknown, options: unknown, callback?: unknown): void {
   const shown = getValidatedPath(path);
   let validated: RmOptions;
   try {
-    validated = sync.validateRmOptions(shown, opts, false) as RmOptions;
+    validated = sync.validateRmOptions(shown, opts, false, "async") as RmOptions;
   } catch (error) {
     if (isArgumentError(error)) {
       throw error;

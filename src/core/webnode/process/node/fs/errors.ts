@@ -146,8 +146,41 @@ export interface ErrorRewrite {
   absoluteDest?: string;
   shownDest?: string;
   syscall?: string;
-  /** Drops the path from the error, as Node does for `opendir`. */
+  /** Drops the path from the error, as Node does for `opendirSync`. */
   dropPath?: boolean;
+}
+
+/** What Node's C++ `rmSync` says for the codes it names (node_file.cc, RmSync). */
+const RM_SYNC_TEXT: Readonly<Record<string, string>> = {
+  EPERM: "Operation not permitted",
+  ENOTEMPTY: "Directory not empty",
+  ENOTDIR: "Not a directory",
+  EACCES: "Permission denied",
+};
+
+/**
+ * A removal error as `rmSync` throws it: `EACCES, Permission denied: 'x'`,
+ * naming the path it was given, with a positive `errno` and syscall `rm`.
+ * Codes it does not name, and other errors, are returned unchanged.
+ */
+export function rmSyncError(error: unknown, shown: string): unknown {
+  if (!isSystemError(error)) {
+    return error;
+  }
+  const text = RM_SYNC_TEXT[error.code];
+  if (text === undefined) {
+    return error;
+  }
+  error.message = `${error.code}, ${text}: '${shown}'`;
+  error.errno = Math.abs(error.errno);
+  error.syscall = "rm";
+  error.path = shown;
+  delete error.dest;
+  if (typeof error.stack === "string") {
+    const newline = error.stack.indexOf("\n");
+    error.stack = `Error: ${error.message}${newline === -1 ? "" : error.stack.slice(newline)}`;
+  }
+  return error;
 }
 
 /**

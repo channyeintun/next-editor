@@ -6,6 +6,7 @@
 // a FileHandle's methods — with callback-style `open`/`read`/`write`/`close`.
 import type { Readable as ReadableType, Writable as WritableType } from "node:stream";
 import { Buffer } from "../buffer";
+import { nextTick } from "../eventLoop";
 import {
   invalidArgType,
   makeNodeError,
@@ -104,8 +105,16 @@ interface FileStream {
   on(event: string | symbol, listener: Callback): unknown;
   destroy(error?: Error): unknown;
   open: unknown;
-  _readableState?: { autoDestroy: boolean };
-  _writableState?: { autoDestroy: boolean };
+  _readableState?: StreamState;
+  _writableState?: StreamState;
+}
+
+/** What a stream's state says about its end, as Node's streams keep it. */
+interface StreamState {
+  autoDestroy: boolean;
+  destroyed: boolean;
+  errored: Error | null;
+  errorEmitted: boolean;
 }
 
 interface ReadStreamSelf extends FileStream {
@@ -210,13 +219,29 @@ function importFd(stream: FileStream, options: Record<string, unknown>): number 
   throw invalidArgType("options.fd", ["number", "FileHandle"], fd);
 }
 
-/** `errorOrDestroy`: destroys an auto-destroying stream, else just emits the error. */
+/**
+ * Node's `errorOrDestroy` for a failure that arrived from the event loop:
+ * destroys an auto-destroying stream; any other is marked errored and emits
+ * 'error' now, once.
+ */
 function errorOrDestroy(stream: FileStream, error: Error): void {
-  const autoDestroy = stream._readableState?.autoDestroy || stream._writableState?.autoDestroy;
-  if (autoDestroy) {
+  const states = [stream._readableState, stream._writableState].filter(
+    (state) => state !== undefined,
+  );
+  if (states.some((state) => state.destroyed)) {
+    return;
+  }
+  if (states.some((state) => state.autoDestroy)) {
     stream.destroy(error);
-  } else {
-    queueMicrotask(() => stream.emit("error", error));
+    return;
+  }
+  const emitted = states.some((state) => state.errorEmitted);
+  for (const state of states) {
+    state.errored ??= error;
+    state.errorEmitted = true;
+  }
+  if (!emitted) {
+    stream.emit("error", error);
   }
 }
 
@@ -665,7 +690,7 @@ Object.assign(WriteStreamImpl.prototype, {
   close(this: WriteStreamSelf, callback?: (error?: Error | null) => void) {
     if (callback) {
       if (this.closed) {
-        queueMicrotask(() => callback());
+        nextTick(callback);
         return;
       }
       this.on("close", callback);

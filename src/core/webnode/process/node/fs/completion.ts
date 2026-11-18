@@ -4,23 +4,22 @@
 // requests, IPC) run between one completion and the next. Delivering in a
 // microtask would starve them all: a delay-free poll loop over `fs.access`
 // would never see the timer it waits for. So each completion runs in a task of
-// its own, from a MessageChannel (not setTimeout, which the browser clamps),
-// and holds the process alive while it waits, as pending I/O does in Node.
+// its own and holds the process alive while it waits, as pending I/O does in
+// Node. Each completion is a macrotask (eventLoop.ts): the nextTick callbacks
+// it queues run as it returns. It runs in the async context of the call that
+// queued it, as the callback of a Node request does.
 import { runtime, type ProcessRuntime } from "../../runtime";
-import { runNextTicks } from "../process";
+import { bindToCurrentContext } from "../async_hooks";
+import { macrotaskSource } from "../eventLoop";
 import { isArgumentError } from "./errors";
 
 const queue: (() => void)[] = [];
-let channel: MessageChannel | null = null;
 let held: ProcessRuntime | null = null;
 
 function runOne(): void {
   const next = queue.shift();
   try {
-    if (next !== undefined) {
-      next();
-      runNextTicks();
-    }
+    next?.();
   } finally {
     if (queue.length === 0 && held !== null) {
       const rt = held;
@@ -30,9 +29,15 @@ function runOne(): void {
   }
 }
 
-/** Runs `deliver` in a task of its own, after the tasks already queued. */
+/** Queues one task that runs the oldest completion. */
+const postCompletionTask = macrotaskSource(runOne);
+
+/**
+ * Runs `deliver` in a task of its own, after the tasks already queued, in the
+ * async context current now.
+ */
 export function complete(deliver: () => void): void {
-  queue.push(deliver);
+  queue.push(bindToCurrentContext(deliver));
   if (held === null) {
     try {
       held = runtime();
@@ -41,13 +46,7 @@ export function complete(deliver: () => void): void {
       held = null;
     }
   }
-  if (channel === null) {
-    channel = new MessageChannel();
-    channel.port1.onmessage = runOne;
-    // Under Node (tests) a port with a listener would keep the loop alive.
-    (channel.port1 as unknown as { unref?: () => void }).unref?.();
-  }
-  channel.port2.postMessage(null);
+  postCompletionTask();
 }
 
 /**
