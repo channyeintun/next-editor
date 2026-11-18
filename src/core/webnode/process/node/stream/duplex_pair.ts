@@ -1,6 +1,7 @@
 // `stream.duplexPair()` (Node 22.6+): two Duplex streams wired back to back, so
 // what one side writes the other side reads. Ported from Node 22's
 // lib/internal/streams/duplexpair.js.
+import { nextTick } from "../eventLoop";
 import type { Duplex as DuplexStream, DuplexConstructor, DuplexOptions } from "./types";
 
 /** Builds `duplexPair` over the given Duplex class. */
@@ -30,7 +31,7 @@ export function createDuplexPair(Duplex: DuplexConstructor) {
         throw new Error("duplexPair: the other side is not set");
       }
       if (chunk.length === 0) {
-        queueMicrotask(callback);
+        nextTick(callback);
       } else {
         other.push(chunk);
         other.pendingCallback = callback;

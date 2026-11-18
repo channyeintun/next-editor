@@ -31,6 +31,15 @@ export function makeNodeError<E extends Error = Error>(
     writable: true,
     configurable: true,
   });
+  nameCodeInStack(error, code);
+  return error;
+}
+
+/**
+ * Makes the first line of `error`'s stack `Name [CODE]: message`, as Node
+ * prints a coded error's stack.
+ */
+export function nameCodeInStack(error: Error, code: string): void {
   const stack = error.stack;
   if (typeof stack === "string") {
     const prefix = `${error.name}: `;
@@ -38,7 +47,6 @@ export function makeNodeError<E extends Error = Error>(
       error.stack = `${error.name} [${code}]: ${stack.slice(prefix.length)}`;
     }
   }
-  return error;
 }
 
 const kTypes = [

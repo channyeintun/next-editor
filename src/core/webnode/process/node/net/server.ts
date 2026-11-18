@@ -11,9 +11,48 @@ import {
   validateNumber,
 } from "../internalErrors";
 import { runtime, type ByteChannel } from "../../runtime";
-import { unsupported, uvExceptionWithHostPort } from "./errors";
+import { complete } from "../fs/completion";
+import { nextTick } from "../eventLoop";
+import {
+  startTimer,
+  stopTimer,
+  unsupported,
+  uvExceptionWithHostPort,
+  type TimerHandle,
+} from "./errors";
 import { isIP, isIPv4, isIPv6, isLocalHost, validatePort } from "./ip";
 import { isPipeName, kAttach, normalizeArgs, Socket, type SocketConnectOptions } from "./socket";
+
+/**
+ * How long a connection the server drops is held open for the bytes its
+ * client writes as it learns of its connection. Node closes the accepted
+ * handle at once, but the client's connect and first write have often
+ * already happened by then; here they come a task or so after the
+ * connection arrives (about 1 ms from another process).
+ */
+const DROP_GRACE_MS = 20;
+
+/**
+ * Closes a connection the server does not take, as Node closes the accepted
+ * handle. Closing a socket whose bytes nobody read sends a reset, on Linux
+ * and macOS alike: a client that already sent data reads ECONNRESET, one that
+ * sent nothing reads a clean end.
+ */
+function dropConnection(channel: ByteChannel): void {
+  let timer: TimerHandle | null = null;
+  const close = (reset: boolean) => {
+    stopTimer(timer);
+    channel.onData = null;
+    channel.onEnd = null;
+    if (!reset) {
+      channel.end();
+    }
+    channel.destroy();
+  };
+  channel.onData = () => close(true);
+  channel.onEnd = () => close(false);
+  timer = startTimer(() => close(false), DROP_GRACE_MS);
+}
 
 /** `net.createServer(options)`. */
 export interface ServerOptions {
@@ -198,7 +237,7 @@ export class Server extends EventEmitter {
       this.close();
     };
     if (abortSignal.aborted) {
-      queueMicrotask(onAborted);
+      nextTick(onAborted);
     } else {
       abortSignal.addEventListener("abort", onAborted, { once: true });
       this.once("close", () => abortSignal.removeEventListener("abort", onAborted));
@@ -207,13 +246,22 @@ export class Server extends EventEmitter {
 
   #lookupAndListen(port: number, host: string): void {
     const listeningId = this.#listeningId;
-    queueMicrotask(() => {
+    // Node looks the host up first. An address is answered from a tick, so the
+    // server has its handle (and its address) before any promise job runs; a
+    // name's answer comes from the event loop.
+    if (isIP(host) !== 0) {
+      nextTick(() => {
+        if (listeningId === this.#listeningId) {
+          this.#setup(host, port);
+        }
+      });
+      return;
+    }
+    complete(() => {
       if (listeningId !== this.#listeningId) {
         return;
       }
-      if (isIP(host) !== 0) {
-        this.#setup(host, port);
-      } else if (isLocalHost(host)) {
+      if (isLocalHost(host)) {
         this.#setup("127.0.0.1", port);
       } else {
         this.emit("error", notFound(host));
@@ -232,7 +280,7 @@ export class Server extends EventEmitter {
       const record = toSystemErrorRecord(error);
       const failure =
         record === null ? error : uvExceptionWithHostPort(record.code, "listen", host, port);
-      queueMicrotask(() => this.emit("error", failure));
+      nextTick(() => this.emit("error", failure));
       return;
     }
     this.#handle = handle;
@@ -242,7 +290,7 @@ export class Server extends EventEmitter {
       port: handle.port,
     };
     this.#updateRef();
-    queueMicrotask(() => {
+    nextTick(() => {
       if (this.#handle === handle) {
         this.emit("listening");
       }
@@ -275,7 +323,7 @@ export class Server extends EventEmitter {
       localFamily: isIPv4(localAddress) ? ("IPv4" as const) : ("IPv6" as const),
     };
     if (this.maxConnections !== undefined && this._connections >= this.maxConnections) {
-      channel.destroy();
+      dropConnection(channel);
       this.emit("drop", {
         localAddress: peer.localAddress,
         localPort: peer.localPort,
@@ -334,12 +382,12 @@ export class Server extends EventEmitter {
     if (this.#handle !== null || this._connections > 0) {
       return;
     }
-    queueMicrotask(() => this.emit("close"));
+    nextTick(() => this.emit("close"));
   }
 
   /** Calls back with the number of open connections. */
   getConnections(cb: (error: Error | null, count: number) => void): this {
-    queueMicrotask(() => cb(null, this._connections));
+    nextTick(() => cb(null, this._connections));
     return this;
   }
 

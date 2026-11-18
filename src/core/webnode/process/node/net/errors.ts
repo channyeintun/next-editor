@@ -2,7 +2,9 @@
 // 127.0.0.1:3000`, `listen EADDRINUSE: address already in use :::3000`,
 // `read ECONNRESET`, with `code`, `errno`, `syscall`, `address` and `port`. Also
 // the platform's own timers, captured at load so a socket timeout never goes
-// through (or keeps alive) the process's `timers` module.
+// through (or keeps alive) the process's `timers` module. Their callbacks are
+// macrotasks (eventLoop.ts `runMacrotask`), as a Node timer's is: the ticks a
+// 'timeout' listener queues run before its promise jobs.
 import {
   errnoOf,
   systemErrorFromRecord,
@@ -11,6 +13,7 @@ import {
   type SystemError,
 } from "../../../errors";
 import { makeNodeError } from "../internalErrors";
+import { runMacrotask } from "../eventLoop";
 
 function description(code: ErrnoCode): string {
   const message = systemErrorMessage({ code, syscall: "" });
@@ -40,6 +43,22 @@ export function exceptionWithHostPort(
     details += ` - ${additional}`;
   }
   return withMessage(error, `${syscall} ${code} ${details}`);
+}
+
+/**
+ * How Node fails a connect by name whose attempt a second connect by name
+ * cancelled: each lookup starts its own attempt on a fresh handle (Node's
+ * autoSelectFamily), the second closes the first's, and the first gives up
+ * with Node's `NodeAggregateError` of the one failure, `code` ECANCELED and
+ * an empty message.
+ */
+export function connectCanceled(address: string, port: number): Error {
+  const error = new AggregateError(
+    [exceptionWithHostPort("ECANCELED", "connect", address, port)],
+    "",
+  ) as AggregateError & { code: string };
+  error.code = "ECANCELED";
+  return error;
 }
 
 /** `listen EADDRINUSE: address already in use :::3000`: Node's `UVExceptionWithHostPort`. */
@@ -104,9 +123,9 @@ function unrefHandle(handle: TimerHandle): TimerHandle {
   return handle;
 }
 
-/** The platform's `setTimeout`, never keeping a Node test process alive. */
+/** The platform's `setTimeout`, never keeping a Node test process alive; `callback` runs as a macrotask. */
 export function startTimer(callback: () => void, ms: number): TimerHandle {
-  return unrefHandle(platformSetTimeout(callback, ms));
+  return unrefHandle(platformSetTimeout(() => runMacrotask(callback), ms));
 }
 
 /** Clears a timer from `startTimer`. */
@@ -116,9 +135,9 @@ export function stopTimer(handle: TimerHandle | null): void {
   }
 }
 
-/** The platform's `setInterval`, never keeping a Node test process alive. */
+/** The platform's `setInterval`, never keeping a Node test process alive; each run of `callback` is a macrotask. */
 export function startInterval(callback: () => void, ms: number): TimerHandle {
-  return unrefHandle(platformSetInterval(callback, ms));
+  return unrefHandle(platformSetInterval(() => runMacrotask(callback), ms));
 }
 
 /** Clears an interval from `startInterval`. */

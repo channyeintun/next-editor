@@ -1,9 +1,11 @@
 // `net.Socket`: a Duplex over one `ByteChannel` (process/runtime.ts). There is
 // no real network: a connection to this machine goes through
 // `runtime().net.connect`, and a server's accepted connection arrives as a
-// channel. The channel has no flow control, so what arrives is pushed as it
-// comes; writes complete a microtask after they reach the channel, so a burst
-// past the high water mark still reports backpressure.
+// channel. A socket paces itself on its channel (byteChannel.ts `paceOf`) as
+// TCP paces a connection: what arrives is pushed into the stream at once, but
+// counts as taken only while the stream wants more, and a write completes
+// once the peer has room for it, so a reader that stops holds its writer back.
+import { paceOf, type ChannelPace } from "../../../byteChannel";
 import { Buffer } from "../buffer";
 import {
   AbortError,
@@ -15,8 +17,11 @@ import {
 } from "../internalErrors";
 import { Duplex } from "../stream";
 import { runtime, type ByteChannel } from "../../runtime";
+import { complete } from "../fs/completion";
+import { nextTick, runMacrotask } from "../eventLoop";
 import { toSystemErrorRecord } from "../../../errors";
 import {
+  connectCanceled,
   errnoException,
   exceptionWithHostPort,
   socketClosedError,
@@ -26,6 +31,7 @@ import {
   writeAfterFinError,
   type TimerHandle,
 } from "./errors";
+import { getDefaultAutoSelectFamily } from "./autoSelectFamily";
 import { isIP, isIPv4, isLocalHost, loopbackFor, validatePort } from "./ip";
 
 /** `new net.Socket(options)`. */
@@ -142,6 +148,13 @@ function family(address: string): "IPv4" | "IPv6" {
 
 type WriteChunk = { chunk: unknown; encoding: string };
 
+/** A write partly sent: `bytes` from `sent` on wait for the peer to have room. */
+interface WaitingWrite {
+  bytes: Uint8Array;
+  sent: number;
+  callback: (error?: Error | null) => void;
+}
+
 function toBytes(chunks: readonly WriteChunk[]): Uint8Array {
   const parts = chunks.map(({ chunk, encoding }) =>
     typeof chunk === "string"
@@ -176,12 +189,34 @@ export class Socket extends Duplex {
   parser: unknown = null;
 
   #channel: ByteChannel | null = null;
+  /** The channel's flow control; undefined for a channel that has none (a test's). */
+  #pace: ChannelPace | undefined = undefined;
+  /** Bytes pushed into a stream that wanted no more: taken once it reads again. */
+  #untaken = 0;
+  /** The write that waits for the peer to have room. */
+  #waitingWrite: WaitingWrite | null = null;
+  /** The kernel's answer to the connect in flight. */
+  #pendingConnect: Promise<ByteChannel> | null = null;
+  /**
+   * Where the connect in flight goes, when it started from a lookup of a
+   * name on its own attempt (Node's autoSelectFamily): a second such connect
+   * cancels it.
+   */
+  #pendingLookedUp: { address: string; port: number } | null = null;
+  /** `connect()`'s `autoSelectFamily`: false makes a lookup's connect use the socket's one handle. */
+  #ownAttempts = true;
+  /**
+   * The socket has what Node calls its handle: from `connect()` (or the
+   * accepted connection) until it is destroyed.
+   */
+  #open = false;
   #peer: PeerInfo | null = null;
   #peerEnded = false;
   #channelClosed = false;
   #peerEndReceived = false;
   #reset = false;
-  #hadError = false;
+  /** What `close` reports; undefined for a socket destroyed before it was ever opened, as in Node. */
+  #hadError: boolean | undefined = undefined;
   #bytesRead = 0;
   #bytesDispatched = 0;
   #timer: TimerHandle | null = null;
@@ -227,7 +262,12 @@ export class Socket extends Duplex {
       const signal = opts.signal;
       const abort = () => this.destroy(abortError(signal));
       if (signal.aborted) {
-        queueMicrotask(abort);
+        // As in Node, whose stream constructor destroys the stream at once:
+        // 'error' and 'close' come in the next tick, ahead of anything the
+        // caller queues. Node's socket constructor then makes the socket
+        // ready again, so a connect() that follows still connects.
+        abort();
+        this.#revive();
       } else {
         signal.addEventListener("abort", abort, { once: true });
         this.once("close", () => signal.removeEventListener("abort", abort));
@@ -259,17 +299,7 @@ export class Socket extends Duplex {
       );
     }
     if (this.destroyed) {
-      (this as unknown as { _undestroy(): void })._undestroy();
-      this.#channel = null;
-      this.#peer = null;
-      this.#peerEnded = false;
-      this.#channelClosed = false;
-      this.#peerEndReceived = false;
-      this.#reset = false;
-      this.#hadError = false;
-    }
-    if (this.connecting || this.#channel !== null) {
-      throw makeAlreadyConnected();
+      this.#revive();
     }
     const host = options.host ?? "localhost";
     if (typeof host !== "string") {
@@ -292,11 +322,16 @@ export class Socket extends Duplex {
     if (typeof options.keepAlive === "boolean") {
       this.#keepAlive = options.keepAlive;
     }
+    this.#ownAttempts =
+      typeof options.autoSelectFamily === "boolean"
+        ? options.autoSelectFamily
+        : getDefaultAutoSelectFamily();
     this.connecting = true;
+    this.#open = true;
     this._host = host;
     this.#updateRef();
     if (isIP(host) !== 0) {
-      queueMicrotask(() => this.#connectTo(host, portNumber));
+      nextTick(() => this.#connectTo(host, portNumber));
       return this;
     }
     const lookup = options.lookup;
@@ -313,30 +348,74 @@ export class Socket extends Duplex {
             this.#failConnect(error);
             return;
           }
-          this.#connectTo(ip, portNumber);
+          this.#connectTo(ip, portNumber, true);
         },
       );
       return this;
     }
-    queueMicrotask(() => {
+    // Node looks the name up first; its answer comes from the event loop.
+    complete(() => {
       if (!this.connecting) {
         return;
       }
       if (!isLocalHost(host)) {
-        this.#connectTo(host, portNumber);
+        this.#connectTo(host, portNumber, true);
         return;
       }
       const resolved = loopbackFor(options.family === 6 ? "::1" : host);
       this.emit("lookup", null, resolved.address, resolved.family, host);
       if (this.connecting) {
-        this.#connectTo(resolved.address, portNumber);
+        this.#connectTo(resolved.address, portNumber, true);
       }
     });
     return this;
   }
 
-  #connectTo(address: string, port: number): void {
+  /** Makes a destroyed socket ready for a connection again, as Node's `initSocketHandle` does. */
+  #revive(): void {
+    (this as unknown as { _undestroy(): void })._undestroy();
+    this.#channel = null;
+    this.#pace = undefined;
+    this.#untaken = 0;
+    this.#pendingConnect = null;
+    this.#pendingLookedUp = null;
+    this.#peer = null;
+    this.#peerEnded = false;
+    this.#channelClosed = false;
+    this.#peerEndReceived = false;
+    this.#reset = false;
+  }
+
+  /** `lookedUp`: the address came from a lookup of the name `connect()` was given. */
+  #connectTo(address: string, port: number, lookedUp = false): void {
     if (!this.connecting || this.destroyed) {
+      return;
+    }
+    const peer = this.#peer;
+    const canceled = this.#pendingLookedUp;
+    if (canceled !== null && lookedUp && this.#ownAttempts) {
+      // As Node's: this attempt takes a handle of its own and closes the one
+      // in flight, whose connect fails with ECANCELED and takes the socket.
+      this.#failConnect(connectCanceled(canceled.address, canceled.port));
+      return;
+    }
+    if (this.#pendingConnect !== null || peer !== null) {
+      // A second connect() on a socket that is connecting or connected fails
+      // here, where libuv refuses it in Node, and takes the socket with it.
+      this.#failConnect(
+        peer === null
+          ? exceptionWithHostPort("EALREADY", "connect", address, port)
+          : exceptionWithHostPort(
+              "EISCONN",
+              "connect",
+              address,
+              port,
+              // This end's address, when it has a port, as Node appends it.
+              peer.localPort === undefined
+                ? undefined
+                : `Local (${peer.localAddress}:${peer.localPort})`,
+            ),
+      );
       return;
     }
     if (!isLocalHost(address)) {
@@ -359,31 +438,42 @@ export class Socket extends Duplex {
       this.#failConnect(this.#connectError(error, target.address, port));
       return;
     }
+    this.#pendingConnect = pending;
+    this.#pendingLookedUp = lookedUp && this.#ownAttempts ? { address, port } : null;
+    // The kernel's answer is a macrotask, as in Node: the ticks the 'connect'
+    // listeners queue run before their promise jobs. An answer to a connect
+    // the socket has given up (destroyed since, or connecting anew) is closed.
     pending.then(
-      (channel) => {
-        if (!this.connecting || this.destroyed) {
-          channel.destroy();
-          return;
-        }
-        this.connecting = false;
-        this[kAttach](channel, {
-          remoteAddress: target.address,
-          remotePort: port,
-          remoteFamily: family(target.address),
-          localAddress: target.family === 6 ? "::1" : "127.0.0.1",
-          // The kernel's label for this end (sysClient puts it on the channel).
-          localPort: channel.localPort,
-          localFamily: target.family === 6 ? "IPv6" : "IPv4",
-        });
-        this.emit("connect");
-        this.emit("ready");
-      },
-      (error: unknown) => {
-        if (!this.connecting || this.destroyed) {
-          return;
-        }
-        this.#failConnect(this.#connectError(error, target.address, port));
-      },
+      (channel) =>
+        runMacrotask(() => {
+          if (this.#pendingConnect !== pending) {
+            channel.destroy();
+            return;
+          }
+          this.#pendingConnect = null;
+          this.#pendingLookedUp = null;
+          this.connecting = false;
+          this[kAttach](channel, {
+            remoteAddress: target.address,
+            remotePort: port,
+            remoteFamily: family(target.address),
+            localAddress: target.family === 6 ? "::1" : "127.0.0.1",
+            // The kernel's label for this end (sysClient puts it on the channel).
+            localPort: channel.localPort,
+            localFamily: target.family === 6 ? "IPv6" : "IPv4",
+          });
+          this.emit("connect");
+          this.emit("ready");
+        }),
+      (error: unknown) =>
+        runMacrotask(() => {
+          if (this.#pendingConnect !== pending) {
+            return;
+          }
+          this.#pendingConnect = null;
+          this.#pendingLookedUp = null;
+          this.#failConnect(this.#connectError(error, target.address, port));
+        }),
     );
   }
 
@@ -403,6 +493,8 @@ export class Socket extends Duplex {
   /** Takes over `channel` as this socket's connection. */
   [kAttach](channel: ByteChannel, peer: PeerInfo): void {
     this.#channel = channel;
+    this.#pace = paceOf(channel);
+    this.#open = true;
     this.#peer = peer;
     this.#updateRef();
     channel.onData = (chunk) => {
@@ -411,7 +503,13 @@ export class Socket extends Duplex {
       }
       this.#bytesRead += chunk.length;
       this._unrefTimer();
-      this.push(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+      if (this.push(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength))) {
+        this.#pace?.taken(chunk.length);
+      } else {
+        // The stream is full: as a socket that stopped reading, it takes no
+        // more until `_read` asks, and the peer's writes wait meanwhile.
+        this.#untaken += chunk.length;
+      }
     };
     channel.onEnd = () => {
       this.#peerEndReceived = true;
@@ -430,14 +528,22 @@ export class Socket extends Duplex {
       if (!this.#peerEndReceived) {
         // The peer went away without ending its side: a reset, as TCP reports it.
         this.destroy(errnoException("ECONNRESET", "read"));
+        return;
       }
+      // Nobody is left to make room: a write that waited goes nowhere.
+      this.#sendWaiting();
     };
   }
 
   // --- stream implementation ----------------------------------------------
 
+  /** The stream wants more: what was pushed past its high water mark is taken now. */
   override _read(): void {
-    // Bytes are pushed as the channel delivers them.
+    if (this.#untaken > 0) {
+      const bytes = this.#untaken;
+      this.#untaken = 0;
+      this.#pace?.taken(bytes);
+    }
   }
 
   override _write(
@@ -473,17 +579,40 @@ export class Socket extends Duplex {
     const bytes = toBytes(chunks);
     this.#bytesDispatched += bytes.length;
     this._unrefTimer();
-    if (bytes.length > 0 && !this.#channelClosed) {
+    this.#waitingWrite = { bytes, sent: 0, callback };
+    this.#sendWaiting();
+  }
+
+  /**
+   * Hands the waiting write to the channel, as much as the peer has room for,
+   * and completes it once all of it is there. With room for all of it that is
+   * at once, as Node's synchronous try_write path: a later write in the same
+   * tick reaches the channel too, instead of waiting in the stream's buffer
+   * where destroy() would drop it. A closed channel takes the rest nowhere.
+   */
+  #sendWaiting(): void {
+    const write = this.#waitingWrite;
+    const channel = this.#channel;
+    if (write === null || channel === null) {
+      return;
+    }
+    const pace = this.#pace;
+    while (write.sent < write.bytes.length && !this.#channelClosed) {
+      const room = pace === undefined ? write.bytes.length : pace.room;
+      if (pace !== undefined && room === 0) {
+        pace.onRoom = () => this.#sendWaiting();
+        return;
+      }
+      const end = Math.min(write.bytes.length, write.sent + room);
       try {
-        channel.write(bytes);
+        channel.write(write.bytes.subarray(write.sent, end));
       } catch {
         // The peer is already gone; its close follows and ends this socket.
       }
+      write.sent = end;
     }
-    // The bytes are already handed to the channel, as Node's synchronous
-    // try_write path: a later write in the same tick reaches the channel too,
-    // instead of waiting in the stream's buffer where destroy() would drop it.
-    callback();
+    this.#waitingWrite = null;
+    write.callback();
   }
 
   override _final(callback: (error?: Error | null) => void): void {
@@ -499,6 +628,8 @@ export class Socket extends Duplex {
 
   override _destroy(error: Error | null, callback: (error?: Error | null) => void): void {
     this.connecting = false;
+    this.#pendingConnect = null;
+    this.#pendingLookedUp = null;
     stopTimer(this.#timer);
     this.#timer = null;
     const channel = this.#channel;
@@ -507,6 +638,9 @@ export class Socket extends Duplex {
       channel.onData = null;
       channel.onEnd = null;
       channel.onClose = null;
+      if (this.#pace !== undefined) {
+        this.#pace.onRoom = null;
+      }
       if (!this.#channelClosed) {
         this.#channelClosed = true;
         // Closing a TCP socket sends FIN first; only a reset skips it.
@@ -516,7 +650,16 @@ export class Socket extends Duplex {
         channel.destroy();
       }
     }
-    this.#hadError = Boolean(error);
+    const waiting = this.#waitingWrite;
+    if (waiting !== null) {
+      // As Node's closing handle cancels the write it had not finished: its
+      // callback, and those of the writes queued behind it, get ECANCELED
+      // before 'close'.
+      this.#waitingWrite = null;
+      nextTick(waiting.callback, errnoException("ECANCELED", "write"));
+    }
+    this.#hadError = this.#open ? Boolean(error) : undefined;
+    this.#open = false;
     this.#updateRef();
     callback(error);
     const server = this._server;
@@ -533,7 +676,7 @@ export class Socket extends Duplex {
       const cb = typeof encoding === "function" ? encoding : callback;
       const error = writeAfterFinError();
       if (typeof cb === "function") {
-        queueMicrotask(() => (cb as (e: Error) => void)(error));
+        nextTick(() => (cb as (e: Error) => void)(error));
       }
       this.destroy(error);
       return false;
@@ -745,10 +888,6 @@ export class Socket extends Duplex {
   get keepAlive(): boolean {
     return this.#keepAlive;
   }
-}
-
-function makeAlreadyConnected(): Error {
-  return makeNodeError("ERR_SOCKET_CONNECTING", "Socket is already connecting", Error);
 }
 
 function makeClosedBeforeConnection(): Error {

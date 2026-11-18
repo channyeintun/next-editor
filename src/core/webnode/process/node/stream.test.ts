@@ -1,5 +1,6 @@
 // @vitest-environment node
 // The `stream`, `stream/promises`, `stream/web` and `stream/consumers` builtins.
+import type { Duplex as NodeDuplex, Writable as NodeWritable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { Buffer } from "./buffer";
 import stream, { Duplex, PassThrough, Readable, Transform, Writable } from "./stream";
@@ -196,6 +197,38 @@ describe("stream: behaviour", () => {
     expect((chunk as Buffer).toString()).toBe("hi");
   });
 
+  // Real Node v26 and v22: a byte stream takes any view, as a Buffer over
+  // the same memory; another chunk is refused in Node's words.
+  it("takes any TypedArray or DataView as a byte chunk, and refuses others as Node does", async () => {
+    const written: string[] = [];
+    const sink = new Writable({
+      write(chunk: unknown, _encoding: string, callback: () => void) {
+        written.push(`${Buffer.isBuffer(chunk)} ${(chunk as Buffer).length}`);
+        callback();
+      },
+    });
+    sink.write(new Float32Array(2));
+    sink.end(new DataView(new ArrayBuffer(3)));
+    const through = new PassThrough();
+    through.write(new Uint16Array([1]));
+    through.end();
+    const readable = new Readable({ read() {} });
+    readable.push(new Int32Array(1));
+    readable.unshift(new Float64Array(1));
+    readable.push(null);
+    const objects = new Readable({ objectMode: true, read() {} });
+    const view = new Float32Array(1);
+    objects.push(view);
+    expect(written).toEqual(["true 8", "true 3"]);
+    expect((await collect(through)).map((chunk) => (chunk as Buffer).length)).toEqual([2]);
+    expect((await collect(readable)).map((chunk) => (chunk as Buffer).length)).toEqual([8, 4]);
+    expect(objects.read()).toBe(view);
+    expect([Readable.prototype.push.length, Readable.prototype.unshift.length]).toEqual([2, 2]);
+    expect(() => sink.write(1)).toThrow(
+      'The "chunk" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (1)',
+    );
+  });
+
   it("duplexPair connects two sides", async () => {
     const [left, right] = stream.duplexPair();
     const received = collect(right);
@@ -370,5 +403,895 @@ describe("stream/web and stream/consumers", () => {
     const blob = await consumers.blob(Readable.from([Buffer.from("blob")]));
     expect(await blob.text()).toBe("blob");
     expect(Array.from(await consumers.bytes(Readable.from([Buffer.from([7])])))).toEqual([7]);
+  });
+});
+
+describe("stream: read() with no size", () => {
+  // What real Node v26 prints for the same reads (Node 26 takes the first
+  // buffered chunk of a byte stream without an encoding).
+  it("takes the first buffered chunk, as Node 26 does", async () => {
+    const seen: unknown[] = [];
+    const readable = new Readable({ read() {} });
+    readable.push("a");
+    readable.push("b");
+    readable.push("cc");
+    seen.push(String(readable.read()), String(readable.read()), readable.readableLength);
+    // An ended stream that read() empties ends.
+    const ending = new Readable({ read() {} });
+    const ended = new Promise((resolve) => ending.on("end", resolve));
+    ending.push("x");
+    ending.push(null);
+    seen.push(String(ending.read()));
+    // A chunk past the high water mark comes whole, and the mark stays.
+    const big = new Readable({ read() {}, highWaterMark: 4 });
+    big.push("123456");
+    big.push("78");
+    seen.push(String(big.read()), big.readableHighWaterMark);
+    // With an encoding the buffered text comes together.
+    const text = new Readable({ read() {} });
+    text.setEncoding("utf8");
+    text.push("a");
+    text.push("b");
+    seen.push(String(text.read()));
+    expect(seen).toEqual(["a", "b", 2, "x", "123456", 4, "ab"]);
+    await ended;
+  });
+
+  it("lets for await yield each chunk", async () => {
+    const readable = new Readable({ read() {} });
+    for (const chunk of ["c0", "c1", "c2"]) {
+      readable.push(chunk);
+    }
+    readable.push(null);
+    const chunks: string[] = [];
+    for await (const chunk of readable) {
+      chunks.push(String(chunk));
+    }
+    expect(chunks).toEqual(["c0", "c1", "c2"]);
+  });
+});
+
+// What real Node v26 logs for each scenario (v22 differs in most: it joins the
+// buffered chunks, and emits a second 'readable' after an end nobody saw).
+describe("stream: paused reads as Node 26 does them", () => {
+  type Log = (...parts: string[]) => void;
+  const show = (chunk: unknown): string =>
+    chunk === null
+      ? "null"
+      : chunk instanceof Uint8Array
+        ? `B(${new TextDecoder().decode(chunk)})`
+        : `${typeof chunk}(${String(chunk)})`;
+  /** Lets `count` turns of the event loop pass: every tick and promise job queued by then has run. */
+  const turns = async (count = 3): Promise<void> => {
+    for (let index = 0; index < count; index += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  };
+  const source = () => new Readable({ read() {} });
+  /** A 'readable' listener that reads until `read()` returns null. */
+  const drainOnReadable = (readable: ReadableType, log: Log) => {
+    readable.on("readable", () => {
+      log("readable");
+      for (let chunk = readable.read(); chunk !== null; chunk = readable.read()) {
+        log(show(chunk));
+      }
+    });
+    readable.on("end", () => log("end"));
+  };
+
+  const scenarios: [string, (log: Log) => Promise<void> | void, string][] = [
+    [
+      "read(null), read(NaN) and a size that is no number mean no size",
+      (log) => {
+        for (const size of [null, NaN, "x", {}]) {
+          const r = source();
+          r.push("a");
+          r.push("b");
+          log(show(r.read(size as never)), show(r.read(size as never)));
+        }
+      },
+      "B(a) B(b) B(a) B(b) B(a) B(b) B(a) B(b)",
+    ],
+    [
+      "a size is parsed as an integer",
+      (log) => {
+        const r = source();
+        r.push("abc");
+        log(show(r.read("1" as never)), show(r.read("1.9" as never)), show(r.read(1.5)));
+        const zero = source();
+        zero.push("a");
+        zero.push("b");
+        log(show(zero.read(0)), show(zero.read(-1)), show(zero.read()));
+      },
+      "B(a) B(b) B(c) null null B(a)",
+    ],
+    [
+      "_read gets the stream's own mark when a buffered chunk is larger",
+      (log) => {
+        const sizes: string[] = [];
+        const r = new Readable({
+          highWaterMark: 4,
+          read(size) {
+            sizes.push(`${size}/${this.readableHighWaterMark}`);
+          },
+        });
+        r.push("abcdefghijklmnop");
+        r.push("q");
+        log(show(r.read()), show(r.read()), sizes.join(","), String(r.readableHighWaterMark));
+      },
+      "B(abcdefghijklmnop) B(q) 4/4 4",
+    ],
+    [
+      "an explicit size above the mark raises it",
+      (log) => {
+        const sizes: number[] = [];
+        const r = new Readable({
+          highWaterMark: 4,
+          read(size) {
+            sizes.push(size);
+          },
+        });
+        r.push("abcdefghijklmnop");
+        r.push("q");
+        log(show(r.read(16)), sizes.join(","), String(r.readableHighWaterMark));
+      },
+      "B(abcdefghijklmnop) 16 16",
+    ],
+    [
+      "_read is called once what stays buffered is below the mark",
+      (log) => {
+        const sizes: number[] = [];
+        const r = new Readable({
+          highWaterMark: 4,
+          read(size) {
+            sizes.push(size);
+          },
+        });
+        r.push("ab");
+        r.push("cdefgh");
+        r.push("i");
+        log(show(r.read()), `[${sizes}]`, show(r.read()), `[${sizes}]`, show(r.read()));
+        log(`[${sizes}]`);
+      },
+      "B(ab) [] B(cdefgh) [4] B(i) [4]",
+    ],
+    [
+      "chunks _read pushes at once come one by one",
+      (log) => {
+        let calls = 0;
+        const r = new Readable({
+          read() {
+            if (calls++ === 0) {
+              this.push("a");
+              this.push("b");
+              this.push("c");
+            }
+          },
+        });
+        log(show(r.read()), show(r.read()), show(r.read()), show(r.read()));
+      },
+      "B(a) B(b) B(c) null",
+    ],
+    [
+      "chunks and the end _read pushes at once",
+      async (log) => {
+        const r = new Readable({
+          read() {
+            this.push("a");
+            this.push("b");
+            this.push(null);
+          },
+        });
+        r.on("end", () => log("end"));
+        log(show(r.read()), show(r.read()), show(r.read()));
+        await turns();
+      },
+      "B(a) B(b) null end",
+    ],
+    [
+      "chunks _read pushes behind a buffered one",
+      (log) => {
+        let calls = 0;
+        const r = new Readable({
+          highWaterMark: 8,
+          read() {
+            if (calls++ < 2) {
+              this.push(`x${calls}`);
+            }
+          },
+        });
+        r.push("a");
+        log(show(r.read()), show(r.read()), show(r.read()), show(r.read()));
+      },
+      "B(a) B(x1) B(x2) null",
+    ],
+    [
+      "a chunk _read puts back in front",
+      (log) => {
+        let calls = 0;
+        const r = new Readable({
+          read() {
+            if (calls++ === 0) {
+              this.unshift(Buffer.from("UU"));
+            }
+          },
+        });
+        r.push("a");
+        r.push("b");
+        log(show(r.read()), show(r.read()), show(r.read()), show(r.read()));
+      },
+      "B(U) B(U) B(a) B(b)",
+    ],
+    [
+      "a _read that throws",
+      async (log) => {
+        const r = new Readable({
+          read() {
+            throw new Error("bad read");
+          },
+        });
+        r.on("error", (error) => log(`error ${error.message}`));
+        r.push("a");
+        log(show(r.read()), `destroyed ${r.destroyed}`);
+        await turns();
+      },
+      "B(a) destroyed true error bad read",
+    ],
+    [
+      "a _read that throws on a stream that does not destroy itself",
+      async (log) => {
+        const r = new Readable({
+          autoDestroy: false,
+          read() {
+            throw new Error("bad read");
+          },
+        });
+        r.on("error", (error) => log(`error ${error.message}`));
+        r.push("a");
+        log(show(r.read()), `destroyed ${r.destroyed}`, `errored ${r.errored?.message}`);
+        await turns();
+      },
+      "error bad read B(a) destroyed false errored bad read",
+    ],
+    [
+      "_read and 'data' listeners see a paused stream",
+      (log) => {
+        const r = new Readable({
+          read() {
+            log(`_read ${this.readableFlowing} ${this.isPaused()}`);
+          },
+        });
+        r.pause();
+        r.on("data", (chunk) => log(`data ${show(chunk)} ${r.readableFlowing} ${r.isPaused()}`));
+        r.push("a");
+        r.push("b");
+        log(show(r.read()), `after ${r.readableFlowing} ${r.isPaused()}`);
+      },
+      "_read false true data B(a) false true B(a) after false true",
+    ],
+    [
+      "a 'data' listener that resumes a paused stream",
+      async (log) => {
+        const r = source();
+        r.pause();
+        const seen: string[] = [];
+        r.on("data", (chunk) => {
+          seen.push(String(chunk));
+          r.resume();
+        });
+        r.push("a");
+        r.push("b");
+        r.push("c");
+        log(show(r.read()), `${r.readableFlowing} ${r.isPaused()}`);
+        await turns();
+        log(seen.join(""));
+      },
+      "B(a) true false abc",
+    ],
+    [
+      "a 'data' listener under a 'readable' listener",
+      async (log) => {
+        const r = source();
+        r.on("readable", () => {});
+        const seen: string[] = [];
+        r.on("data", (chunk) => {
+          seen.push(String(chunk));
+          r.resume();
+        });
+        r.push("a");
+        r.push("b");
+        log(show(r.read()), `${r.readableFlowing} ${r.isPaused()}`);
+        await turns();
+        log(seen.join(""));
+      },
+      "B(a) false true a",
+    ],
+    [
+      "one read per 'readable'",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.push("b");
+        r.push("c");
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        await turns();
+        log(`left ${r.readableLength}`);
+      },
+      "readable:B(a) left 2",
+    ],
+    [
+      "one read per 'readable' on a stream that ended unobserved",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.push("b");
+        r.push(null);
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+        log(`left ${r.readableLength} ended ${r.readableEnded}`);
+      },
+      "readable:B(a) left 1 ended false",
+    ],
+    [
+      "a read loop on a stream that ended unobserved",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.push("b");
+        r.push(null);
+        drainOnReadable(r, log);
+        await turns();
+      },
+      "readable B(a) B(b) end",
+    ],
+    [
+      "a listener added after an end with nothing buffered",
+      async (log) => {
+        const r = source();
+        r.push(null);
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "readable:null end",
+    ],
+    [
+      "a listener added a tick after an end with nothing buffered",
+      async (log) => {
+        const r = source();
+        r.push(null);
+        await new Promise<void>((resolve) => process.nextTick(resolve));
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "readable:null end",
+    ],
+    [
+      "a listener added turns after an end with data",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.push("b");
+        r.push(null);
+        await turns();
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+        log(`left ${r.readableLength}`);
+      },
+      "readable:B(a) left 1",
+    ],
+    [
+      "a listener added before the chunks and the end",
+      async (log) => {
+        const r = source();
+        drainOnReadable(r, log);
+        r.push("a");
+        r.push("b");
+        r.push(null);
+        await turns();
+      },
+      "readable B(a) B(b) end",
+    ],
+    [
+      "an end pushed later, with a listener",
+      async (log) => {
+        const r = source();
+        drainOnReadable(r, log);
+        r.push("a");
+        setImmediate(() => r.push(null));
+        await turns();
+      },
+      "readable B(a) readable end",
+    ],
+    [
+      "an end pushed later, read afterwards",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.on("end", () => log("end"));
+        setImmediate(() => r.push(null));
+        await turns();
+        log(show(r.read()), show(r.read()));
+        await turns();
+      },
+      "B(a) null end",
+    ],
+    [
+      "a stream that ended unobserved, then flows",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.push("b");
+        r.push(null);
+        await turns();
+        r.on("data", (chunk) => log(`data:${String(chunk)}`));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "data:a data:b end",
+    ],
+    [
+      "an empty stream that ended unobserved",
+      async (log) => {
+        const resumed = source();
+        resumed.push(null);
+        resumed.on("end", () => log("end"));
+        resumed.resume();
+        await turns();
+        const untouched = source();
+        untouched.push(null);
+        untouched.on("end", () => log("end"));
+        await turns();
+        log(`ended ${untouched.readableEnded}`);
+      },
+      "end ended false",
+    ],
+    [
+      "once('readable') after an unobserved end",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.push(null);
+        r.once("readable", () => log(`readable:${show(r.read())}:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "readable:B(a):null end",
+    ],
+    [
+      "for await over a stream that ended unobserved",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.push("b");
+        r.push(null);
+        for await (const chunk of r) {
+          log(show(chunk));
+        }
+        const empty = source();
+        empty.push(null);
+        for await (const chunk of empty) {
+          log(show(chunk));
+        }
+        log("done");
+      },
+      "B(a) B(b) done",
+    ],
+    [
+      "a PassThrough that ended unobserved",
+      async (log) => {
+        const later = new PassThrough();
+        later.write("a");
+        later.write("b");
+        later.end();
+        await turns();
+        drainOnReadable(later, log);
+        await turns();
+        const sameTurn = new PassThrough();
+        sameTurn.end("c");
+        drainOnReadable(sameTurn, log);
+        await turns();
+      },
+      "readable B(a) B(b) end readable B(c) end",
+    ],
+    [
+      "an object stream that ended unobserved",
+      async (log) => {
+        const r = new Readable({ objectMode: true, read() {} });
+        r.push(1);
+        r.push(2);
+        r.push(null);
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+        log(`left ${r.readableLength}`);
+      },
+      "readable:number(1) left 1",
+    ],
+    [
+      "a stream with an encoding that ended unobserved",
+      async (log) => {
+        const r = source();
+        r.setEncoding("utf8");
+        r.push("a");
+        r.push("b");
+        r.push(null);
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "readable:string(ab) end",
+    ],
+    [
+      "an end pushed by _read, at once and later",
+      async (log) => {
+        const atOnce = new Readable({
+          read() {
+            this.push("a");
+            this.push(null);
+          },
+        });
+        drainOnReadable(atOnce, log);
+        await turns();
+        let calls = 0;
+        const later = new Readable({
+          read() {
+            setImmediate(() => this.push(calls++ < 2 ? `c${calls}` : null));
+          },
+        });
+        drainOnReadable(later, log);
+        await turns(6);
+      },
+      "readable B(a) end readable B(c1) readable B(c2) readable end",
+    ],
+    [
+      "a 'readable' listener removed again after an unobserved end",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.push(null);
+        const listener = () => log("readable");
+        r.on("readable", listener);
+        r.off("readable", listener);
+        r.on("data", (chunk) => log(`data:${String(chunk)}`));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "data:a end",
+    ],
+    [
+      "a pipe from a stream that ended unobserved",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.push("b");
+        r.push(null);
+        const through = new PassThrough();
+        r.pipe(through);
+        const got: string[] = [];
+        through.on("data", (chunk) => got.push(String(chunk)));
+        through.on("end", () => log(`end ${got.join("|")}`));
+        await turns();
+      },
+      "end a|b",
+    ],
+    [
+      "read(0) and a chunk put back after an unobserved end",
+      async (log) => {
+        const nudged = source();
+        nudged.push("a");
+        nudged.push(null);
+        nudged.on("end", () => log("end"));
+        log(show(nudged.read(0)), show(nudged.read()), show(nudged.read()));
+        await turns();
+        const r = source();
+        r.push("b");
+        r.push(null);
+        r.unshift(r.read());
+        drainOnReadable(r, log);
+        await turns();
+      },
+      "null B(a) null end readable B(b) end",
+    ],
+    [
+      "a listener added after the reads that emptied a stream ended unobserved",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.push(null);
+        log(show(r.read()));
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "B(a) end",
+    ],
+    [
+      "a listener added after read(0) of an empty stream ended unobserved",
+      async (log) => {
+        const r = source();
+        r.push(null);
+        log(show(r.read(0)));
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "null end",
+    ],
+    [
+      "an end put in front (unshift(null)) while nobody observes",
+      async (log) => {
+        const r = source();
+        r.push("a");
+        r.unshift(null);
+        drainOnReadable(r, log);
+        await turns();
+      },
+      "readable B(a) end",
+    ],
+    [
+      "two listeners added after an unobserved end, the first with addListener",
+      async (log) => {
+        const r = source();
+        r.push(null);
+        r.addListener("readable", () => log("first"));
+        r.on("readable", () => log("second"));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "first second end",
+    ],
+    [
+      "a stream destroyed before its listener's event",
+      async (log) => {
+        const r = source();
+        r.push(null);
+        r.on("readable", () => log("readable"));
+        r.on("close", () => log("close"));
+        r.destroy();
+        await turns();
+      },
+      "close",
+    ],
+    [
+      "a listener added after the reads emptied a stream that does not destroy itself",
+      async (log) => {
+        const r = new Readable({ autoDestroy: false, read() {} });
+        r.push("a");
+        r.push(null);
+        log(show(r.read()));
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "B(a) end",
+    ],
+    [
+      "a chunk put back after a read that found the end",
+      async (log) => {
+        const r = new Readable({
+          read() {
+            this.push(null);
+          },
+        });
+        log(show(r.read()));
+        r.unshift(Buffer.from("x"));
+        drainOnReadable(r, log);
+        await turns();
+      },
+      "null readable B(x) end",
+    ],
+    [
+      "a listener that is refused, then a real one a tick later, after an unobserved end",
+      async (log) => {
+        const r = source();
+        r.push(null);
+        try {
+          r.on("readable", 5 as never);
+        } catch (error) {
+          log((error as { code: string }).code);
+        }
+        await new Promise<void>((resolve) => process.nextTick(resolve));
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "ERR_INVALID_ARG_TYPE readable:null end",
+    ],
+    [
+      "a chunk put back, or read(0), between the listener and its event",
+      async (log) => {
+        const r = source();
+        r.push(null);
+        drainOnReadable(r, log);
+        r.unshift(Buffer.from("a"));
+        await turns();
+        const nudged = source();
+        nudged.push(null);
+        nudged.on("readable", () => log(`readable:${show(nudged.read())}`));
+        nudged.on("end", () => log("end"));
+        log(show(nudged.read(0)));
+        await turns();
+      },
+      "readable B(a) end null readable:null end",
+    ],
+    [
+      "an end that a waiting read observed",
+      async (log) => {
+        const r = source();
+        log(show(r.read()));
+        r.push(null);
+        r.on("readable", () => log(`readable:${show(r.read())}`));
+        r.on("end", () => log("end"));
+        await turns();
+      },
+      "null end",
+    ],
+  ];
+
+  it.each(scenarios)("%s", async (_name, body, expected) => {
+    const events: string[] = [];
+    await body((...parts) => events.push(...parts));
+    expect(events.join(" ")).toBe(expected);
+  });
+});
+
+describe("the callbacks of write() and end()", () => {
+  /** What each callback was called with, on webnode's streams or the host's. */
+  function callbackArguments(module: {
+    Writable: typeof NodeWritable;
+    Duplex: typeof NodeDuplex;
+  }): Promise<string[]> {
+    const out: string[] = [];
+    const show =
+      (label: string) =>
+      (...args: unknown[]) =>
+        out.push(
+          `${label}: ${args.length} ${args.map((arg) => (arg instanceof Error ? arg.message : String(arg)))}`,
+        );
+    const now = new module.Writable({ write: (_chunk, _encoding, done) => done() });
+    const later = new module.Writable({
+      write: (_chunk, _encoding, done) => void setImmediate(done),
+    });
+    const batch = new module.Writable({ writev: (_chunks, done) => void setImmediate(done) });
+    const duplex = new module.Duplex({ read() {}, write: (_chunk, _encoding, done) => done() });
+    const failing = new module.Writable({
+      write: (_chunk, _encoding, done) => done(new Error("refused")),
+    });
+    failing.on("error", () => {});
+    now.write("a", show("write"));
+    now.write("a", "utf8", show("write with an encoding"));
+    later.write("a", show("write that completes later"));
+    later.write("b", show("write queued behind it"));
+    batch.cork();
+    batch.write("a", show("first of a batch"));
+    batch.write("b", show("second of a batch"));
+    batch.uncork();
+    duplex.write("a", show("write of a duplex"));
+    failing.write("a", show("failed write"));
+    now.end("z", show("end with a chunk"));
+    later.end(show("end"));
+    duplex.end("z", "utf8", show("end of a duplex"));
+    return new Promise((resolve) => setTimeout(() => resolve(out.sort()), 30));
+  }
+
+  it("get null for no error, as in Node, never undefined or nothing", async () => {
+    const ours = await callbackArguments(stream as unknown as typeof import("node:stream"));
+    expect(ours).toEqual(await callbackArguments(await import("node:stream")));
+    expect(ours).toContain("write: 1 null");
+    expect(ours).toContain("end: 1 null");
+  });
+
+  it("keep the arity Node's methods have", () => {
+    expect([Writable.prototype.write.length, Writable.prototype.end.length]).toEqual([3, 3]);
+    expect([Duplex.prototype.write.length, Duplex.prototype.end.length]).toEqual([3, 3]);
+  });
+});
+
+// Real Node v26 and v22 (errs.cjs): each is a plain Error (TypeError for an
+// argument) with an own `code`, `toString()` and a stack's first line of
+// `Error [CODE]: message`, and `constructor.name` "Error".
+describe("the coded errors streams raise", () => {
+  const shape = (error: Error & { code?: string }) => ({
+    isError: error instanceof Error,
+    name: error.name,
+    code: error.code,
+    constructor: error.constructor.name,
+    own: Object.getOwnPropertyNames(error)
+      .filter((key) => key !== "stack")
+      .sort(),
+    keys: Object.keys(error),
+    string: String(error),
+    stack: String(error.stack).split("\n")[0],
+  });
+  const caught = (start: (done: (error: Error) => void) => void) =>
+    new Promise<Error>((resolve) => start(resolve));
+  const writable = () => new Writable({ write: (_c, _e, callback) => callback() });
+
+  it("have Node's shape", async () => {
+    const errors: [string, string, Error][] = [
+      [
+        "ERR_STREAM_WRITE_AFTER_END",
+        "write after end",
+        await caught((done) => {
+          const w = writable();
+          w.on("error", done);
+          w.end();
+          w.write("x");
+        }),
+      ],
+      [
+        "ERR_STREAM_PREMATURE_CLOSE",
+        "Premature close",
+        await caught((done) => {
+          const r = new Readable({ read() {} });
+          stream.finished(r, (error) => done(error as Error));
+          r.destroy();
+        }),
+      ],
+      [
+        "ERR_STREAM_PUSH_AFTER_EOF",
+        "stream.push() after EOF",
+        await caught((done) => {
+          const r = new Readable({ read() {} });
+          r.on("error", done);
+          r.push(null);
+          r.push("x");
+        }),
+      ],
+      [
+        "ERR_METHOD_NOT_IMPLEMENTED",
+        "The _read() method is not implemented",
+        await caught((done) => {
+          const r = new Readable();
+          r.on("error", done);
+          r.read();
+        }),
+      ],
+      [
+        "ERR_STREAM_DESTROYED",
+        "Cannot call write after a stream was destroyed",
+        await caught((done) => {
+          const w = writable();
+          w.destroy();
+          w.write("x", (error) => done(error as Error));
+        }),
+      ],
+    ];
+    for (const [code, message, error] of errors) {
+      expect(shape(error)).toEqual({
+        isError: true,
+        name: "Error",
+        code,
+        constructor: "Error",
+        own: ["code", "message"],
+        keys: ["code"],
+        string: `Error [${code}]: ${message}`,
+        stack: `Error [${code}]: ${message}`,
+      });
+    }
+  });
+
+  it("start their stack at the stream call that raised them", () => {
+    let thrown: (Error & { code?: string }) | undefined;
+    try {
+      writable().write(42 as never);
+    } catch (error) {
+      thrown = error as Error;
+    }
+    expect(thrown).toBeInstanceOf(TypeError);
+    const { name, code, constructor, keys, string } = shape(thrown!);
+    expect([name, code, constructor, keys]).toEqual([
+      "TypeError",
+      "ERR_INVALID_ARG_TYPE",
+      "TypeError",
+      ["code"],
+    ]);
+    expect(string.startsWith('TypeError [ERR_INVALID_ARG_TYPE]: The "chunk" argument')).toBe(true);
+    const frames = String(thrown!.stack).split("\n").slice(1);
+    expect(frames[0]).not.toMatch(/NodeError|NodeShaped|makeNodeError/);
   });
 });

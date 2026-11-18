@@ -47,6 +47,48 @@ describe("FdReadable", () => {
     expect(fake.refCount).toBe(0);
   });
 
+  // Real Node v26: a child's stdout that nobody reads holds exactly its
+  // 64 KiB highWaterMark (65536), whatever sizes the writes have.
+  it("takes no more of a pipe than its high water mark, and gives the rest back in order", async () => {
+    const { readFd, writeFd } = fake.processes.pipe();
+    const output = new FdReadable(readFd);
+    output.read(0);
+    const sent: number[] = [];
+    for (let index = 0; index < 10; index += 1) {
+      const chunk = new Uint8Array(7000).fill(index);
+      sent.push(...chunk);
+      fake.fdStream.write(writeFd, chunk);
+    }
+    await settle();
+    expect(output.readableLength).toBe(65536);
+    expect(output.readableHighWaterMark).toBe(65536);
+    const received: number[] = [];
+    output.on("data", (chunk: Uint8Array) => received.push(...chunk));
+    fake.fdStream.close(writeFd);
+    await new Promise((resolve) => output.on("end", resolve));
+    expect(received.length).toBe(70000);
+    expect(received).toEqual(sent);
+  });
+
+  it("reads again after a chunk came while an unshift() had filled it", async () => {
+    const { readFd, writeFd } = fake.processes.pipe();
+    const output = new FdReadable(readFd);
+    output.read(0);
+    await settle();
+    output.unshift(Buffer.alloc(65536, 1));
+    fake.fdStream.write(writeFd, new Uint8Array(1000).fill(2));
+    await settle();
+    expect(output.readableLength).toBe(65536);
+    let received = 0;
+    output.on("data", (chunk: Uint8Array) => (received += chunk.length));
+    fake.fdStream.close(writeFd);
+    const ended = await Promise.race([
+      new Promise((resolve) => output.on("end", () => resolve(true))),
+      new Promise((resolve) => setTimeout(() => resolve(false), 500)),
+    ]);
+    expect([ended, received]).toEqual([true, 66536]);
+  });
+
   it("delivers webnode Buffers", async () => {
     const stdin = new FdReadable(0);
     let first: unknown;
@@ -121,6 +163,36 @@ describe("FdReadable", () => {
     expect(fake.refCount).toBe(0);
   });
 
+  // What child_process does with a child's output stream it gives to another
+  // child as its stdio (Node: readStop on the handle, then pause).
+  it("handOver() stops the reading for good: the pipe keeps what it was not handed, for whoever gets the fd", async () => {
+    const { readFd, writeFd } = fake.processes.pipe();
+    const reader = new FdReadable(readFd);
+    const writer = new FdWritable(writeFd);
+    reader.read(0);
+    await settle();
+    expect(fake.refCount).toBe(1);
+    await new Promise<void>((resolve) => writer.write("kept ", () => resolve()));
+    await settle();
+    expect(reader.readableLength).toBe(5);
+    reader.handOver();
+    expect([reader.isPaused(), fake.refCount]).toEqual([true, 0]);
+    await new Promise<void>((resolve) => writer.write("left in the pipe", () => resolve()));
+    await settle();
+    // What it already held is its own; the rest was never taken.
+    expect(reader.readableLength).toBe(5);
+    expect(Buffer.from(fake.fs.read(readFd, 100, null)).toString()).toBe("left in the pipe");
+    // The stream can still be read: its own choice, as in Node.
+    await new Promise<void>((resolve) => writer.write("more", () => resolve()));
+    const seen: string[] = [];
+    reader.on("data", (chunk: Uint8Array) => seen.push(Buffer.from(chunk).toString()));
+    reader.resume();
+    await settle();
+    expect(seen.join("")).toBe("kept more");
+    reader.destroy();
+    writer.destroy();
+  });
+
   it("autoClose: false leaves the fd open", async () => {
     const { readFd, writeFd } = fake.processes.pipe();
     const reader = new FdReadable(readFd, { autoClose: false });
@@ -159,5 +231,24 @@ describe("FdWritable", () => {
       stdout.write("x");
     });
     expect((error as { code?: string }).code).toBe("EBADF");
+  });
+
+  // Real Node v26, a write to a pipe whose reader has gone:
+  // { message: 'write EPIPE', errno: -32, code: 'EPIPE', syscall: 'write' }.
+  it("words a failed write as Node's streams do: `write EPIPE`, not the fs form", async () => {
+    const { readFd, writeFd } = fake.processes.pipe();
+    fake.fdStream.close(readFd);
+    const writer = new FdWritable(writeFd);
+    writer.on("error", () => {});
+    const error = await new Promise<Error | null | undefined>((resolve) =>
+      writer.write("x", resolve),
+    );
+    expect({ ...error, message: error?.message }).toEqual({
+      message: "write EPIPE",
+      errno: -32,
+      code: "EPIPE",
+      syscall: "write",
+    });
+    expect(Object.keys(error ?? {})).toEqual(["errno", "code", "syscall"]);
   });
 });

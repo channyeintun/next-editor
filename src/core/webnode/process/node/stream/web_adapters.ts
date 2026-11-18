@@ -3,6 +3,7 @@
 // `Duplex.fromWeb/toWeb`. Ported from Node 22's lib/internal/webstreams/adapters.js.
 import { Buffer } from "../buffer";
 import { normalizeEncoding } from "../buffer/encodings";
+import { nextTick } from "../eventLoop";
 import {
   AbortError,
   invalidArgType,
@@ -52,10 +53,14 @@ function deferred<T = void>(): {
   return { promise, resolve, reject };
 }
 
+/**
+ * Throws `error` from a tick, as Node does for what a stream callback threw
+ * inside a promise reaction: there it would only reject that promise.
+ */
 function rethrowLater(error: unknown): void {
-  setTimeout(() => {
+  nextTick(() => {
     throw error;
-  }, 0);
+  });
 }
 
 function encodeChunk(chunk: unknown, encoding: string): unknown {
@@ -224,7 +229,7 @@ export function installWebAdapters(stream: StreamModule): void {
           try {
             callback(error);
           } catch (thrown) {
-            queueMicrotask(() => destroy(getStream(), thrown as Error));
+            nextTick(() => destroy(getStream(), thrown as Error));
           }
         };
         if (!isClosed()) {

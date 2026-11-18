@@ -1,9 +1,12 @@
 // @vitest-environment node
 // The `net` builtin on the fake runtime's loopback network.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CHANNEL_WINDOW, createPortChannel } from "../../byteChannel";
 import { setRuntime } from "../runtime";
 import { createFakeRuntime, type FakeRuntime } from "../testing/fakeRuntime";
+import { Buffer } from "./buffer";
 import net, { BlockList, Socket, SocketAddress, type Server } from "./net";
+import { kAttach } from "./net/socket";
 
 let fake: FakeRuntime;
 
@@ -345,7 +348,9 @@ describe("net servers and sockets", () => {
     server.ref();
     expect(fake.refCount).toBe(1);
     const client = net.connect(port);
-    expect(fake.refCount).toBe(2);
+    // The socket, and its lookup of "localhost" until it answers, as Node's
+    // pending lookup holds the process.
+    expect(fake.refCount).toBe(3);
     await once(client, "connect");
     await tick();
     expect(fake.refCount).toBe(3);
@@ -400,18 +405,58 @@ describe("net servers and sockets", () => {
     expect(server.listening).toBe(false);
   });
 
-  it("drops connections beyond maxConnections", async () => {
+  it("drops connections beyond maxConnections, which the client reads as a clean end", async () => {
     const server = net.createServer((socket) => socket.resume());
     server.maxConnections = 0;
     const drops: unknown[] = [];
     server.on("drop", (info) => drops.push(info));
     const port = await listen(server, 0);
     const client = net.connect(port);
-    client.on("error", () => {});
+    const events: string[] = [];
+    client.on("error", (error: Error & { code?: string }) => events.push(`error ${error.code}`));
+    client.on("end", () => events.push("end"));
     client.resume();
-    await once(client, "close");
+    const [hadError] = await once<[boolean]>(client, "close");
+    expect(events).toEqual(["end"]);
+    expect(hadError).toBe(false);
     expect(drops).toHaveLength(1);
     server.close();
+  });
+
+  // Real Node v26 and v22 (macOS; Linux sends the same reset): the server
+  // closes the dropped connection with the client's bytes unread, which is a
+  // reset, so the client reads no end.
+  it("resets a dropped connection whose client already sent data", async () => {
+    const server = net.createServer((socket) => socket.resume());
+    server.maxConnections = 0;
+    const port = await listen(server, 0);
+    const client = net.connect(port, "127.0.0.1", () => client.write("hello"));
+    const events: string[] = [];
+    client.on("error", (error: Error & { code?: string }) => events.push(`error ${error.code}`));
+    client.on("end", () => events.push("end"));
+    client.resume();
+    const [hadError] = await once<[boolean]>(client, "close");
+    expect(events).toEqual(["error ECONNRESET"]);
+    expect(hadError).toBe(true);
+    server.close();
+  });
+
+  it("reports 'close' without an argument for a socket destroyed before it was ever opened", async () => {
+    const plain = new Socket();
+    const closedPlain = once<[unknown]>(plain, "close");
+    plain.destroy();
+    expect(await closedPlain).toEqual([undefined]);
+
+    const failed = new Socket();
+    failed.on("error", () => {});
+    const closedFailed = once<[unknown]>(failed, "close");
+    failed.destroy(new Error("boom"));
+    expect(await closedFailed).toEqual([undefined]);
+
+    // One that was connecting says whether an error closed it.
+    const refused = net.connect(1, "127.0.0.1");
+    refused.on("error", () => {});
+    expect(await once<[unknown]>(refused, "close")).toEqual([true]);
   });
 
   it("errors writes after the peer ended without allowHalfOpen", async () => {
@@ -439,5 +484,142 @@ describe("*.localhost names", () => {
     expect(await collect(client)).toBe("hi");
     expect(lookups).toEqual([[null, "127.0.0.1", 4, "api.localhost"]]);
     server.close();
+  });
+});
+
+// Two sockets joined by a real port channel, as a process's are: the fake
+// network's channels have no flow control.
+describe("a connection over a port channel is paced, as TCP paces one", () => {
+  const ports: MessagePort[] = [];
+  const chunk = Buffer.alloc(CHANNEL_WINDOW, 1);
+
+  afterEach(() => {
+    for (const port of ports.splice(0)) {
+      port.close();
+    }
+  });
+
+  function connection(): [Socket, Socket] {
+    const { port1, port2 } = new MessageChannel();
+    ports.push(port1, port2);
+    const peer = {
+      remoteAddress: "127.0.0.1",
+      remotePort: 1,
+      remoteFamily: "IPv4" as const,
+      localAddress: "127.0.0.1",
+      localPort: 2,
+      localFamily: "IPv4" as const,
+    };
+    const a = new Socket();
+    const b = new Socket();
+    a[kAttach](createPortChannel(port1), peer);
+    b[kAttach](createPortChannel(port2), peer);
+    return [a, b];
+  }
+
+  const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it("holds a writer to a reader that stops, and lets it go when the reader reads again", async () => {
+    const [writer, reader] = connection();
+    reader.pause();
+    let written = 0;
+    let refused = 0;
+    for (let i = 0; i < 128; i += 1) {
+      if (!writer.write(chunk, () => (written += 1))) {
+        refused += 1;
+      }
+    }
+    await pause(30);
+    // The first chunk filled the reader's stream; the next waits for room.
+    expect(written).toBe(1);
+    expect(refused).toBeGreaterThan(0);
+    expect(writer.writableNeedDrain).toBe(true);
+    expect(writer.writableLength).toBe(127 * chunk.length);
+    expect(reader.readableLength).toBe(chunk.length);
+
+    let received = 0;
+    let largest = 0;
+    reader.on("data", (data: Uint8Array) => {
+      received += data.length;
+      largest = Math.max(largest, data.length);
+    });
+    reader.resume();
+    await once(writer, "drain");
+    expect(written).toBe(128);
+    writer.end();
+    await once(reader, "end");
+    expect(received).toBe(128 * chunk.length);
+    expect(largest).toBeLessThanOrEqual(CHANNEL_WINDOW);
+  });
+
+  it("lets a stream nobody reads take its high water mark, and the writer one window more", async () => {
+    const [writer, reader] = connection();
+    const small = Buffer.alloc(1024, 2);
+    let written = 0;
+    for (let i = 0; i < 300; i += 1) {
+      writer.write(small, () => (written += 1));
+    }
+    await pause(30);
+    expect(reader.readableLength).toBeGreaterThanOrEqual(reader.readableHighWaterMark);
+    expect(reader.readableLength).toBeLessThanOrEqual(
+      reader.readableHighWaterMark + CHANNEL_WINDOW,
+    );
+    expect(written).toBeLessThan(300);
+    expect(writer.writableLength).toBeGreaterThan(0);
+    reader.resume();
+    await once(writer, "drain");
+    expect(written).toBe(300);
+    writer.destroy();
+    reader.destroy();
+  });
+
+  it("sends one large write in pieces no larger than the window", async () => {
+    const [writer, reader] = connection();
+    const sizes: number[] = [];
+    reader.on("data", (data: Uint8Array) => sizes.push(data.length));
+    const ended = once(reader, "end");
+    writer.end(Buffer.alloc(1_000_000, 3));
+    await ended;
+    expect(sizes.reduce((sum, size) => sum + size, 0)).toBe(1_000_000);
+    expect(sizes.length).toBeGreaterThan(1);
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(CHANNEL_WINDOW);
+  });
+
+  it("cancels the write that waits, and those behind it, when the socket is destroyed", async () => {
+    const [writer, reader] = connection();
+    reader.pause();
+    const results: (string | undefined)[] = [];
+    const errors: unknown[] = [];
+    writer.on("error", (error) => errors.push(error));
+    for (let i = 0; i < 4; i += 1) {
+      writer.write(chunk, (error?: (Error & { code?: string }) | null) =>
+        results.push(error?.code),
+      );
+    }
+    await pause(20);
+    expect(results).toEqual([undefined]);
+    const closed = once<[boolean]>(writer, "close");
+    writer.destroy();
+    const [hadError] = await closed;
+    expect(results).toEqual([undefined, "ECANCELED", "ECANCELED", "ECANCELED"]);
+    expect(errors).toEqual([]);
+    expect(hadError).toBe(false);
+    reader.destroy();
+  });
+
+  it("completes a write that waits once the peer has gone, so the socket can close", async () => {
+    const [writer, reader] = connection();
+    reader.pause();
+    let written = 0;
+    writer.write(chunk, () => (written += 1));
+    writer.write(chunk, () => (written += 1));
+    writer.resume();
+    await pause(20);
+    expect(written).toBe(1);
+    const closed = once<[boolean]>(writer, "close");
+    reader.destroy();
+    const [hadError] = await closed;
+    expect(written).toBe(2);
+    expect(hadError).toBe(false);
   });
 });

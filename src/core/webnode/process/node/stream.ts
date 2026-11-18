@@ -1,13 +1,20 @@
 // The `stream` builtin: readable-stream@4.8.0 (Node's own stream code,
 // extracted) with the gaps against Node 22 filled: the web stream adapters
 // (stream/web_adapters.ts), `duplexPair`, `_isArrayBufferView`, and Uint8Array
-// chunks turned into webnode's Buffer. The default export is the legacy
+// chunks turned into webnode's Buffer, other views too (stream/view_chunks.ts). A paused stream is read as Node 26 reads
+// it (stream/paused_read.ts), the callbacks of `write` and `end` get `null`
+// for no error (stream/write_callbacks.ts), and its coded errors have Node's
+// shape (stream/node_errors.ts). The default export is the legacy
 // `Stream` constructor carrying everything, exactly as `require("stream")`.
 import Stream from "readable-stream/lib/stream.js";
 import { Buffer } from "./buffer";
 import { createDuplexPair } from "./stream/duplex_pair";
+import { installNodeErrors } from "./stream/node_errors";
+import { installPausedRead } from "./stream/paused_read";
 import type { StreamModule } from "./stream/types";
+import { installViewChunks } from "./stream/view_chunks";
 import { installWebAdapters } from "./stream/web_adapters";
+import { installWriteCallbacks } from "./stream/write_callbacks";
 
 import type * as types from "./stream/types";
 
@@ -38,7 +45,11 @@ export type PassThrough = types.Transform;
 
 const stream = Stream as unknown as StreamModule;
 
+installNodeErrors();
 installWebAdapters(stream);
+installPausedRead(stream);
+installWriteCallbacks(stream);
+installViewChunks(stream);
 // Node 22 raised the default byte high water mark from 16 KiB to 64 KiB.
 stream.setDefaultHighWaterMark(false, 64 * 1024);
 
