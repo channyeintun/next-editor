@@ -255,7 +255,34 @@ describe("spawn, pipes and exit", () => {
     const opened = parent.sync("fs.open", `${h.cwd}/log.txt`, 0o101, 0o644);
     expect(opened.value).toBe(3);
     const child = spawnFrom(h, parent, ["pipe", "pipe", "pipe", "ignore", 3]);
-    expect(child.worker.init.inheritedFds).toEqual([3, 4]);
+    expect(child.worker.init.inheritedFds).toEqual([4]);
+  });
+
+  it("leaves closed a descriptor above 2 that is ignored or closed in the parent, as libuv does", () => {
+    const h = boot();
+    const parent = h.worker(h.kernel.spawnFromPage("node", ["parent.js"], {}));
+    // O_WRONLY | O_CREAT
+    expect(parent.sync("fs.open", `${h.cwd}/log.txt`, 0o101, 0o644).value).toBe(3);
+    // 4 is ignored, 5 inherits the parent's closed 5, 6 takes the closed 9.
+    const child = spawnFrom(h, parent, [
+      "ignore",
+      "ignore",
+      "ignore",
+      "inherit",
+      "ignore",
+      "inherit",
+      9,
+    ]);
+    expect(child.worker.init.inheritedFds).toEqual([3]);
+    for (const fd of [4, 5, 6]) {
+      const answer = child.worker.sync("fs.fstat", fd);
+      expect(answer.ok).toBe(false);
+      expect((answer.value as { code?: string }).code).toBe("EBADF");
+    }
+    // 0, 1 and 2 still read and write /dev/null when ignored or closed.
+    expect(child.worker.sync("fs.fstat", 0).value).toMatchObject({ mode: 0o20666, uid: 0 });
+    // The lowest free number is the first closed one above 2.
+    expect(child.worker.sync("fs.open", `${h.cwd}/log.txt`, 0o101, 0o644).value).toBe(4);
   });
 
   it("wires a child's piped stdio to the parent and ends its stdout at exit", async () => {
@@ -3204,6 +3231,86 @@ describe("permissions", () => {
     expect(proc.sync("fs.readdir", `${h.cwd}/root/dev/fd`).value).toEqual(
       proc.sync("fs.readdir", "/dev/fd").value,
     );
+  });
+
+  it("takes /dev/fd/.. for /dev, and a name after any other device for ENOTDIR, by every path", () => {
+    const h = boot();
+    const proc = h.worker(h.kernel.spawnFromPage("node", ["a.js"], {}));
+    h.kernel.vfs.symlink("/", `${h.cwd}/root`);
+    h.kernel.vfs.symlink("/dev", `${h.cwd}/devlink`);
+    const devNames = h.kernel.vfs.readdir("/dev").map((entry) => entry.name);
+    const names = (answer: SyncAnswer) =>
+      (answer.value as { name: string }[]).map((entry) => entry.name);
+    for (const path of [
+      "/dev/fd/..",
+      "/dev/fd/./..",
+      "/dev/fd/../",
+      "/dev/fd/../fd/..",
+      `${h.cwd}/root/dev/fd/..`,
+      `${h.cwd}/devlink/fd/..`,
+      `${h.cwd}/devlink/fd/./..`,
+    ]) {
+      const kind = (follow: boolean) => {
+        const stat = proc.sync("fs.stat", path, follow).value as StatData;
+        return [(stat.mode & 0o170000).toString(8), stat.uid];
+      };
+      expect({
+        path,
+        stat: kind(true),
+        lstat: kind(false),
+        access: outcome(proc.sync("fs.access", path, 0)),
+        realpath: proc.sync("fs.realpath", path).value,
+        readdir: names(proc.sync("fs.readdir", path)),
+        exists: proc.sync("fs.exists", path).value,
+      }).toEqual({
+        path,
+        stat: ["40000", 0],
+        lstat: ["40000", 0],
+        access: "ok",
+        realpath: "/dev",
+        readdir: devNames,
+        exists: true,
+      });
+    }
+    // Into /dev again by a name.
+    expect(proc.sync("fs.realpath", "/dev/fd/../fd/../null").value).toBe("/dev/null");
+    expect(
+      outcome(proc.sync("fs.writeFile", "/dev/fd/../null", encoder.encode("x"), 0o1101, 0o666)),
+    ).toBe("ok");
+    // A missing name, and a refusal, are the tree's, named as given.
+    expect(proc.sync("fs.stat", "/dev/fd/../nope", true).value).toMatchObject({
+      system: { code: "ENOENT", syscall: "stat", path: "/dev/fd/../nope" },
+    });
+    expect(outcome(proc.sync("fs.mkdir", `${h.cwd}/devlink/fd/../xd`, false, 0o777))).toBe(
+      "EACCES mkdir",
+    );
+    expect(outcome(proc.sync("fs.stat", "/dev/fd/nope", true))).toBe("ENOENT stat");
+    // A device that is no directory: nothing goes through it.
+    for (const path of [
+      "/dev/fd/0/..",
+      "/dev/null/..",
+      "/dev/null/.",
+      "/dev/null/",
+      "/dev/tty/../null",
+      `${h.cwd}/root/dev/fd/0/..`,
+      `${h.cwd}/devlink/null/..`,
+    ]) {
+      expect({
+        path,
+        stat: outcome(proc.sync("fs.stat", path, true)),
+        lstat: outcome(proc.sync("fs.stat", path, false)),
+        access: outcome(proc.sync("fs.access", path, 0)),
+        readdir: outcome(proc.sync("fs.readdir", path)),
+        exists: proc.sync("fs.exists", path).value,
+      }).toEqual({
+        path,
+        stat: "ENOTDIR stat",
+        lstat: "ENOTDIR lstat",
+        access: "ENOTDIR access",
+        readdir: "ENOTDIR scandir",
+        exists: false,
+      });
+    }
   });
 
   it("refuses to make, rename or remove entries in /dev, also through a link to it, and keeps its devices", () => {

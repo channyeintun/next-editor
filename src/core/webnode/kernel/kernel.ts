@@ -47,7 +47,8 @@ import type { PageFiles } from "./pageFiles";
 import type { ByteSource } from "./streams";
 import { Delivery, Pipe, PIPE_CAPACITY, Terminal, TerminalDelivery } from "./streams";
 import type { SharedFilesystem } from "../sharedfs/boot";
-import { isDeviceEntry, kernelPathOf, normalizePath } from "../sharedfs/processBackend";
+import { isDeviceEntry, kernelPathOf } from "../sharedfs/processBackend";
+import { DEVICE_NAMES, deviceFd, deviceOf, walkDevicePath, type DeviceWalk } from "./devicePaths";
 import { endsByDefault, exitStatusNumber } from "../signals";
 import { createUmaskCell, DEFAULT_UMASK, readUmask, type UmaskCell } from "../umask";
 import type { OpenFile, PermissionedVfs, StatData } from "./vfs/types";
@@ -58,6 +59,7 @@ import {
   O_CREAT,
   O_DIRECTORY,
   O_EXCL,
+  O_NOFOLLOW,
   O_TRUNC,
   O_WRONLY,
   OWNER_W,
@@ -65,8 +67,6 @@ import {
   S_IFCHR,
   S_IFDIR,
   S_IFIFO,
-  S_IFLNK,
-  S_IFMT,
 } from "./vfs/types";
 
 /** The part of a Worker the kernel uses. */
@@ -170,7 +170,10 @@ interface Proc {
   foregroundJob: number | null;
   /** For a thread: the process it belongs to. */
   owner: Proc | null;
-  /** The process or thread that started this process and hears its `child-exit`; null for none. */
+  /**
+   * The process or thread that started this process and hears its
+   * `child-exit` (for a thread: its `thread-exit`); null for none.
+   */
   reportTo: Proc | null;
   threadId: number;
   worker: KernelWorker;
@@ -283,32 +286,6 @@ const EPHEMERAL_PORT_END = 65535;
 const WATCH_BATCH_MS = 16;
 
 type Handler = (proc: Proc, ...args: never[]) => unknown;
-
-/** The devices the kernel provides, as names under /dev; `/dev/fd/N` too. */
-const DEVICE_NAMES = ["fd", "null", "stderr", "stdin", "stdout", "tty"];
-const STDIO_DEVICES = ["/dev/stdin", "/dev/stdout", "/dev/stderr"];
-
-function isDevicePath(normalized: string): boolean {
-  return (
-    (normalized.startsWith("/dev/") && DEVICE_NAMES.includes(normalized.slice(5))) ||
-    /^\/dev\/fd\/\d+$/.test(normalized)
-  );
-}
-
-/** The device `path` names by its spelling (`//dev/null`, `/dev/../dev/null` …), or null. */
-function deviceOf(path: string): string | null {
-  const normalized = kernelPathOf(path);
-  return normalized !== null && isDevicePath(normalized) ? normalized : null;
-}
-
-/** The descriptor a device stands for: /dev/stdin, /dev/stdout, /dev/stderr and /dev/fd/N. */
-function deviceFd(device: string): number | null {
-  const stdio = STDIO_DEVICES.indexOf(device);
-  if (stdio >= 0) {
-    return stdio;
-  }
-  return device.startsWith("/dev/fd/") ? Number(device.slice(8)) : null;
-}
 
 function isLinkLoop(error: unknown): boolean {
   return toSystemErrorRecord(error)?.code === "ELOOP";
@@ -1249,10 +1226,18 @@ export class Kernel {
     this.releaseResources(proc);
 
     if (proc.owner) {
-      // A thread: its process keeps the file descriptors.
+      // A thread: its process keeps the file descriptors. As in Node, the
+      // threads it started end with it, and the thread that started it
+      // (reportTo) hears its exit.
       proc.owner.threads.delete(proc);
-      if (!proc.owner.exited) {
-        proc.owner.worker.postMessage({
+      for (const thread of Array.from(proc.owner.threads)) {
+        if (thread.reportTo === proc) {
+          this.finish(thread, { code: 1, signal: null });
+        }
+      }
+      const starter = proc.reportTo;
+      if (starter && !starter.exited) {
+        starter.worker.postMessage({
           type: "thread-exit",
           threadId: proc.threadId,
           code: status.code ?? 1,
@@ -1741,75 +1726,72 @@ export class Kernel {
   }
 
   /**
-   * Where `path` leads when that is one of the kernel's devices, following
-   * links in the tree; null when it leads anywhere else. Only asked after the
-   * tree found a loop of links, which is what a device's own link gives.
+   * Where `path` leads through the kernel's devices (`walkDevicePath`),
+   * the last part's link followed when `follow` is; null when no device is
+   * on the way. Only asked after the tree found a loop of links, which is
+   * what a device's own link gives, or an entry that is one.
    */
-  private deviceBehind(path: string, hops = 0): string | null {
-    const normalized = normalizePath(path);
-    if (isDevicePath(normalized)) {
-      return normalized;
-    }
-    if (normalized === "/" || hops > 40) {
-      return null;
-    }
-    // The directory as the path names it, so the tree resolves a `..` after
-    // a link (`devlink/../dev/fd`) where the link leads, as Linux does; by
-    // the normalized spelling when the last part is itself `.` or `..`.
-    const trimmed = path.replace(/\/+$/, "");
-    const last = trimmed.slice(trimmed.lastIndexOf("/") + 1);
-    const named = last === "." || last === ".." || !trimmed.startsWith("/") ? normalized : trimmed;
-    const slash = named.lastIndexOf("/");
-    const directory = named.slice(0, slash) || "/";
-    const name = named.slice(slash + 1);
-    let real: string | null;
-    try {
-      real = this.vfs.realpath(directory);
-    } catch (error) {
-      real = isLinkLoop(error) ? this.deviceBehind(directory, hops + 1) : null;
-    }
-    if (real === null) {
-      return null;
-    }
-    const candidate = `${real === "/" ? "" : real}/${name}`;
-    if (isDevicePath(candidate)) {
-      return candidate;
-    }
-    try {
-      if ((this.vfs.stat(candidate, false).mode & S_IFMT) !== S_IFLNK) {
-        return null;
-      }
-      const target = this.vfs.readlink(candidate);
-      return this.deviceBehind(
-        target.startsWith("/") ? target : `${real === "/" ? "" : real}/${target}`,
-        hops + 1,
-      );
-    } catch {
-      return null;
-    }
+  private walk(path: string, follow: boolean): DeviceWalk | null {
+    return walkDevicePath(this.vfs, path, follow);
+  }
+
+  /** The device `path` leads to, following links in the tree; null when it leads anywhere else. */
+  private deviceBehind(path: string, follow = true): string | null {
+    const end = this.walk(path, follow);
+    return end !== null && "device" in end ? end.device : null;
   }
 
   /**
    * `onDevice` with the device when `path` is one of the kernel's devices,
-   * however it is spelled or linked to, else `onTree`.
+   * however it is spelled or linked to, else `onTree` with the path. A path
+   * that goes through a device into the tree (`/dev/fd/..`) is `onTree` with
+   * the place it leads to, and its errors name `path` as it was given; one
+   * that goes through a device that is no directory is ENOTDIR. `follow`:
+   * whether the call follows a link in the last part.
    */
-  private onPath<T>(path: string, onDevice: (device: string) => T, onTree: () => T): T {
+  private onPath<T>(
+    path: string,
+    onDevice: (device: string) => T,
+    onTree: (path: string) => T,
+    follow = true,
+  ): T {
     const device = deviceOf(path);
     if (device !== null) {
       return onDevice(device);
     }
     try {
-      return onTree();
+      return onTree(path);
     } catch (error) {
-      const behind = isLinkLoop(error) ? this.deviceBehind(path) : null;
-      if (behind === null) {
+      const record = toSystemErrorRecord(error);
+      const end = record?.code === "ELOOP" ? this.walk(path, follow) : null;
+      if (record === null || end === null) {
         throw error;
       }
-      return onDevice(behind);
+      if ("device" in end) {
+        return onDevice(end.device);
+      }
+      if ("error" in end) {
+        throw createSystemError(end.error, record.syscall, record.path, record.dest);
+      }
+      try {
+        return onTree(end.tree);
+      } catch (again) {
+        const failure = toSystemErrorRecord(again);
+        if (failure === null) {
+          throw again;
+        }
+        const named = (given: string | undefined) => (given === end.tree ? path : given);
+        throw createSystemError(
+          failure.code,
+          failure.syscall,
+          named(failure.path),
+          named(failure.dest),
+        );
+      }
     }
   }
 
-  /** `onPath` for a call on two paths: `onDevice` when either is a device. */
+  /** `onPath` for a call on two paths, neither link followed: `onDevice` when either is a device. */
   private onPaths<T>(first: string, second: string, onDevice: () => T, onTree: () => T): T {
     if (deviceOf(first) !== null || deviceOf(second) !== null) {
       return onDevice();
@@ -1817,11 +1799,17 @@ export class Kernel {
     try {
       return onTree();
     } catch (error) {
-      if (
-        isLinkLoop(error) &&
-        (this.deviceBehind(first) !== null || this.deviceBehind(second) !== null)
-      ) {
+      const record = toSystemErrorRecord(error);
+      if (record?.code !== "ELOOP") {
+        throw error;
+      }
+      const ends = [this.walk(first, false), this.walk(second, false)];
+      if (ends.some((end) => end !== null && "device" in end)) {
         return onDevice();
+      }
+      const walkError = ends.find((end) => end !== null && "error" in end);
+      if (walkError !== undefined && walkError !== null && "error" in walkError) {
+        throw createSystemError(walkError.error, record.syscall, record.path, record.dest);
       }
       throw error;
     }
@@ -1874,10 +1862,18 @@ export class Kernel {
       stdio.push("pipe");
     }
 
+    // As libuv sets up a child: a descriptor given as 'ignore', or one
+    // whose source is closed in the parent, reads and writes /dev/null when
+    // it is 0, 1 or 2, and is left closed above them (the child's EBADF).
+    const closedOrNull = (fd: number) => {
+      if (fd <= 2) {
+        fds.set(fd, { kind: "null", refs: 1 });
+      }
+    };
     stdio.forEach((spec, fd) => {
       parentFds[fd] = null;
       if (spec === "ignore") {
-        fds.set(fd, { kind: "null", refs: 1 });
+        closedOrNull(fd);
         return;
       }
       if (spec === "ipc") {
@@ -1886,7 +1882,7 @@ export class Kernel {
       if (spec === "inherit" || typeof spec === "number") {
         const source = process.fds.get(spec === "inherit" ? fd : spec);
         if (!source) {
-          fds.set(fd, { kind: "null", refs: 1 });
+          closedOrNull(fd);
           return;
         }
         source.refs += 1;
@@ -2134,7 +2130,8 @@ export class Kernel {
       lineage: process.lineage,
       foregroundJob: null,
       owner: process,
-      reportTo: null,
+      // The thread or main thread that started it: it hears the thread's exit.
+      reportTo: parent,
       threadId: id,
       worker,
       argv: request.argv,
@@ -2327,11 +2324,12 @@ export class Kernel {
         this.onPath(
           path,
           (device) => this.deviceStat(proc, device, follow ? "stat" : "lstat"),
-          () => {
-            const stat = vfs.stat(path, follow);
-            const device = follow || !isDeviceEntry(stat) ? null : this.deviceBehind(path);
+          (at) => {
+            const stat = vfs.stat(at, follow);
+            const device = follow || !isDeviceEntry(stat) ? null : this.deviceBehind(at, false);
             return device === null ? stat : this.deviceStat(proc, device, "lstat");
           },
+          follow,
         ),
       "fs.exists": (proc: Proc, path: string) => {
         const device = deviceOf(path);
@@ -2349,8 +2347,11 @@ export class Kernel {
             return false;
           }
         }
-        const behind = this.deviceBehind(path);
-        return behind !== null && this.deviceExists(proc, behind);
+        const end = this.walk(path, true);
+        if (end === null || "error" in end) {
+          return false;
+        }
+        return "device" in end ? this.deviceExists(proc, end.device) : vfs.exists(end.tree);
       },
       "fs.readdir": (proc: Proc, path: string) =>
         this.onPath(
@@ -2363,7 +2364,7 @@ export class Kernel {
               .sort((a, b) => a - b)
               .map((fd) => ({ name: String(fd), type: "symlink" as const }));
           },
-          () => vfs.readdir(path),
+          (at) => vfs.readdir(at),
         ),
       "fs.mkdir": (proc: Proc, path: string, recursive: boolean, mode: number, floor?: string) =>
         this.onPath(
@@ -2374,7 +2375,8 @@ export class Kernel {
             }
             throw createSystemError("EEXIST", "mkdir", path);
           },
-          () => this.creating(proc, () => vfs.mkdir(path, recursive, mode, floor)),
+          (at) => this.creating(proc, () => vfs.mkdir(at, recursive, mode, floor)),
+          false,
         ),
       "fs.rmdir": (_proc: Proc, path: string) =>
         this.onPath(
@@ -2382,7 +2384,8 @@ export class Kernel {
           (device) => {
             throw createSystemError(device === "/dev/fd" ? "EACCES" : "ENOTDIR", "rmdir", path);
           },
-          () => vfs.rmdir(path),
+          (at) => vfs.rmdir(at),
+          false,
         ),
       "fs.unlink": (_proc: Proc, path: string) =>
         this.onPath(
@@ -2390,7 +2393,8 @@ export class Kernel {
           () => {
             throw createSystemError("EACCES", "unlink", path);
           },
-          () => vfs.unlink(path),
+          (at) => vfs.unlink(at),
+          false,
         ),
       "fs.rm": (_proc: Proc, path: string, recursive: boolean, force: boolean) =>
         this.onPath(
@@ -2398,7 +2402,8 @@ export class Kernel {
           () => {
             throw createSystemError("EACCES", "rm", path);
           },
-          () => vfs.rm(path, recursive, force),
+          (at) => vfs.rm(at, recursive, force),
+          false,
         ),
       "fs.rename": (_proc: Proc, from: string, to: string) =>
         this.onPaths(
@@ -2417,7 +2422,7 @@ export class Kernel {
             // Linux's linkat: the new name first (a device is there), then
             // the protected hard links, which refuse a device the user does
             // not own (`may_linkat`), before the directory's permission.
-            const taken = deviceOf(path) ?? this.deviceBehind(path);
+            const taken = deviceOf(path) ?? this.deviceBehind(path, false);
             throw createSystemError(taken !== null ? "EEXIST" : "EPERM", "link", existing, path);
           },
           () => vfs.link(existing, path),
@@ -2428,7 +2433,8 @@ export class Kernel {
           () => {
             throw createSystemError("EEXIST", "symlink", target, path);
           },
-          () => vfs.symlink(target, path),
+          (at) => vfs.symlink(target, at),
+          false,
         ),
       "fs.readlink": (_proc: Proc, path: string) =>
         this.onPath(
@@ -2436,14 +2442,15 @@ export class Kernel {
           () => {
             throw createSystemError("EINVAL", "readlink", path);
           },
-          () => {
-            const target = vfs.readlink(path);
+          (at) => {
+            const target = vfs.readlink(at);
             // A device's own entry (`isDeviceEntry`) is no link to read.
-            if (kernelPathOf(target) !== null && isDeviceEntry(vfs.stat(path, false))) {
+            if (kernelPathOf(target) !== null && isDeviceEntry(vfs.stat(at, false))) {
               throw createSystemError("EINVAL", "readlink", path);
             }
             return target;
           },
+          false,
         ),
       "fs.realpath": (proc: Proc, path: string) =>
         this.onPath(
@@ -2454,7 +2461,7 @@ export class Kernel {
             }
             return device;
           },
-          () => vfs.realpath(path),
+          (at) => vfs.realpath(at),
         ),
       "fs.chmod": (_proc: Proc, path: string, mode: number, follow: boolean) =>
         this.onPath(
@@ -2462,7 +2469,8 @@ export class Kernel {
           () => {
             throw createSystemError("EPERM", "chmod", path);
           },
-          () => vfs.chmod(path, mode, follow),
+          (at) => vfs.chmod(at, mode, follow),
+          follow,
         ),
       "fs.utimes": (
         proc: Proc,
@@ -2487,7 +2495,8 @@ export class Kernel {
               throw createSystemError("EPERM", "utime", path);
             }
           },
-          () => vfs.utimes(path, atime, mtime, follow),
+          (at) => vfs.utimes(at, atime, mtime, follow),
+          follow,
         ),
       "fs.truncate": (proc: Proc, path: string, length: number) =>
         this.onPath(
@@ -2498,7 +2507,7 @@ export class Kernel {
                 description.file.truncate(length);
               }
             }),
-          () => vfs.truncate(path, length),
+          (at) => vfs.truncate(at, length),
         ),
       "fs.copyFile": (proc: Proc, source: string, destination: string, mode: number) => {
         let from = deviceOf(source);
@@ -2508,9 +2517,19 @@ export class Kernel {
             vfs.copyFile(source, destination, mode);
             return undefined;
           } catch (error) {
-            from = isLinkLoop(error) ? this.deviceBehind(source) : null;
-            to = isLinkLoop(error) ? this.deviceBehind(destination) : null;
+            if (!isLinkLoop(error)) {
+              throw error;
+            }
+            const ends = [this.walk(source, true), this.walk(destination, true)];
+            const [fromEnd, toEnd] = ends;
+            from = fromEnd !== null && "device" in fromEnd ? fromEnd.device : null;
+            to = toEnd !== null && "device" in toEnd ? toEnd.device : null;
             if (from === null && to === null) {
+              for (const end of ends) {
+                if (end !== null && "error" in end) {
+                  throw createSystemError(end.error, "copyfile", source, destination);
+                }
+              }
               throw error;
             }
           }
@@ -2578,7 +2597,7 @@ export class Kernel {
               throw createSystemError("EACCES", "access", path);
             }
           },
-          () => vfs.access(path, mode),
+          (at) => vfs.access(at, mode),
         ),
       "fs.mkdtemp": (proc: Proc, prefix: string) => this.creating(proc, () => vfs.mkdtemp(prefix)),
       "fs.readFile": (proc: Proc, path: string) =>
@@ -2586,7 +2605,7 @@ export class Kernel {
           path,
           (device) =>
             this.useDevice(proc, device, (description) => this.readAll(proc, description)),
-          () => vfs.readFile(path),
+          (at) => vfs.readFile(at),
         ),
       "fs.writeFile": (proc: Proc, path: string, data: Uint8Array, flags: number, mode: number) =>
         this.onPath<undefined | Promise<undefined>>(
@@ -2597,8 +2616,8 @@ export class Kernel {
             }
             return this.writeAllToDevice(proc, device, data);
           },
-          () => {
-            this.creating(proc, () => vfs.writeFile(path, data, flags, mode));
+          (at) => {
+            this.creating(proc, () => vfs.writeFile(at, data, flags, mode));
             return undefined;
           },
         ),
@@ -2619,11 +2638,12 @@ export class Kernel {
               }
               return this.openDevice(proc, device);
             },
-            () => ({
+            (at) => ({
               kind: "file",
               refs: 1,
-              file: this.creating(proc, () => vfs.open(path, flags, mode)),
+              file: this.creating(proc, () => vfs.open(at, flags, mode)),
             }),
+            (flags & O_NOFOLLOW) === 0,
           ),
         ),
       "fs.close": (proc: Proc, fd: number) => {

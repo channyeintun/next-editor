@@ -188,7 +188,11 @@ export interface TtyBackend {
   reclaim(fd: number): void;
 }
 
-/** How one of a child's file descriptors is set up, as in `child_process` `stdio`. */
+/**
+ * How one of a child's file descriptors is set up, as in `child_process`
+ * `stdio`. As libuv sets it up, 'ignore' (and an fd the parent has closed)
+ * is /dev/null at 0, 1 and 2, and left closed above them.
+ */
 export type StdioSpec = "pipe" | "inherit" | "ignore" | "ipc" | number;
 
 export interface SpawnRequest {
