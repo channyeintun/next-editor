@@ -5,10 +5,14 @@ import { isUniqueViolation } from "./uniqueViolation";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-// Escapes LIKE metacharacters in user-supplied search text so `%`, `_`, and
-// `\` are matched literally instead of acting as wildcards.
-function escapeLikePattern(value: string): string {
-  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+/**
+ * The LIKE pattern (used with `ESCAPE '\'`) that matches text containing `q`
+ * anywhere. LIKE metacharacters in the user's text — `%`, `_` and `\` — are
+ * escaped so they match literally instead of acting as wildcards. Every search
+ * query (lessons, users, playlists) builds its pattern here.
+ */
+export function containsLikePattern(q: string): string {
+  return `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
 }
 
 export interface UpsertUserParams {
@@ -566,7 +570,7 @@ export function publishedLessonsByOwnerStatement(
 
 // Backs GET /api/search — authors matched by username or display name.
 export async function searchUsers(db: D1Database, q: string, limit: number): Promise<UserRow[]> {
-  const like = `%${escapeLikePattern(q)}%`;
+  const like = containsLikePattern(q);
   const result = await db
     .prepare(
       `SELECT * FROM users
@@ -578,24 +582,47 @@ export async function searchUsers(db: D1Database, q: string, limit: number): Pro
   return result.results ?? [];
 }
 
-// Backs GET /api/search — published lessons matched by title, description, or
-// tags. `tags` is stored as a JSON array string, so the LIKE match here is a
-// substring match against that raw JSON text (same fields the old client-side
-// filter checked, just across every published lesson instead of only loaded pages).
+/** One page of searchPublishedLessons. */
+export interface LessonSearchPage {
+  lessons: LessonRow[];
+  /** How many published lessons match, across every page. */
+  total: number;
+}
+
+// Which published lessons a search matches: title, description or tags.
+// `tags` is stored as a JSON array string, so its LIKE is a substring match
+// against that raw JSON text. ?1 is the containsLikePattern pattern.
+const LESSON_SEARCH_MATCH = `status = 'published'
+       AND (title LIKE ?1 ESCAPE '\\' OR description LIKE ?1 ESCAPE '\\' OR tags LIKE ?1 ESCAPE '\\')`;
+
+// Backs GET /api/search — one page of the published lessons that match `q`.
+// Lessons whose title matches come before those that match only in their
+// description or tags; within each, newest first. The window count gives the
+// total from the same scan that finds the page.
 export async function searchPublishedLessons(
   db: D1Database,
   q: string,
-  limit: number,
-): Promise<LessonRow[]> {
-  const like = `%${escapeLikePattern(q)}%`;
+  { limit, offset }: { limit: number; offset: number },
+): Promise<LessonSearchPage> {
+  const like = containsLikePattern(q);
   const result = await db
     .prepare(
-      `SELECT * FROM lessons
-       WHERE status = 'published' AND (title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR tags LIKE ? ESCAPE '\\')
-       ORDER BY published_at DESC, id DESC
-       LIMIT ?`,
+      `SELECT *, COUNT(*) OVER () AS match_count FROM lessons
+       WHERE ${LESSON_SEARCH_MATCH}
+       ORDER BY (title LIKE ?1 ESCAPE '\\') DESC, published_at DESC, id DESC
+       LIMIT ?2 OFFSET ?3`,
     )
-    .bind(like, like, like, limit)
-    .all<LessonRow>();
-  return result.results ?? [];
+    .bind(like, limit, offset)
+    .all<LessonRow & { match_count: number }>();
+  const rows = result.results ?? [];
+  const lessons = rows.map(({ match_count: _matchCount, ...row }) => row);
+  if (rows.length > 0 || offset === 0) return { lessons, total: rows[0]?.match_count ?? 0 };
+
+  // A page past the end has no row to carry the count (matches were removed
+  // since the reader's last page), so count them on their own.
+  const count = await db
+    .prepare(`SELECT COUNT(*) AS total FROM lessons WHERE ${LESSON_SEARCH_MATCH}`)
+    .bind(like)
+    .first<{ total: number }>();
+  return { lessons, total: count?.total ?? 0 };
 }

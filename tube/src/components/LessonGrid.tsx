@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { useSearch } from "@next-editor/infra";
 import { useLessonsInfinite } from "../hooks/useLessons";
 import { useWarmLessonRoute } from "../hooks/useWarmLessonRoute";
@@ -6,6 +7,7 @@ import { GALLERY_COLUMN_QUERIES } from "../lib/galleryColumns";
 import { flattenLessonPages } from "../lib/lessons";
 import { busyFadeClass } from "../lib/busyFade";
 import { settleWithoutFirstRow, whenFirstRowThumbnailsSettled } from "../lib/firstRowThumbnails";
+import { searchQueryFrom, withSearchQuery } from "../lib/searchQuery";
 import type { Lesson } from "../types";
 import LessonRows from "./LessonRows";
 import LessonCardSkeleton from "@app/components/LessonCardSkeleton";
@@ -29,6 +31,11 @@ function useColumns(): number {
   return columns;
 }
 
+/** "1 lesson", "3 lessons". */
+function countOf(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 function chunk<T>(items: T[], size: number): T[][] {
   const cols = Math.max(1, size);
   const rows: T[][] = [];
@@ -48,15 +55,22 @@ export default function LessonGrid() {
     isFetchNextPageError,
     refetch,
   } = useLessonsInfinite();
-  // What the field holds, and what was last searched for: typing changes only
-  // the first; Enter copies it into the second, which is what the page shows.
-  const [query, setQuery] = useState("");
-  const [submittedQuery, setSubmittedQuery] = useState("");
+  // What was last searched for is the URL's (/learn?q=…), so Back from a
+  // result, a reload and a shared link bring the search back. The field holds
+  // what is being typed: typing changes only the field; Enter puts it in the
+  // URL as a new history entry, which is what the page shows.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const submittedQuery = searchQueryFrom(searchParams);
+  const [query, setQuery] = useState(submittedQuery);
+  const showSearch = (next: string) => setSearchParams((params) => withSearchQuery(params, next));
   // The page's one search observer; SearchResults draws what it holds.
   const search = useSearch(submittedQuery);
+  // An infinite query is in error when only a later page failed too; that
+  // failure belongs to "Show more lessons", with the results kept on screen.
+  const searchFailed = search.isError && !search.isFetchNextPageError;
   // Placeholder data is the last search that had an answer, not what is on
   // screen: it may stand in for a loading search only when results were
-  // showing when Enter was pressed. After Escape the gallery was showing, so
+  // showing when the search changed. After Escape the gallery was showing, so
   // the gallery stays (dimmed) until the new search answers.
   const [fromResults, setFromResults] = useState(false);
   const showResults =
@@ -69,6 +83,15 @@ export default function LessonGrid() {
   const [answeredQuery, setAnsweredQuery] = useState("");
   if (search.data && !search.isPlaceholderData && submittedQuery !== answeredQuery) {
     setAnsweredQuery(submittedQuery);
+  }
+  // The search changed — by Enter, by Clear, or by Back/Forward through the
+  // history. The field shows it, and the last answer may stand in while it
+  // loads only if that answer was what the page showed.
+  const [shownQuery, setShownQuery] = useState(submittedQuery);
+  if (submittedQuery !== shownQuery) {
+    setShownQuery(submittedQuery);
+    setQuery(submittedQuery);
+    setFromResults(Boolean(shownQuery) && answeredQuery === shownQuery);
   }
   const searchInputRef = useRef<HTMLInputElement>(null);
   // A retry replaces the failure with a loading search, so nothing older may
@@ -84,19 +107,17 @@ export default function LessonGrid() {
       onChange={setQuery}
       onSubmit={() => {
         const next = query.trim();
-        // Enter on the query that just failed tries it again; setting the same
-        // value would change nothing.
-        if (next && next === submittedQuery && search.isError) {
-          retrySearch();
+        // Enter on the search already showing adds no history entry; on one
+        // that just failed, it tries it again.
+        if (next === submittedQuery) {
+          if (next && searchFailed) retrySearch();
           return;
         }
-        setFromResults(showResults && !search.isError);
-        setSubmittedQuery(next);
+        showSearch(next);
       }}
       onClear={() => {
-        setFromResults(false);
         setQuery("");
-        setSubmittedQuery("");
+        if (submittedQuery) showSearch("");
       }}
       isDirty={query.trim() !== submittedQuery}
     />
@@ -144,17 +165,21 @@ export default function LessonGrid() {
   // is not reliably read). Errors are announced by their own role="alert".
   let statusText = "";
   if (submittedQuery) {
-    if (isSearching || (search.isError && search.isFetching)) statusText = "Searching…";
-    else if (search.data && !search.isError) {
-      const authorCount = search.data.authors.length;
-      const lessonCount = search.data.lessons.length;
-      const counts =
-        authorCount + lessonCount === 0
-          ? "No authors or lessons match your search."
-          : `${lessonCount} ${lessonCount === 1 ? "lesson" : "lessons"} and ${authorCount} ${authorCount === 1 ? "author" : "authors"} found`;
+    if (isSearching || (searchFailed && search.isFetching)) statusText = "Searching…";
+    else if (search.isFetchingNextPage) statusText = "Loading more lessons…";
+    else if (search.data && !searchFailed) {
+      const { authors, playlists, lessons, lessonTotal, pageCount } = search.data;
       // Naming the query makes each search's text new, so it is announced even
-      // when two searches find the same counts.
-      statusText = `Results for “${submittedQuery}”: ${counts}`;
+      // when two searches find the same counts. After Show more lessons, the
+      // text says how far the reader has got.
+      statusText =
+        pageCount > 1
+          ? `Showing ${lessons.length} of ${countOf(lessonTotal, "lesson")} for “${submittedQuery}”`
+          : `Results for “${submittedQuery}”: ${
+              lessonTotal + playlists.length + authors.length === 0
+                ? "No authors, playlists or lessons match your search."
+                : `${countOf(lessonTotal, "lesson")}, ${countOf(playlists.length, "playlist")} and ${countOf(authors.length, "author")} found`
+            }`;
     }
   } else if (isPending) statusText = "Loading lessons…";
   else if (isFetchingNextPage) statusText = "Loading more lessons…";
@@ -204,11 +229,19 @@ export default function LessonGrid() {
         <SearchResults
           key={answeredQuery}
           data={search.data}
-          isError={search.isError}
+          isError={searchFailed}
           isBusy={search.isPlaceholderData}
           onRetry={() => {
             retrySearch();
             searchInputRef.current?.focus();
+          }}
+          more={{
+            hasMore: search.hasNextPage,
+            isLoading: search.isFetchingNextPage,
+            isError: search.isFetchNextPageError,
+            load: () => {
+              if (!search.isFetching) void search.fetchNextPage();
+            },
           }}
         />
       </div>

@@ -5,8 +5,14 @@ import type {
   PlaylistRowWithMembership,
 } from "./types";
 import { MAX_PLAYLISTS_PER_OWNER } from "./ownerLimits";
-import { ownerCondition, type AuthorRef } from "./queries";
+import { containsLikePattern, ownerCondition, type AuthorRef } from "./queries";
 import { isUniqueViolation } from "./uniqueViolation";
+
+// The outer playlist row's currently-published members: what every public
+// view of a playlist counts, shows and covers itself with.
+const PUBLISHED_MEMBERS = `FROM playlist_lessons
+  JOIN lessons ON lessons.id = playlist_lessons.lesson_id
+  WHERE playlist_lessons.playlist_id = playlists.id AND lessons.status = 'published'`;
 
 // Shared subquery for PlaylistRowWithCount's first_lesson_thumbnail — the
 // lowest-position currently-published member's thumbnail, used as the
@@ -14,12 +20,15 @@ import { isUniqueViolation } from "./uniqueViolation";
 // constant (not copy-pasted) since every PlaylistRowWithCount producer below
 // must produce the exact same shape.
 const FIRST_LESSON_THUMBNAIL_SUBQUERY = `(
-  SELECT lessons.thumbnail FROM playlist_lessons
-  JOIN lessons ON lessons.id = playlist_lessons.lesson_id
-  WHERE playlist_lessons.playlist_id = playlists.id AND lessons.status = 'published'
+  SELECT lessons.thumbnail ${PUBLISHED_MEMBERS}
   ORDER BY playlist_lessons.position ASC
   LIMIT 1
 ) AS first_lesson_thumbnail`;
+
+// The public views' lesson_count, and their rule that a playlist with no
+// currently-published member is not shown at all (never an empty/all-draft card).
+const PUBLISHED_LESSON_COUNT_SUBQUERY = `(SELECT COUNT(*) ${PUBLISHED_MEMBERS}) AS lesson_count`;
+const HAS_PUBLISHED_MEMBER = `EXISTS (SELECT 1 ${PUBLISHED_MEMBERS})`;
 
 // PlaylistRowWithCount's lesson_count for the owner's own views: every member,
 // published or not. The public profile counts published members only
@@ -188,22 +197,36 @@ export function publishedPlaylistsByOwnerStatement(
   const { sql, value } = ownerCondition(owner);
   return db
     .prepare(
-      `SELECT playlists.*, (
-         SELECT COUNT(*) FROM playlist_lessons
-         JOIN lessons ON lessons.id = playlist_lessons.lesson_id
-         WHERE playlist_lessons.playlist_id = playlists.id AND lessons.status = 'published'
-       ) AS lesson_count,
+      `SELECT playlists.*, ${PUBLISHED_LESSON_COUNT_SUBQUERY},
        ${FIRST_LESSON_THUMBNAIL_SUBQUERY}
        FROM playlists
-       WHERE ${sql}
-         AND EXISTS (
-           SELECT 1 FROM playlist_lessons
-           JOIN lessons ON lessons.id = playlist_lessons.lesson_id
-           WHERE playlist_lessons.playlist_id = playlists.id AND lessons.status = 'published'
-         )
+       WHERE ${sql} AND ${HAS_PUBLISHED_MEMBER}
        ORDER BY updated_at DESC`,
     )
     .bind(value);
+}
+
+// Backs GET /api/search — the public playlists (same published-member rule and
+// count as the author profile above) whose title or description contains `q`.
+// Title matches first, then the most recently updated.
+export async function searchPublishedPlaylists(
+  db: D1Database,
+  q: string,
+  limit: number,
+): Promise<PlaylistRowWithCount[]> {
+  const result = await db
+    .prepare(
+      `SELECT playlists.*, ${PUBLISHED_LESSON_COUNT_SUBQUERY},
+       ${FIRST_LESSON_THUMBNAIL_SUBQUERY}
+       FROM playlists
+       WHERE (playlists.title LIKE ?1 ESCAPE '\\' OR playlists.description LIKE ?1 ESCAPE '\\')
+         AND ${HAS_PUBLISHED_MEMBER}
+       ORDER BY (playlists.title LIKE ?1 ESCAPE '\\') DESC, playlists.updated_at DESC
+       LIMIT ?2`,
+    )
+    .bind(containsLikePattern(q), limit)
+    .all<PlaylistRowWithCount>();
+  return result.results ?? [];
 }
 
 // Backs the "Add to playlist" popover: every one of the owner's playlists,

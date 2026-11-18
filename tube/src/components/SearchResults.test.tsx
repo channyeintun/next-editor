@@ -2,12 +2,17 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { SearchResults as SearchResultsData } from "@next-editor/infra";
+import type { MoreLessons } from "./SearchResults";
 
 vi.mock("@next-editor/infra", () => ({
   avatarProxyUrl: (url: string) => url,
 }));
 vi.mock("./LessonCard", () => ({
-  default: ({ lesson }: { lesson: { title: string } }) => <h3>{lesson.title}</h3>,
+  default: ({ lesson }: { lesson: { slug: string; title: string } }) => (
+    <h3>
+      <a href={`/learn/${lesson.slug}`}>{lesson.title}</a>
+    </h3>
+  ),
 }));
 
 const { default: SearchResults } = await import("./SearchResults");
@@ -15,24 +20,48 @@ const { default: SearchResults } = await import("./SearchResults");
 const author = { username: "chan", name: "Chan Nyein Tun", avatarUrl: null };
 const lesson = (slug: string, title: string) => ({ slug, title });
 
-function results(overrides: Partial<Record<"authors" | "lessons", unknown[]>>): SearchResultsData {
-  return { authors: [], lessons: [], ...overrides } as unknown as SearchResultsData;
+const playlist = {
+  slug: "css-course",
+  title: "CSS Course",
+  description: "",
+  lessonCount: 43,
+  thumbnail: null,
+};
+
+function results(
+  overrides: Partial<Record<"authors" | "playlists" | "lessons", unknown[]>> & {
+    lessonTotal?: number;
+  },
+): SearchResultsData {
+  const lessons = overrides.lessons ?? [];
+  return {
+    authors: [],
+    playlists: [],
+    lessonTotal: lessons.length,
+    pageCount: 1,
+    ...overrides,
+    lessons,
+  } as unknown as SearchResultsData;
 }
+
+const noMore: MoreLessons = { hasMore: false, isLoading: false, isError: false, load: () => {} };
 
 function ui({
   data,
   isError = false,
   isBusy = false,
   onRetry = vi.fn<() => void>(),
+  more = noMore,
 }: {
   data: SearchResultsData | undefined;
   isError?: boolean;
   isBusy?: boolean;
   onRetry?: () => void;
+  more?: MoreLessons;
 }) {
   return (
     <MemoryRouter>
-      <SearchResults data={data} isError={isError} isBusy={isBusy} onRetry={onRetry} />
+      <SearchResults data={data} isError={isError} isBusy={isBusy} onRetry={onRetry} more={more} />
     </MemoryRouter>
   );
 }
@@ -72,6 +101,26 @@ describe("SearchResults", () => {
     ]);
   });
 
+  it("lists matching playlists after authors and before lessons, linking to the playlist", () => {
+    render(
+      ui({
+        data: results({
+          authors: [author],
+          playlists: [playlist],
+          lessons: [lesson("css-12", "CSS Course 12")],
+        }),
+      }),
+    );
+
+    expect(
+      screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
+    ).toEqual(["Authors", "Playlists", "Lessons"]);
+    expect(screen.getByRole("link", { name: "CSS Course, 43 lessons" })).toHaveAttribute(
+      "href",
+      "/learn/playlist/css-course",
+    );
+  });
+
   it("has no Lessons heading when only authors match", () => {
     render(ui({ data: results({ authors: [author] }) }));
 
@@ -94,7 +143,7 @@ describe("SearchResults", () => {
   it("dims a previous 'no match' too, instead of presenting it as the new answer", () => {
     render(ui({ data: results({}), isBusy: true }));
 
-    const message = screen.getByText("No authors or lessons match your search.");
+    const message = screen.getByText("No authors, playlists or lessons match your search.");
     expect(message.closest("[aria-busy]")).toHaveClass("opacity-50");
   });
 
@@ -117,5 +166,76 @@ describe("SearchResults", () => {
 
     view.rerender(ui({ data: undefined }));
     expect(view.container).toBeEmptyDOMElement();
+  });
+
+  describe("Show more lessons", () => {
+    const firstPage = [lesson("css-43", "CSS Course 43"), lesson("css-42", "CSS Course 42")];
+
+    it("says how many lessons are shown, and loads more when pressed", () => {
+      const load = vi.fn<() => void>();
+      render(
+        ui({
+          data: results({ lessons: firstPage, lessonTotal: 43 }),
+          more: { ...noMore, hasMore: true, load },
+        }),
+      );
+
+      expect(screen.getByText("Showing 2 of 43 lessons")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Show more lessons" }));
+      expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it("is absent once every matching lesson is shown", () => {
+      render(ui({ data: results({ lessons: firstPage }) }));
+
+      expect(screen.queryByRole("button", { name: "Show more lessons" })).not.toBeInTheDocument();
+    });
+
+    it("keeps focus while loading, without loading twice", () => {
+      const load = vi.fn<() => void>();
+      render(
+        ui({
+          data: results({ lessons: firstPage, lessonTotal: 43 }),
+          more: { ...noMore, hasMore: true, isLoading: true, load },
+        }),
+      );
+
+      const button = screen.getByRole("button", { name: "Show more lessons" });
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button).toBeEnabled();
+      fireEvent.click(button);
+      expect(load).not.toHaveBeenCalled();
+    });
+
+    it("moves focus to the first lesson it added", () => {
+      const more = { ...noMore, hasMore: true };
+      const view = render(ui({ data: results({ lessons: firstPage, lessonTotal: 43 }), more }));
+      fireEvent.click(screen.getByRole("button", { name: "Show more lessons" }));
+
+      view.rerender(
+        ui({
+          data: results({
+            lessons: [...firstPage, lesson("css-41", "CSS Course 41")],
+            lessonTotal: 43,
+          }),
+          more,
+        }),
+      );
+
+      expect(screen.getByRole("link", { name: "CSS Course 41" })).toHaveFocus();
+    });
+
+    it("keeps the lessons shown when loading more fails, with the reason", () => {
+      render(
+        ui({
+          data: results({ lessons: firstPage, lessonTotal: 43 }),
+          more: { ...noMore, hasMore: true, isError: true },
+        }),
+      );
+
+      expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load more lessons.");
+      expect(screen.getByRole("heading", { name: "CSS Course 43" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Show more lessons" })).toBeInTheDocument();
+    });
   });
 });

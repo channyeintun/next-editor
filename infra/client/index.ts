@@ -38,7 +38,7 @@ export {
 } from "./collaboration/collaborationApi";
 export type { AuthorSummary } from "../db/types";
 export { useSearch } from "./search/useSearch";
-export type { SearchResults } from "./search/searchApi";
+export type { SearchPage, SearchResults } from "./search/searchApi";
 export {
   useMyPlaylists,
   usePlaylistsForLesson,
