@@ -204,6 +204,41 @@ function createInput(fd: number): NodeProcess["stdin"] {
   return stream;
 }
 
+/** The process objects whose 'exit' event was emitted: it is emitted once. */
+const exitEmitted = new WeakSet<NodeProcess>();
+
+/**
+ * Emits 'exit' on `process` with its exit code, unless it was emitted
+ * already. A listener's throw goes to the caller.
+ */
+function emitExit(process: NodeProcess): void {
+  if (exitEmitted.has(process)) {
+    return;
+  }
+  exitEmitted.add(process);
+  (process as { _exiting?: boolean })._exiting = true;
+  process.emit("exit", process.exitCode ?? 0);
+}
+
+/**
+ * What a worker thread does before an error nothing caught ends it, as Node:
+ * its exit code becomes 1 and its 'exit' listeners run with it. A listener's
+ * throw stops the listeners after it and changes nothing else; a listener's
+ * `process.exit(n)` ends the thread there with n. Does nothing when 'exit'
+ * was emitted already (the error came from an 'exit' listener).
+ */
+export function emitExitForUncaughtError(process: NodeProcess): void {
+  if (exitEmitted.has(process)) {
+    return;
+  }
+  process.exitCode = 1;
+  try {
+    emitExit(process);
+  } catch {
+    // The thread ends with 1 whatever a listener threw.
+  }
+}
+
 /** Builds the process object. Call once, after `setRuntime`. */
 export function createProcess(host: ProcessHost): NodeProcess {
   const rt = runtime();
@@ -258,7 +293,6 @@ export function createProcess(host: ProcessHost): NodeProcess {
   };
   memoryUsage.rss = () => memoryUsage().rss;
 
-  let exiting = false;
   let stdout: NodeProcess["stdout"] | undefined;
   let stderr: NodeProcess["stderr"] | undefined;
   let stdin: NodeProcess["stdin"] | undefined;
@@ -439,11 +473,7 @@ export function createProcess(host: ProcessHost): NodeProcess {
       if (code !== undefined) {
         process.exitCode = code;
       }
-      if (!exiting) {
-        exiting = true;
-        (process as { _exiting?: boolean })._exiting = true;
-        process.emit("exit", process.exitCode ?? 0);
-      }
+      emitExit(process);
       return rt.processes.exit(Number(process.exitCode ?? 0));
     },
     reallyExit: (code?: number) => rt.processes.exit(code ?? 0),

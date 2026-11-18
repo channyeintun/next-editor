@@ -3,11 +3,11 @@
 // jobs, the IPC channel's ref()/unref(), and a broken pipe on stdout.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setRuntime } from "../runtime";
-import { createFakeRuntime, type FakeRuntime } from "../testing/fakeRuntime";
+import { createFakeRuntime, FakeExit, type FakeRuntime } from "../testing/fakeRuntime";
 import { createConsole } from "./console";
 import { runMacrotask, runNextTicks } from "./eventLoop";
 import { withPlatform } from "./eventLoop.testkit";
-import { createProcess } from "./process";
+import { createProcess, emitExitForUncaughtError } from "./process";
 import { kernelSignalName, nodeSignalNumber } from "./signalNames";
 import timers from "./timers";
 
@@ -1104,5 +1104,47 @@ describe("stdout on a pipe", () => {
     expect(errors).toEqual(["error (1 listening)"]);
     expect(stdout.listenerCount("error")).toBe(0);
     expect(fake.stderr()).toBe("alive\n");
+  });
+});
+
+describe("emitExitForUncaughtError", () => {
+  const newProcess = () => createProcess({ loadBuiltin: () => undefined, ipc: null });
+
+  it("runs the 'exit' listeners once with code 1, as a thread does before an uncaught error ends it", () => {
+    const process = newProcess();
+    process.exitCode = 4;
+    const seen: string[] = [];
+    process.on("exit", (code) => seen.push(`listener ${code} ${process.exitCode}`));
+    emitExitForUncaughtError(process);
+    expect(seen).toEqual(["listener 1 1"]);
+    expect((process as { _exiting?: boolean })._exiting).toBe(true);
+    // Emitted once: neither a second error nor process.exit runs them again.
+    emitExitForUncaughtError(process);
+    expect(() => process.exit(3)).toThrow(FakeExit);
+    expect(seen).toEqual(["listener 1 1"]);
+    expect(fake.exitCode).toBe(3);
+  });
+
+  it("drops a listener's throw, which stops the listeners after it", () => {
+    const process = newProcess();
+    const seen: string[] = [];
+    process.on("exit", () => {
+      seen.push("first");
+      throw new Error("from the listener");
+    });
+    process.on("exit", () => seen.push("second"));
+    expect(() => emitExitForUncaughtError(process)).not.toThrow();
+    expect(seen).toEqual(["first"]);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("runs none when 'exit' was emitted already", () => {
+    const process = newProcess();
+    const seen: number[] = [];
+    process.on("exit", (code) => seen.push(code as number));
+    expect(() => process.exit(0)).toThrow(FakeExit);
+    emitExitForUncaughtError(process);
+    expect(seen).toEqual([0]);
+    expect(process.exitCode).toBe(0);
   });
 });

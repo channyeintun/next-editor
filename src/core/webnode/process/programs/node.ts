@@ -32,7 +32,7 @@ import { writeFd } from "../node/internal/fdWrite";
 import { loadBuiltin, setProcessBuiltins } from "../node/index";
 import { BUILTIN_MODULE_NAMES } from "../node/names";
 import path from "../node/path";
-import { createProcess } from "../node/process";
+import { createProcess, emitExitForUncaughtError } from "../node/process";
 import type { NodeProcess } from "../node/process";
 import util from "../node/util";
 import {
@@ -425,7 +425,9 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
 
   // A thread's uncaught error goes to its parent's `error` event and the
   // thread ends with 1. Node posts it with the port's own `postMessage`, so
-  // what a program made of that method takes it.
+  // what a program made of that method takes it. Its 'exit' listeners run
+  // before (emitExitForUncaughtError), unless an 'uncaughtException' listener
+  // threw.
   const handToParent = (target: NonNullable<typeof thread>, error: unknown): never => {
     target.port.postMessage(threadErrorMessage(error));
     return rt.processes.exit(1);
@@ -455,6 +457,7 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
       return;
     }
     if (thread) {
+      emitExitForUncaughtError(process);
       handToParent(thread, error);
     }
     fatal(error);
