@@ -59,7 +59,19 @@ export default function LessonDetail({ lesson }: { lesson: Lesson }) {
     <Editor
       readOnly
       recordingUrl={`/${lesson.ne}`}
-      breadcrumb={embedded ? undefined : <Breadcrumb title={lesson.title} />}
+      breadcrumb={
+        embedded ? undefined : (
+          <Breadcrumb
+            title={lesson.title}
+            // Opened from a playlist: the trail leads back to that playlist.
+            parent={
+              playlistMode && playlist
+                ? { to: `/learn/playlist/${playlist.slug}`, label: playlist.title }
+                : undefined
+            }
+          />
+        )
+      }
       playlistMode={playlistMode}
       onEnded={handleEnded}
       autoplayOverride={autoplayOverride}

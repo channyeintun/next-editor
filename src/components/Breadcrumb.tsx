@@ -2,17 +2,31 @@ import { Link } from "react-router";
 import { ChevronRight } from "lucide-react";
 import LangText from "./LangText";
 
+export interface BreadcrumbParent {
+  to: string;
+  label: string;
+}
+
+const GALLERY: BreadcrumbParent = { to: "/learn", label: "Lessons" };
+
 // Shared "Lessons > X" trail back to the gallery — used inside the editor's
 // header (the /learn/:slug detail view and the /code editor) and standalone
-// on pages that don't render an editor (e.g. /learn/@username).
-export default function Breadcrumb({ title }: { title: string }) {
+// on pages that don't render an editor (e.g. /learn/@username). A caller with
+// a closer parent (a lesson opened from a playlist) passes it as `parent`.
+export default function Breadcrumb({
+  title,
+  parent = GALLERY,
+}: {
+  title: string;
+  parent?: BreadcrumbParent;
+}) {
   return (
     <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-xs">
       <Link
-        to="/learn"
-        className="shrink-0 font-bold capitalize tracking-wider text-slate-300 transition-colors hover:text-white"
+        to={parent.to}
+        className="max-w-[45%] shrink-0 truncate font-bold capitalize tracking-wider text-slate-300 transition-colors hover:text-white"
       >
-        Lessons
+        <LangText text={parent.label} />
       </Link>
       <ChevronRight className="size-3.5 shrink-0 text-slate-600" />
       <span className="truncate font-bold capitalize tracking-wider text-slate-200">
