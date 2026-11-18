@@ -3,10 +3,11 @@
 // utils,callbacks,emitKeypressEvents,promises}.js. Line splitting on
 // `\n`/`\r\n`/`\r` with `crlfDelay`, terminal line editing driven by
 // `keypress` events (Node's escape-sequence parser `emitKeys`), history, tab
-// completion, `question`, async iteration, and the ANSI cursor helpers.
-// Differences: callbacks Node defers with `process.nextTick` are deferred with
-// `queueMicrotask`; Ctrl+Z with no `SIGTSTP` listener does nothing (a browser
-// has no job control); there is no kill ring (Ctrl+Y).
+// completion, `question`, async iteration, and the ANSI cursor helpers. Lines
+// end as in Node 26, which also splits at U+2028 and U+2029.
+// Differences: Ctrl+Z with no `SIGTSTP` listener does nothing (a browser has
+// no job control); there is no kill ring (Ctrl+Y).
+import { nextTick } from "./eventLoop";
 import type { EventEmitter as EventEmitterInstance } from "./events";
 import EventEmitter, { addAbortListener } from "./events";
 import {
@@ -21,8 +22,14 @@ import {
   validateString,
 } from "./internalErrors";
 import { StringDecoder } from "./string_decoder";
+import { getStringWidth } from "./stringWidth";
+import { clearTimeout, setTimeout } from "./timers";
 import { inspect, stripVTControlCharacters } from "./util";
 import { runtime } from "../runtime";
+
+// The clock as it is when this module is evaluated: a program may replace
+// `Date.now` with a fake one, and how long ago a `\r` came is real time.
+const now = Date.now;
 
 // ---------------------------------------------------------------------------
 // lib/internal/readline/utils.js
@@ -54,59 +61,6 @@ function charLengthAt(str: string, i: number): number {
     return 1;
   }
   return (str.codePointAt(i) as number) >= kUTF16SurrogateThreshold ? 2 : 1;
-}
-
-function isFullWidthCodePoint(code: number): boolean {
-  return (
-    code >= 0x1100 &&
-    (code <= 0x115f ||
-      code === 0x2329 ||
-      code === 0x232a ||
-      (code >= 0x2e80 && code <= 0x3247 && code !== 0x303f) ||
-      (code >= 0x3250 && code <= 0x4dbf) ||
-      (code >= 0x4e00 && code <= 0xa4c6) ||
-      (code >= 0xa960 && code <= 0xa97c) ||
-      (code >= 0xac00 && code <= 0xd7a3) ||
-      (code >= 0xf900 && code <= 0xfaff) ||
-      (code >= 0xfe10 && code <= 0xfe19) ||
-      (code >= 0xfe30 && code <= 0xfe6b) ||
-      (code >= 0xff01 && code <= 0xff60) ||
-      (code >= 0xffe0 && code <= 0xffe6) ||
-      (code >= 0x1b000 && code <= 0x1b001) ||
-      (code >= 0x1f200 && code <= 0x1f251) ||
-      (code >= 0x1f300 && code <= 0x1f64f) ||
-      (code >= 0x20000 && code <= 0x3fffd))
-  );
-}
-
-function isZeroWidthCodePoint(code: number): boolean {
-  return (
-    code <= 0x1f ||
-    (code >= 0x7f && code <= 0x9f) ||
-    (code >= 0x300 && code <= 0x36f) ||
-    (code >= 0x200b && code <= 0x200f) ||
-    (code >= 0x20d0 && code <= 0x20ff) ||
-    (code >= 0xfe00 && code <= 0xfe0f) ||
-    (code >= 0xfe20 && code <= 0xfe2f) ||
-    (code >= 0xe0100 && code <= 0xe01ef)
-  );
-}
-
-/** Columns `str` takes in a terminal (Node's non-ICU `getStringWidth`). */
-function getStringWidth(str: string, removeControlChars = true): number {
-  let width = 0;
-  if (removeControlChars) {
-    str = stripVTControlCharacters(str);
-  }
-  for (const char of str) {
-    const code = char.codePointAt(0) as number;
-    if (isFullWidthCodePoint(code)) {
-      width += 2;
-    } else if (!isZeroWidthCodePoint(code)) {
-      width++;
-    }
-  }
-  return width;
 }
 
 function commonPrefix(strings: string[]): string {
@@ -381,7 +335,7 @@ export function emitKeypressEvents(stream: unknown, iface: KeypressInterface = {
     if (emitter.listenerCount("keypress") > 0) {
       const string = decoder.write(input as Buffer);
       if (string) {
-        globalThis.clearTimeout(timeoutId);
+        clearTimeout(timeoutId);
         // This supports characters of length 2.
         iface[kSawKeyPress] = charLengthAt(string, 0) === string.length;
         iface.isCompletionEnabled = false;
@@ -395,7 +349,7 @@ export function emitKeypressEvents(stream: unknown, iface: KeypressInterface = {
             escapeDecoder.next(character);
             // Escape letter at the tail position
             if (length === string.length && character === kEscape) {
-              timeoutId = globalThis.setTimeout(triggerEscape, escapeCodeTimeout);
+              timeoutId = setTimeout(triggerEscape, escapeCodeTimeout);
             }
           } catch (error) {
             // A `keypress` listener threw: restart the generator.
@@ -436,7 +390,7 @@ interface WritableLike {
 
 function deferCallback(callback: unknown): void {
   if (typeof callback === "function") {
-    queueMicrotask(() => (callback as (error: null) => void)(null));
+    nextTick(callback as (error: null) => void, null);
   }
 }
 
@@ -540,7 +494,7 @@ export function clearScreenDown(stream: unknown, callback?: unknown): boolean {
 const kHistorySize = 30;
 const kMaxUndoRedoStackSize = 2048;
 const kMincrlfDelay = 100;
-const lineEnding = /\r?\n|\r(?!\n)/g;
+const lineEnding = /\r?\n|\r(?!\n)|\u2028|\u2029/g;
 
 const kDispose =
   (Symbol as unknown as { dispose?: symbol }).dispose ?? Symbol.for("nodejs.dispose");
@@ -838,7 +792,7 @@ export class InterfaceConstructor extends EventEmitter {
       return;
     }
     let string = this[kDecoder].write(b as Buffer);
-    if (this[kSawReturnAt] && Date.now() - this[kSawReturnAt] <= this.crlfDelay) {
+    if (this[kSawReturnAt] && now() - this[kSawReturnAt] <= this.crlfDelay) {
       if (string.codePointAt(0) === 10) {
         string = string.slice(1);
       }
@@ -854,7 +808,7 @@ export class InterfaceConstructor extends EventEmitter {
         lineEnding.lastIndex = 0;
         newPartContainsEnding = lineEnding.exec(string) as RegExpExecArray;
       }
-      this[kSawReturnAt] = string.endsWith("\r") ? Date.now() : 0;
+      this[kSawReturnAt] = string.endsWith("\r") ? now() : 0;
       const indexes = [0, newPartContainsEnding.index, lineEnding.lastIndex];
       let nextMatch: RegExpExecArray | null;
       while ((nextMatch = lineEnding.exec(string)) !== null) {
@@ -864,10 +818,9 @@ export class InterfaceConstructor extends EventEmitter {
       // Either '' or (conceivably) the unfinished portion of the next line.
       this[kLineBuffer] = string.slice(indexes[lastIndex]);
       for (let i = 1; i < lastIndex; i += 2) {
+        // A listener that closes the interface still gets the lines that
+        // came in the same chunk, as in Node.
         this._onLine(string.slice(indexes[i - 1], indexes[i]));
-        if (this.closed) {
-          break;
-        }
       }
     } else if (string) {
       // No newlines this time, save what we have for next time.
@@ -1333,12 +1286,12 @@ export class InterfaceConstructor extends EventEmitter {
       }
       switch (key.name) {
         case "return":
-          this[kSawReturnAt] = Date.now();
+          this[kSawReturnAt] = now();
           this._line();
           break;
         case "enter":
           // When the key interval > crlfDelay
-          if (this[kSawReturnAt] === 0 || Date.now() - this[kSawReturnAt] > this.crlfDelay) {
+          if (this[kSawReturnAt] === 0 || now() - this[kSawReturnAt] > this.crlfDelay) {
             this._line();
           }
           this[kSawReturnAt] = 0;
@@ -1678,7 +1631,7 @@ function initInterface(
   if (signal) {
     const onAborted = () => self.close();
     if (signal.aborted) {
-      queueMicrotask(onAborted);
+      nextTick(onAborted);
     } else {
       const disposable = addAbortListener(signal, onAborted);
       self.once("close", () => {
@@ -1861,7 +1814,7 @@ export class Readline {
 
   #queue(data: string): void {
     if (this.#autoCommit) {
-      queueMicrotask(() => this.#stream.write(data));
+      nextTick(() => this.#stream.write(data));
     } else {
       this.#todo.push(data);
     }

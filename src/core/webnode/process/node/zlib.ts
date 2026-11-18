@@ -1,8 +1,14 @@
 // The `zlib` builtin: gzip, zlib (deflate) and raw deflate over fflate, with
 // Node's framing, checks and errors from zlib/engine.ts. Streaming classes are
-// `stream.Transform`s; the `*Sync` functions run an engine in one call; the
-// callback forms run it on a later task. Brotli and zstd are present and throw.
+// `stream.Transform`s; the `*Sync` functions run an engine in one call. Node
+// runs a stream's chunks and the callback forms on its thread pool, so here
+// their results come from the event loop, each in a task of its own. Brotli
+// and zstd are present and throw.
+import { captureAsyncContext } from "./async_hooks";
 import { Buffer } from "./buffer";
+import { nextTick } from "./eventLoop";
+import { complete } from "./fs/completion";
+import { runJob, type JobCallback } from "./internal/threadPoolJob";
 import {
   invalidArgType,
   makeNodeError,
@@ -15,9 +21,11 @@ import type { StreamCallback, TransformOptions } from "./stream";
 import { crc32Update } from "./zlib/checksum";
 import { codes, constants } from "./zlib/constants";
 import {
+  Z_BLOCK,
   Z_FINISH,
   Z_FULL_FLUSH,
   Z_NO_FLUSH,
+  Z_PARTIAL_FLUSH,
   Z_SYNC_FLUSH,
   createEngine,
   type Engine,
@@ -115,6 +123,14 @@ function concatAll(parts: Uint8Array[], total: number): Buffer {
   return out;
 }
 
+/** How much each flush kind does, least first: Node's `flushiness`. */
+const FLUSH_ORDER = [Z_NO_FLUSH, Z_BLOCK, Z_PARTIAL_FLUSH, Z_SYNC_FLUSH, Z_FULL_FLUSH, Z_FINISH];
+
+/** Node's `maxFlush`: the flush kind that does more. */
+function maxFlush(a: number, b: number): number {
+  return FLUSH_ORDER.indexOf(a) > FLUSH_ORDER.indexOf(b) ? a : b;
+}
+
 function bufferTooLarge(max: number): Error {
   return makeNodeError(
     "ERR_BUFFER_TOO_LARGE",
@@ -167,6 +183,8 @@ class ZlibBase extends stream.Transform {
   /** Node's native handle; null once the stream is closed. */
   _handle: ZlibHandle | null;
   #pendingFlushes: number[] = [];
+  /** Binds a callback to the async context the stream was made in, where Node runs its handle's callbacks. */
+  readonly #inOwnContext = captureAsyncContext();
 
   constructor(options: ZlibOptions | undefined, mode: Mode) {
     let opts = options;
@@ -286,6 +304,15 @@ class ZlibBase extends stream.Transform {
 
   #pushOutput(output: Uint8Array[]): void {
     const size = this._chunkSize;
+    let total = 0;
+    for (const part of output) {
+      total += part.length;
+    }
+    if (output.length > 1 && total <= size) {
+      // What one run gave fits one chunk: one push, as Node's output buffer.
+      this.push(concatAll(output, total));
+      return;
+    }
     for (const part of output) {
       for (let at = 0; at < part.length; at += size) {
         this.push(asBuffer(at === 0 && part.length <= size ? part : part.subarray(at, at + size)));
@@ -293,31 +320,55 @@ class ZlibBase extends stream.Transform {
     }
   }
 
+  /**
+   * Runs the engine over `chunk` and finishes as Node's zlib does once its
+   * thread pool has run a chunk: from the event loop, in a task of its own.
+   * The output is pushed there and `callback` follows; a run that failed
+   * destroys the stream, and its callback is never called.
+   */
+  #runChunk(chunk: Uint8Array, flushFlag: number, callback: StreamCallback): void {
+    let output: Uint8Array[] = [];
+    let failure: { error: Error } | null = null;
+    try {
+      output = this._runEngine(chunk, flushFlag);
+    } catch (error) {
+      failure = { error: error as Error };
+    }
+    complete(
+      this.#inOwnContext(() => {
+        if (failure !== null) {
+          this.destroy(failure.error);
+          return;
+        }
+        if (!this.destroyed) {
+          this.#pushOutput(output);
+        }
+        callback();
+      }),
+    );
+  }
+
   override _transform(chunk: Uint8Array, _encoding: string, callback: StreamCallback): void {
     let flushFlag = this._defaultFlushFlag;
     if (chunk.length === 0 && this.#pendingFlushes.length > 0) {
       flushFlag = this.#pendingFlushes.shift() as number;
     }
-    let output: Uint8Array[];
-    try {
-      output = this._runEngine(chunk, flushFlag);
-    } catch (error) {
-      callback(error as Error);
-      return;
+    // The last chunk of an ended stream is also the one that finishes it.
+    if (this.writableEnded && this.writableLength === chunk.byteLength) {
+      flushFlag = maxFlush(flushFlag, this._finishFlushFlag);
     }
-    this.#pushOutput(output);
-    callback();
+    this.#runChunk(chunk, flushFlag, callback);
   }
 
   override _flush(callback: StreamCallback): void {
-    let output: Uint8Array[];
-    try {
-      output = this._runEngine(new Uint8Array(0), this._finishFlushFlag);
-    } catch (error) {
-      callback(error as Error);
-      return;
-    }
-    this.#pushOutput(output);
+    this.#runChunk(new Uint8Array(0), this._finishFlushFlag, callback);
+  }
+
+  /**
+   * Done at once, as in Node: 'finish' does not wait for the last flush, which
+   * Transform then starts from 'prefinish' and which ends the readable side.
+   */
+  override _final(callback: StreamCallback): void {
     callback();
   }
 
@@ -335,7 +386,7 @@ class ZlibBase extends stream.Transform {
     const flushKind = (kind ?? this._defaultFullFlushFlag) as number;
     if (this.writableFinished) {
       if (callback) {
-        queueMicrotask(callback);
+        nextTick(callback);
       }
     } else if (this.writableEnded) {
       if (callback) {
@@ -493,12 +544,9 @@ function runEngine(
   return engine._info ? { buffer: result, engine } : result;
 }
 
-type ZlibCallback = (
-  error: Error | null,
-  result?: Buffer | { buffer: Buffer; engine: ZlibBase },
-) => void;
+type ZlibCallback = JobCallback<Buffer | { buffer: Buffer; engine: ZlibBase }>;
 
-/** Node's `zlibBuffer`: the callback form, completing on a later task. */
+/** Node's `zlibBuffer`: the callback form, completing from the event loop. */
 function runAsync(Class: ZlibClass, buffer: unknown, options: unknown, callback: unknown): void {
   if (typeof options === "function") {
     callback = options;
@@ -508,18 +556,8 @@ function runAsync(Class: ZlibClass, buffer: unknown, options: unknown, callback:
   const engine = new Class(options as ZlibOptions | undefined);
   validateFunction(callback, "callback");
   const input = toBytes(buffer, "buffer", true);
-  const done = callback as ZlibCallback;
   const copy = new Uint8Array(input);
-  setTimeout(() => {
-    let result: Buffer | { buffer: Buffer; engine: ZlibBase };
-    try {
-      result = runEngine(engine, copy);
-    } catch (error) {
-      done(error as Error);
-      return;
-    }
-    done(null, result);
-  }, 0);
+  runJob(() => runEngine(engine, copy), callback as ZlibCallback);
 }
 
 function syncFn(Class: ZlibClass, name: string) {

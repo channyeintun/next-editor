@@ -9,6 +9,7 @@ import { outOfRange, validateBoolean, validateInteger, validateObject } from "..
 import { connResetException, startInterval, stopInterval, type TimerHandle } from "../net/errors";
 import { Server as NetServer } from "../net/server";
 import type { Socket } from "../net/socket";
+import { nextTick } from "../eventLoop";
 import {
   codedError,
   continueExpression,
@@ -599,7 +600,7 @@ function resOnFinish(
   }
   res.detachSocket(socket);
   clearIncoming(connection, req);
-  queueMicrotask(() => emitResponseClose(res));
+  nextTick(() => emitResponseClose(res));
   if (res._last) {
     socket.destroySoon();
   } else if (connection.outgoing.length === 0) {

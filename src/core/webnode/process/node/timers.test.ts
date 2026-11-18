@@ -2,6 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setRuntime } from "../runtime";
 import { createFakeRuntime, type FakeRuntime } from "../testing/fakeRuntime";
+import { recordingScheduler, withPlatform } from "./eventLoop.testkit";
+import { createProcess } from "./process";
 import timers, {
   Immediate,
   Timeout,
@@ -284,6 +286,124 @@ describe("setImmediate", () => {
     expect(fake.refCount).toBe(1);
     await sleep(10);
     expect(fake.refCount).toBe(0);
+  });
+});
+
+describe("ticks and macrotasks", () => {
+  function busyWait(ms: number): void {
+    const end = performance.now() + ms;
+    while (performance.now() < end) {
+      // A timer comes due meanwhile.
+    }
+  }
+
+  it("orders ticks, promise jobs, immediates and a timeout inside a timer as Node does", async () => {
+    const process = createProcess({ loadBuiltin: () => undefined, ipc: null });
+    const order: string[] = [];
+    setTimeout(() => {
+      setTimeout(() => order.push("timeout"), 0);
+      setImmediate(() => {
+        order.push("immediate");
+        process.nextTick(() => order.push("immediate>t"));
+        void Promise.resolve().then(() => order.push("immediate>p"));
+      });
+      setImmediate(() => order.push("immediate2"));
+      void Promise.resolve().then(() => {
+        order.push("p");
+        process.nextTick(() => order.push("p>t"));
+        setImmediate(() => order.push("p>immediate"));
+      });
+      process.nextTick(() => {
+        order.push("t");
+        setImmediate(() => order.push("t>immediate"));
+      });
+    }, 1);
+    await sleep(40);
+    // What real Node v26 prints for the same timer.
+    expect(order).toEqual([
+      "t",
+      "p",
+      "p>t",
+      "immediate",
+      "immediate>t",
+      "immediate>p",
+      "immediate2",
+      "t>immediate",
+      "p>immediate",
+      "timeout",
+    ]);
+  });
+
+  it("a timer refreshed by ticks that ran before it fires once, from the refresh", async () => {
+    const process = createProcess({ loadBuiltin: () => undefined, ipc: null });
+    let fired = 0;
+    const timeout = setTimeout(() => (fired += 1), 1);
+    busyWait(5);
+    await Promise.resolve();
+    // Queued outside a macrotask: it runs before the timer, which is already due.
+    process.nextTick(() => timeout.refresh());
+    await sleep(40);
+    expect(fired).toBe(1);
+    expect(fake.refCount).toBe(0);
+  });
+
+  it("a timer cleared by ticks that ran before it does not fire", async () => {
+    const process = createProcess({ loadBuiltin: () => undefined, ipc: null });
+    let fired = 0;
+    const timeout = setTimeout(() => (fired += 1), 1);
+    busyWait(5);
+    await Promise.resolve();
+    process.nextTick(() => clearTimeout(timeout));
+    await sleep(20);
+    expect(fired).toBe(0);
+    expect(fake.refCount).toBe(0);
+  });
+
+  /**
+   * A process whose waiting ticks get their turn only when the test runs it:
+   * a timer's task that comes meanwhile runs those ticks and waits for the
+   * turn itself.
+   */
+  async function withHeldTurn() {
+    const { posted, scheduler } = recordingScheduler();
+    const fresh = await withPlatform({ reportError: () => {}, scheduler });
+    /** Runs the turn's tasks until none is posted. */
+    const runTurn = () => {
+      for (let task = posted.shift(); task !== undefined; task = posted.shift()) {
+        task.callback();
+      }
+    };
+    return { ...fresh, runTurn };
+  }
+
+  it("a timer refreshed by a tick its own task ran, while that task waits, fires once, from the refresh", async () => {
+    const { process, runtime, timers: fresh, runTurn } = await withHeldTurn();
+    let fired = 0;
+    const timeout = fresh.setTimeout(() => (fired += 1), 1);
+    await Promise.resolve();
+    // Queued outside a macrotask: the timer's task finds it waiting, runs it
+    // (the refresh) and waits behind it; the refreshed timer's task comes too.
+    process.nextTick(() => timeout.refresh());
+    await sleep(20);
+    expect(fired).toBe(0);
+    runTurn();
+    expect(fired).toBe(1);
+    await sleep(10);
+    runTurn();
+    expect(fired).toBe(1);
+    expect(runtime.refCount).toBe(0);
+  });
+
+  it("a timer cleared by a tick its own task ran, while that task waits, does not fire", async () => {
+    const { process, runtime, timers: fresh, runTurn } = await withHeldTurn();
+    let fired = 0;
+    const timeout = fresh.setTimeout(() => (fired += 1), 1);
+    await Promise.resolve();
+    process.nextTick(() => fresh.clearTimeout(timeout));
+    await sleep(20);
+    runTurn();
+    expect(fired).toBe(0);
+    expect(runtime.refCount).toBe(0);
   });
 });
 

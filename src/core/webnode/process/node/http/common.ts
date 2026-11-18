@@ -285,7 +285,7 @@ function configureParser(): void {
 }
 
 const PARSE_ERROR_REASONS: Record<string, string> = {
-  HPE_INVALID_CONSTANT: "Expected HTTP/",
+  HPE_INVALID_CONSTANT: "Expected HTTP/, RTSP/ or ICE/",
   HPE_INVALID_METHOD: "Invalid method encountered",
   HPE_HEADER_OVERFLOW: "Header overflow",
   HPE_LF_EXPECTED: "Missing expected LF after header value",
@@ -294,6 +294,117 @@ const PARSE_ERROR_REASONS: Record<string, string> = {
   HPE_INVALID_EOF_STATE: "Invalid EOF state",
   HPE_INVALID_TRANSFER_ENCODING: "Transfer-Encoding can't be present with Content-Length",
 };
+
+/** What is wrong with a request line, and at which of its characters. */
+interface LineFault {
+  code: string;
+  reason: string;
+  at: number;
+}
+
+/** A parse error that already knows its reason and where in the chunk it lies. */
+interface LocatedParseError extends Error {
+  code: string;
+  reason: string;
+  bytesParsed: number;
+}
+
+function isLocated(error: Error): error is LocatedParseError {
+  return typeof (error as { bytesParsed?: unknown }).bytesParsed === "number";
+}
+
+/** The versions llhttp takes in a request line. */
+const REQUEST_VERSIONS = new Set(["0.9", "1.0", "1.1", "2.0"]);
+
+function isDigit(character: string | undefined): boolean {
+  return character !== undefined && character >= "0" && character <= "9";
+}
+
+/**
+ * What llhttp says of a request line the parser here refused, and at which
+ * character: llhttp reads a line byte by byte and stops at the first it cannot
+ * take. Null for a line llhttp would take (HTTP/0.9's `GET /`, two spaces
+ * before the target), which stays refused as not HTTP.
+ */
+function requestLineFault(line: string): LineFault | null {
+  const methods = RawHTTPParser.methods;
+  let at = 0;
+  while (at < line.length && methods.some((name) => name.startsWith(line.slice(0, at + 1)))) {
+    at += 1;
+  }
+  if (!methods.includes(line.slice(0, at))) {
+    return { code: "HPE_INVALID_METHOD", reason: "Invalid method encountered", at };
+  }
+  if (line[at] !== " ") {
+    return { code: "HPE_INVALID_METHOD", reason: "Expected space after method", at };
+  }
+  while (line[at] === " ") {
+    at += 1;
+  }
+  at = line.indexOf(" ", at);
+  if (at === -1) {
+    return null;
+  }
+  while (line[at] === " ") {
+    at += 1;
+  }
+  const protocol = "HTTP/";
+  for (let i = 0; i < protocol.length; i += 1) {
+    if (line[at + i] !== protocol[i]) {
+      return {
+        code: "HPE_INVALID_CONSTANT",
+        reason: PARSE_ERROR_REASONS.HPE_INVALID_CONSTANT,
+        at: at + i,
+      };
+    }
+  }
+  at += protocol.length;
+  const version = (reason: string, where: number): LineFault => ({
+    code: "HPE_INVALID_VERSION",
+    reason,
+    at: where,
+  });
+  if (!isDigit(line[at])) {
+    return version("Invalid major version", at);
+  }
+  if (line[at + 1] !== ".") {
+    return version("Expected dot", at + 1);
+  }
+  if (!isDigit(line[at + 2])) {
+    return version("Invalid minor version", at + 2);
+  }
+  if (!REQUEST_VERSIONS.has(line.slice(at, at + 3))) {
+    return version("Invalid HTTP version", at + 3);
+  }
+  return at + 3 < line.length ? version("Expected CRLF after version", at + 3) : null;
+}
+
+/** The line the parser's next step will read whole from its chunk, or undefined if its end is yet to come. */
+function wholeLine(raw: RawParser): string | undefined {
+  const chunk = raw.chunk as Buffer;
+  const newline = chunk.indexOf(0x0a, raw.offset);
+  if (newline === -1 || newline >= (raw.end as number)) {
+    return undefined;
+  }
+  const line = String(raw.line) + chunk.toString("latin1", raw.offset, newline);
+  return line.endsWith("\r") ? line.slice(0, -1) : line;
+}
+
+/**
+ * Where in its chunk character `at` of a line lies: the line began at `began`
+ * in its first chunk, each chunk before the current one brought `pieces` of
+ * it, and the current chunk has the rest from `start`.
+ */
+function placeInChunk(at: number, began: number, pieces: readonly number[], start: number): number {
+  let left = at;
+  for (const [index, piece] of pieces.entries()) {
+    if (left < piece) {
+      return (index === 0 ? began : 0) + left;
+    }
+    left -= piece;
+  }
+  return start + left;
+}
 
 function parseError(error: Error, bytesParsed: number): Error {
   let code = (error as { code?: string }).code;
@@ -308,11 +419,11 @@ function parseError(error: Error, bytesParsed: number): Error {
       code = "HPE_INVALID_CHUNK_SIZE";
     }
   }
-  const reason = PARSE_ERROR_REASONS[code] ?? error.message;
+  const reason = isLocated(error) ? error.reason : (PARSE_ERROR_REASONS[code] ?? error.message);
   const result = new Error(`Parse Error: ${reason}`) as Error & Record<string, unknown>;
   result.code = code;
   result.reason = reason;
-  result.bytesParsed = bytesParsed;
+  result.bytesParsed = isLocated(error) ? error.bytesParsed : bytesParsed;
   return result;
 }
 
@@ -360,12 +471,49 @@ export class HttpParser {
     // A head the parser must refuse once it is whole; raised from the state
     // step, outside the user callback, so execute() returns it as an error.
     let rejected: Error | null = null;
+    // Of the request line being read: where it began in the chunk that brought
+    // its first byte, and how many of its bytes each chunk before this one
+    // brought. A fault is reported at its place in the chunk that holds it,
+    // as llhttp reports it.
+    let lineBegan = 0;
+    let linePieces: number[] = [];
     for (const state of [`${kind}_LINE`, "HEADER"]) {
       const step = RawHTTPParser.prototype[state];
       raw[state] = function (this: RawParser) {
         const start = this.offset;
         headDone = false;
-        const result = step.call(this);
+        const line = state === "REQUEST_LINE" ? wholeLine(this) : undefined;
+        let result: unknown;
+        let fault: LineFault | null = null;
+        try {
+          result = step.call(this);
+          // The parser takes any version number; llhttp only the ones it knows.
+          if (line !== undefined && line !== "" && !REQUEST_VERSIONS.has(line.slice(-3))) {
+            fault = requestLineFault(line);
+          }
+        } catch (error) {
+          fault = line === undefined ? null : requestLineFault(line);
+          if (fault === null) {
+            throw error;
+          }
+        }
+        if (fault !== null) {
+          throw Object.assign(new Error("Parse Error"), {
+            code: fault.code,
+            reason: fault.reason,
+            bytesParsed: placeInChunk(fault.at, lineBegan, linePieces, start),
+          } satisfies Omit<LocatedParseError, keyof Error>);
+        }
+        if (state === "REQUEST_LINE") {
+          if (line !== undefined) {
+            linePieces = [];
+          } else {
+            if (linePieces.length === 0) {
+              lineBegan = start;
+            }
+            linePieces.push(this.offset - start);
+          }
+        }
         if (rejected !== null) {
           throw rejected;
         }

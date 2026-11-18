@@ -11,6 +11,10 @@ import asyncHooks, {
   executionAsyncResource,
   triggerAsyncId,
 } from "./async_hooks";
+import { nextTick, runMacrotask } from "./eventLoop";
+import { createProcess } from "./process";
+import { setRuntime } from "../runtime";
+import { createFakeRuntime } from "../testing/fakeRuntime";
 import { setImmediate, setInterval, clearInterval, setTimeout } from "./timers";
 
 const tick = () => new Promise<void>((resolve) => globalThis.setTimeout(resolve, 5));
@@ -123,6 +127,41 @@ describe("AsyncLocalStorage", () => {
     expect(seen).toContainEqual(["immediate", 7]);
     expect(seen).toContainEqual(["interval", 7]);
     expect(seen).toContainEqual(["other", 8]);
+  });
+
+  it("propagates through process.nextTick, and the ticks the runtime's own modules queue", async () => {
+    setRuntime(createFakeRuntime());
+    try {
+      const process = createProcess({ loadBuiltin: () => undefined, ipc: null });
+      const als = new AsyncLocalStorage<string>();
+      const seen: unknown[] = [];
+      runMacrotask(() => {
+        als.run("request", () => {
+          process.nextTick((label: string) => {
+            seen.push([label, als.getStore()]);
+            process.nextTick(() => seen.push(["tick>tick", als.getStore()]));
+          }, "tick");
+          // As net and http defer 'finish', 'listening' and write callbacks.
+          nextTick(() => seen.push(["internal", als.getStore()]));
+        });
+        process.nextTick(() => seen.push(["outside", als.getStore()]));
+      });
+      // What real Node v26 gives each of the four.
+      expect(seen).toEqual([
+        ["tick", "request"],
+        ["internal", "request"],
+        ["outside", undefined],
+        ["tick>tick", "request"],
+      ]);
+      // From a promise job the tick waits for a turn, and still has the store.
+      await als.run("later", () =>
+        Promise.resolve().then(() => process.nextTick(() => seen.push(["p>tick", als.getStore()]))),
+      );
+      await tick();
+      expect(seen[4]).toEqual(["p>tick", "later"]);
+    } finally {
+      setRuntime(null);
+    }
   });
 
   it("enterWith sets the store for the rest of the execution", async () => {

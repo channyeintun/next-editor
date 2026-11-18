@@ -19,12 +19,11 @@ import {
 } from "./errors";
 import type { Digest } from "./digests";
 import { digestForMac } from "./hash";
+import { runJob, settleJob, type JobCallback } from "../internal/threadPoolJob";
 
-type Callback<T> = (error: Error | null, result?: T) => void;
-
-/** Runs `fn` on a later task, the way Node finishes a crypto job off the main thread. */
-function later(fn: () => void): void {
-  setTimeout(fn, 0);
+/** OpenSSL derives no key of zero bytes with PBKDF2 or HKDF; this is how Node reports it. */
+function derivationFailed(algorithm: "PBKDF2" | "HKDF"): Error {
+  return new Error(`${algorithm} derivation failed`);
 }
 
 // --- pbkdf2 ---------------------------------------------------------------
@@ -63,7 +62,7 @@ export function pbkdf2Sync(
   const params = checkPbkdf2(password, salt, iterations, keylen, digest);
   const hash = digestForMac(params.digest).hash;
   if (params.keylen === 0) {
-    return toBuffer(new Uint8Array(0));
+    throw derivationFailed("PBKDF2");
   }
   return toBuffer(
     noblePbkdf2(hash, params.password, params.salt, { c: params.iterations, dkLen: params.keylen }),
@@ -85,18 +84,21 @@ export function pbkdf2(
   }
   const params = checkPbkdf2(password, salt, iterations, keylen, digest);
   validateFunction(callback, "callback");
-  const done = callback as Callback<Buffer>;
+  const done = callback as JobCallback<Buffer>;
   const hash = digestForMac(params.digest).hash;
   if (params.keylen === 0) {
-    later(() => done(null, toBuffer(new Uint8Array(0))));
+    runJob((): Buffer => {
+      throw derivationFailed("PBKDF2");
+    }, done);
     return;
   }
-  pbkdf2Async(hash, params.password, params.salt, {
-    c: params.iterations,
-    dkLen: params.keylen,
-  }).then(
-    (key) => done(null, toBuffer(key)),
-    (error: unknown) => done(error as Error),
+  // The derivation gives way to the event loop every few milliseconds.
+  settleJob(
+    pbkdf2Async(hash, params.password, params.salt, {
+      c: params.iterations,
+      dkLen: params.keylen,
+    }).then(toBuffer),
+    done,
   );
 }
 
@@ -260,14 +262,15 @@ export function scrypt(
   }
   const params = checkScrypt(password, salt, keylen, options);
   validateFunction(callback, "callback");
-  const done = callback as Callback<Buffer>;
+  const done = callback as JobCallback<Buffer>;
   if (params.keylen === 0) {
-    later(() => done(null, toBuffer(new Uint8Array(0))));
+    runJob(() => toBuffer(new Uint8Array(0)), done);
     return;
   }
-  scryptAsync(params.password, params.salt, nobleScryptOptions(params)).then(
-    (key) => done(null, toBuffer(key)),
-    (error: unknown) => done(error as Error),
+  // The derivation gives way to the event loop every few milliseconds.
+  settleJob(
+    scryptAsync(params.password, params.salt, nobleScryptOptions(params)).then(toBuffer),
+    done,
   );
 }
 
@@ -338,7 +341,7 @@ function prepareHkdf(params: HkdfParams): Digest {
 
 function deriveHkdf(params: HkdfParams, digest: Digest): ArrayBuffer {
   if (params.keylen === 0) {
-    return new ArrayBuffer(0);
+    throw derivationFailed("HKDF");
   }
   // RFC 5869: an empty salt is a string of HashLen zeros, which noble also uses for undefined.
   const prk = extract(digest.hash, params.key, params.salt.length ? params.salt : undefined);
@@ -369,7 +372,7 @@ export function hkdf(
 ): void {
   const params = checkHkdf(digest, ikm, salt, info, keylen);
   validateFunction(callback, "callback");
-  const done = callback as Callback<ArrayBuffer>;
+  const done = callback as JobCallback<ArrayBuffer>;
   const hash = prepareHkdf(params);
-  later(() => done(null, deriveHkdf(params, hash)));
+  runJob(() => deriveHkdf(params, hash), done);
 }

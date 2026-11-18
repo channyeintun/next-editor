@@ -609,6 +609,66 @@ describe("http server and client over loopback", () => {
     await closeServer(server);
   });
 
+  // What real Node v26 (llhttp) reports for each line: code, reason and the
+  // number of bytes it had parsed.
+  it("says what is wrong with a request line as Node's parser does", async () => {
+    const server = http.createServer(() => {
+      throw new Error("never");
+    });
+    const errors: string[] = [];
+    server.on(
+      "clientError",
+      (error: Error & { code?: string; reason?: string; bytesParsed?: number }, socket: Socket) => {
+        errors.push(`${error.code} | ${error.reason} | ${error.bytesParsed}`);
+        expect(error.message).toBe(`Parse Error: ${error.reason}`);
+        socket.destroy();
+      },
+    );
+    const port = await listen(server, 0);
+    const report = async (...chunks: string[]) => {
+      const raw = await rawConnection(port);
+      for (const chunk of chunks) {
+        raw.channel.write(Buffer.from(chunk, "latin1"));
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      await raw.ended;
+      return errors.pop();
+    };
+    const method = "HPE_INVALID_METHOD | Invalid method encountered";
+    const space = "HPE_INVALID_METHOD | Expected space after method";
+    const protocol = "HPE_INVALID_CONSTANT | Expected HTTP/, RTSP/ or ICE/";
+    expect(await report("NOT HTTP AT ALL\r\n\r\n")).toBe(`${method} | 3`);
+    expect(await report("G@T / HTTP/1.1\r\n\r\n")).toBe(`${method} | 1`);
+    expect(await report("get / HTTP/1.1\r\n\r\n")).toBe(`${method} | 0`);
+    expect(await report(" GET / HTTP/1.1\r\n\r\n")).toBe(`${method} | 0`);
+    expect(await report("PRO / HTTP/1.1\r\n\r\n")).toBe(`${method} | 3`);
+    expect(await report("GET\r\n\r\n")).toBe(`${space} | 3`);
+    expect(await report("POST\r\n\r\n")).toBe(`${space} | 4`);
+    expect(await report("GETT / HTTP/1.1\r\n\r\n")).toBe(`${space} | 3`);
+    expect(await report("PUTX / HTTP/1.1\r\n\r\n")).toBe(`${space} | 3`);
+    expect(await report("GET / FTP/1.1\r\n\r\n")).toBe(`${protocol} | 6`);
+    expect(await report("GET / http/1.1\r\n\r\n")).toBe(`${protocol} | 6`);
+    expect(await report("GET /x y HTTP/1.1\r\n\r\n")).toBe(`${protocol} | 7`);
+    expect(await report("GET / HTTP/x.1\r\n\r\n")).toBe(
+      "HPE_INVALID_VERSION | Invalid major version | 11",
+    );
+    expect(await report("GET / HTTP/1\r\n\r\n")).toBe("HPE_INVALID_VERSION | Expected dot | 12");
+    expect(await report("GET / HTTP/1.5\r\n\r\n")).toBe(
+      "HPE_INVALID_VERSION | Invalid HTTP version | 14",
+    );
+    expect(await report("GET / HTTP/9.9x\r\n\r\n")).toBe(
+      "HPE_INVALID_VERSION | Invalid HTTP version | 14",
+    );
+    expect(await report("GET / HTTP/1.1x\r\n\r\n")).toBe(
+      "HPE_INVALID_VERSION | Expected CRLF after version | 14",
+    );
+    // The count is of the whole connection: after a blank line, and for a
+    // line that arrived in two pieces.
+    expect(await report("\r\nGETT / HTTP/1.1\r\n\r\n")).toBe(`${space} | 5`);
+    expect(await report("GET / F", "TP/1.1\r\n\r\n")).toBe(`${protocol} | 6`);
+    await closeServer(server);
+  });
+
   it("rejects an HTTP/1.1 request without Host", async () => {
     const server = http.createServer((_req, res) => res.end("no"));
     const port = await listen(server, 0);
@@ -948,6 +1008,56 @@ describe("http server and client over loopback", () => {
     expect(error).toMatchObject({ code: "ECONNREFUSED", address: "127.0.0.1", port: 4999 });
     await tick();
     expect(fake.refCount).toBe(0);
+  });
+
+  it("calls end() callbacks as Node 26 does: before 'finish', with null or the write's error", async () => {
+    const events: string[] = [];
+    const show =
+      (label: string) =>
+      (...args: unknown[]) =>
+        events.push(
+          `${label}: ${args.length} ${args.map((a) => (a instanceof Error ? (a as Error & { code?: string }).code : String(a)))}`,
+        );
+    await new Promise<void>((resolve) => {
+      const refused = http.request({ port: 4999, host: "127.0.0.1", method: "POST" });
+      refused.on("error", (e: Error & { code?: string }) => events.push(`refused error ${e.code}`));
+      refused.on("finish", show("refused finish"));
+      refused.end("q", show("refused end"));
+      refused.on("close", () => {
+        refused.end(show("refused end after close"));
+        setTimeout(resolve, 5);
+      });
+    });
+    const server = http.createServer((req, res) => {
+      req.resume();
+      res.on("finish", () => events.push(`res finish ${res.writableFinished}`));
+      res.end("body", show("res.end(chunk, cb)"));
+      res.end(show("res.end again"));
+      events.push(`res after end ${res.writableFinished} ${res.writableEnded}`);
+      res.on("finish", () => setTimeout(() => res.end(show("res.end after finish")), 5));
+    });
+    const port = await listen(server, 0);
+    await new Promise<void>((resolve) => {
+      const req = http.request({ port, method: "POST" }, (res) => {
+        res.resume();
+        res.on("end", () => setTimeout(resolve, 20));
+      });
+      req.on("finish", show("req finish"));
+      req.end("data", show("req.end(chunk, cb)"));
+    });
+    expect(events).toEqual([
+      "refused error ECONNREFUSED",
+      "refused end: 1 ERR_SOCKET_CLOSED_BEFORE_CONNECTION",
+      "refused end after close: 1 ERR_SOCKET_CLOSED_BEFORE_CONNECTION",
+      "req.end(chunk, cb): 1 null",
+      "req finish: 0 ",
+      "res after end false true",
+      "res.end(chunk, cb): 1 null",
+      "res.end again: 1 null",
+      "res finish true",
+      "res.end after finish: 1 ERR_STREAM_ALREADY_FINISHED",
+    ]);
+    await closeServer(server);
   });
 
   it("validates request options as Node does", () => {

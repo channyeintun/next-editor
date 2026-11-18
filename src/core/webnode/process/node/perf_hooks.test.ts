@@ -1,6 +1,6 @@
 // @vitest-environment node
 import * as nodePerf from "node:perf_hooks";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import perfHooks, { createHistogram, monitorEventLoopDelay, performance } from "./perf_hooks";
 
 function lcg(seed: number): () => number {
@@ -102,18 +102,77 @@ describe("perf_hooks histograms", () => {
     expect(h.min).toBeGreaterThan(1_000_000);
   });
 
-  it("samples the event loop delay while enabled", async () => {
+  it("samples the event loop delay while enabled, and only then", async () => {
     const h = monitorEventLoopDelay({ resolution: 2 });
     expect(h.enable()).toBe(true);
     expect(h.enable()).toBe(false);
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    // Until it has samples, however long the event loop takes to give them:
+    // a busy machine may run no interval callback for longer than any fixed wait.
+    while (h.count < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
     expect(h.disable()).toBe(true);
     expect(h.disable()).toBe(false);
-    expect(h.count).toBeGreaterThan(0);
-    expect(h.min).toBeGreaterThanOrEqual(1_000_000);
+    const sampled = h.count;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(h.count).toBe(sampled);
     expect(() => monitorEventLoopDelay({ resolution: 0 })).toThrow(
       expect.objectContaining({ code: "ERR_OUT_OF_RANGE" }),
     );
+  });
+
+  describe("on a clock the test drives", () => {
+    // The sampler's interval and clock are the ones the module finds when it
+    // is evaluated, so a copy evaluated under the fake clock samples exactly
+    // when the test says. What a real interval's gaps are is the scheduler's
+    // business: a late callback is followed by one on time, far under the
+    // resolution apart.
+    let fresh: typeof import("./perf_hooks");
+
+    beforeEach(async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+      vi.resetModules();
+      fresh = await import("./perf_hooks");
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.resetModules();
+    });
+
+    it("records the gap between two samples in nanoseconds", () => {
+      const h = fresh.monitorEventLoopDelay({ resolution: 2 });
+      h.enable();
+      // The first callback has nothing to measure from.
+      vi.advanceTimersByTime(2);
+      expect(h.count).toBe(0);
+      vi.advanceTimersByTime(10);
+      expect(h.count).toBe(5);
+      // 2 ms, in the histogram's bucket for it (three significant figures).
+      const twoMs = createHistogram();
+      twoMs.record(2_000_000);
+      expect(h.min).toBe(twoMs.min);
+      expect(h.max).toBe(twoMs.max);
+      expect(h.min).toBeGreaterThan(1_990_000);
+      expect(h.max).toBeLessThan(2_010_000);
+    });
+
+    it("stops at disable() and measures afresh after enable()", () => {
+      const h = fresh.monitorEventLoopDelay({ resolution: 5 });
+      h.enable();
+      vi.advanceTimersByTime(15);
+      expect(h.count).toBe(2);
+      h.disable();
+      vi.advanceTimersByTime(1000);
+      expect(h.count).toBe(2);
+      // The time it spent disabled is no sample: the first callback after
+      // enable() only marks the time.
+      h.enable();
+      vi.advanceTimersByTime(10);
+      expect(h.count).toBe(3);
+      expect(h.max).toBeLessThan(5_010_000);
+      h.disable();
+    });
   });
 });
 

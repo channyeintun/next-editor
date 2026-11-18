@@ -4,7 +4,7 @@
 import * as nodeCrypto from "node:crypto";
 import { Buffer as NodeBuffer } from "node:buffer";
 import { PassThrough } from "readable-stream";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import crypto from "./crypto";
 
 const HASHES = [
@@ -500,6 +500,46 @@ describe("key derivation", () => {
     expect(norm(ours)).toBe(norm(nodeCrypto.hkdfSync("sha384", "ikm", "salt", "info", 64)));
   });
 
+  it("derives no key of zero bytes with pbkdf2 or hkdf, as Node's OpenSSL refuses to", async () => {
+    // Node 26's messages (Node 22 says "Deriving bits failed" for both).
+    const failures: [string, () => unknown, () => unknown][] = [
+      [
+        "PBKDF2 derivation failed",
+        () => crypto.pbkdf2Sync("pw", "salt", 10, 0, "sha256"),
+        () => nodeCrypto.pbkdf2Sync("pw", "salt", 10, 0, "sha256"),
+      ],
+      [
+        "HKDF derivation failed",
+        () => crypto.hkdfSync("sha256", "key", "salt", "info", 0),
+        () => nodeCrypto.hkdfSync("sha256", "key", "salt", "info", 0),
+      ],
+    ];
+    for (const [message, ours, theirs] of failures) {
+      expect(errorOf(theirs)).toMatchObject({ name: "Error", code: undefined });
+      expect(errorOf(ours)).toEqual({ name: "Error", code: undefined, message });
+    }
+    const called = (start: (done: (error: Error | null, key?: unknown) => void) => void) =>
+      new Promise<string>((resolve) =>
+        start((error, key) => resolve(error ? `${error.name}: ${error.message}` : norm(key))),
+      );
+    expect(await called((done) => crypto.pbkdf2("pw", "salt", 10, 0, "sha256", done))).toBe(
+      "Error: PBKDF2 derivation failed",
+    );
+    expect(await called((done) => crypto.hkdf("sha256", "key", "salt", "info", 0, done))).toBe(
+      "Error: HKDF derivation failed",
+    );
+    // An invalid digest is still what is reported first.
+    sameError(
+      () => crypto.pbkdf2Sync("pw", "salt", 10, 0, "nope"),
+      () => nodeCrypto.pbkdf2Sync("pw", "salt", 10, 0, "nope"),
+    );
+    // scrypt does derive one.
+    expect(norm(crypto.scryptSync("pw", "salt", 0))).toBe(
+      norm(nodeCrypto.scryptSync("pw", "salt", 0)),
+    );
+    expect(await called((done) => crypto.scrypt("pw", "salt", 0, done))).toBe("b:");
+  });
+
   it("hkdf raises node's errors", () => {
     expect.hasAssertions();
     sameError(
@@ -868,5 +908,66 @@ describe("module surface", () => {
     for (const key of node22) {
       expect(key in crypto ? key : `missing: ${key}`).toBe(key);
     }
+  });
+});
+
+// Node finishes these jobs off the main thread and calls back from the event
+// loop. Here the callback must come in a task of its own: not in a promise job
+// of the caller's task, and not from a global timer a program may have replaced.
+describe("callbacks of asynchronous jobs", () => {
+  type Done = (error: Error | null, result?: unknown) => void;
+  const jobs: [string, (done: Done) => void][] = [
+    ["pbkdf2", (done) => crypto.pbkdf2("pw", "salt", 10, 16, "sha256", done)],
+    [
+      "pbkdf2 of no bytes (an error)",
+      (done) => crypto.pbkdf2("pw", "salt", 10, 0, "sha256", () => done(null)),
+    ],
+    ["scrypt", (done) => crypto.scrypt("pw", "salt", 16, { N: 16 }, done)],
+    ["scrypt of no bytes", (done) => crypto.scrypt("pw", "salt", 0, done)],
+    ["hkdf", (done) => crypto.hkdf("sha256", "key", "salt", "info", 16, done)],
+    ["randomBytes", (done) => crypto.randomBytes(8, done)],
+    ["randomFill", (done) => crypto.randomFill(new Uint8Array(8), done)],
+    ["randomInt", (done) => crypto.randomInt(10, done)],
+  ];
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(jobs)("%s calls back after the caller's promise jobs", async (_name, start) => {
+    let called = false;
+    const finished = new Promise<void>((resolve, reject) =>
+      start((error) => {
+        called = true;
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      }),
+    );
+    // Far more promise jobs than any derivation here takes: all of them run
+    // before the event loop takes its next task.
+    for (let hop = 0; hop < 2000; hop += 1) {
+      await Promise.resolve();
+    }
+    expect(called).toBe(false);
+    await finished;
+    expect(called).toBe(true);
+  });
+
+  it.each(jobs)("%s completes with the global timers replaced", async (_name, start) => {
+    // A fake clock: what it is given never runs.
+    const parked = vi.fn<() => void>();
+    vi.stubGlobal("setTimeout", parked);
+    vi.stubGlobal("setInterval", parked);
+    vi.stubGlobal("setImmediate", parked);
+    vi.stubGlobal("queueMicrotask", parked);
+    const finished = new Promise<void>((resolve, reject) =>
+      start((error) => (error ? reject(error) : resolve())),
+    );
+    expect(parked).not.toHaveBeenCalled();
+    await finished;
+    expect(parked).not.toHaveBeenCalled();
   });
 });

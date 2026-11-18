@@ -2,7 +2,8 @@
 // The `zlib` builtin: round trips, cross-checks with Node's own zlib in both
 // directions, streaming, corrupt input, and the constants table.
 import * as nodeZlib from "node:zlib";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AsyncLocalStorage } from "./async_hooks";
 import { Buffer } from "./buffer";
 import stream from "./stream";
 import zlib from "./zlib";
@@ -346,6 +347,48 @@ describe("zlib: callbacks", () => {
     expect(() => zlib.gzip("x", undefined as never)).toThrow(/callback/);
   });
 
+  describe("with the global timers replaced", () => {
+    // A fake clock: what it is given never runs. Node's zlib finishes on its
+    // thread pool whatever a program did to the global timers.
+    const parked = vi.fn<() => void>();
+    const replaceTimers = () => {
+      parked.mockClear();
+      vi.stubGlobal("setTimeout", parked);
+      vi.stubGlobal("setInterval", parked);
+      vi.stubGlobal("setImmediate", parked);
+      vi.stubGlobal("queueMicrotask", parked);
+    };
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("a compression and a failing decompression still call back", async () => {
+      replaceTimers();
+      const packed = await new Promise<Buffer>((resolve, reject) =>
+        zlib.gzip("hello", (error: Error | null, out?: unknown) =>
+          error ? reject(error) : resolve(out as Buffer),
+        ),
+      );
+      expect(nodeZlib.gunzipSync(packed).toString()).toBe("hello");
+      const failure = await new Promise<Error | null>((resolve) =>
+        zlib.inflate("not deflate data", (error: Error | null) => resolve(error)),
+      );
+      expect((failure as { code?: string } | null)?.code).toBe("Z_DATA_ERROR");
+      expect(parked).not.toHaveBeenCalled();
+    });
+
+    it("flush() on a finished stream still calls back", async () => {
+      const gzip = zlib.createGzip();
+      gzip.resume();
+      await new Promise((resolve) => gzip.end("x", () => resolve(null)));
+      expect(gzip.writableFinished).toBe(true);
+      replaceTimers();
+      await new Promise<void>((resolve) => gzip.flush(resolve));
+      expect(parked).not.toHaveBeenCalled();
+    });
+  });
+
   it("validate options before returning, as Node does", () => {
     for (const z of [zlib, nodeZlib] as const) {
       expect(
@@ -376,6 +419,153 @@ describe("zlib: streaming", () => {
       expect(same(await pipeChunks(format.createDecompress(), packed, 1), data)).toBe(true);
     });
   }
+
+  // Node runs each chunk on its thread pool: the output of a write comes from
+  // the event loop, 'finish' does not wait for the last flush, and 'end'
+  // follows that flush. (The same order in Node 22 and 26.)
+  describe("the order of a stream's events", () => {
+    type Zlib = ReturnType<typeof zlib.createGzip>;
+    /** The events of `stream`, by name, until 'close' or the event loop has turned `turns` times. */
+    async function events(
+      create: () => Zlib,
+      drive: (stream: Zlib, log: (event: string) => void) => void,
+    ): Promise<string[]> {
+      const seen: string[] = [];
+      const stream = create();
+      const closed = new Promise<void>((resolve) => stream.on("close", resolve));
+      for (const name of ["finish", "end", "close"]) {
+        stream.on(name, () => seen.push(name));
+      }
+      drive(stream, (event) => seen.push(event));
+      await closed;
+      return seen;
+    }
+
+    it("a write's output, 'finish', the flush's output, 'end', 'close'", async () => {
+      const seen = await events(zlib.createGzip, (gzip, log) => {
+        gzip.on("data", () => log("data"));
+        gzip.end("hello");
+        log("returned");
+      });
+      expect(seen).toEqual(["returned", "data", "finish", "data", "end", "close"]);
+    });
+
+    it("write and end callbacks before the data of the end", async () => {
+      const seen = await events(zlib.createDeflate, (deflate, log) => {
+        deflate.on("data", () => log("data"));
+        deflate.write("a".repeat(100000), () => log("write callback"));
+        deflate.end(() => log("end callback"));
+      });
+      expect(seen).toEqual([
+        "data",
+        "write callback",
+        "end callback",
+        "finish",
+        "data",
+        "end",
+        "close",
+      ]);
+    });
+
+    it("a chunk still waiting when the stream ends is the one that finishes it", async () => {
+      const seen = await events(zlib.createGzip, (gzip, log) => {
+        gzip.on("data", () => log("data"));
+        gzip.write("aaa", () => log("first callback"));
+        gzip.write("bbb", () => log("second callback"));
+        gzip.end(() => log("end callback"));
+      });
+      expect(seen).toEqual([
+        "data",
+        "first callback",
+        "data",
+        "second callback",
+        "end callback",
+        "finish",
+        "end",
+        "close",
+      ]);
+      const packed = nodeZlib.gzipSync("hello world");
+      const unpacked = await events(zlib.createGunzip, (gunzip, log) => {
+        gunzip.on("data", (chunk: Uint8Array) => log(`data ${Buffer.from(chunk).toString()}`));
+        gunzip.write(packed.subarray(0, 12), () => log("first callback"));
+        gunzip.write(packed.subarray(12), () => log("second callback"));
+        gunzip.end(() => log("end callback"));
+      });
+      expect(unpacked).toEqual([
+        "data h",
+        "first callback",
+        "data ello world",
+        "second callback",
+        "end callback",
+        "finish",
+        "end",
+        "close",
+      ]);
+    });
+
+    it("a chunk's output and callback run in the async context the stream was made in", async () => {
+      const storage = new AsyncLocalStorage<string>();
+      const stores: string[] = [];
+      await new Promise<void>((resolve) => {
+        const gzip = storage.run("made", () => zlib.createGzip());
+        gzip.on("data", () => stores.push(`data:${storage.getStore()}`));
+        gzip.on("end", resolve);
+        storage.run("written", () =>
+          gzip.write("x", () => stores.push(`callback:${storage.getStore()}`)),
+        );
+        storage.run("ended", () => gzip.end());
+      });
+      expect(stores).toEqual(["data:made", "callback:made", "data:made"]);
+      // A one-shot call's callback runs in the context of the call.
+      const called = await new Promise<unknown>((resolve) =>
+        storage.run("called", () => zlib.gzip("x", () => resolve(storage.getStore()))),
+      );
+      expect(called).toBe("called");
+    });
+
+    it("flush() in an 'end' listener finds the stream finished, and calls back", async () => {
+      let flushed: Promise<void> | undefined;
+      const seen = await events(zlib.createGzip, (gzip, log) => {
+        gzip.resume();
+        gzip.on("end", () => {
+          log(`finished ${gzip.writableFinished}`);
+          flushed = new Promise((resolve) => gzip.flush(resolve));
+        });
+        gzip.end("x");
+      });
+      expect(seen).toEqual(["finish", "end", "finished true", "close"]);
+      await flushed;
+    });
+
+    it("a write callback is not called in the caller's own task", async () => {
+      const gzip = zlib.createGzip();
+      gzip.resume();
+      let called = false;
+      const written = new Promise<void>((resolve) =>
+        gzip.write("abc", () => {
+          called = true;
+          resolve();
+        }),
+      );
+      // Ticks and promise jobs of this task: the chunk is still on its way.
+      await new Promise<void>((resolve) => process.nextTick(resolve));
+      for (let hop = 0; hop < 100; hop += 1) {
+        await Promise.resolve();
+      }
+      expect(called).toBe(false);
+      await written;
+      gzip.destroy();
+    });
+
+    it("a chunk that fails destroys the stream from the event loop", async () => {
+      const seen = await events(zlib.createInflate, (inflate, log) => {
+        inflate.on("error", (error: Error & { code?: string }) => log(`error ${error.code}`));
+        inflate.write("not deflate data", () => log("write callback"));
+        log("returned");
+      });
+      expect(seen).toEqual(["returned", "error Z_DATA_ERROR", "close"]);
+    });
+  });
 
   it("pipeline with Unzip and bounded output chunks", async () => {
     const data = compressible(200000);

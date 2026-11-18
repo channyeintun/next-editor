@@ -3,16 +3,17 @@
 // the natives are captured when this module is evaluated.
 //
 // Each Timeout owns one native timer (re-armed on every repeat and refresh).
-// Immediates sit in one FIFO queue drained by a MessageChannel: each immediate
-// runs in its own task, after the I/O messages already queued, so microtasks
-// queued by one immediate run before the next one starts.
+// Immediates sit in one FIFO queue: each immediate runs in its own task, after
+// the I/O messages already queued, so microtasks queued by one immediate run
+// before the next one starts. Every callback runs as a macrotask
+// (eventLoop.ts), so its nextTick callbacks run as it returns.
 //
 // Liveness: an active, ref'd timer or immediate holds one `runtime().ref()`,
 // released when it fires (unless it repeats), is cleared, or is `unref()`'d.
 import { bindToCurrentContext } from "./async_hooks";
+import { macrotaskSource, runMacrotask } from "./eventLoop";
 import { validateFunction, validateNumber } from "./internalErrors";
 import { runtime, type ProcessRuntime } from "../runtime";
-import { runNextTicks } from "./process";
 import timersPromises from "./timers_promises";
 import { emitWarning } from "./util";
 
@@ -90,6 +91,8 @@ export class Timeout {
   #refed: boolean;
   #hasPrimitive = false;
   #native: NativeHandle | null = null;
+  /** Counts the arms: a native timer whose callback waited past a re-arm does nothing. */
+  #armed = 0;
   #liveness = new Liveness();
 
   constructor(
@@ -113,7 +116,8 @@ export class Timeout {
     if (this.#native !== null) {
       nativeClearTimeout(this.#native);
     }
-    this.#native = nativeSetTimeout(() => this.#fire(), this._idleTimeout);
+    const armed = ++this.#armed;
+    this.#native = nativeSetTimeout(() => runMacrotask(() => this.#fire(armed)), this._idleTimeout);
     this._destroyed = false;
     this.#liveness.set(this.#refed);
   }
@@ -130,7 +134,11 @@ export class Timeout {
     }
   }
 
-  #fire(): void {
+  #fire(armed: number): void {
+    if (armed !== this.#armed) {
+      // Refreshed while this run waited behind earlier ticks: the new arm runs it.
+      return;
+    }
     this.#native = null;
     const callback = this._onTimeout;
     if (typeof callback !== "function") {
@@ -157,8 +165,6 @@ export class Timeout {
         this.#disarm();
       }
     }
-    // The task ends: nextTick callbacks run before promise jobs (after a throw, a microtask runs them).
-    runNextTicks();
   }
 
   /** Re-arms the timer from now with its original delay; revives one that already fired. */
@@ -278,25 +284,13 @@ export function clearInterval(timer: unknown): void {
 // Immediates
 
 const immediateQueue: Immediate[] = [];
-let channel: MessageChannel | null = null;
-
-function postImmediateTask(): void {
-  if (channel === null) {
-    channel = new MessageChannel();
-    channel.port1.onmessage = runOneImmediate;
-    // Under Node (tests) a port with a listener would keep the loop alive.
-    (channel.port1 as unknown as { unref?: () => void }).unref?.();
-  }
-  channel.port2.postMessage(null);
-}
 
 function runOneImmediate(): void {
-  const immediate = immediateQueue.shift();
-  if (immediate !== undefined) {
-    immediate._run();
-    runNextTicks();
-  }
+  immediateQueue.shift()?._run();
 }
+
+/** Queues one task that runs the oldest immediate. */
+const postImmediateTask = macrotaskSource(runOneImmediate);
 
 /** Node's `Immediate`, as `setImmediate` returns it. */
 export class Immediate {

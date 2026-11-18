@@ -9,6 +9,8 @@
 // Content-Length are not passed on with it.
 import { errnoOf } from "../../../errors";
 import { runtime } from "../../runtime";
+import { complete } from "../fs/completion";
+import { nextTick, runMacrotask } from "../eventLoop";
 import { Buffer } from "../buffer";
 import { unsupported } from "../net/errors";
 import { Socket } from "../net/socket";
@@ -108,7 +110,7 @@ export class FetchExchange {
       this.#chunks.push(bytes.slice());
     }
     if (callback) {
-      queueMicrotask(() => callback());
+      nextTick(() => callback());
     }
     return true;
   }
@@ -135,10 +137,11 @@ export class FetchExchange {
     }
     // fetch drops Expect and only sends once the body has ended, while a
     // caller that asked for 100-continue writes the body after 'continue'.
-    // The browser deals with the expectation itself, so go ahead at once.
+    // The browser deals with the expectation itself, so go ahead at once:
+    // from the event loop, where Node's 'continue' comes from too.
     const expect = this.#req.getHeaders().expect;
     if (typeof expect === "string" && expect.toLowerCase() === "100-continue") {
-      queueMicrotask(() => {
+      complete(() => {
         if (!this.#cancelled) {
           this.#req.emit("continue");
         }
@@ -216,9 +219,10 @@ export class FetchExchange {
       this.#fail(error);
       return;
     }
+    // The answer is a macrotask, as a response is in Node.
     pending.then(
-      (response) => this.#respond(response, follow),
-      (error: unknown) => this.#fail(error),
+      (response) => runMacrotask(() => this.#respond(response, follow)),
+      (error: unknown) => runMacrotask(() => this.#fail(error)),
     );
   }
 
@@ -313,31 +317,66 @@ export class FetchExchange {
     void this.#pump(response.body.getReader(), res);
   }
 
+  /**
+   * Reads the body into `res`. Each chunk, the end and a failure are
+   * macrotasks, as what a socket reads is in Node: the ticks the 'data' and
+   * 'end' listeners queue run before their promise jobs.
+   */
   async #pump(reader: ReadableStreamDefaultReader<Uint8Array>, res: FetchResponse): Promise<void> {
     this.#reader = reader;
     try {
       for (;;) {
         const { done, value } = await reader.read();
-        if (this.#cancelled || res.destroyed) {
-          reader.cancel().catch(() => {});
+        let settle: (next: boolean | Promise<boolean>) => void = () => {};
+        const delivered = new Promise<boolean>((resolve) => {
+          settle = resolve;
+        });
+        runMacrotask(() => {
+          // A listener that throws is the macrotask's to report; the body goes on.
+          let next: boolean | Promise<boolean> = true;
+          try {
+            next = this.#deliver(reader, res, done ? null : value);
+          } finally {
+            settle(next);
+          }
+        });
+        if (!(await delivered)) {
           return;
-        }
-        if (done) {
-          res.complete = true;
-          res.push(null);
-          return;
-        }
-        this.socket._unrefTimer();
-        if (!res.push(Buffer.from(value.buffer, value.byteOffset, value.byteLength))) {
-          await new Promise<void>((resolve) => {
-            res.onRead = resolve;
-          });
         }
       }
     } catch (error) {
-      if (!this.#cancelled) {
-        this.socket.destroy(error instanceof Error ? error : new Error(String(error)));
-      }
+      runMacrotask(() => {
+        if (!this.#cancelled) {
+          this.socket.destroy(error instanceof Error ? error : new Error(String(error)));
+        }
+      });
     }
+  }
+
+  /**
+   * Gives `res` one chunk of the body, or its end (null). False ends the
+   * pump; a promise is the wait for a full `res` to want more.
+   */
+  #deliver(
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    res: FetchResponse,
+    chunk: Uint8Array | null,
+  ): boolean | Promise<boolean> {
+    if (this.#cancelled || res.destroyed) {
+      reader.cancel().catch(() => {});
+      return false;
+    }
+    if (chunk === null) {
+      res.complete = true;
+      res.push(null);
+      return false;
+    }
+    this.socket._unrefTimer();
+    if (res.push(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength))) {
+      return true;
+    }
+    return new Promise<boolean>((resolve) => {
+      res.onRead = () => resolve(true);
+    });
   }
 }

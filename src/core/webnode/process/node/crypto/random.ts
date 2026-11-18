@@ -11,13 +11,12 @@ import {
   validateNumber,
   validateObject,
 } from "./errors";
+import { runJob, type JobCallback } from "../internal/threadPoolJob";
 
 const MAX_POSSIBLE_LENGTH = 2147483647;
 const GET_RANDOM_VALUES_LIMIT = 65536;
 /** `randomInt`'s range limit: 48 bits. */
 const RAND_MAX = 0xffff_ffff_ffff;
-
-type Callback<T> = (error: Error | null, result?: T) => void;
 
 // The browser's Web Crypto, captured now: a program may replace
 // `globalThis.crypto` with an object built on this module (Go's WebAssembly
@@ -96,16 +95,10 @@ export function randomBytes(size: unknown, callback?: unknown): Buffer | undefin
     fillRandom(buffer);
     return buffer;
   }
-  const done = callback as Callback<Buffer>;
-  setTimeout(() => {
-    try {
-      fillRandom(buffer);
-    } catch (error) {
-      done(error as Error);
-      return;
-    }
-    done(null, buffer);
-  }, 0);
+  runJob(() => {
+    fillRandom(buffer);
+    return buffer;
+  }, callback as JobCallback<Buffer>);
   return undefined;
 }
 
@@ -151,16 +144,10 @@ export function randomFill(
     count =
       size === undefined ? byteLength - start : assertSize(size, elementSize, start, byteLength);
   }
-  const done = callback as Callback<unknown>;
-  setTimeout(() => {
-    try {
-      fillRandom(bytesOf(target).subarray(start, start + count));
-    } catch (error) {
-      done(error as Error);
-      return;
-    }
-    done(null, buf);
-  }, 0);
+  runJob(() => {
+    fillRandom(bytesOf(target).subarray(start, start + count));
+    return buf;
+  }, callback as JobCallback<unknown>);
 }
 
 function safeInteger(value: unknown, name: string): asserts value is number {
@@ -213,10 +200,9 @@ export function randomInt(min: unknown, max?: unknown, callback?: unknown): numb
   if (isSync) {
     return drawInt(min, max);
   }
-  const done = callback as Callback<number>;
   const low = min;
   const high = max;
-  setTimeout(() => done(null, drawInt(low, high)), 0);
+  runJob(() => drawInt(low, high), callback as JobCallback<number>);
   return undefined;
 }
 

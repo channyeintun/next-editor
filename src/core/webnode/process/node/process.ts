@@ -1,14 +1,25 @@
 // The `process` object: the program's view of itself — arguments, environment,
 // working directory, stdio, signals, exit. It is created once per worker, after
 // the process runtime is installed.
-import { ARCH, EXEC_PATH, NODE_VERSION, PLATFORM, VERSIONS } from "../platform";
+import { createSystemError, toSystemErrorRecord } from "../../errors";
+import { SIGNAL_NUMBERS } from "../../signals";
+import { ARCH, EXEC_PATH, GID, NODE_VERSION, PLATFORM, UID, VERSIONS } from "../platform";
 import { runtime } from "../runtime";
 import { Buffer } from "./buffer";
+import { postIpcDisconnect, postIpcMessage } from "./internal/ipcEnvelope";
+import { Console } from "./console";
+import { queueTick, startEventLoop } from "./eventLoop";
 import EventEmitter from "./events";
 import type { EventEmitter as EventEmitterInstance } from "./events";
-import { FdReadable, FdWritable } from "./internal/fdStreams";
+import { parseFileMode } from "./fs/args";
+import { checkChdir } from "./fs/chdir";
+import { FdReadable, FdWritable, streamWriteError } from "./internal/fdStreams";
+import { invalidArgType, makeNodeError, validateString } from "./internalErrors";
 import { BUILTIN_MODULE_NAMES, builtinName } from "./names";
+import { errnoException } from "./net/errors";
+import { signals as nodeSignals } from "./os";
 import path from "./path";
+import { kernelSignalName } from "./signalNames";
 import { Readable, Writable } from "./stream";
 import tty from "./tty";
 import { parseEnv } from "./util";
@@ -19,105 +30,6 @@ import { listenOnPlatformPort } from "./worker_threads";
 const clock = globalThis.performance;
 
 type AnyFunction = (...args: never[]) => unknown;
-
-const SIGNAL_NUMBERS: Record<string, number> = {
-  SIGHUP: 1,
-  SIGINT: 2,
-  SIGQUIT: 3,
-  SIGILL: 4,
-  SIGTRAP: 5,
-  SIGABRT: 6,
-  SIGBUS: 7,
-  SIGFPE: 8,
-  SIGKILL: 9,
-  SIGUSR1: 10,
-  SIGSEGV: 11,
-  SIGUSR2: 12,
-  SIGPIPE: 13,
-  SIGALRM: 14,
-  SIGTERM: 15,
-  SIGCHLD: 17,
-  SIGCONT: 18,
-  SIGSTOP: 19,
-  SIGTSTP: 20,
-  SIGTTIN: 21,
-  SIGTTOU: 22,
-  SIGWINCH: 28,
-};
-
-/** The name for a signal given by name or number. */
-export function signalName(signal: string | number | undefined): string {
-  if (signal === undefined) {
-    return "SIGTERM";
-  }
-  if (typeof signal === "number") {
-    if (signal === 0) {
-      return "0";
-    }
-    const found = Object.entries(SIGNAL_NUMBERS).find(([, number]) => number === signal);
-    if (!found) {
-      throw Object.assign(new TypeError(`Unknown signal: ${signal}`), {
-        code: "ERR_UNKNOWN_SIGNAL",
-      });
-    }
-    return found[0];
-  }
-  if (!(signal in SIGNAL_NUMBERS)) {
-    throw Object.assign(new TypeError(`Unknown signal: ${signal}`), { code: "ERR_UNKNOWN_SIGNAL" });
-  }
-  return signal;
-}
-
-/** How V8 names a value without running its code: Node's text for a rejection reason. */
-function describeReason(reason: unknown): string {
-  if (typeof reason === "symbol") {
-    return reason.toString();
-  }
-  if (reason === null || (typeof reason !== "object" && typeof reason !== "function")) {
-    return String(reason);
-  }
-  if (Array.isArray(reason)) {
-    return reason
-      .map((item) => (item === null || item === undefined ? "" : describeReason(item)))
-      .join(",");
-  }
-  const constructor = (reason as { constructor?: { name?: unknown } }).constructor;
-  return `#<${typeof constructor?.name === "string" && constructor.name !== "" ? constructor.name : "Object"}>`;
-}
-
-/**
- * What Node raises for a rejected promise nobody handled: the reason itself
- * when it is an error (an object with its own `stack`), otherwise an
- * `UnhandledPromiseRejection` with code ERR_UNHANDLED_REJECTION that quotes it.
- */
-export function unhandledRejectionError(reason: unknown): unknown {
-  if (typeof reason === "object" && reason !== null && Object.hasOwn(reason, "stack")) {
-    return reason;
-  }
-  const error = new Error(
-    `This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason "${describeReason(reason)}".`,
-  );
-  Object.assign(error, { code: "ERR_UNHANDLED_REJECTION", name: "UnhandledPromiseRejection" });
-  error.stack = error.stack?.replace(/^Error/, "UnhandledPromiseRejection");
-  return error;
-}
-
-/** The number of signal `name`, or 0. */
-export function signalNumber(name: string): number {
-  return SIGNAL_NUMBERS[name] ?? 0;
-}
-
-/** Runs this worker's queued nextTick callbacks; set by `createProcess`. */
-let tickRunner: (() => void) | null = null;
-
-/**
- * Runs the queued `process.nextTick` callbacks now. Whoever enters user code
- * from the event loop (a timer, an immediate, a kernel message) calls this as
- * the task ends, so ticks run before promise jobs, as in Node.
- */
-export function runNextTicks(): void {
-  tickRunner?.();
-}
 
 export interface NodeProcess extends EventEmitterInstance {
   [key: string]: unknown;
@@ -140,6 +52,15 @@ export interface ProcessHost {
   loadBuiltin(name: string): unknown;
   /** The IPC channel to the parent, when this process was forked. */
   ipc: MessagePort | null;
+}
+
+/** The flags of a Writable's state that say it has ended. */
+interface EndedState {
+  ending: boolean;
+  ended: boolean;
+  finalCalled: boolean;
+  prefinished: boolean;
+  finished: boolean;
 }
 
 /** A writable for a file descriptor that is a file: each write is one blocking call. */
@@ -175,32 +96,87 @@ function createOutput(fd: number): NodeProcess["stdout"] {
   } else {
     stream = new FileWritable(fd);
   }
+  /**
+   * `end()` shut the pipe or terminal down, as libuv shuts Node's stream
+   * down: a later write fails with EPIPE and nothing reaches the reader, who
+   * sees no end of file before the process exits. A file is written on.
+   */
+  let shutDown = false;
   if (kind !== "file" && kind !== "null") {
-    // As on Linux, a write to a terminal or pipe is complete when `write` returns:
-    // the bytes are handed to the kernel in order, and none are lost at exit.
+    const final = stream._final;
+    stream._final = (callback) => {
+      shutDown = true;
+      final.call(stream, callback);
+    };
+    // Synchronous: a write is complete when `write` returns, as Node's is
+    // for a terminal. For a pipe Node queues what does not fit and goes on
+    // (and loses the queue at `process.exit()`); here, on purpose, the bytes
+    // are handed to the kernel in order and none are lost at exit, and past
+    // what a pipe holds a write waits for its reader, so a program that
+    // ignores backpressure waits instead of growing. A broken pipe fails the
+    // write with EPIPE (Node ignores SIGPIPE), which the write's callback
+    // gets as Node's does, so `console` can keep it quiet.
     (stream as { _write: Writable["_write"] })._write = (chunk, encoding, callback) => {
       const bytes =
         typeof chunk === "string"
           ? Buffer.from(chunk, encoding as BufferEncoding)
           : (chunk as Uint8Array);
-      if (kind === "pipe") {
-        // A broken pipe surfaces on the stream: Node ignores SIGPIPE, so the
-        // write fails with EPIPE and the process lives.
-        runtime().fdStream.write(fd, bytes, (error) => {
-          if (error && !stream.destroyed) {
-            stream.destroy(error);
-          }
-        });
-      } else {
+      if (shutDown) {
+        callback(errnoException("EPIPE", "write"));
+        return;
+      }
+      try {
         runtime().fdStream.write(fd, bytes);
+      } catch (error) {
+        // Where an asynchronous write's error would come, as Node's (macOS)
+        // pipe writes are: after the messages the kernel sent first, so a
+        // Ctrl+C that also ended the reader runs the SIGINT handler first.
+        runtime().fdStream.reportWriteError(fd, streamWriteError(error as Error), callback);
+        return;
       }
       callback();
     };
   }
-  // A program that ends or destroys its stdout must not take the stream down.
-  const output = stream as NodeProcess["stdout"] & { destroySoon?: unknown; _destroy?: unknown };
-  output._destroy = (error: Error | null, callback: (error?: Error | null) => void) =>
+  // A program that ends or destroys its stdout, or a write that fails, must
+  // not take the stream down. As Node's dummyDestroy: the destroy is
+  // reported ('error', 'close') and then undone, so the stream is writable
+  // again and each later write to a broken pipe fails with its own EPIPE.
+  const output = stream as NodeProcess["stdout"] & {
+    destroySoon?: unknown;
+    _destroy?: unknown;
+    _undestroy(): void;
+    _writableState: EndedState;
+  };
+  // Node's terminal stream is a duplex whose readable side never ends, so
+  // 'finish' does not destroy it: no 'close' at end(), and the first write
+  // after it fails as a write after end (later ones with EPIPE).
+  let finishing = false;
+  if (kind === "tty") {
+    const emit = output.emit;
+    output.emit = function (this: typeof output, event: string | symbol, ...args: unknown[]) {
+      const listened = emit.call(this, event, ...args);
+      if (event === "finish") {
+        // What destroys the stream as 'finish' returns is the stream's own autoDestroy.
+        finishing = true;
+        queueTick(() => {
+          finishing = false;
+        }, []);
+      }
+      return listened;
+    };
+  }
+  output._destroy = (error: Error | null, callback: (error?: Error | null) => void) => {
+    if (finishing && error === null) {
+      finishing = false;
+      // Not destroyed after all, and still ended: nothing is reported.
+      output._undestroy();
+      const state = output._writableState;
+      state.ending = state.ended = state.finalCalled = state.prefinished = state.finished = true;
+      return;
+    }
     callback(error);
+    output._undestroy();
+  };
   output.destroySoon = output.destroy;
   return output;
 }
@@ -234,38 +210,9 @@ export function createProcess(host: ProcessHost): NodeProcess {
   const startedAt = clock.now();
   const process = new EventEmitter() as NodeProcess;
 
-  // nextTick: callbacks run in order as soon as the current code returns. The
-  // event loop's entry points drain them synchronously (`runNextTicks`); a
-  // microtask drains the ones queued from a promise job.
-  const ticks: { callback: AnyFunction; args: unknown[] }[] = [];
-  let scheduled = false;
-  let running = false;
-  const runTicks = () => {
-    if (running) {
-      return;
-    }
-    running = true;
-    let index = 0;
-    try {
-      while (index < ticks.length) {
-        const tick = ticks[index];
-        index += 1;
-        (tick.callback as (...args: unknown[]) => unknown)(...tick.args);
-      }
-    } finally {
-      ticks.splice(0, index);
-      running = false;
-      if (ticks.length > 0 && !scheduled) {
-        scheduled = true;
-        queueMicrotask(drainFromMicrotask);
-      }
-    }
-  };
-  const drainFromMicrotask = () => {
-    scheduled = false;
-    runTicks();
-  };
-  tickRunner = runTicks;
+  // nextTick: callbacks run in Node's order (eventLoop.ts), and so do the
+  // reports of rejections nobody handled.
+  startEventLoop();
 
   const env = new Proxy(rt.env, {
     set(target, key, value) {
@@ -315,7 +262,6 @@ export function createProcess(host: ProcessHost): NodeProcess {
   let stdout: NodeProcess["stdout"] | undefined;
   let stderr: NodeProcess["stderr"] | undefined;
   let stdin: NodeProcess["stdin"] | undefined;
-  let warningsShown = true;
   let captureCallback: ((error: unknown) => void) | null = null;
   let connected = host.ipc !== null;
   let ipcReffed = false;
@@ -396,25 +342,51 @@ export function createProcess(host: ProcessHost): NodeProcess {
     },
 
     cwd: () => rt.cwd,
-    chdir(directory: string) {
-      const target = path.resolve(String(directory));
-      const mode = rt.fs.stat(target, true).mode & 0o170000;
-      if (mode !== 0o040000) {
-        throw Object.assign(new Error(`ENOTDIR: not a directory, chdir '${directory}'`), {
-          code: "ENOTDIR",
-          syscall: "chdir",
-          path: directory,
-        });
+    chdir(directory: unknown) {
+      validateString(directory, "directory");
+      if (!rt.threads.isMainThread) {
+        // The working directory belongs to the process, not to one thread.
+        throw makeNodeError(
+          "ERR_WORKER_UNSUPPORTED_OPERATION",
+          "process.chdir() is not supported in workers",
+          TypeError,
+        );
       }
-      rt.cwd = target;
-      rt.env.PWD = target;
+      if (directory === "") {
+        // As chdir(2): an empty path names nothing.
+        throw createSystemError("ENOENT", "chdir", rt.cwd, directory);
+      }
+      const target = path.resolve(directory);
+      // What chdir(2) checks, with Node's error: `<code>: …, chdir '<cwd>' -> '<directory>'`.
+      checkChdir(directory, target);
+      // The directory itself, as getcwd(2) answers: with no link on the way.
+      // `env.PWD` is the shell's to keep; Node leaves it alone.
+      rt.cwd = rt.fs.realpath(target);
     },
-    umask: () => 0o22,
-    getuid: () => 1,
-    geteuid: () => 1,
-    getgid: () => 1,
-    getegid: () => 1,
-    getgroups: () => [1],
+    // Node's name for it. With no argument it reads the mask; with one it
+    // sets the mask and returns the one before.
+    umask: function wrappedUmask(mask: unknown) {
+      if (mask === undefined) {
+        return rt.umask;
+      }
+      if (!rt.threads.isMainThread) {
+        // The mask belongs to the process, not to one thread.
+        throw makeNodeError(
+          "ERR_WORKER_UNSUPPORTED_OPERATION",
+          "Setting process.umask() is not supported in workers",
+          TypeError,
+        );
+      }
+      const next = parseFileMode(mask, "mask");
+      const previous = rt.umask;
+      rt.umask = next;
+      return previous;
+    },
+    getuid: () => UID,
+    geteuid: () => UID,
+    getgid: () => GID,
+    getegid: () => GID,
+    getgroups: () => [GID],
     uptime: () => (clock.now() - startedAt) / 1000,
     hrtime,
     memoryUsage,
@@ -460,11 +432,7 @@ export function createProcess(host: ProcessHost): NodeProcess {
           { code: "ERR_INVALID_ARG_TYPE" },
         );
       }
-      ticks.push({ callback, args });
-      if (!scheduled && !running) {
-        scheduled = true;
-        queueMicrotask(drainFromMicrotask);
-      }
+      queueTick(callback, args);
     },
 
     exit(code?: number): never {
@@ -480,8 +448,23 @@ export function createProcess(host: ProcessHost): NodeProcess {
     },
     reallyExit: (code?: number) => rt.processes.exit(code ?? 0),
     abort: () => rt.processes.exit(134),
-    kill(pid: number, signal?: string | number) {
-      rt.processes.kill(pid, signalName(signal));
+    // A negative pid names a process group, as kill(2): `-child.pid` reaches
+    // a `detached` child and everything it started.
+    kill(pid: unknown, signal?: string | number) {
+      if (
+        (typeof pid !== "number" && typeof pid !== "string") ||
+        Number(pid) !== (Number(pid) | 0)
+      ) {
+        throw invalidArgType("pid", "number", pid);
+      }
+      const name = kernelSignalName(signal);
+      try {
+        rt.processes.kill(Number(pid), name);
+      } catch (error) {
+        // Node's ErrnoException: `kill ESRCH`.
+        const record = toSystemErrorRecord(error);
+        throw record === null ? error : errnoException(record.code, "kill");
+      }
       return true;
     },
 
@@ -500,6 +483,9 @@ export function createProcess(host: ProcessHost): NodeProcess {
       if (code !== undefined) {
         (error as Error & { code?: string }).code = code;
       }
+      if (typeof options.detail === "string") {
+        (error as Error & { detail?: string }).detail = options.detail;
+      }
       if (error.name === "DeprecationWarning") {
         if (process.noDeprecation) {
           return;
@@ -508,14 +494,7 @@ export function createProcess(host: ProcessHost): NodeProcess {
           throw error;
         }
       }
-      process.nextTick(() => {
-        process.emit("warning", error);
-        if (!warningsShown) {
-          return;
-        }
-        const prefix = code ? `[${code}] ` : "";
-        process.stderr.write(`(node:${rt.pid}) ${prefix}${error.name}: ${error.message}\n`);
-      });
+      process.nextTick(() => process.emit("warning", error));
     },
 
     binding(name: string) {
@@ -541,38 +520,6 @@ export function createProcess(host: ProcessHost): NodeProcess {
     _rawDebug: (...args: unknown[]) => {
       rt.fs.write(2, new TextEncoder().encode(`${args.join(" ")}\n`), null);
     },
-
-    // IPC with the parent, when forked.
-    send(message: unknown, ...rest: unknown[]) {
-      const callback = rest.find((item) => typeof item === "function") as
-        | ((error: Error | null) => void)
-        | undefined;
-      if (!host.ipc || !connected) {
-        const error = Object.assign(new Error("Channel closed"), {
-          code: "ERR_IPC_CHANNEL_CLOSED",
-        });
-        if (callback) {
-          process.nextTick(() => callback(error));
-          return false;
-        }
-        throw error;
-      }
-      host.ipc.postMessage({ type: "message", message });
-      if (callback) {
-        process.nextTick(() => callback(null));
-      }
-      return true;
-    },
-    disconnect() {
-      if (!host.ipc || !connected) {
-        return;
-      }
-      connected = false;
-      host.ipc.postMessage({ type: "disconnect" });
-      host.ipc.close();
-      updateIpcRef();
-      process.nextTick(() => process.emit("disconnect"));
-    },
   };
 
   Object.assign(process, members);
@@ -582,30 +529,101 @@ export function createProcess(host: ProcessHost): NodeProcess {
     stdout: { configurable: true, enumerable: true, get: () => (stdout ??= createOutput(1)) },
     stderr: { configurable: true, enumerable: true, get: () => (stderr ??= createOutput(2)) },
     stdin: { configurable: true, enumerable: true, get: () => (stdin ??= createInput(0)) },
-    connected: { configurable: true, enumerable: true, get: () => connected },
-    channel: {
-      configurable: true,
-      enumerable: true,
-      get: () => (host.ipc && connected ? channel : undefined),
-    },
   });
+
+  // IPC with the parent. As in Node, `send`, `disconnect`, `connected` and
+  // `channel` exist only in a process that was started with a channel: a
+  // program tells by `if (process.send)` whether it has a parent to report to.
+  const ipc = host.ipc;
+  if (ipc) {
+    const channelClosed = () => makeNodeError("ERR_IPC_CHANNEL_CLOSED", "Channel closed", Error);
+    Object.assign(process, {
+      send(message: unknown, ...rest: unknown[]) {
+        const callback = rest.find((item) => typeof item === "function") as
+          | ((error: Error | null) => void)
+          | undefined;
+        if (!connected) {
+          const error = channelClosed();
+          if (callback) {
+            process.nextTick(() => callback(error));
+          } else {
+            process.nextTick(() => process.emit("error", error));
+          }
+          return false;
+        }
+        postIpcMessage(ipc, message);
+        if (callback) {
+          process.nextTick(() => callback(null));
+        }
+        return true;
+      },
+      disconnect() {
+        if (!connected) {
+          process.emit(
+            "error",
+            makeNodeError("ERR_IPC_DISCONNECTED", "IPC channel is already disconnected", Error),
+          );
+          return;
+        }
+        connected = false;
+        postIpcDisconnect(ipc);
+        ipc.close();
+        updateIpcRef();
+        process.nextTick(() => process.emit("disconnect"));
+      },
+    });
+    Object.defineProperties(process, {
+      connected: { configurable: true, enumerable: true, get: () => connected },
+      channel: { configurable: true, enumerable: true, get: () => (connected ? channel : null) },
+    });
+  }
 
   const noWarnings =
     rt.env.NODE_NO_WARNINGS === "1" ||
     rt.execArgv.includes("--no-warnings") ||
     (rt.env.NODE_OPTIONS ?? "").includes("--no-warnings");
-  warningsShown = !noWarnings;
+  if (!noWarnings) {
+    // As in Node, a warning is printed by a 'warning' listener of the
+    // process's own, the first one: a program's listeners run after the line
+    // is written, and a program that removes every listener silences them.
+    // The text is Node's: the warning, its `detail` on a line of its own,
+    // and after the first one how to find where a warning came from. It goes
+    // out through a console, as Node's does: a stderr that cannot be written
+    // (a pipe whose reader has gone) loses the warning and the process goes on.
+    let printer: Console | null = null;
+    let hintShown = false;
+    process.on("warning", (warning: Error & { code?: unknown; detail?: unknown }) => {
+      const prefix = typeof warning.code === "string" ? `[${warning.code}] ` : "";
+      let text = `(node:${rt.pid}) ${prefix}${String(warning)}`;
+      if (typeof warning.detail === "string") {
+        text += `\n${warning.detail}`;
+      }
+      if (!hintShown) {
+        hintShown = true;
+        const flag =
+          warning.name === "DeprecationWarning" ? "--trace-deprecation" : "--trace-warnings";
+        text += `\n(Use \`node ${flag} ...\` to show where the warning was created)`;
+      }
+      printer ??= new Console(process.stderr);
+      printer.error(text);
+    });
+  }
 
   // Signals: listening for one tells the kernel the process handles it.
   // SIGPIPE is always handled: Node ignores it at startup, so a write to a
   // closed pipe fails with EPIPE on the stream instead of ending the process.
+  // A listener may go by any name Node has for a signal (`os.constants.signals`:
+  // SIGIOT is SIGABRT, SIGPOLL is SIGIO); the kernel knows each signal by one.
   const handled = new Set<string>();
   const publishSignals = () => rt.processes.setHandledSignals([...handled, "SIGPIPE"]);
   const isSignalEvent = (event: unknown): event is string =>
-    typeof event === "string" && event in SIGNAL_NUMBERS;
+    typeof event === "string" && Object.hasOwn(nodeSignals, event);
+  /** Node's names for the signal the kernel calls `signal`, in Node's order. */
+  const namesOfSignal = (signal: string): string[] =>
+    Object.keys(nodeSignals).filter((name) => nodeSignals[name] === SIGNAL_NUMBERS[signal]);
   process.on("newListener", (event: unknown) => {
-    if (isSignalEvent(event) && !handled.has(event)) {
-      handled.add(event);
+    if (isSignalEvent(event) && !handled.has(kernelSignalName(event))) {
+      handled.add(kernelSignalName(event));
       publishSignals();
     }
     // newListener runs before the listener is added, so this cannot count it.
@@ -615,20 +633,25 @@ export function createProcess(host: ProcessHost): NodeProcess {
     }
   });
   process.on("removeListener", (event: unknown) => {
-    if (isSignalEvent(event) && process.listenerCount(event) === 0) {
-      handled.delete(event);
-      publishSignals();
+    if (isSignalEvent(event)) {
+      const signal = kernelSignalName(event);
+      if (namesOfSignal(signal).every((name) => process.listenerCount(name) === 0)) {
+        handled.delete(signal);
+        publishSignals();
+      }
     }
     if (event === "message") {
       updateIpcRef();
     }
   });
   rt.processes.onSignal((signal) => {
-    if (process.listenerCount(signal) === 0) {
-      return signal === "SIGPIPE";
+    // Each name with listeners gets the signal under that name, as each of
+    // Node's signal watchers emits its own.
+    const names = namesOfSignal(signal).filter((name) => process.listenerCount(name) > 0);
+    for (const name of names) {
+      process.emit(name, name, nodeSignals[name]);
     }
-    process.emit(signal, signal, SIGNAL_NUMBERS[signal] ?? 0);
-    return true;
+    return names.length > 0 || signal === "SIGPIPE";
   });
   publishSignals();
 

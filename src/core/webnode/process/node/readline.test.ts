@@ -4,7 +4,7 @@
 // Node's readline where the two can be driven the same way.
 import * as nodeReadline from "node:readline";
 import { PassThrough as NodePassThrough } from "node:stream";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setRuntime } from "../runtime";
 import { createFakeRuntime } from "../testing/fakeRuntime";
 import readline, {
@@ -110,6 +110,73 @@ describe("non-terminal line splitting", () => {
       expect(await splitLines(ours, chunks, end)).toEqual(await splitLines(real, chunks, end));
     });
   }
+
+  /** The events of an interface whose 'line' listener closes it at the line `closeAt`. */
+  async function closeInLine(impl: Impl, chunks: string[], closeAt: string): Promise<string[]> {
+    const input = new impl.PassThrough();
+    const rl = impl.createInterface({ input });
+    const events: string[] = [];
+    rl.on("line", (line) => {
+      events.push(line as string);
+      if (line === closeAt) {
+        rl.close();
+      }
+    });
+    rl.on("close", () => events.push("<close>"));
+    for (const chunk of chunks) {
+      input.write(chunk);
+      await settle();
+    }
+    return events;
+  }
+
+  const closing: [string, string[], string][] = [
+    ["the rest of the chunk still comes", ["a\nb\nc\nd\n"], "b"],
+    ["an unfinished last line does not", ["a\nb\nc\ntail"], "a"],
+    ["with \\r\\n and \\r endings", ["a\r\nb\rc\nd\n"], "a"],
+    ["a later chunk is not read", ["a\nb\nc\n", "d\ne\n"], "b"],
+    ["closed in a line joined with the buffered start", ["he", "llo\nx\ny\n"], "hello"],
+  ];
+  it.each(closing)("close() in a 'line' listener: %s", async (_name, chunks, closeAt) => {
+    const events = await closeInLine(ours, chunks, closeAt);
+    expect(events).toEqual(await closeInLine(real, chunks, closeAt));
+    expect(events).toContain("<close>");
+  });
+
+  it("splits lines at U+2028 and U+2029, as Node 26 does", async () => {
+    expect(await splitLines(ours, ["a\u2028b\u2029c\r\nd\re\n", "x\u2028", "y\n"], false)).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+      "x",
+      "y",
+    ]);
+  });
+
+  it("pairs \\r with a late \\n by the real clock, whatever a program made of Date.now", async () => {
+    const lateNewline = async (impl: Impl): Promise<string[]> => {
+      const input = new impl.PassThrough();
+      const rl = impl.createInterface({ input, crlfDelay: 100 });
+      const lines: string[] = [];
+      rl.on("line", (line) => lines.push(line as string));
+      input.write("a\r");
+      await settle();
+      // Longer than crlfDelay: the \n that follows is a line of its own.
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      input.write("\nb\n");
+      await settle();
+      rl.close();
+      return lines;
+    };
+    const frozen = vi.spyOn(Date, "now").mockReturnValue(1000);
+    try {
+      expect(await lateNewline(ours)).toEqual(await lateNewline(real));
+    } finally {
+      frozen.mockRestore();
+    }
+  });
 
   it("splits a multi-byte character across chunks", async () => {
     const input = new PassThrough();
@@ -540,6 +607,26 @@ describe("terminal line editing", () => {
     const theirs = await edit(real, ["ba", "\t", "\r"], { completer: callbackCompleter });
     expect(mine).toEqual(theirs);
     expect(mine.lines).toEqual(["banana"]);
+  });
+
+  it("places the cursor by the columns each script takes in a terminal, as Node does", () => {
+    const columns = (impl: Impl) =>
+      ["မောင်မောင်", "สวัสดี", "e\u0301a", "👍🏽x", "漢字"].map((text) => {
+        const input = new impl.PassThrough();
+        const rl = impl.createInterface({
+          input,
+          output: fakeOutput(),
+          terminal: true,
+          prompt: "",
+        }) as ReturnType<Impl["createInterface"]> & { getCursorPos(): { cols: number } };
+        rl.line = text;
+        rl.cursor = text.length;
+        const { cols } = rl.getCursorPos();
+        rl.close();
+        return cols;
+      });
+    expect(columns(ours)).toEqual(columns(real));
+    expect(columns(ours)).toEqual([8, 4, 2, 5, 4]);
   });
 
   it("drives a real tty on the fake runtime", async () => {

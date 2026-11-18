@@ -1,8 +1,12 @@
 // @vitest-environment node
 // The `dns` and `dns/promises` builtins: only this machine's names resolve.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { setRuntime } from "../runtime";
+import { createFakeRuntime } from "../testing/fakeRuntime";
 import dns from "./dns";
 import dnsPromises from "./dns_promises";
+import { runMacrotask } from "./eventLoop";
+import { createProcess } from "./process";
 
 type Lookup = (
   hostname: string,
@@ -141,6 +145,44 @@ describe("dns", () => {
     expect(() => dns.setServers(["nope"])).toThrow("Invalid IP address: nope");
   });
 
+  it("takes only getaddrinfo's flags as lookup hints, as Node does", async () => {
+    const message = (hints: unknown) => {
+      try {
+        lookup("localhost", { hints }, () => {});
+      } catch (error) {
+        return `${(error as { code?: string }).code}: ${(error as Error).message}`;
+      }
+      return "ok";
+    };
+    const text = (received: number) => `The argument 'hints' is invalid. Received ${received}`;
+    const invalid = (received: number) => `ERR_INVALID_ARG_VALUE: ${text(received)}`;
+    for (const hints of [
+      undefined,
+      null,
+      0,
+      dns.ADDRCONFIG,
+      dns.V4MAPPED,
+      dns.ALL,
+      dns.ADDRCONFIG | dns.V4MAPPED | dns.ALL,
+    ]) {
+      expect(message(hints)).toBe("ok");
+    }
+    expect(message(123456)).toBe(invalid(123456));
+    expect(message(3)).toBe(invalid(3));
+    // The number is read as Node reads it: an unsigned 32-bit integer.
+    expect(message(-1)).toBe(invalid(4294967295));
+    expect(message(1.5)).toBe(invalid(1));
+    expect(message("1")).toBe(
+      "ERR_INVALID_ARG_TYPE: The \"options.hints\" property must be of type number. Received type string ('1')",
+    );
+    // The hints are checked before the family.
+    expect(() => lookup("localhost", { hints: 3, family: 9 }, () => {})).toThrow(text(3));
+    // dns.promises throws at the call, as Node's does.
+    expect(() => dnsPromises.lookup("localhost", { hints: 3 })).toThrow(
+      expect.objectContaining({ code: "ERR_INVALID_ARG_VALUE" }),
+    );
+  });
+
   it("keeps the result order and server list", () => {
     expect(dns.getDefaultResultOrder()).toBe("verbatim");
     dns.setDefaultResultOrder("ipv4first");
@@ -197,5 +239,145 @@ describe("dns", () => {
     });
     const resolver = new dnsPromises.Resolver();
     await expect(resolver.resolve6("example.com")).rejects.toMatchObject({ syscall: "queryAaaa" });
+  });
+});
+
+// Each order below is what real Node v26 prints for the same program: a
+// callback logs itself, then queues a tick (">t") and a promise job (">p").
+describe("when the answers come, as Node's", () => {
+  const order: string[] = [];
+  let proc: ReturnType<typeof createProcess>;
+  let fake: ReturnType<typeof createFakeRuntime>;
+
+  function start(): void {
+    fake = createFakeRuntime();
+    setRuntime(fake);
+    proc = createProcess({ loadBuiltin: () => undefined, ipc: null });
+    order.length = 0;
+  }
+
+  afterEach(() => {
+    setRuntime(null);
+  });
+
+  function mark(tag: string): void {
+    order.push(tag);
+    proc.nextTick(() => order.push(`${tag}>t`));
+    void Promise.resolve().then(() => order.push(`${tag}>p`));
+  }
+
+  function callerQueues(): void {
+    proc.nextTick(() => order.push("caller>t"));
+    void Promise.resolve().then(() => order.push("caller>p"));
+  }
+
+  async function until(count: number): Promise<void> {
+    for (let i = 0; i < 100 && order.length < count; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+  }
+
+  it("answers a lookup by name from the event loop, holding the process meanwhile", async () => {
+    start();
+    let held = 0;
+    runMacrotask(() => {
+      lookup("localhost", {}, () => mark("lookup"));
+      held = fake.refCount;
+      callerQueues();
+    });
+    await until(5);
+    expect(order).toEqual(["caller>t", "caller>p", "lookup", "lookup>t", "lookup>p"]);
+    expect([held, fake.refCount]).toEqual([1, 0]);
+  });
+
+  it("answers a lookup of an address from a tick, in its own family whatever was asked", async () => {
+    start();
+    const answers: unknown[] = [];
+    runMacrotask(() => {
+      lookup("127.0.0.1", {}, () => mark("ip"));
+      callerQueues();
+      lookup("127.0.0.1", { family: 6 }, (error, address, family) =>
+        answers.push([error, address, family]),
+      );
+      lookup("::1", { family: 4, all: true }, (error, address) => answers.push([error, address]));
+    });
+    await until(5);
+    expect(order).toEqual(["ip", "caller>t", "ip>t", "caller>p", "ip>p"]);
+    expect(answers).toEqual([
+      [null, "127.0.0.1", 4],
+      [null, [{ address: "::1", family: 6 }]],
+    ]);
+  });
+
+  it("answers lookupService and the queries from the event loop", async () => {
+    start();
+    runMacrotask(() => {
+      dns.lookupService("127.0.0.1", 80, (_error, hostname, service) =>
+        mark(`service ${hostname} ${service}`),
+      );
+      callerQueues();
+    });
+    await until(5);
+    expect(order).toEqual([
+      "caller>t",
+      "caller>p",
+      "service localhost http",
+      "service localhost http>t",
+      "service localhost http>p",
+    ]);
+    order.length = 0;
+    runMacrotask(() => {
+      dns.resolve4("example.com", (error) =>
+        mark(`resolve4 ${(error as { code?: string } | null)?.code}`),
+      );
+      callerQueues();
+    });
+    await until(5);
+    expect(order.slice(0, 3)).toEqual(["caller>t", "caller>p", "resolve4 ENOTFOUND"]);
+  });
+
+  it("settles dns.promises.lookup of a name from the event loop", async () => {
+    start();
+    runMacrotask(() => {
+      void dnsPromises.lookup("localhost").then(() => mark("lookup"));
+      callerQueues();
+    });
+    await until(5);
+    // In a promise job a tick runs after the promise jobs queued with it.
+    expect(order).toEqual(["caller>t", "caller>p", "lookup", "lookup>p", "lookup>t"]);
+  });
+
+  it("throws for a hostname that is empty, as Node 26 does, after checking the callback", async () => {
+    start();
+    for (const hostname of ["", null, undefined, false, 0]) {
+      expect(() => lookup(hostname as string, {}, () => {})).toThrow(
+        expect.objectContaining({
+          code: "ERR_INVALID_ARG_VALUE",
+          message: `The argument 'hostname' must be a non-empty string. Received ${hostname === "" ? "''" : String(hostname)}`,
+        }),
+      );
+    }
+    expect(() => lookup("", 5 as unknown as object)).toThrow(
+      expect.objectContaining({
+        code: "ERR_INVALID_ARG_TYPE",
+        message: 'The "callback" argument must be of type function. Received undefined',
+      }),
+    );
+    await expect(dnsPromises.lookup("")).rejects.toMatchObject({ code: "ERR_INVALID_ARG_VALUE" });
+  });
+
+  it("checks lookupService's address, then its port, then its callback, as Node does", () => {
+    const code = (run: () => unknown) => {
+      try {
+        run();
+      } catch (error) {
+        return (error as { code?: string }).code;
+      }
+      return "ok";
+    };
+    const lookupService = dns.lookupService as (...args: unknown[]) => object;
+    expect(code(() => lookupService("x", 80, 5))).toBe("ERR_INVALID_ARG_VALUE");
+    expect(code(() => lookupService("127.0.0.1", 99999, 5))).toBe("ERR_SOCKET_BAD_PORT");
+    expect(code(() => lookupService("127.0.0.1", 80, 5))).toBe("ERR_INVALID_ARG_TYPE");
   });
 });

@@ -129,12 +129,15 @@ function currentProcess(): MinimalProcess | undefined {
   return (globalThis as { process?: MinimalProcess }).process;
 }
 
+// The platform's own, taken before a program can replace the global.
+const platformQueueMicrotask = globalThis.queueMicrotask.bind(globalThis);
+
 function nextTick(callback: () => void): void {
   const process = currentProcess();
   if (typeof process?.nextTick === "function") {
     process.nextTick(callback);
   } else {
-    queueMicrotask(callback);
+    platformQueueMicrotask(callback);
   }
 }
 
@@ -721,7 +724,7 @@ export function addAbortListener(
   let remove: () => void;
   if (signal.aborted) {
     let disposed = false;
-    queueMicrotask(() => {
+    platformQueueMicrotask(() => {
       if (!disposed) {
         listener(new Event("abort"));
       }

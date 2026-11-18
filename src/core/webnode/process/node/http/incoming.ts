@@ -5,6 +5,7 @@
 // single-value fields keep their first value, the rest join with `, `.
 import { finished, Readable } from "../stream";
 import type { Socket } from "../net/socket";
+import { nextTick } from "../eventLoop";
 
 /** `message.headers`: lower-cased names. */
 export type IncomingHttpHeaders = Record<string, string | string[] | undefined>;
@@ -254,7 +255,7 @@ export class IncomingMessage extends Readable {
       this.emit("aborted");
     }
     const report = (failure: Error | null) => {
-      queueMicrotask(() => {
+      nextTick(() => {
         if (this.listenerCount("error") === 0) {
           callback();
         } else {

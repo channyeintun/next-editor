@@ -598,6 +598,20 @@ describe("statics", () => {
     await Promise.resolve();
     expect(late).toHaveBeenCalledTimes(1);
 
+    // Node queues that call itself: what a program made of the global
+    // `queueMicrotask` (a test's fake timers) does not hold it back.
+    const real = globalThis.queueMicrotask;
+    const faked: unknown[] = [];
+    const underFake = vi.fn<(...args: unknown[]) => void>();
+    globalThis.queueMicrotask = (job) => void faked.push(job);
+    try {
+      addAbortListener(controller.signal, underFake);
+    } finally {
+      globalThis.queueMicrotask = real;
+    }
+    await Promise.resolve();
+    expect([underFake.mock.calls.length, faked.length]).toEqual([1, 0]);
+
     expect(thrown(() => addAbortListener(undefined as never, () => {}))).toEqual(
       thrown(() => nodeEvents.addAbortListener(undefined as never, () => {})),
     );

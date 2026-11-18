@@ -4,6 +4,13 @@
 // `ENOTFOUND`, and the DNS queries (`resolve*`, `reverse`) fail the way they
 // do with no reachable DNS server. `dns/promises` (dns_promises.ts) shares the
 // same rules through `lookupAddresses` and `queryError`.
+//
+// The answers come when Node's do. An argument error is thrown at once. A
+// lookup of an IP literal is answered from a tick. A lookup by name,
+// lookupService and the queries are answered from the event loop, as
+// getaddrinfo's and c-ares's are (fs/completion `complete`), and hold the
+// process until then.
+import { complete } from "./fs/completion";
 import {
   invalidArgType,
   invalidArgValue,
@@ -12,6 +19,7 @@ import {
   validateString,
 } from "./internalErrors";
 import { isIP, isLocalHost, validatePort } from "./net/ip";
+import { nextTick } from "./eventLoop";
 
 /** One address `lookup` reports. */
 export interface LookupAddress {
@@ -158,8 +166,15 @@ export function normalizeLookupOptions(options: unknown): {
     throw invalidArgType("options", ["integer", "object"], options);
   }
   const opts = options as LookupOptions;
-  if (opts.hints !== undefined && typeof opts.hints !== "number") {
-    throw invalidArgType("options.hints", "number", opts.hints);
+  if (opts.hints !== undefined && opts.hints !== null) {
+    if (typeof opts.hints !== "number") {
+      throw invalidArgType("options.hints", "number", opts.hints);
+    }
+    // Read as Node reads them: an unsigned integer of getaddrinfo's flags only.
+    const hints = opts.hints >>> 0;
+    if ((hints & ~(ADDRCONFIG | ALL | V4MAPPED)) !== 0) {
+      throw invalidArgValue("hints", hints);
+    }
   }
   if (opts.all !== undefined && typeof opts.all !== "boolean") {
     throw invalidArgType("options.all", "boolean", opts.all);
@@ -186,7 +201,8 @@ export function normalizeLookupOptions(options: unknown): {
 
 /**
  * The addresses `hostname` resolves to, in result order, or an `ENOTFOUND`
- * error. An IP literal resolves to itself.
+ * error. An IP literal resolves to itself, in its own family whatever
+ * `family` asks for, as Node answers it without getaddrinfo.
  */
 export function lookupAddresses(
   hostname: string,
@@ -195,9 +211,6 @@ export function lookupAddresses(
 ): LookupAddress[] | Error {
   const literal = isIP(hostname);
   if (literal !== 0) {
-    if (family !== 0 && family !== literal) {
-      return notFoundError(hostname);
-    }
     return [{ address: hostname, family: literal }];
   }
   if (!isLocalHost(hostname)) {
@@ -220,6 +233,11 @@ type LookupCallback = (
   family?: number,
 ) => void;
 
+/** Node 26's error for a lookup of no name (DEP0118 has run its course). */
+function emptyHostname(hostname: unknown): Error {
+  return invalidArgValue("hostname", hostname, "must be a non-empty string");
+}
+
 /** `dns.lookup(hostname[, options], callback)`. */
 export function lookup(hostname: string, options: unknown, callback?: LookupCallback): object {
   let cb = callback;
@@ -235,17 +253,10 @@ export function lookup(hostname: string, options: unknown, callback?: LookupCall
   const done = cb as LookupCallback;
   const { family, all, order } = normalizeLookupOptions(opts);
   if (!hostname) {
-    queueMicrotask(() => {
-      if (all) {
-        done(null, []);
-      } else {
-        done(null, null, family === 6 ? 6 : 4);
-      }
-    });
-    return {};
+    throw emptyHostname(hostname);
   }
   const result = lookupAddresses(hostname, family, order);
-  queueMicrotask(() => {
+  const answer = () => {
     if (result instanceof Error) {
       done(result);
     } else if (all) {
@@ -253,7 +264,12 @@ export function lookup(hostname: string, options: unknown, callback?: LookupCall
     } else {
       done(null, result[0].address, result[0].family);
     }
-  });
+  };
+  if (isIP(hostname) !== 0) {
+    nextTick(answer);
+  } else {
+    complete(answer);
+  }
   return {};
 }
 
@@ -299,9 +315,10 @@ export function lookupService(
       TypeError,
     );
   }
-  validateFunction(callback, "callback");
+  // The address and port first, then the callback, in Node's order.
   const result = lookupServiceResult(address, port);
-  queueMicrotask(() => {
+  validateFunction(callback, "callback");
+  complete(() => {
     if (result instanceof Error) {
       callback(result);
     } else {
@@ -387,7 +404,7 @@ function query(type: string) {
     validateString(hostname, "hostname");
     validateFunction(cb, "callback");
     const error = queryError(QUERY_SYSCALLS[type], hostname);
-    queueMicrotask(() => cb(error));
+    complete(() => cb(error));
     return {};
   };
 }
@@ -426,7 +443,7 @@ export class Resolver {
     const type = validateResolve(hostname, typeof rrtype === "function" ? undefined : rrtype);
     validateFunction(cb, "callback");
     const error = queryError(QUERY_SYSCALLS[type], hostname);
-    queueMicrotask(() => cb(error));
+    complete(() => cb(error));
     return {};
   }
 
@@ -434,7 +451,7 @@ export class Resolver {
     validateString(ip, "ip");
     validateFunction(callback, "callback");
     const error = queryError("getHostByAddr", ip);
-    queueMicrotask(() => callback(error));
+    complete(() => callback(error));
     return {};
   }
 
@@ -486,23 +503,32 @@ export function reverse(ip: string, callback: QueryCallback): object {
   return defaultResolver.reverse(ip, callback);
 }
 
+/** A promise of `outcome`, settled from the event loop, as a getaddrinfo or c-ares answer is. */
+function answerLater<T>(outcome: T | Error): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    complete(() => (outcome instanceof Error ? reject(outcome) : resolve(outcome)));
+  });
+}
+
 /** `dnsPromises.lookup(hostname[, options])`. */
 function lookupPromise(
   hostname: string,
   options?: unknown,
-): Promise<LookupAddress | LookupAddress[] | { address: null; family: number }> {
+): Promise<LookupAddress | LookupAddress[]> {
   if (hostname) {
     validateString(hostname, "hostname");
   }
   const { family, all, order } = normalizeLookupOptions(options);
   if (!hostname) {
-    return Promise.resolve(all ? [] : { address: null, family: family === 6 ? 6 : 4 });
+    return Promise.reject(emptyHostname(hostname));
   }
   const result = lookupAddresses(hostname, family, order);
   if (result instanceof Error) {
-    return Promise.reject(result);
+    return answerLater<LookupAddress>(result);
   }
-  return Promise.resolve(all ? result : result[0]);
+  const answer = all ? result : result[0];
+  // An IP literal needs no getaddrinfo: it settles at once.
+  return isIP(hostname) !== 0 ? Promise.resolve(answer) : answerLater(answer);
 }
 
 /** `dnsPromises.lookupService(address, port)`. */
@@ -510,14 +536,13 @@ function lookupServicePromise(
   address: string,
   port: number,
 ): Promise<{ hostname: string; service: string }> {
-  const result = lookupServiceResult(address, port);
-  return result instanceof Error ? Promise.reject(result) : Promise.resolve(result);
+  return answerLater(lookupServiceResult(address, port));
 }
 
 function promiseQuery(type: string) {
   return function resolveQuery(hostname: string): Promise<never> {
     validateString(hostname, "hostname");
-    return Promise.reject(queryError(QUERY_SYSCALLS[type], hostname));
+    return answerLater<never>(queryError(QUERY_SYSCALLS[type], hostname));
   };
 }
 
@@ -552,12 +577,12 @@ export class PromiseResolver {
 
   resolve(hostname: string, rrtype?: string): Promise<never> {
     const type = validateResolve(hostname, rrtype);
-    return Promise.reject(queryError(QUERY_SYSCALLS[type], hostname));
+    return answerLater<never>(queryError(QUERY_SYSCALLS[type], hostname));
   }
 
   reverse(ip: string): Promise<never> {
     validateString(ip, "ip");
-    return Promise.reject(queryError("getHostByAddr", ip));
+    return answerLater<never>(queryError("getHostByAddr", ip));
   }
 
   declare resolve4: ReturnType<typeof promiseQuery>;

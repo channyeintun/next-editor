@@ -1,15 +1,17 @@
 // The `async_hooks` builtin: `AsyncLocalStorage`, `AsyncResource`, and the
 // hook API's surface. It also owns the async-context propagation the rest of
 // the runtime uses: `bindToCurrentContext(fn)` captures the current store map
-// and restores it around `fn`, and `timers` and the lead's `process.nextTick`
-// and I/O callbacks wrap their continuations with it.
+// and restores it around `fn`. `timers` wraps its callbacks with it, and
+// eventLoop.ts every `process.nextTick` callback, the ticks of the runtime's
+// own modules (net, http, streams) included.
 //
 // A browser has no async-context tracking, so the context travels only through
 // the continuations the runtime controls: `Promise.prototype.then` (and with it
 // `catch` and `finally`, which call `then`), `queueMicrotask`, webnode's timers
-// and immediates, and anything wrapped with `bindToCurrentContext`. Those
-// wrappers are installed lazily, when the first `AsyncLocalStorage` is
-// constructed, so a program that never uses one pays nothing.
+// and immediates, `process.nextTick`, and anything wrapped with
+// `bindToCurrentContext`. Those wrappers are installed lazily, when the first
+// `AsyncLocalStorage` is constructed, so a program that never uses one pays
+// nothing.
 //
 // Known gap: the continuation after `await` on a native promise inside a native
 // async function is resumed by the engine without calling `then`, so it cannot
@@ -88,8 +90,7 @@ function enterFrame(frame: Frame): void {
 
 /**
  * Wraps `fn` so it runs in the async context current now. Returns `fn` itself
- * until the first `AsyncLocalStorage` is constructed. The lead wraps
- * `process.nextTick` and I/O callbacks with this.
+ * until the first `AsyncLocalStorage` is constructed.
  */
 export function bindToCurrentContext<T extends AnyFunction>(fn: T): T {
   if (!tracking || typeof fn !== "function") {

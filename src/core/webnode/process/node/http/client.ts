@@ -12,6 +12,7 @@ import {
   validateInteger,
 } from "../internalErrors";
 import { connect as netConnect } from "../net";
+import { nextTick } from "../eventLoop";
 import { connResetException, unsupported } from "../net/errors";
 import { isLocalHost } from "../net/ip";
 import { timerDuration, type Socket } from "../net/socket";
@@ -343,7 +344,7 @@ export class ClientRequest extends OutgoingMessage {
         }
         called = true;
         if (error) {
-          queueMicrotask(() => this.emit("error", error));
+          nextTick(() => this.emit("error", error));
         } else if (socket) {
           this.onSocket(socket as HttpSocket);
         }
@@ -413,7 +414,7 @@ export class ClientRequest extends OutgoingMessage {
       return;
     }
     this.aborted = true;
-    queueMicrotask(() => this.emit("abort"));
+    nextTick(() => this.emit("abort"));
     this.destroy();
   }
 
@@ -434,7 +435,7 @@ export class ClientRequest extends OutgoingMessage {
 
   /** Hands the request its socket on the next tick. */
   onSocket(socket: HttpSocket, error?: Error): void {
-    queueMicrotask(() => onSocketNT(this, socket, error));
+    nextTick(() => onSocketNT(this, socket, error));
   }
 
   _deferToConnect(method: "setNoDelay" | "setKeepAlive" | null, args: unknown[]): void {
@@ -873,7 +874,8 @@ function responseKeepAlive(req: ClientRequest): void {
   socket.removeListener("error", socketErrorListener);
   socket.removeListener("data", socketOnData);
   socket.removeListener("end", socketOnEnd);
-  queueMicrotask(() => {
+  // After the 'end' listeners have had their turn, as Node marks it free.
+  nextTick(() => {
     req._closed = true;
     req.emit("close");
     req.socket?.emit("free");

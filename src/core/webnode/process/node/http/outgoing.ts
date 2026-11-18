@@ -5,6 +5,7 @@
 // `Writable`, and buffers output until a socket is assigned.
 import { Buffer } from "../buffer";
 import { invalidArgType, invalidArgValue, makeNodeError, validateString } from "../internalErrors";
+import { nextTick } from "../eventLoop";
 import stream from "../stream";
 import type { HttpSocket } from "./incoming";
 import {
@@ -55,6 +56,12 @@ const kBytesWritten = Symbol("kBytesWritten");
 const kErrored = Symbol("kErrored");
 const kHighWaterMark = Symbol("kHighWaterMark");
 const kRejectNonStandardBodyWrites = Symbol("kRejectNonStandardBodyWrites");
+/** The callbacks given to `end`, called before 'finish' (`flushEndCallbacks`). */
+const kEndCallbacks = Symbol("kEndCallbacks");
+/** Set when the message has finished: everything was handed to the socket and 'finish' is due. */
+const kWritableFinished = Symbol("kWritableFinished");
+/** The error the last write ended with, which later `end` callbacks get. */
+const kFlushError = Symbol("kFlushError");
 
 const RE_CONN_CLOSE = /(?:^|\W)close(?:$|\W)/i;
 const RE_TE_CHUNKED = /(?:^|\W)chunked(?:$|\W)/i;
@@ -131,6 +138,9 @@ export class OutgoingMessage extends LegacyStream {
   [kErrored]: Error | null | undefined = null;
   [kHighWaterMark]: number;
   [kRejectNonStandardBodyWrites]: boolean;
+  [kEndCallbacks]: WriteCallback[] | null = null;
+  [kWritableFinished] = false;
+  [kFlushError]: Error | null = null;
 
   constructor(options?: OutgoingMessageOptions) {
     super();
@@ -147,11 +157,7 @@ export class OutgoingMessage extends LegacyStream {
   }
 
   get writableFinished(): boolean {
-    return (
-      this.finished &&
-      this.outputSize === 0 &&
-      (!this[kSocket] || this[kSocket].writableLength === 0)
-    );
+    return this[kWritableFinished];
   }
 
   get writableObjectMode(): boolean {
@@ -700,16 +706,7 @@ export class OutgoingMessage extends LegacyStream {
       writeImpl(this, data, enc, null, true);
     } else if (this.finished) {
       if (typeof cb === "function") {
-        if (!this.writableFinished) {
-          this.on("finish", cb);
-        } else {
-          cb(
-            codedError(
-              "ERR_STREAM_ALREADY_FINISHED",
-              "Cannot call end after a stream was finished",
-            ),
-          );
-        }
+        queueEndCallback(this, cb);
       }
       return this;
     } else if (!this._header) {
@@ -718,18 +715,18 @@ export class OutgoingMessage extends LegacyStream {
       this._implicitHeader();
     }
     if (typeof cb === "function") {
-      this.once("finish", cb);
+      queueEndCallback(this, cb);
     }
     if (strictContentLength(this) && this[kBytesWritten] !== Number(this._contentLength)) {
       throw contentLengthMismatch(this[kBytesWritten], this._contentLength);
     }
-    const finish = () => onFinish(this);
+    const finish = (error?: Error | null) => onFinish(this, error);
     if (this._hasBody && this.chunkedEncoding) {
       this._send(`0\r\n${this._trailer}\r\n`, "latin1", finish);
     } else if (!this._headerSent || this.writableLength || data) {
       this._send("", "latin1", finish);
     } else {
-      queueMicrotask(finish);
+      nextTick(finish);
     }
     const current = this[kSocket];
     if (current) {
@@ -925,7 +922,7 @@ function onError(message: OutgoingMessage, error: Error, callback: WriteCallback
   if (message.destroyed) {
     return;
   }
-  queueMicrotask(() => {
+  nextTick(() => {
     callback(error);
     if (!message.destroyed) {
       message.emit("error", error);
@@ -933,10 +930,58 @@ function onError(message: OutgoingMessage, error: Error, callback: WriteCallback
   });
 }
 
-function onFinish(message: OutgoingMessage): void {
-  if (message.socket?._hadError) {
+/**
+ * Queues a callback given to `end`: it is called with null when the message
+ * finishes, before the 'finish' listeners, or with the error its last write
+ * ended with. One given after that is called at once with
+ * ERR_STREAM_ALREADY_FINISHED, or on the next tick with that error.
+ */
+function queueEndCallback(message: OutgoingMessage, callback: WriteCallback): void {
+  if (message[kWritableFinished]) {
+    callback(
+      codedError("ERR_STREAM_ALREADY_FINISHED", "Cannot call end after a stream was finished"),
+    );
     return;
   }
+  const failure = message[kFlushError];
+  if (failure !== null) {
+    nextTick(() => callback(failure));
+    return;
+  }
+  message[kEndCallbacks] ??= [];
+  message[kEndCallbacks].push(callback);
+}
+
+function flushEndCallbacks(message: OutgoingMessage, error: Error | null): void {
+  const callbacks = message[kEndCallbacks];
+  if (callbacks === null) {
+    return;
+  }
+  message[kEndCallbacks] = null;
+  for (const callback of callbacks) {
+    callback(error);
+  }
+}
+
+/** What the last write of a message ended with: its own error, its socket's, or its being destroyed. */
+function endCallbackError(message: OutgoingMessage): Error {
+  return (
+    message[kErrored] ??
+    message.socket?.errored ??
+    codedError("ERR_STREAM_DESTROYED", "Cannot call end after a stream was destroyed")
+  );
+}
+
+/** Called when the last write of `end` is done, with the error it ended with. */
+function onFinish(message: OutgoingMessage, error?: Error | null): void {
+  const socket = message.socket;
+  if (error || message[kErrored] || socket?.errored || socket?._hadError) {
+    message[kFlushError] = error ?? endCallbackError(message);
+    flushEndCallbacks(message, message[kFlushError]);
+    return;
+  }
+  message[kWritableFinished] = true;
+  flushEndCallbacks(message, null);
   message.emit("finish");
 }
 
@@ -964,7 +1009,7 @@ function writeImpl(
       onError(message, error, cb);
     } else {
       const failure = error;
-      queueMicrotask(() => cb(failure));
+      nextTick(() => cb(failure));
     }
     return false;
   }
@@ -995,13 +1040,13 @@ function writeImpl(
         "Adding content for this request method or response status is not allowed.",
       );
     }
-    queueMicrotask(() => cb());
+    nextTick(() => cb());
     return true;
   }
   const socket = message.socket;
   if (!fromEnd && socket && !socket.writableCorked) {
     socket.cork();
-    queueMicrotask(() => socket.uncork());
+    nextTick(() => socket.uncork());
   }
   if (message.chunkedEncoding && chunk.length !== 0) {
     length ??= byteLengthOf(chunk, encoding);
