@@ -7,13 +7,14 @@ import { fileURLToPath } from "node:url";
 import type { HarnessApi } from "../webnode-harness";
 import { plainText as strip } from "./text";
 
-const ROOT = fileURLToPath(new URL("../../src/starters/", import.meta.url));
+export const STARTERS_ROOT = fileURLToPath(new URL("../../src/starters/", import.meta.url));
+const ROOT = STARTERS_ROOT;
 
 /** What `pnpm dev` leads to: a page on a port, or a program that prints and exits 0. */
-type Shows = { port: number; title: string; text: string } | { output: string };
+export type Shows = { port: number; title: string; text: string } | { output: string };
 
 const SQUARES = "1 squared is 1\n2 squared is 4\n3 squared is 9\n4 squared is 16\n5 squared is 25";
-const STARTERS: Record<string, { file: string; factory: string; shows: Shows }> = {
+export const STARTERS: Record<string, { file: string; factory: string; shows: Shows }> = {
   react: {
     file: "react.ts",
     factory: "createStarterWorkspaceProject",

@@ -51,14 +51,14 @@ const TARGET_PREVIEW_HOST = process.env.WEBNODE_HARNESS_PREVIEW_HOST?.trim() || 
 /** Where the harness page lives on a target origin: a path the target never serves itself. */
 const TARGET_PAGE_PATH = "/__webnode_harness__/";
 
-const ISOLATION_HEADERS = {
+export const ISOLATION_HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
   "Cross-Origin-Resource-Policy": "cross-origin",
   "Cache-Control": "no-store",
 };
 
-const harnessHtml = (
+export const harnessHtml = (
   scriptUrl: string,
 ) => `<!doctype html><meta charset="utf-8"><title>webnode harness</title>
 <body style="font:14px system-ui;margin:24px"><h1>webnode harness</h1>
@@ -197,7 +197,7 @@ async function interceptHarnessPage(page: Page, target: string): Promise<string>
 const PREVIEW_CONNECT_TITLE = "Connecting to preview…";
 
 /** The page's preview frame (the `<iframe id="preview">` of `harnessHtml`), for a scenario's steps. */
-function previewFrame(page: Page): PreviewFrame {
+export function previewFrame(page: Page): PreviewFrame {
   const frameOf = (url: string) => page.frames().find((frame) => frame.url().startsWith(url));
   return {
     async show(url) {

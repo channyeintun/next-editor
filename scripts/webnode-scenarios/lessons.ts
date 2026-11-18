@@ -11,7 +11,7 @@ import type { HarnessApi } from "../webnode-harness";
 import { plainText as strip } from "./text";
 
 /** Where the lessons' scripts are. */
-const LESSON_SCRIPTS = fileURLToPath(new URL("../../src/studio/scripts/", import.meta.url));
+export const LESSON_SCRIPTS = fileURLToPath(new URL("../../src/studio/scripts/", import.meta.url));
 
 const DEFAULT_LESSONS = [
   "next-editor-intro-mm",
@@ -26,7 +26,8 @@ const DEFAULT_LESSONS = [
 /** Lessons whose page has no text when the lesson starts: the lesson writes it. */
 const EMPTY_AT_START = new Set(["next-editor-intro-mm"]);
 
-function tree(files: Record<string, string>) {
+/** `files` (path to contents) as the tree `mount` takes. */
+export function tree(files: Record<string, string>) {
   const root: any = {};
   for (const [path, contents] of Object.entries(files)) {
     const parts = path.split("/");
@@ -38,7 +39,7 @@ function tree(files: Record<string, string>) {
 }
 
 /** The text of the page's <title>, as the browser reports it. */
-function titleOf(html: string): string {
+export function titleOf(html: string): string {
   const title = /<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "";
   return title
     .replace(/&amp;/g, "&")

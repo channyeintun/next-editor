@@ -50,6 +50,10 @@ breaks, or a measured gain in speed or memory on a real lesson or starter
 those numbers worse. A fix that would be large (a new subsystem, more than
 about a day) goes to the owner first.
 
+**The numbers** come from `bun scripts/webnode-scenarios/measure.ts`: one
+lesson per setup and every starter, on webnode and on WebContainer, in
+headless Chrome (`--list` prints the setups and the lessons it measures).
+
 **WebContainer stays as the fallback.** `?runtime=webcontainer` opts a browser
 out (and is remembered), WebContainer is the default outside Chromium and for
 a lesson embedded on another site, and a webnode that fails to start falls
@@ -153,43 +157,43 @@ preview iframe                on a PREVIEW ORIGIN, <session>-<port>.<host>. Its
 Each directory is one domain with one owner. Add behaviour in the owning
 directory; the files marked _hub_ only wire.
 
-| Path                               | What it owns                                                                                                                                                        |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `errors.ts`                        | errno table, `SystemError`                                                                                                                                          |
-| `signals.ts`                       | signal numbers, what a signal does to a process that does not handle it, and the exit status of a process a signal ended (the kernel's and the shell's one rule)    |
-| `umask.ts`                         | the file mode creation mask: its default (022), the bits a mask keeps, and the word of shared memory a process's mask lives in                                      |
-| `buildId.ts`                       | the id of the build a script belongs to                                                                                                                             |
-| `protocol.ts`                      | every message that crosses a thread                                                                                                                                 |
-| `byteChannel.ts`                   | a connection between two threads (a socket's bytes, the preview gateway's) and its flow control                                                                     |
-| `api.ts`                           | the page-facing API (WebContainer-compatible)                                                                                                                       |
-| `sharedfs/`                        | the filesystem: a Rust module on one shared memory (its README)                                                                                                     |
-| `kernel/vfs/`                      | the filesystem in TypeScript: the reference and the fallback                                                                                                        |
-| `kernel/kernel.ts`                 | processes, process groups, fds and what is delivered to them, ports, blocking-call answers                                                                          |
-| `kernel/streams.ts`                | pipes and terminals: what they hold and hand to a reader, a terminal's modes and cooked line                                                                        |
-| `kernel/exec.ts`                   | what a command line runs (PATH, `#!`, built-in commands)                                                                                                            |
-| `kernel/pageFiles.ts`              | the page's own file requests (`fs.*`): unchecked, paths relative to the project directory                                                                           |
-| `kernel/kernelWorker.ts`           | the kernel worker's entry — _hub_                                                                                                                                   |
-| `kernel/runtimeFrame.ts`           | the runtime frame's script                                                                                                                                          |
-| `process/runtime.ts`               | what a process can ask the kernel for (interfaces) — _contract_                                                                                                     |
-| `process/sysClient.ts`             | a process's end of its link to the kernel                                                                                                                           |
-| `process/platform.ts`              | what the runtime reports of itself: versions, platform, paths, the one user (uid and gid 1)                                                                         |
-| `process/host.ts`                  | the process worker's entry — _hub_                                                                                                                                  |
-| `process/loader/`                  | module resolution, CommonJS and ES module loading, and the `import()` of code a program evaluates itself (`new Function`, `eval`)                                   |
-| `process/node/index.ts`            | the builtin-module registry — _hub_                                                                                                                                 |
-| `process/node/<name>.ts`           | one Node builtin module each (see "Builtin modules")                                                                                                                |
-| `process/node/eventLoop.ts`        | the order of work in a `node` process: `process.nextTick`, macrotasks, the reports of unhandled rejections                                                          |
-| `process/node/signalNames.ts`      | signals as Node's API names them (`os.constants.signals`, aliases, numbers), mapped to the kernel's names                                                           |
-| `process/node/threadStdio.ts`      | the standard streams a Worker keeps (`stdout: true` …), both ends                                                                                                   |
-| `process/node/stringWidth.ts`      | the terminal columns a string takes, as Node counts them                                                                                                            |
-| `process/programs/shell/`          | `sh` / `jsh` and the built-in commands                                                                                                                              |
-| `process/programs/npm/`            | `npm` / `pnpm` / `yarn` / `npx`: the installer and script runner                                                                                                    |
-| `process/programs/node.ts`         | the `node` command line                                                                                                                                             |
-| `process/programs/rejections.ts`   | what `node` does with a rejection nobody handled: the `--unhandled-rejections` modes and their warnings                                                             |
-| `process/programs/watch.ts`        | watch mode: the `node --watch` and `tsx watch` supervisors, and what a child reports                                                                                |
-| `process/programs/watchOptions.ts` | tsx's command line (`tsxArguments`, which kernel/exec.ts calls for the `tsx` command) and the private options `tsx watch` reaches the node program with             |
-| `process/programs/watchReport.ts`  | Node's watch-mode report protocol (the variable and the two messages): written by the child's reporter, passed on by node/worker_threads.ts, read by the supervisor |
-| `preview/`                         | preview service worker, connect page, injected client, gateway                                                                                                      |
-| `test/`                            | the browser harness page (harnessPage.ts), the steps a scenario script is given (scenario.ts, outputMatch.ts) and the conformance cases                             |
+| Path                               | What it owns                                                                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `errors.ts`                        | errno table, `SystemError`                                                                                                                                                |
+| `signals.ts`                       | signal numbers, what a signal does to a process that does not handle it, and the exit status of a process a signal ended (the kernel's and the shell's one rule)          |
+| `umask.ts`                         | the file mode creation mask: its default (022), the bits a mask keeps, and the word of shared memory a process's mask lives in                                            |
+| `buildId.ts`                       | the id of the build a script belongs to                                                                                                                                   |
+| `protocol.ts`                      | every message that crosses a thread                                                                                                                                       |
+| `byteChannel.ts`                   | a connection between two threads (a socket's bytes, the preview gateway's) and its flow control                                                                           |
+| `api.ts`                           | the page-facing API (WebContainer-compatible)                                                                                                                             |
+| `sharedfs/`                        | the filesystem: a Rust module on one shared memory (its README)                                                                                                           |
+| `kernel/vfs/`                      | the filesystem in TypeScript: the reference and the fallback                                                                                                              |
+| `kernel/kernel.ts`                 | processes, process groups, fds and what is delivered to them, ports, blocking-call answers                                                                                |
+| `kernel/streams.ts`                | pipes and terminals: what they hold and hand to a reader, a terminal's modes and cooked line                                                                              |
+| `kernel/exec.ts`                   | what a command line runs (PATH, `#!`, built-in commands)                                                                                                                  |
+| `kernel/pageFiles.ts`              | the page's own file requests (`fs.*`): unchecked, paths relative to the project directory                                                                                 |
+| `kernel/kernelWorker.ts`           | the kernel worker's entry — _hub_                                                                                                                                         |
+| `kernel/runtimeFrame.ts`           | the runtime frame's script                                                                                                                                                |
+| `process/runtime.ts`               | what a process can ask the kernel for (interfaces) — _contract_                                                                                                           |
+| `process/sysClient.ts`             | a process's end of its link to the kernel                                                                                                                                 |
+| `process/platform.ts`              | what the runtime reports of itself: versions, platform, paths, the one user (uid and gid 1)                                                                               |
+| `process/host.ts`                  | the process worker's entry — _hub_                                                                                                                                        |
+| `process/loader/`                  | module resolution, CommonJS and ES module loading, and the `import()` of code a program evaluates itself (`new Function`, `eval`)                                         |
+| `process/node/index.ts`            | the builtin-module registry — _hub_                                                                                                                                       |
+| `process/node/<name>.ts`           | one Node builtin module each (see "Builtin modules")                                                                                                                      |
+| `process/node/eventLoop.ts`        | the order of work in a `node` process: `process.nextTick`, macrotasks, the reports of unhandled rejections                                                                |
+| `process/node/signalNames.ts`      | signals as Node's API names them (`os.constants.signals`, aliases, numbers), mapped to the kernel's names                                                                 |
+| `process/node/threadStdio.ts`      | the standard streams a Worker keeps (`stdout: true` …), both ends                                                                                                         |
+| `process/node/stringWidth.ts`      | the terminal columns a string takes, as Node counts them                                                                                                                  |
+| `process/programs/shell/`          | `sh` / `jsh` and the built-in commands                                                                                                                                    |
+| `process/programs/npm/`            | `npm` / `pnpm` / `yarn` / `npx`: the installer and script runner                                                                                                          |
+| `process/programs/node.ts`         | the `node` command line                                                                                                                                                   |
+| `process/programs/rejections.ts`   | what `node` does with a rejection nobody handled: the `--unhandled-rejections` modes and their warnings                                                                   |
+| `process/programs/watch.ts`        | watch mode: the `node --watch` and `tsx watch` supervisors, and what a child reports                                                                                      |
+| `process/programs/watchOptions.ts` | tsx's command line (`tsxArguments`, which kernel/exec.ts calls for the `tsx` command) and the private options `tsx watch` reaches the node program with                   |
+| `process/programs/watchReport.ts`  | Node's watch-mode report protocol (the variable and the two messages): written by the child's reporter, passed on by node/worker_threads.ts, read by the supervisor       |
+| `preview/`                         | preview service worker, connect page, injected client, gateway                                                                                                            |
+| `test/`                            | the browser harness page (harnessPage.ts) and its driver (harnessDriver.ts), the steps a scenario script is given (scenario.ts, outputMatch.ts) and the conformance cases |
 
 ## Rules for code in this directory
 
