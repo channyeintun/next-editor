@@ -61,6 +61,16 @@ const nativePostMessage = MessagePort.prototype.postMessage as (
   message: unknown,
 ) => void;
 const nativeStart = MessagePort.prototype.start;
+/**
+ * Node's own MessagePort counts the listeners of each type and warns past ten
+ * (its `setMaxListeners`, inherited from Node's NodeEventTarget). A browser's
+ * MessagePort has no limit and no such method. Captured now, before a program
+ * could add one.
+ */
+const PlatformMessagePort = MessagePort;
+const nodeSetMaxListeners = (
+  PlatformMessagePort.prototype as { setMaxListeners?: (this: MessagePort, n: number) => void }
+).setMaxListeners;
 /** Ahead of every task already queued: timers, messages, the kernel's replies. */
 const TURN_PRIORITY = { priority: "user-blocking" };
 /**
@@ -231,6 +241,7 @@ function postContinuation(): void {
   if (turnPort === null) {
     const channel = new PlatformMessageChannel();
     turnPort = channel.port1;
+    allowRoundListeners(channel.port2);
     // The platform's own listeners, unwrapped: each is one round.
     for (let index = 0; index < ROUNDS_PER_TASK; index += 1) {
       const last = index === ROUNDS_PER_TASK - 1;
@@ -244,6 +255,19 @@ function postContinuation(): void {
   }
   holdForTurn(true);
   nativePostMessage.call(turnPort, null);
+}
+
+/**
+ * Lets `target`, one of the runtime's own ports, take the round listeners
+ * (ROUNDS_PER_TASK of them for each macrotask listener, by design) without
+ * Node's warning of a leak, where the runtime runs under Node (the unit
+ * tests). Nothing elsewhere.
+ */
+function allowRoundListeners(target: EventTarget): void {
+  if (typeof nodeSetMaxListeners === "function" && target instanceof PlatformMessagePort) {
+    // 0: no limit.
+    nodeSetMaxListeners.call(target, 0);
+  }
 }
 
 /** One listener of a continuation message: one round, or the end of the turn. */
@@ -551,6 +575,7 @@ export function addMacrotaskListener(
   type: string,
   listener: (event: Event) => void,
 ): void {
+  allowRoundListeners(target);
   nativeAddEventListener.call(target, type, (event: Event) => {
     if (programDispatches > 0) {
       listener(event);

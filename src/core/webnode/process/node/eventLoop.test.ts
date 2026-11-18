@@ -2,10 +2,12 @@
 // The event loop's scheduler over the fake runtime: the gate the exit check
 // asks, the end of a turn, rejections reported together, and the rounds a
 // macrotask of the runtime's own has in its task.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import nodeProcess from "node:process";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from "vitest";
 import { setRuntime } from "../runtime";
 import { createFakeRuntime, type FakeRuntime } from "../testing/fakeRuntime";
 import {
+  addMacrotaskListener,
   eventLoopHolds,
   gateNextMacrotask,
   holdProcess,
@@ -38,6 +40,25 @@ async function until(done: () => boolean): Promise<void> {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+describe("addMacrotaskListener", () => {
+  it("puts its round listeners on a port of Node's without Node's warning of a leak", async () => {
+    const warnings: string[] = [];
+    const onWarning = (warning: Error) => warnings.push(warning.name);
+    nodeProcess.on("warning", onWarning);
+    const { port1, port2 } = new MessageChannel();
+    onTestFinished(() => {
+      nodeProcess.off("warning", onWarning);
+      port1.close();
+      port2.close();
+    });
+    addMacrotaskListener(port1, "message", () => {});
+    addMacrotaskListener(port1, "message", () => {});
+    // Node emits the warning from a tick.
+    await sleep(5);
+    expect(warnings).toEqual([]);
+  });
+});
 
 describe("gateNextMacrotask", () => {
   it("asks once, as the next macrotask is about to start, and lets it run on yes", () => {
@@ -544,7 +565,13 @@ describe("a macrotask of the runtime's own, on a platform that runs promise jobs
 
   it("runs the listener of an event a program dispatched as part of its caller", async () => {
     const { process, eventLoop } = await inBrowser();
-    const target = new EventTarget();
+    // A port, as the runtime's targets are: one of Node's takes the listeners
+    // without a warning.
+    const { port1: target, port2 } = new MessageChannel();
+    onTestFinished(() => {
+      target.close();
+      port2.close();
+    });
     const order: string[] = [];
     eventLoop.addMacrotaskListener(target, "message", () => {
       order.push("listener");
