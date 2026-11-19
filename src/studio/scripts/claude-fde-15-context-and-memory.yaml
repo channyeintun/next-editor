@@ -1,0 +1,631 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-15-context-and-memory
+  title: "Claude FDE 15: Context နဲ့ memory"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/15-continuity.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/15-continuity.md: |
+        # Session တစ်ခုကနေ နောက်တစ်ခုဆီ ဘာသယ်မလဲ
+
+        Support lead team · Claude app (Team plan) · feature နာမည်များက 2026-11 အတိုင်း
+
+        | ဆက်ပါရမယ့် အရာ | ဘယ်မှာ ထားမလဲ | ဘယ်သူ update လုပ်မလဲ |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — one session's context window (the course's dashed white box, what
+    # fills it in blue, what is lost in orange) and three shelves outside it that
+    # feed the next session (blue), joined by a violet arrow.
+    - { id: c-win, kind: rectangle, x: 290, y: 200, width: 360, height: 400, strokeStyle: dashed }
+    - {
+        id: c-win-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 215,
+        width: 360,
+        height: 35,
+        text: "context window",
+        fontSize: 28,
+      }
+    - {
+        id: c-in1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 290,
+        width: 360,
+        height: 35,
+        text: "project knowledge",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-in2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 360,
+        width: 360,
+        height: 35,
+        text: "ဒီ chat ရဲ့ message",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-in3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 430,
+        width: 360,
+        height: 35,
+        text: "tool · connector ရလဒ်",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-gone,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 535,
+        width: 360,
+        height: 35,
+        text: "chat ပြီးရင် ကျန်ခဲ့",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-arrow,
+        kind: freedraw,
+        stroke: arrow-left,
+        x: 670,
+        y: 380,
+        width: 100,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s1,
+        kind: rectangle,
+        x: 790,
+        y: 220,
+        width: 290,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s1-l,
+        kind: text,
+        align: center,
+        x: 790,
+        y: 238,
+        width: 290,
+        height: 35,
+        text: "Project",
+        fontSize: 28,
+      }
+    - {
+        id: s2,
+        kind: rectangle,
+        x: 790,
+        y: 340,
+        width: 290,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s2-l,
+        kind: text,
+        align: center,
+        x: 790,
+        y: 358,
+        width: 290,
+        height: 35,
+        text: "Instructions",
+        fontSize: 28,
+      }
+    - {
+        id: s3,
+        kind: rectangle,
+        x: 790,
+        y: 460,
+        width: 290,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s3-l,
+        kind: text,
+        align: center,
+        x: 790,
+        y: 478,
+        width: 290,
+        height: 35,
+        text: "Memory",
+        fontSize: 28,
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "အင်္ဂါနေ့ chat က သိမလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) project တူလို့ သိမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) project knowledge ထဲ မရေးရင် မသိ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 520,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 850,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "chat တစ်ခုနဲ့ တစ်ခု context မမျှ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "ဆက်ပါရမယ့် အရာကို ရည်ရွယ်ပြီး သိမ်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9315
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: monday
+    chapter: တနင်္လာနေ့တိုင်း
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ အလုပ်ရဲ့ အရည်အသွေး လိုအပ်ချက်၊ မြန်နှုန်းနဲ့ အကြိမ်ရေကို ကြည့်ပြီး Haiku၊ Sonnet၊
+      Opus၊ Fable ထဲက ဘယ် model ကနေ စမလဲ ရွေးခဲ့ပါတယ်။ prompt မရေးခင် ဆုံးဖြတ်ချက် လေးခုထဲက
+      နောက်ဆုံး တစ်ခုကတော့ model ကို ဘာတွေ မြင်စေမလဲ၊ ပြီးတော့ session တစ်ခုကနေ နောက်တစ်ခုဆီ ဘာကို
+      သယ်သွားမလဲ ဆိုတာပါ။
+      [[mark:need]] support manager လှလှ ရဲ့ support lead တွေက တနင်္လာနေ့ မနက်တိုင်း chat အသစ် ဖွင့်ပြီး Claude ကို
+      နောက်ခံ အကြောင်းတွေ အစကနေ ပြန်ရှင်းပြနေရပါတယ်။ ဘယ်လို လေသံနဲ့ ရေးရမလဲ၊ အိမ်ရွှေ့တဲ့ customer ကို
+      ဘာပြောရမလဲ၊ ဒီအပတ် ဘယ်မြို့နယ်မှာ လိုင်း ပြင်နေလဲ ဆိုတာတွေပါ။ ပြီးခဲ့တဲ့ အပတ်က ပြောခဲ့တာကို Claude က
+      မှတ်မိနေမယ်လို့ ထင်ခဲ့ကြပေမဲ့ ပြောခဲ့တာတွေ အကုန် ပါမလာပါဘူး။
+      [[mark:need-2]] ပိုဆိုးတာက support lead တစ်ယောက်ချင်း ရှင်းပြပုံ မတူတာမို့၊ တစ်ယောက်ရဲ့
+      chat က ထွက်လာတဲ့ မူကြမ်းနဲ့ နောက်တစ်ယောက်ရဲ့ မူကြမ်း စည်းကမ်းချင်း ကွဲနေတတ်တာပါ။
+      [[mark:sel-title]] ဒီမှာ မေးခွန်း နှစ်ခု ရှိပါတယ်။ တစ်ခုက ဘာတွေကို session တွေကြား ဆက်ပါစေချင်လဲ ဆိုတာပါ။
+      နောက်တစ်ခုက ဘာတွေကို တမင် မသိမ်းဘဲ အသစ် ယူသင့်လဲ ဆိုတာပါ။ ဒီ lesson မှာ အဲဒီ နှစ်ခုကို ဆုံးဖြတ်ပြီး
+      continuity table တစ်ခု ရေးပါမယ်။
+    sources:
+      - {
+          title: "Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+    actions:
+      - {
+          id: open-cont,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: notebook/15-continuity.md,
+        }
+      - id: sel-title
+        type: editor.select
+        at: { mark: sel-title }
+        target:
+          file: notebook/15-continuity.md
+          text: "# Session တစ်ခုကနေ နောက်တစ်ခုဆီ ဘာသယ်မလဲ"
+
+  - id: one-session
+    chapter: Session တစ်ခုရဲ့ context
+    narration: >
+      [[mark:c-open]] အရင်ဆုံး session တစ်ခုအတွင်းမှာ ဘာဖြစ်လဲ ကြည့်ရအောင်။ context window ဆိုတာ request တစ်ခုမှာ
+      model မြင်နိုင်တဲ့ စာ အားလုံးအတွက် နေရာပါ။ model ရဲ့ working memory လို့လည်း ပြောလို့ရပြီး၊ model ရေးမယ့်
+      အဖြေကိုယ်တိုင်လည်း ဒီ နေရာထဲမှာ ပါပါတယ်။ နေရာကို token နဲ့ တိုင်းပါတယ်။ token ဆိုတာ model က စာကို ဖြတ်ယူတဲ့ အပိုင်းအစလေးပါ။
+      [[mark:c-size]] ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ paid plan ပေါ်က လက်ရှိ model တွေရဲ့ chat window က token
+      တစ်သန်းအထိ ရှိပါတယ်။ ဒါပေမဲ့ model တစ်ခုတည်းတောင် chat၊ Claude Code နဲ့ Cowork မှာ window အရွယ် မတူနိုင်တာမို့၊
+      Claude ရဲ့ context window အကြောင်း support article မှာ ပြန်စစ်ပါ။
+      [[mark:c-fill]] Claude app ထဲမှာ ဒီနေရာကို ဖြည့်တာက project knowledge နဲ့ instructions၊ ဒီ chat ထဲက message တွေ၊
+      ပြီးတော့ tool နဲ့ connector တွေက ပြန်ပေးတဲ့ ရလဒ်တွေပါ။ connector တွေက token အများကြီး သုံးတတ်ပြီး၊ web
+      ကနေ article ရှည်ကြီး တစ်ပုဒ်ကို ဖွင့်ဖတ်ခိုင်းရင် article တစ်ပုဒ်လုံး context ထဲ ဝင်သွားပါတယ်။ effort နဲ့
+      thinking မြင့်လေလည်း နေရာ ပိုကုန်လေပါ။
+      [[mark:c-rot]] ဒါပေမဲ့ များများ ထည့်လေ ကောင်းလေ မဟုတ်ပါဘူး။ Anthropic ရဲ့ docs က token အရေအတွက် များလာတာနဲ့
+      အမျှ တိကျမှုနဲ့ ပြန်ရှာနိုင်မှု ကျလာတတ်တယ်လို့ ဆိုပါတယ်။ ဒါကို context rot လို့ ခေါ်ပါတယ်။ ဒါကြောင့် ဆက်စပ်မှု
+      မရှိတဲ့ file တွေ၊ မလိုတဲ့ connector တွေကို ဖယ်ထားတာက နေရာ သက်သာရုံသာမက အဖြေကိုလည်း ပိုကောင်းစေနိုင်ပါတယ်။
+      [[mark:c-long]] chat တစ်ခု အရမ်း ရှည်လာရင်တော့ ကန့်သတ်ချက်နား ရောက်တဲ့အခါ Claude က အရင် message တွေကို
+      အကျဉ်းချုပ်ပြီး chat ကို ဆက်သွားပါတယ်။ history အပြည့်အစုံကိုတော့ သိမ်းထားပါသေးတယ်။ ဒီလုပ်ဆောင်ချက်က code
+      execution ဖွင့်ထားမှ အလုပ်လုပ်ပါတယ်။ သတိထားရမှာက ဒါဟာ chat တစ်ခုရဲ့ length limit ပါ။ ငါးနာရီနဲ့ တစ်ပတ်
+      အလိုက် တွက်တဲ့ usage limit နဲ့ မတူပါဘူး။
+      [[mark:c-gone]] အရေးကြီးဆုံး အချက်က chat ပြီးသွားရင် ဒီ context ထဲက အရာတွေက နောက် chat အသစ်ထဲကို
+      သူ့အလိုလို လိုက်မလာပါဘူး။ တနင်္လာနေ့ မနက်တိုင်း ပြန်ရှင်းပြနေရတာ အဲဒါကြောင့်ပါ။
+    sources:
+      - {
+          title: "Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+      - {
+          title: "How large is the context window on paid Claude plans?",
+          url: "https://support.claude.com/en/articles/8606394-how-large-is-the-context-window-on-paid-claude-plans",
+        }
+      - {
+          title: "How do usage and length limits work?",
+          url: "https://support.claude.com/en/articles/11647753-how-do-usage-and-length-limits-work",
+        }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          open: true,
+          clear: true,
+          upsertIds: [c-win, c-win-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-fill,
+          type: whiteboard.apply,
+          at: { mark: c-fill },
+          upsertIds: [c-in1, c-in2, c-in3],
+          drawMs: 1500,
+        }
+      - {
+          id: point-window,
+          type: whiteboard.point,
+          at: { mark: c-long },
+          target: { assetId: c-win },
+        }
+      - {
+          id: draw-c-gone,
+          type: whiteboard.apply,
+          at: { mark: c-gone },
+          upsertIds: [c-gone],
+          drawMs: 900,
+        }
+
+  - id: shelves
+    chapter: Session တွေကြား သယ်ပေးတဲ့ feature
+    narration: >
+      [[mark:s-open]] session တွေကြား ဆက်ပါစေချင်တဲ့ အရာအတွက် window အပြင်ဘက်မှာ စင် တစ်ခုခု လိုပါတယ်။ အဲဒီ
+      စင်ကနေ chat အသစ် စတိုင်း context ထဲကို ပြန်ဖြည့်ပေးတာပါ။
+      [[mark:s-project]] ပထမ စင်က Project ပါ။ project knowledge နဲ့ project instructions က project ထဲက chat တိုင်းမှာ
+      ပါလာပါတယ်။ paid plan တွေမှာ project knowledge များလာလို့ context ကန့်သတ်ချက်နား ရောက်ရင်၊ Claude က လိုတဲ့
+      အပိုင်းကိုပဲ ရှာဖတ်တဲ့ နည်းကို သူ့အလိုလို ပြောင်းသုံးပြီး ဆယ်ဆလောက်အထိ ပိုထည့်နိုင်ပါတယ်။
+      [[mark:s-instr]] ဒုတိယ စင်က Instructions for Claude ပါ။ account တစ်ခုလုံးမှာ chat တိုင်းအတွက် သက်ရောက်တဲ့
+      ညွှန်ကြားချက်မို့၊ ကိုယ့် ရေးဟန်၊ ကိုယ် ကြိုက်တဲ့ ပုံစံလို တစ်ယောက်ချင်း အကြောင်းအတွက် သင့်တော်ပါတယ်။ team
+      ရဲ့ စည်းကမ်းကိုတော့ project ထဲမှာ ထားတာ ပိုကောင်းပါတယ်။
+      [[mark:s-memory]] တတိယ စင်က memory ပါ။ memory ဆိုတာ session တစ်ခုကနေ နောက်တစ်ခုဆီ သယ်သွားတဲ့
+      မှတ်သားချက်ပါ။ Claude က chat လုပ်ရင်း ခေါင်းစဉ် တစ်ခုချင်းအလိုက် မှတ်ထားပြီး၊ ဒါကို မှတ်ထားပါလို့ ပြောလည်း
+      မှတ်ပါတယ်။ Free၊ Pro၊ Max နဲ့ Ultra မှာ default အနေနဲ့ ဖွင့်ထားပြီး၊ Team နဲ့ Enterprise မှာတော့ owner က
+      ပေးသုံးမလား ဆုံးဖြတ်ပါတယ်။ project တစ်ခုချင်းမှာလည်း သီးခြား memory ရှိပါတယ်။
+      [[mark:s-limits]] memory ကို ခဏ ရပ်ထားလို့ ရသလို၊ အကုန် ဖျက်ပစ်လို့လည်း ရပါတယ်။ ကျန်းမာရေး၊ ဘာသာရေးလို
+      အကြောင်းတွေကို ကိုယ်က ခွင့်မပြုရင် မမှတ်သလို၊ မှတ်ပုံတင် နံပါတ်နဲ့ ငွေစာရင်း နံပါတ်တွေကိုတော့ ဘယ်တော့မှ
+      မမှတ်ပါဘူး။ သတိထားရမှာက chat တစ်ခုကို ဖျက်လိုက်ရုံနဲ့ အဲဒီ chat ကနေ မှတ်ထားတဲ့ memory မပျက်ပါဘူး။ incognito chat ဆိုရင် history ထဲမှာရော memory ထဲမှာရော မကျန်ပါဘူး။ paid plan တွေမှာတော့
+      chat အဟောင်းတွေကို ရှာပြီး ကိုးကားနိုင်တဲ့ chat search လည်း ရှိပါတယ်။
+      [[mark:s-code]] Claude Code မှာဆိုရင် ဒီ စင်တွေရဲ့ နေရာကို CLAUDE.md က ယူပါတယ်။ session စတိုင်း ဖတ်တဲ့ file
+      ဖြစ်ပြီး git နဲ့ team တစ်ခုလုံး မျှသုံးလို့ရပါတယ်။
+    sources:
+      - {
+          title: "Retrieval augmented generation (RAG) for projects",
+          url: "https://support.claude.com/en/articles/11473015-retrieval-augmented-generation-rag-for-projects",
+        }
+      - {
+          title: "Use Claude's chat search and memory to build on previous context",
+          url: "https://support.claude.com/en/articles/11817273-use-claude-s-chat-search-and-memory-to-build-on-previous-context",
+        }
+      - {
+          title: "Manage Claude's memory (Claude Code)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          upsertIds: [c-arrow],
+          drawMs: 900,
+        }
+      - {
+          id: draw-s1,
+          type: whiteboard.apply,
+          at: { mark: s-project },
+          upsertIds: [s1, s1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s2,
+          type: whiteboard.apply,
+          at: { mark: s-instr },
+          upsertIds: [s2, s2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s3,
+          type: whiteboard.apply,
+          at: { mark: s-memory },
+          upsertIds: [s3, s3-l],
+          drawMs: 1200,
+        }
+      - {
+          id: point-memory,
+          type: whiteboard.point,
+          at: { mark: s-limits },
+          target: { assetId: s3 },
+        }
+
+  - id: the-table
+    chapter: Continuity table
+    narration: >
+      [[mark:t-close]] စင်တွေ ရှိတိုင်း အကုန် တင်ထားရမယ် မဟုတ်ပါဘူး။ မပြောင်းတဲ့ စည်းကမ်းနဲ့ ကိုးကားစရာ document
+      တွေကို ရည်ရွယ်ပြီး သိမ်းထားပါ။ ခဏခဏ ပြောင်းတဲ့ အရာတွေကိုတော့ မသိမ်းဘဲ မူရင်း နေရာကနေ အသစ် ယူပါ။ ဒီ
+      ဆုံးဖြတ်ချက်ကို table နဲ့ ချရေးကြည့်ရအောင်။
+      [[mark:type-1]] ပထမ row က tone guide နဲ့ အဖြေ ရေးတဲ့ စည်းကမ်းပါ။ team တစ်ခုလုံး တူရမှာမို့ project instructions
+      ထဲမှာ ထားပြီး၊ ပြောင်းချင်ရင် လှလှ က ဆုံးဖြတ်ပါတယ်။
+      [[mark:type-2]] ဒုတိယ row က ပြဿနာဖြေရှင်းနည်း မှတ်စုနဲ့ အိမ်ရွှေ့တဲ့ customer အတွက် လုပ်ရမယ့် အဆင့်တွေပါ။ ရွှေ့ပြောင်းခကတော့ plan အလိုက် ကွာပြီး Billing ထဲမှာပဲ ရှိတာမို့ ဒီထဲ မထည့်ပါဘူး။ project knowledge ထဲမှာ
+      ထားပြီး၊ support lead တစ်ယောက်က လစဉ် စစ်ပြီး update လုပ်ပါမယ်။ ဘယ်သူ ထိန်းလဲ မရှိရင် Knowledge base
+      လိုပဲ ခေတ်နောက်ကျသွားတတ်လို့ပါ။
+      [[mark:type-3]] တတိယ row က ဒီအပတ် လိုင်းပြင်နေတဲ့ မြို့နယ်တွေပါ။ ဒါကို တမင် မသိမ်းပါဘူး။ ရက်ပိုင်းအတွင်း
+      ပြောင်းသွားတာမို့ memory ထဲ ကျန်နေရင် အမှားကို ယုံကြည်စွာ ပြောတဲ့ အဖြေတွေ ထွက်လာနိုင်ပါတယ်။ NMS ကနေ
+      အသစ် ယူရပါမယ်။
+      [[mark:type-4]] စတုတ္ထ row က customer ရဲ့ ဖုန်းနံပါတ်နဲ့ account အချက်အလက်ပါ။ memory၊ instructions၊ project
+      ဘယ်ထဲမှာမှ မထားပါဘူး။ ဒီ data တွေက ကုမ္ပဏီရဲ့ system ထဲမှာပဲ နေရပါမယ်။ မုန်တိုင်းကျတဲ့ညက personal
+      account တွေထဲ ရောက်သွားခဲ့တဲ့ ပြဿနာကို ထပ်မဖြစ်စေဖို့ပါ။
+      [[mark:sel-owner]] နောက်ဆုံး column ကိုလည်း ချန်မထားပါနဲ့။ သိမ်းထားတဲ့ အရာ တိုင်းမှာ update လုပ်မယ့်သူ ရှိမှ၊
+      ခေတ်နောက်ကျနေတဲ့ စည်းကမ်းကို Claude က ယုံကြည်စွာ ပြန်ပြောတာမျိုး မဖြစ်တော့ပါဘူး။
+    sources:
+      - {
+          title: "Use Claude's chat search and memory to build on previous context",
+          url: "https://support.claude.com/en/articles/11817273-use-claude-s-chat-search-and-memory-to-build-on-previous-context",
+        }
+      - {
+          title: "What are projects?",
+          url: "https://support.claude.com/en/articles/9517075-what-are-projects",
+        }
+    actions:
+      - { id: close-shelves, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: open-cont-2,
+          type: workspace.openFile,
+          at: { afterAction: close-shelves },
+          path: notebook/15-continuity.md,
+        }
+      - id: type-1
+        type: editor.type
+        at: { mark: type-1 }
+        cadence: line-by-line
+        target: { file: notebook/15-continuity.md, after: "|---|---|---|\n" }
+        text: "| tone guide၊ အဖြေ စည်းကမ်း | project instructions | လှလှ |\n"
+      - id: type-2
+        type: editor.type
+        at: { mark: type-2 }
+        cadence: line-by-line
+        target: { file: notebook/15-continuity.md, after: "| project instructions | လှလှ |\n" }
+        text: "| troubleshooting notes၊ အိမ်ရွှေ့ အဆင့်များ | project knowledge | support lead 1 ယောက်၊ လစဉ် |\n"
+      - id: type-3
+        type: editor.type
+        at: { mark: type-3 }
+        cadence: line-by-line
+        target: { file: notebook/15-continuity.md, after: "support lead 1 ယောက်၊ လစဉ် |\n" }
+        text: "| ဒီအပတ် လိုင်းပြင်နေတဲ့ မြို့နယ် | မသိမ်း · NMS ကနေ အသစ် ယူ | — |\n"
+      - id: type-4
+        type: editor.type
+        at: { mark: type-4 }
+        cadence: line-by-line
+        target: { file: notebook/15-continuity.md, after: "NMS ကနေ အသစ် ယူ | — |\n" }
+        text: "| customer ဖုန်း၊ account အချက်အလက် | ဘယ်မှာမှ မသိမ်း · ကုမ္ပဏီ system ထဲမှာပဲ | — |\n"
+      - id: sel-owner
+        type: editor.select
+        at: { mark: sel-owner }
+        target:
+          file: notebook/15-continuity.md
+          text: "ဘယ်သူ update လုပ်မလဲ |"
+      - id: expect-row-3
+        type: expect.file
+        at: { afterAction: type-4 }
+        path: notebook/15-continuity.md
+        contains: "| ဒီအပတ် လိုင်းပြင်နေတဲ့ မြို့နယ် | မသိမ်း · NMS ကနေ အသစ် ယူ | — |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ နေခြည် ရဲ့ Team plan မှာ memory နဲ့ chat search ကို နှစ်ခုလုံး ပိတ်ထားတယ် ဆိုပါစို့။
+      support lead တစ်ယောက်က တနင်္လာနေ့မှာ support project ထဲက chat တစ်ခုမှာ လျော်ကြေး စည်းကမ်း အသစ်ကို
+      Claude ကို ရှင်းပြခဲ့ပါတယ်။ အင်္ဂါနေ့မှာ အဲဒီ project ထဲမှာပဲ chat အသစ် တစ်ခု ဖွင့်လိုက်ပါတယ်။ Claude က
+      စည်းကမ်း အသစ်ကို သိမလား။
+      [[mark:q-a]] ပထမ အဖြေက project တူတာမို့ သိမယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက အဲဒီ စည်းကမ်းကို project knowledge ဒါမှမဟုတ် instructions ထဲ မရေးထားရင် မသိဘူး
+      ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ project တစ်ခုထဲက chat တွေက တစ်ခုနဲ့ တစ်ခု
+      context ကို မမျှကြလို့ပါ။ chat တိုင်းမှာ ပါလာတာက project knowledge နဲ့ instructions ပဲ ဖြစ်ပါတယ်။ တနင်္လာနေ့ chat
+      ထဲမှာ ပြောခဲ့တာက အဲဒီ chat ရဲ့ context ထဲမှာပဲ ကျန်ခဲ့ပြီး၊ memory နဲ့ chat search လည်း ပိတ်ထားတော့ သယ်ပေးမယ့် စင် မရှိပါဘူး။
+      [[mark:q-rule]] ဒါကြောင့် ဆက်ပါရမယ့် အရာကို chat ထဲ ပြောရုံနဲ့ မလုံလောက်ပါဘူး။ ရည်ရွယ်ပြီး စင် တစ်ခုပေါ်
+      တင်ထားမှ နောက် session မှာ ပါလာပါတယ်။
+    sources:
+      - {
+          title: "How can I create and manage projects?",
+          url: "https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် team အတွက် ဒီ continuity table ကို ရေးကြည့်ပါ။
+      AI ကို သုံးတိုင်း ထပ်ခါထပ်ခါ ရှင်းပြနေရတဲ့ အရာ သုံးခုကို အရင် ချရေးပါ။ ပြီးရင် တစ်ခုချင်းအတွက် ဘယ်စင်ပေါ်
+      ထားမလဲ၊ ဘယ်သူ update လုပ်မလဲ ဆိုတာ ဖြည့်ပါ။
+      [[mark:turn-2]] မသိမ်းရမယ့် row တစ်ခုကိုလည်း မမေ့ပါနဲ့။ ခဏခဏ ပြောင်းတဲ့ data နဲ့ customer ရဲ့ ကိုယ်ရေး
+      အချက်အလက်တွေက ဘယ်ကနေ အသစ် ယူမလဲ ဆိုတာကို ရေးထားပါ။
+    sources:
+      - {
+          title: "Use Claude's chat search and memory to build on previous context",
+          url: "https://support.claude.com/en/articles/11817273-use-claude-s-chat-search-and-memory-to-build-on-previous-context",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/15-continuity.md
+          text: "| ဆက်ပါရမယ့် အရာ | ဘယ်မှာ ထားမလဲ | ဘယ်သူ update လုပ်မလဲ |"
+      - id: sel-fresh
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/15-continuity.md
+          text: "မသိမ်း · NMS ကနေ အသစ် ယူ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ chat တစ်ခုရဲ့ context က အဲဒီ chat နဲ့အတူ ကျန်ခဲ့ပါတယ်။ session တွေကြား ဆက်ပါစေချင်တာကို
+      project၊ instructions ဒါမှမဟုတ် memory ဆိုတဲ့ စင်ပေါ် ရည်ရွယ်ပြီး တင်ရပါတယ်။
+      [[mark:recap-2]] မပြောင်းတဲ့ စည်းကမ်းကို သိမ်းပါ။ ပြောင်းတတ်တာကို အသစ် ယူပါ။ customer data ကိုတော့ ဘယ်စင်ပေါ်မှာမှ
+      မတင်ပါနဲ့။ ဒါဆိုရင် entry point၊ feature၊ model နဲ့ context ဆိုတဲ့ ဆုံးဖြတ်ချက် လေးခုလုံး ပြည့်စုံသွားပါပြီ။
+      [[mark:next]] နောက် lesson မှာတော့ Claude Platform ကို စပြီး လေ့လာသွားပါမယ်။ Reply assistant က Ticket system
+      ထဲမှာ အလုပ်လုပ်ရမှာမို့ Claude ကို လူ မဟုတ်ဘဲ program က ခေါ်ရပါမယ်။ အဲဒီ ပထမဆုံး API call ကနေ စပါမယ်။
+    sources:
+      - {
+          title: "Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+    actions:
+      - id: sel-customer
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/15-continuity.md
+          text: "ဘယ်မှာမှ မသိမ်း · ကုမ္ပဏီ system ထဲမှာပဲ"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
