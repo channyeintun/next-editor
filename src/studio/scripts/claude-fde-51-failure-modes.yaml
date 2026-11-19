@@ -1,0 +1,617 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-51-failure-modes
+  title: "Claude FDE 51: ကြိုမြင်ထားသင့်တဲ့ failure mode များ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/51-risk-register.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/51-risk-register.md: |
+        # Delivery Plan Pack · နောက်ဆက်တွဲ B. Risk register
+
+        ရက် 30 activation ပျက်တတ်တဲ့ ပုံစံ၊ အစောဆုံး မြင်ရမယ့် လက္ခဏာ၊ အခုပဲ လုပ်မယ့်အရာ
+
+        | Failure | အစောဆုံး လက္ခဏာ | အခု လုပ်မယ့်အရာ | တာဝန်ခံ |
+        |---|---|---|---|
+        | wishlist use case | "ဒါလည်း စမ်းရအောင်" တောင်းဆိုချက်တွေ တိုးလာ | criteria 4 ခုနဲ့ ပြန်စစ်၊ ဒီ 30 ရက်ထဲ မထည့် | ကိုယ် + CTO |
+        | enthusiast 1 ယောက်၊ champion မရှိ | မေးခွန်းတိုင်း တစ်ယောက်တည်းဆီ | မောင်မောင် + ဒုတိယ champion၊ အချိန် ဖယ်ပေး | CTO |
+
+        ## Sponsor
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the 30 days as a violet line with four white ticks; each red
+    # failure starts under the moment it first shows; the orange rule.
+    - {
+        id: f-title,
+        kind: text,
+        x: 270,
+        y: 155,
+        width: 700,
+        height: 45,
+        text: "Failure တွေ ဘယ်မှာ စပေါ်လဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: f-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 205,
+        width: 790,
+        height: 34,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-t0,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 220,
+        height: 35,
+        text: "Day 1 မတိုင်ခင်",
+        fontSize: 28,
+      }
+    - { id: f-t1, kind: text, x: 530, y: 250, width: 120, height: 35, text: "Day 1", fontSize: 28 }
+    - {
+        id: f-t2,
+        kind: text,
+        x: 690,
+        y: 250,
+        width: 160,
+        height: 35,
+        text: "week 1–2",
+        fontSize: 28,
+      }
+    - {
+        id: f-t3,
+        kind: text,
+        x: 890,
+        y: 250,
+        width: 160,
+        height: 35,
+        text: "week 3–4",
+        fontSize: 28,
+      }
+    - {
+        id: f-r1,
+        kind: text,
+        x: 290,
+        y: 305,
+        width: 300,
+        height: 35,
+        text: "wishlist use case",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-r2,
+        kind: text,
+        x: 290,
+        y: 355,
+        width: 300,
+        height: 35,
+        text: "baseline မရှိ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-r3,
+        kind: text,
+        x: 290,
+        y: 405,
+        width: 420,
+        height: 35,
+        text: "security ကို နောက်ဆုံးမှ မေး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-r4,
+        kind: text,
+        x: 530,
+        y: 455,
+        width: 300,
+        height: 35,
+        text: "license ပေး၊ မသင်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-r5,
+        kind: text,
+        x: 690,
+        y: 505,
+        width: 380,
+        height: 35,
+        text: "activity ကိုပဲ ရေတွက်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-r6,
+        kind: text,
+        x: 890,
+        y: 555,
+        width: 190,
+        height: 35,
+        text: "champion မရှိ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-rule,
+        kind: text,
+        x: 290,
+        y: 608,
+        width: 560,
+        height: 35,
+        text: "လက္ခဏာ မြင်တာနဲ့ အခုပဲ လုပ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Week 2: job ခက်တွေ ကိုယ် ရွှေ့ပေးမလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) ကိုယ်ကိုယ်တိုင် ရွှေ့ပေး၊ ဂဏန်း ကောင်းလာမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) job တစ်ခုကို တွဲလုပ်ပြ၊ ကျန်တာ သူတို့ ရွှေ့",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 600,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 1000,
+        y: 300,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "ဂဏန်းက team ရဲ့ ဂဏန်း ဖြစ်ရမယ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "FDE က တွဲလုပ်ပြ၊ အလုပ်ကို မယူ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9351
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ဒုတိယ ပတ်ကို ကြိုမြင်ကြည့်ခြင်း
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ champion ကို ရွေးပြီး၊ ကိုယ် ထွက်သွားလည်း deployment ဆက်ရှင်နေအောင် CLAUDE.md နဲ့ document
+      တွေကို ထိန်းဖို့၊ handover ကို ရက်စွဲနဲ့ checklist ပါတဲ့ အလုပ်အဖြစ် ဆွဲဖို့ လေ့လာခဲ့ပါတယ်။
+      [[mark:imagine]] ပထမ နေ့ မစခင် လေ့ကျင့်ခန်း တစ်ခု လုပ်ကြည့်ရအောင်။ ဒုတိယ ပတ် ရောက်နေပြီလို့ မြင်ယောင်ကြည့်ပါ။
+      developer တွေက Claude Code ကို နေ့တိုင်း သုံးနေကြပြီး၊ session အရေအတွက်လည်း များပါတယ်။ channel ထဲမှာလည်း
+      စကားတွေ စည်နေပါတယ်။ Claude Code ဆိုတာ terminal ထဲကနေ code ကို ဖတ်၊ ပြင်၊ command run ပေးတဲ့ coding agent ပါ။
+      [[mark:nothing]] ဒါပေမဲ့ CTO ဖြစ်တဲ့ အောင်အောင် က သောကြာနေ့ ဂဏန်း ကြည့်တဲ့အခါ၊ output တိုက်စစ်ပြီးသား job
+      အရေအတွက်က ထင်ထားသလောက် မတက်ပါဘူး။ သုံးတာ များပေမဲ့ တိုင်းလို့ရတဲ့ ရလဒ်က မပြောင်းသေးပါဘူး။ ဘာကြောင့်
+      ဖြစ်နိုင်လဲ ဆိုတာကို အခုကတည်းက စဉ်းစားထားရင်၊ တကယ် မဖြစ်ခင် ကာကွယ်လို့ ရပါတယ်။
+      [[mark:fm]] အဲဒီလို ပျက်တတ်တဲ့ ပုံစံကို failure mode လို့ ခေါ်ပါတယ်။ Anthropic ရဲ့ FDE learning path ဖော်ပြချက်က
+      နည်းပညာ တပ်ဆင်တာက ပိုလွယ်တဲ့ အပိုင်းလို့ ဆိုပြီး၊ အဖြစ်များတဲ့ failure mode တွေကို ကြိုတင် ကာကွယ်ဖို့ကို သီးသန့်
+      ခေါင်းစဉ် တစ်ခုအဖြစ် ထားပါတယ်။ ဒီနေ့ Delivery Plan Pack ရဲ့ နောက်ဆက်တွဲအဖြစ် risk register ကို ရေးပါမယ်။ risk register ဆိုတာ ဖြစ်လာနိုင်တဲ့ ပြဿနာ တစ်ခုချင်းစီနဲ့ အဲဒါအတွက် ဘာလုပ်မလဲ ဆိုတာကို ရေးထားတဲ့ စာရင်းပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: open-risk,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: notebook/51-risk-register.md,
+        }
+      - id: sel-intro
+        type: editor.select
+        at: { mark: fm }
+        target:
+          file: notebook/51-risk-register.md
+          text: "ရက် 30 activation ပျက်တတ်တဲ့ ပုံစံ၊ အစောဆုံး မြင်ရမယ့် လက္ခဏာ၊ အခုပဲ လုပ်မယ့်အရာ"
+
+  - id: timeline
+    chapter: ဘယ်အချိန်မှာ စပေါ်လဲ
+    narration: >
+      [[mark:f-title]] failure mode တွေက ရက် ၃၀ ရဲ့ အချိန် တစ်ခုခုမှာ စပေါ်ပါတယ်။ ဘယ်မှာ စပေါ်လဲ သိထားရင်၊ ဘယ်အချိန်
+      ဘာကို စောင့်ကြည့်ရမလဲ သိပါတယ်။
+      [[mark:f-line]] အချိန်ကို အပိုင်း လေးပိုင်း ခွဲကြည့်ပါမယ်။ ပထမ နေ့ မတိုင်ခင်၊ ပထမ နေ့၊ ပထမ နှစ်ပတ်နဲ့ နောက်ဆုံး
+      နှစ်ပတ်ပါ။
+      [[mark:f-before]] အများဆုံးက ပထမ နေ့ မတိုင်ခင်မှာ စပါတယ်။ ဘယ်သူမှ ငြင်းလို့ မရတဲ့ ဂဏန်း မပါဘဲ စိတ်ဝင်စားစရာ
+      ကောင်းတာကို ရွေးမိတဲ့ wishlist use case၊ ပြီးတော့ မစခင်က ဂဏန်း မယူထားတဲ့ baseline မရှိတာပါ။ နှစ်ခုလုံးကို
+      ကိုယ်တို့ ပြီးခဲ့တဲ့ lesson တွေမှာ ကာကွယ်ခဲ့ပြီးပါပြီ။
+      [[mark:f-sec]] နောက်တစ်ခုက security ကို နောက်ဆုံးမှ မေးတာပါ။ ဒုတိယ ပတ်ရောက်မှ security တာဝန်ခံက customer data
+      ဘယ်ကို ရောက်လဲ မေးလာရင်၊ အဖြေ မရမချင်း အလုပ် တစ်ခုလုံး ရပ်သွားနိုင်ပါတယ်။ အစောဆုံး လက္ခဏာက ပထမ နေ့ နီးလာပြီး
+      security review အတွက် ရက်ချိန်း မရှိသေးတာပါ။
+      [[mark:f-day1]] ပထမ နေ့မှာ စပေါ်တာက license ပေးပြီး ဘယ်သူမှ မသင်ပေးတာပါ။
+      [[mark:f-setup]] Anthropic ရဲ့ administrator guide နဲ့
+      Claude Code docs မှာ ပထမ နေ့ကို ပျက်စေနိုင်တဲ့ setup ပြဿနာတွေ ပါပါတယ်။ seat အမျိုးအစား တချို့မှာ Claude Code
+      မပါတာ၊ API access ကနေ လာတဲ့သူတွေ SSO နဲ့ ပြန် login ဝင်ရတာ၊ developer ရဲ့ shell ထဲက environment variable
+      တချို့ကြောင့် managed settings ကို ဘာ သတိပေးချက်မှ မပြဘဲ ကျော်သွားတာမျိုးတွေပါ။ managed settings ဆိုတာ admin က developer
+      တိုင်းရဲ့ Claude Code ပေါ် တွန်းထည့်ထားတဲ့ setting တွေပါ။
+      [[mark:f-habit]] login ဝင်ပြီးရင်လည်း ပြဿနာ ရှိပါသေးတယ်။ Anthropic ရဲ့ scaling guide အရ၊ မသင်ရသေးတဲ့သူတွေက
+      အလုပ်ကြီး တစ်ခုလုံးကို တစ်ခါတည်း ခိုင်းတတ်ပြီး၊ ဘာကြောင့် မရလဲ ဆိုတာကို error အပြည့်အစုံ မပေးဘဲ မရဘူးလို့ပဲ
+      ပြောတတ်ကြပါတယ်။ အလုပ်ကို အပိုင်းသေးသေး ခွဲပြီး အဆင့်တိုင်းမှာ စစ်ဖို့ကို သင်ပေးရပါမယ်။ champion kit ကလည်း တစ်ခါ စမ်းကြည့်တော့ AI က လုပ်ကြံ ရေးတယ်လို့ ပြောတဲ့သူတွေရဲ့ ပြဿနာက များသောအားဖြင့် context မလုံလောက်တာလို့ ဆိုပါတယ်။
+      [[mark:f-budget]] ငွေကြေး ဘက်မှာလည်း ပထမ နေ့ ပြဿနာ တစ်ခု ရှိနိုင်ပါတယ်။ Claude Enterprise ရဲ့ သုံးစွဲမှု လမ်းညွှန်က အဖွဲ့အစည်း တစ်ခုလုံးအတွက် သုံးစွဲမှု ကန့်သတ်ချက် တစ်ခုတည်း ထားရင်၊ အဲဒါ ပြည့်သွားတဲ့နေ့မှာ လူတိုင်း တစ်ပြိုင်နက် ရပ်သွားတယ်လို့ သတိပေးပါတယ်။ group အလိုက်နဲ့ လူတစ်ယောက်ချင်း ကန့်သတ်ချက်နဲ့ စဖို့ပါ။
+      [[mark:f-act]] ပထမ နှစ်ပတ်မှာ စပေါ်တာက activity ကိုပဲ ရေတွက်တာပါ။ session များတာ၊ channel စည်တာကို တိုးတက်မှုလို့
+      ထင်မိတာပါ။ champion kit ကလည်း တစ်ခါ စမ်းကြည့်တာထက် ထပ်ခါထပ်ခါ ပြန်သုံးတာကို စောင့်ကြည့်ဖို့ ပြောထားပါတယ်။
+      [[mark:f-champ]] နောက်ဆုံး နှစ်ပတ်မှာ စပေါ်တာက champion မရှိတာပါ။ စိတ်အားထက်သန်တဲ့သူ တစ်ယောက်ဆီကိုပဲ မေးခွန်းတိုင်း
+      ရောက်နေရင်၊ အဲဒီလူ မအားတဲ့ ပတ်မှာ အားလုံး ရပ်သွားပါတယ်။ ဒါကို ပြီးခဲ့တဲ့ lesson က champion plan နဲ့ ကာကွယ်ထားပါတယ်။ လက္ခဏာက channel ထဲက မေးခွန်းတွေကို လူ တစ်ယောက်တည်းပဲ ဖြေနေတာပါ။
+    sources:
+      - {
+          title: "Claude Enterprise Administrator Guide (Claude Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+      - {
+          title: "Claude Code docs: server-managed settings",
+          url: "https://code.claude.com/docs/en/server-managed-settings",
+        }
+      - {
+          title: "Claude Help Center: Claude Enterprise consumption guide",
+          url: "https://support.claude.com/en/articles/14782391-claude-enterprise-consumption-guide",
+        }
+      - {
+          title: "Claude: avoiding common challenges to adoption",
+          url: "https://claude.com/resources/guides/scaling-agentic-coding-across-your-organization/avoiding-common-challenges-to-adoption",
+        }
+    actions:
+      - {
+          id: draw-f-title,
+          type: whiteboard.apply,
+          at: { mark: f-title },
+          open: true,
+          clear: true,
+          upsertIds: [f-title],
+        }
+      - {
+          id: draw-f-line,
+          type: whiteboard.apply,
+          at: { mark: f-line },
+          upsertIds: [f-line, f-t0, f-t1, f-t2, f-t3],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-f-before,
+          type: whiteboard.apply,
+          at: { mark: f-before },
+          upsertIds: [f-r1, f-r2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-f-sec,
+          type: whiteboard.apply,
+          at: { mark: f-sec },
+          upsertIds: [f-r3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-f-day1,
+          type: whiteboard.apply,
+          at: { mark: f-day1 },
+          upsertIds: [f-r4],
+          drawMs: 900,
+        }
+      - { id: point-f-r4, type: whiteboard.point, at: { mark: f-setup }, target: { assetId: f-r4 } }
+      - {
+          id: draw-f-act,
+          type: whiteboard.apply,
+          at: { mark: f-act },
+          upsertIds: [f-r5],
+          drawMs: 900,
+        }
+      - {
+          id: draw-f-champ,
+          type: whiteboard.apply,
+          at: { mark: f-champ },
+          upsertIds: [f-r6],
+          drawMs: 900,
+        }
+
+  - id: early
+    chapter: လက္ခဏာနဲ့ အစောဆုံး လုပ်ရမယ့်အရာ
+    narration: >
+      [[mark:e-rule]] ဒီ failure တွေမှာ တူတဲ့ အချက် တစ်ခု ရှိပါတယ်။ ပျက်သွားတဲ့နေ့ ရုတ်တရက် ပေါ်လာတာ မဟုတ်ဘဲ၊
+      အစောပိုင်းကတည်းက လက္ခဏာ တစ်ခု ပြနေတတ်ပါတယ်။ ပြီးတော့ အဲဒီ လက္ခဏာကို မြင်တဲ့အချိန်မှာ လုပ်ရမယ့်အရာက များသောအားဖြင့်
+      သေးသေးလေးပါ။ စောင့်လေ ပြင်ရတာ ကြီးလေ ဖြစ်ပါတယ်။
+      [[mark:e-point]] ဥပမာ security review ရက်ချိန်း မရှိတာကို ပထမ နေ့ မတိုင်ခင် မြင်ရင် အစည်းအဝေး တစ်ခု စီစဉ်ရုံပါပဲ။
+      ဒုတိယ ပတ်ရောက်မှ မြင်ရင်တော့ developer ရှစ်ယောက်ရဲ့ အလုပ် ရပ်သွားနိုင်ပါတယ်။
+      [[mark:e-base]] baseline လည်း အတူတူပါ။ ပထမ နေ့ မတိုင်ခင်ဆိုရင် job သုံးခုကို လက်နဲ့ ရွှေ့ကြည့်ရုံပါ။ ပထမ နေ့ ကျော်သွားရင်တော့ ဘယ်လောက် ကြိုးစားကြိုးစား အဲဒီ ဂဏန်းကို ပြန်ယူလို့ မရတော့ပါဘူး။
+      [[mark:e-sign]] ဒါကြောင့် ဒီ စာရင်းကို ပြဿနာ ဖြစ်ပြီးမှ မဖတ်ဘဲ၊ အစမှာ ကြိုပြောထားရပါတယ်။ sponsor ဖြစ်တဲ့ CTO ကို
+      ပထမ နေ့ မတိုင်ခင် ပြပြီး လက်မှတ် ထိုးခိုင်းပါမယ်။ sponsor ဆိုတာ engagement ကို ရန်ပုံငွေနဲ့ ဆုံးဖြတ်ချက်ဘက်က
+      ကျောထောက်နောက်ခံ ပေးတဲ့သူပါ။ လက်မှတ် ထိုးထားတဲ့ စာရင်းထဲက လက္ခဏာ ပေါ်လာရင်၊ ဘယ်သူ့ကိုမှ အပြစ်တင်စရာ မလိုဘဲ
+      သဘောတူထားတဲ့ အတိုင်း လုပ်ရုံပါပဲ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-f-rule,
+          type: whiteboard.apply,
+          at: { mark: e-rule },
+          upsertIds: [f-rule],
+          drawMs: 900,
+        }
+      - { id: point-f-r3, type: whiteboard.point, at: { mark: e-point }, target: { assetId: f-r3 } }
+      - { id: point-f-r2, type: whiteboard.point, at: { mark: e-base }, target: { assetId: f-r2 } }
+
+  - id: register
+    chapter: Risk register
+    narration: >
+      [[mark:k-close]] ဒါကို risk register အဖြစ် ချရေးကြည့်ရအောင်။ wishlist နဲ့ champion နှစ်ကြောင်းကတော့ ပြီးခဲ့တဲ့
+      lesson တွေကနေ ရေးထားပြီးသားပါ။
+      [[mark:type-base]] ပထမ တစ်ကြောင်းက baseline ပါ။ အစောဆုံး လက္ခဏာက ပထမ နေ့ ရောက်လာပြီး လက်နဲ့ ရွှေ့ပြီး တိုင်းရမယ့် job
+      သုံးခု မပြီးသေးတာပါ။ အဲဒီလိုဆိုရင် ပထမ နေ့ကို ရွှေ့ပြီး baseline ကို အရင် ယူပါမယ်။ ရက် နှစ်ရက် နောက်ကျတာက
+      ယှဉ်စရာ မရှိတဲ့ ရလဒ်ထက် အများကြီး သက်သာပါတယ်။
+      [[mark:type-lic]] ဒုတိယ တစ်ကြောင်းက license နဲ့ သင်တန်းပါ။ ပထမ နေ့ မတိုင်ခင် ရှစ်ယောက်လုံး login ဝင်ကြည့်ပြီး၊ status
+      command ထဲမှာ Enterprise managed settings ပေါ်လား စစ်ပါမယ်။ cohort ထဲက တစ်ယောက်ချင်းစီနဲ့ တွဲလုပ်တာ တစ်ကြိမ်လည်း
+      လုပ်ပါမယ်။
+      [[mark:type-sec]] တတိယ တစ်ကြောင်းက security ပါ။ ဒီအပတ်ထဲမှာပဲ security တာဝန်ခံနဲ့ ထိုင်ပြီး၊ ဘယ် data ကို prompt
+      ထဲ ထည့်ခွင့် ရှိလဲ သဘောတူပါမယ်။ customer data က prompt ထဲ ရောက်သွားတာကို pilot ရပ်ရမယ့် အခြေအနေအဖြစ် pilot design မှာ ရေးထားခဲ့တော့၊ အဲဒီ စည်းကမ်းကို မစခင် ရှင်းထားဖို့ ပိုအရေးကြီးပါတယ်။
+      [[mark:type-act]] စတုတ္ထ တစ်ကြောင်းက activity ကိုပဲ ရေတွက်တာပါ။ session တွေ များပြီး စစ်ပြီးသား job မတက်တာက လက္ခဏာပါ။
+      အဲဒီအတွက် သောကြာနေ့တိုင်း CTO ကို စစ်ပြီးသား job အရေအတွက်ကိုပဲ ပြပါမယ်။ session အရေအတွက်ကို ဘေးက မှတ်စု အဖြစ်ပဲ ထားပါမယ်။
+      [[mark:type-sponsor]] အောက်ဆုံးမှာ sponsor ရဲ့ တာဝန်ကို ရေးပါတယ်။ ပထမ နေ့ မတိုင်ခင် လက်မှတ် ထိုးဖို့နဲ့၊ သောကြာနေ့တိုင်း
+      ဆယ့်ငါးမိနစ် ဒီ register ကို ပြန်ကြည့်ဖို့ပါ။
+    sources:
+      - {
+          title: "Claude Code docs: admin setup",
+          url: "https://code.claude.com/docs/en/admin-setup",
+        }
+      - {
+          title: "Claude Code docs: champion kit",
+          url: "https://code.claude.com/docs/en/champion-kit",
+        }
+    actions:
+      - { id: close-timeline, type: whiteboard.apply, at: { mark: k-close }, open: false }
+      - id: type-base
+        type: editor.type
+        at: { mark: type-base }
+        cadence: line-by-line
+        target: { file: notebook/51-risk-register.md, after: "|---|---|---|---|\n" }
+        text: "| baseline မရှိ | Day 1 ရောက်ပြီ၊ လက်နဲ့ job 3 ခု မတိုင်းရသေး | Day 1 ကို ရွှေ့၊ baseline အရင် ယူ | ကိုယ် |\n"
+      - id: type-lic
+        type: editor.type
+        at: { mark: type-lic }
+        cadence: line-by-line
+        target: { file: notebook/51-risk-register.md, after: "baseline အရင် ယူ | ကိုယ် |\n" }
+        text: "| license ပေး၊ မသင် | Day 1 မှာ login မရ၊ seat မှာ Claude Code မပါ | 8 ယောက်လုံး login + /status စစ်၊ တွဲလုပ် 1 ကြိမ် | admin + ကိုယ် |\n"
+      - id: type-sec
+        type: editor.type
+        at: { mark: type-sec }
+        cadence: line-by-line
+        target: { file: notebook/51-risk-register.md, after: "တွဲလုပ် 1 ကြိမ် | admin + ကိုယ် |\n" }
+        text: "| security နောက်ဆုံးမှ | Day 1 နီးပြီ၊ security review ရက် မရှိ | ဒီအပတ် prompt ထဲ ထည့်ခွင့်ရှိတဲ့ data သဘောတူ | security တာဝန်ခံ |\n"
+      - id: type-act
+        type: editor.type
+        at: { mark: type-act }
+        cadence: line-by-line
+        target: { file: notebook/51-risk-register.md, after: "data သဘောတူ | security တာဝန်ခံ |\n" }
+        text: "| activity ကိုပဲ ရေတွက် | session များ၊ စစ်ပြီးသား job မတက် | သောကြာတိုင်း စစ်ပြီးသား job ကိုပဲ ပြ | ကိုယ် |\n"
+      - id: type-sponsor
+        type: editor.type
+        at: { mark: type-sponsor }
+        cadence: line-by-line
+        target: { file: notebook/51-risk-register.md, after: "## Sponsor\n" }
+        text: "- CTO အောင်အောင်: Day 1 မတိုင်ခင် ဖတ်ပြီး လက်မှတ်ထိုး၊ သောကြာတိုင်း 15 မိနစ် ပြန်ကြည့်\n"
+      - id: expect-act
+        type: expect.file
+        at: { afterAction: type-sponsor }
+        path: notebook/51-risk-register.md
+        contains: "| activity ကိုပဲ ရေတွက် | session များ၊ စစ်ပြီးသား job မတက် | သောကြာတိုင်း စစ်ပြီးသား job ကိုပဲ ပြ | ကိုယ် |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဒုတိယ ပတ်မှာ report job ရွှေ့တာ ရည်မှန်းချက်ထက် နည်းနည်း နောက်ကျနေတယ် ဆိုပါစို့။
+      job ရွှေ့နေတဲ့ developer နှစ်ယောက်က အခက်ဆုံး job တွေကို ကိုယ့်ကို ရွှေ့ပေးဖို့ တောင်းဆိုလာပါတယ်။ ဘာလုပ်သင့်လဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက ကိုယ်တိုင် ရွှေ့ပေးလိုက်တာပါ။ ရက် ၃၀ ပြည့်တဲ့နေ့မှာ ဂဏန်းက ပိုကောင်းနေပါလိမ့်မယ်။
+      [[mark:q-b]] ဒုတိယ တစ်ခုက ခက်တဲ့ job တစ်ခုကို သူတို့နဲ့ တွဲလုပ်ပြပြီး၊ ကျန်တာကို သူတို့ကိုယ်တိုင် ရွှေ့ခိုင်းတာပါ။
+      lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ ဒါရိုက်တာ အဖွဲ့ ဖတ်မယ့် ဂဏန်းက developer နှစ်ယောက်
+      Claude Code နဲ့ ဘာလုပ်နိုင်လဲ ဆိုတာကို ပြရမှာပါ။ ကိုယ် ရွှေ့ပေးလိုက်တဲ့ job တွေက ဂဏန်းကို လှအောင် လုပ်ပေမဲ့၊ ကိုယ်
+      ထွက်သွားတဲ့နေ့မှာ ပျောက်သွားမယ့် စွမ်းရည်ပါ။ ဒါကလည်း failure mode တစ်ခုပါ။ FDE ကိုယ်တိုင် အလုပ်ကို ယူလုပ်မိတာပါ။
+      [[mark:q-rule]] ဒါကြောင့် ကူညီတိုင်း မေးကြည့်ပါ။ ဒီ ဂဏန်းက team ရဲ့ ဂဏန်း ဟုတ်ရဲ့လား၊ ကိုယ် မရှိတော့ရင်လည်း ဒီလို
+      ဆက်လုပ်နိုင်မလား ဆိုတာပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+      - {
+          title: "Claude Code docs: champion kit",
+          url: "https://code.claude.com/docs/en/champion-kit",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule, offsetMs: 2500 },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် အဖွဲ့အစည်းမှာ
+    narration: >
+      [[mark:turn]] အဲဒီ failure ကိုလည်း register ထဲ နောက်ဆုံး တစ်ကြောင်းအဖြစ် ထည့်ပါမယ်။ အစောဆုံး လက္ခဏာက ခက်တဲ့ job
+      တွေ ကိုယ့်ဆီ ရောက်လာတာ ဖြစ်ပြီး၊ လုပ်ရမှာက တွဲလုပ်ပြပြီး ပြန်ပေးတာပါ။
+      [[mark:turn-2]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် အဖွဲ့အစည်းမှာ ဖြစ်နိုင်ခြေ အများဆုံး failure နှစ်ခုကို
+      ဒီ table ထဲက ရွေးကြည့်ပါ။ တစ်ခုချင်းစီအတွက် ကိုယ့်ဆီမှာ ဘယ်လို လက္ခဏာနဲ့ စပေါ်မလဲ၊ ဒီအပတ်ထဲ ဘာလုပ်လို့ ရမလဲ ဆိုတာကို
+      ကိုယ့်စကားနဲ့ ပြန်ရေးပါ။ တာဝန်ခံ ကော်လံမှာ နာမည် အမှန်ကို ရေးနိုင်ရင် ပိုကောင်းပါတယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: type-fde
+        type: editor.type
+        at: { mark: turn, offsetMs: 1200 }
+        cadence: line-by-line
+        target: { file: notebook/51-risk-register.md, after: "စစ်ပြီးသား job ကိုပဲ ပြ | ကိုယ် |\n" }
+        text: "| FDE ကိုယ်တိုင် အလုပ်ယူ | ခက်တဲ့ job တွေ ကိုယ့်ဆီ ရောက်လာ | တွဲလုပ်ပြပြီး ပြန်ပေး၊ ကိုယ် မရွှေ့ | ကိုယ် |\n"
+      - id: sel-table
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/51-risk-register.md
+          text: "| Failure | အစောဆုံး လက္ခဏာ | အခု လုပ်မယ့်အရာ | တာဝန်ခံ |"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ engagement တစ်ခု ပျက်တာက နည်းပညာကြောင့် ထက် လူနဲ့ အစီအစဉ်ကြောင့် များပါတယ်။
+      failure mode တစ်ခုချင်းစီမှာ အစောဆုံး လက္ခဏာ တစ်ခုနဲ့ စောစော လုပ်ရင် သေးသေးလေးပဲ ကုန်တဲ့ အလုပ် တစ်ခု ရှိပါတယ်။
+      [[mark:recap-2]] အဲဒါတွေကို အစမှာ စာရင်း တစ်ခုအဖြစ် ချရေးပြီး sponsor ကို လက်မှတ် ထိုးခိုင်းထားရင်၊ လက္ခဏာ ပေါ်လာတဲ့
+      နေ့မှာ ငြင်းခုံစရာ မလိုဘဲ လုပ်ရမှာကို လုပ်ရုံပါပဲ။
+      [[mark:next]] နောက် lesson မှာတော့ Delivery Plan Pack တစ်ခုလုံးကို calendar တစ်ခုတည်းပေါ် တင်ပြီး၊ kick off မတိုင်ခင်ကနေ
+      handover အထိ ရက် ၃၀ activation ကို အပတ်လိုက် ချရေးတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-fde
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/51-risk-register.md
+          text: "| FDE ကိုယ်တိုင် အလုပ်ယူ |"
+      - id: sel-sponsor
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/51-risk-register.md
+          text: "- CTO အောင်အောင်: Day 1 မတိုင်ခင် ဖတ်ပြီး လက်မှတ်ထိုး"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
