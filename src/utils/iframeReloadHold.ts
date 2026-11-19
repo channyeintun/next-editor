@@ -11,8 +11,10 @@
 // API (Chromium), the page's own reload becomes a replace navigation to the
 // same address, which may start a view transition (a reload may not). The new
 // document keeps the old one's picture on top until it has loaded and painted
-// what its scripts rendered, then drops it. Everywhere else the reload runs as
-// it always did.
+// what its scripts rendered, then drops it. A reload that comes while the
+// picture is still up waits for that moment, so a burst of them (one for each
+// keystroke) becomes one, taken from a page that has been drawn. Everywhere
+// else the reload runs as it always did.
 
 /** What the old document leaves for the new one, in the preview origin's sessionStorage. */
 export const IFRAME_RELOAD_HOLD_STORAGE_KEY = "__NEXT_EDITOR_RELOAD_HOLD__";
@@ -105,24 +107,36 @@ export function createIframeReloadHoldScript(setupMarker: string): string {
       }
 
       // ── the new document: keep the old picture until this one is ready ──
+      // While the old picture is up this document has drawn nothing yet, so a
+      // reload that comes now waits: taken at once, the picture kept for the
+      // next document would be this empty one. Typing without a pause sends
+      // reloads faster than a page loads.
+      let holding = false;
+      let reloadWaiting = false;
+
       const note = readNote();
       if (note) {
         const removeRules = addRules(optInCss + holdCss);
         let transition = null;
-        let released = false;
+        holding = true;
 
         function release() {
-          if (released) return;
-          released = true;
+          if (!holding) return;
+          holding = false;
           // A replace navigation starts at the top; a reload kept its place.
           if (note.x || note.y) window.scrollTo(note.x, note.y);
           if (transition) transition.skipTransition();
           removeRules();
+          // The reloads that waited, as one, now that this page is on screen.
+          if (reloadWaiting) {
+            reloadWaiting = false;
+            window.location.reload();
+          }
         }
 
         window.addEventListener("pagereveal", function(event) {
           transition = event.viewTransition || null;
-          if (released && transition) transition.skipTransition();
+          if (!holding && transition) transition.skipTransition();
         }, { once: true });
 
         // Loaded, then two frames: what the page's scripts rendered is painted.
@@ -140,6 +154,11 @@ export function createIframeReloadHoldScript(setupMarker: string): string {
       navigation.addEventListener("navigate", function(event) {
         // With a fragment, navigating to the same address only scrolls.
         if (event.navigationType !== "reload" || !event.cancelable || window.location.hash) return;
+        if (holding) {
+          event.preventDefault();
+          reloadWaiting = true;
+          return;
+        }
         try {
           window.sessionStorage.setItem(key, JSON.stringify({
             at: Date.now(),
@@ -152,6 +171,13 @@ export function createIframeReloadHoldScript(setupMarker: string): string {
         }
         event.preventDefault();
         addRules(optInCss);
+        // The browser learns that this document allows the transition when its
+        // styles are next worked out. Left to the next frame, a navigation that
+        // commits sooner (a local dev server answers in a few milliseconds) gets
+        // no transition, so they are worked out now.
+        if (typeof window.getComputedStyle === "function") {
+          void window.getComputedStyle(document.documentElement).opacity;
+        }
         window.location.replace(window.location.href);
       });
     })();

@@ -32,7 +32,10 @@ function createFrameWindow(options: FakeOptions = {}) {
   const document = {
     readyState: options.readyState ?? "loading",
     adoptedStyleSheets: [] as FakeSheet[],
+    documentElement: {},
   };
+  /** What the document's sheets held each time its styles were worked out. */
+  const styleUpdates: string[] = [];
   const frameWindow: Record<string, unknown> = {
     document,
     navigation: {
@@ -52,10 +55,15 @@ function createFrameWindow(options: FakeOptions = {}) {
       href: options.href ?? HREF,
       hash: options.hash ?? "",
       replace: vi.fn<(url: string) => void>(),
+      reload: vi.fn<() => void>(),
     },
     scrollX: 0,
     scrollY: 240,
     scrollTo: vi.fn<(x: number, y: number) => void>(),
+    getComputedStyle: () => {
+      styleUpdates.push(document.adoptedStyleSheets.map((sheet) => sheet.css).join(""));
+      return { opacity: "1" };
+    },
     addEventListener: (type: string, listener: (event: unknown) => void) =>
       windowListeners.set(type, listener),
     requestAnimationFrame: (callback: () => void) => frames.push(callback),
@@ -70,8 +78,12 @@ function createFrameWindow(options: FakeOptions = {}) {
   return {
     storage,
     document,
-    location: frameWindow.location as { replace: ReturnType<typeof vi.fn> },
+    location: frameWindow.location as {
+      replace: ReturnType<typeof vi.fn>;
+      reload: ReturnType<typeof vi.fn>;
+    },
     scrollTo: frameWindow.scrollTo as ReturnType<typeof vi.fn>,
+    styleUpdates,
     hasNavigateListener: () => navigationListeners.has("navigate"),
     /** The page navigates; answers whether the script cancelled it. */
     navigate(navigationType: string, cancelable = true): boolean {
@@ -109,6 +121,20 @@ describe("createIframeReloadHoldScript: the document that reloads", () => {
     });
     // The document it leaves allows the transition.
     expect(frame.rules()).toContain("@view-transition{navigation:auto}");
+  });
+
+  it("has its styles worked out with the rule in place before it navigates", () => {
+    // The browser hears of the rule at a style update; a navigation that
+    // commits before the next frame's would otherwise get no transition.
+    const frame = createFrameWindow();
+    frame.location.replace.mockImplementation(() => {
+      expect(frame.styleUpdates).toHaveLength(1);
+    });
+
+    frame.navigate("reload");
+
+    expect(frame.location.replace).toHaveBeenCalledTimes(1);
+    expect(frame.styleUpdates[0]).toContain("@view-transition{navigation:auto}");
   });
 
   it("leaves every other navigation alone", () => {
@@ -207,6 +233,41 @@ describe("createIframeReloadHoldScript: the document that arrives", () => {
     frame.fire("pagereveal", { viewTransition: { skipTransition } });
 
     expect(skipTransition).toHaveBeenCalledTimes(1);
+  });
+
+  it("makes a reload that comes while the old picture is up wait until the page is painted", () => {
+    const frame = createFrameWindow({ stored: note() });
+    const skipTransition = vi.fn<() => void>();
+    frame.fire("pagereveal", { viewTransition: { skipTransition } });
+
+    // Two more edits before this document has drawn anything: neither reloads yet.
+    expect(frame.navigate("reload")).toBe(true);
+    expect(frame.navigate("reload")).toBe(true);
+    expect(frame.location.replace).not.toHaveBeenCalled();
+    expect(frame.location.reload).not.toHaveBeenCalled();
+    expect(frame.storage.has(IFRAME_RELOAD_HOLD_STORAGE_KEY)).toBe(false);
+
+    frame.fire("load");
+    frame.runFrames();
+    frame.runFrames();
+
+    // The page is on screen, at its place: now they reload, once.
+    expect(frame.scrollTo).toHaveBeenCalledWith(0, 240);
+    expect(skipTransition).toHaveBeenCalledTimes(1);
+    expect(frame.location.reload).toHaveBeenCalledTimes(1);
+
+    // That reload is held as any reload of a drawn page is.
+    expect(frame.navigate("reload")).toBe(true);
+    expect(frame.location.replace).toHaveBeenCalledWith(HREF);
+  });
+
+  it("reloads no more once the page is drawn and no reload waited", () => {
+    const frame = createFrameWindow({ stored: note(), readyState: "complete" });
+
+    frame.runFrames();
+    frame.runFrames();
+
+    expect(frame.location.reload).not.toHaveBeenCalled();
   });
 
   it("stays at the top when the old document was there", () => {
