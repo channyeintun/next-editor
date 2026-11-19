@@ -1,0 +1,661 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-44-skills-vs-other-features
+  title: "Claude FDE 44: Skill လား၊ တခြား feature လား"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/44-which-feature.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/44-which-feature.md: |
+        # Billing: လိုအပ်ချက် တစ်ခုအတွက် ဘယ် feature လဲ
+
+        | လိုအပ်ချက် | Feature | ဘာကြောင့် |
+        |---|---|---|
+        | test နဲ့ lint command | CLAUDE.md | session တိုင်း သိထားရမယ် |
+        | outage notice ရေးတဲ့ အဆင့်တွေ | skill | notice ရေးတဲ့ task မှာပဲ လို |
+        | test suite အပြည့် run တာ | subagent | output ထောင်ချီ၊ report တစ်ခုပဲ ပြန်လို |
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 820,
+        height: 45,
+        text: "turn မပြီးခင် test pass ရမယ်",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) skill ထဲမှာ ရေးထားမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) Stop hook နဲ့ test run မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 430,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 760,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "skill: Claude ကို တောင်းဆိုတာ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "hook: Claude Code က အမြဲ run",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — five features (blue, parts of the system), each with its one question (white);
+    # violet braces join the pairs that work together.
+    - {
+        id: f-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 820,
+        height: 45,
+        text: "Feature ငါးခု၊ မေးခွန်း တစ်ခုစီ",
+        fontSize: 36,
+      }
+    - {
+        id: f-1,
+        kind: text,
+        x: 350,
+        y: 235,
+        width: 190,
+        height: 35,
+        text: "CLAUDE.md",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-1q,
+        kind: text,
+        x: 600,
+        y: 235,
+        width: 490,
+        height: 35,
+        text: "session တိုင်း သိရမလား?",
+        fontSize: 28,
+      }
+    - {
+        id: f-2,
+        kind: text,
+        x: 350,
+        y: 315,
+        width: 190,
+        height: 35,
+        text: "hook",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-2q,
+        kind: text,
+        x: 600,
+        y: 315,
+        width: 490,
+        height: 35,
+        text: "ခြွင်းချက်မရှိ ဖြစ်ရမလား?",
+        fontSize: 28,
+      }
+    - {
+        id: f-3,
+        kind: text,
+        x: 350,
+        y: 395,
+        width: 190,
+        height: 35,
+        text: "subagent",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-3q,
+        kind: text,
+        x: 600,
+        y: 395,
+        width: 490,
+        height: 35,
+        text: "သီးသန့် context လိုလား?",
+        fontSize: 28,
+      }
+    - {
+        id: f-4,
+        kind: text,
+        x: 350,
+        y: 475,
+        width: 190,
+        height: 35,
+        text: "skill",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-4q,
+        kind: text,
+        x: 600,
+        y: 475,
+        width: 490,
+        height: 35,
+        text: "task တချို့အတွက် နည်းလား?",
+        fontSize: 28,
+      }
+    - {
+        id: f-5,
+        kind: text,
+        x: 350,
+        y: 555,
+        width: 190,
+        height: 35,
+        text: "MCP server",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-5q,
+        kind: text,
+        x: 600,
+        y: 555,
+        width: 490,
+        height: 35,
+        text: "အပြင် system နဲ့ ချိတ်မလား?",
+        fontSize: 28,
+      }
+    - {
+        id: f-pair-sub,
+        kind: freedraw,
+        stroke: brace-left,
+        x: 300,
+        y: 395,
+        width: 36,
+        height: 118,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-pair-mcp,
+        kind: freedraw,
+        stroke: brace-right,
+        x: 548,
+        y: 475,
+        width: 36,
+        height: 118,
+        strokeColor: "#6741d9",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9344
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: နည်း ငါးမျိုး၊ ကျပန်း သုံးနေတာ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ report migration skill ကို SKILL.md၊ reference file နဲ့ script ဆိုပြီး ခွဲဖွဲ့စည်းကာ၊ လိုတာလောက်ပဲ
+      context ထဲ ဝင်အောင် လုပ်ခဲ့ပါတယ်။
+      [[mark:sel-teams]] အခု Billing မှာ Claude Code ကို ပြင်ဆင်တဲ့ နည်း ငါးမျိုး ရှိနေပါပြီ။ CLAUDE.md၊ skill၊ subagent၊
+      hook နဲ့ MCP server ပါ။ Network Tools team ကလည်း Billing ရဲ့ setup ကို plugin နဲ့ ယူသုံးနေပါပြီ။
+      [[mark:story]] ပြဿနာက လိုအပ်ချက် အသစ် တစ်ခု ပေါ်တိုင်း ဘယ်နည်းကို သုံးမလဲ ဆိုတာ လူတိုင်း မတူတာပါ။ တစ်ယောက်က
+      လုပ်ငန်းစဉ် ရှည်ရှည်ကို CLAUDE.md ထဲ ထည့်လို့ session တိုင်း token ကုန်နေတယ်။ နောက်တစ်ယောက်က အမြဲ ဖြစ်ရမယ့်
+      စည်းကမ်းကို skill ထဲ ရေးထားပြီး၊ Claude က တစ်ခါတလေ လိုက်မလုပ်တာကို ကြုံရတယ်။
+      [[mark:story-2]] ဒါကြောင့် Network Tools ရဲ့ team lead က စာမျက်နှာ တစ်မျက်နှာ စာ တောင်းလာပါတယ်။ လိုအပ်ချက် တစ်ခု
+      ရောက်လာရင် ဘယ် feature ကို ရွေးမလဲ ဆိုတာ ဆုံးဖြတ်ပေးတဲ့ လမ်းညွှန်ပါ။ ဒီ lesson မှာ အဲဒီ လမ်းညွှန်ကို feature
+      တစ်ခုစီအတွက် မေးခွန်း တစ်ခုစီနဲ့ ရေးသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude Code (features overview)",
+          url: "https://code.claude.com/docs/en/features-overview",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { scene: start }, path: README.md }
+      - id: sel-teams
+        type: editor.select
+        at: { mark: sel-teams }
+        target:
+          file: README.md
+          text: "- Billing team နဲ့ Claude Code"
+      - id: sel-team-list
+        type: editor.select
+        at: { mark: story-2 }
+        target:
+          file: README.md
+          text: "- developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] လမ်းညွှန်ကို မရေးခင် မေးခွန်း တစ်ခု မေးပါရစေ။ Network Tools team က Claude က turn တစ်ခု မပြီးခင်
+      test တွေ pass ဖြစ်ကို ဖြစ်ရမယ်လို့ လိုချင်ပါတယ်။ turn ဆိုတာ ကိုယ့် message တစ်ခုကို Claude က ဖြေပြီး ရပ်သွားတဲ့အထိ
+      ပါ။
+      [[mark:q-a]] ပထမ နည်းက test run ပြီးမှ ရပ်ပါလို့ skill တစ်ခုထဲမှာ ရေးထားတာပါ။
+      [[mark:q-b]] ဒုတိယ နည်းက Claude ရပ်ခါနီးတိုင်း test ကို run ပေးတဲ့ Stop hook ထားတာပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ နည်းပါ။ ဘာကြောင့်လဲဆိုတော့ skill က Claude ဖတ်ပြီး ကိုယ်တိုင် အဓိပ္ပာယ်ဖော်ရတဲ့
+      ညွှန်ကြားချက် ဖြစ်လို့ ရလဒ်က တစ်ခါနဲ့ တစ်ခါ ကွာနိုင်ပါတယ်။ hook ကတော့ Claude Code ရဲ့ အဆင့် တစ်ခုခုမှာ အလိုအလျောက်
+      run တဲ့ ကိုယ့် command ပါ။ Claude က ဆုံးဖြတ်စရာ မလိုဘဲ event ရောက်တိုင်း run ပြီး၊ test fail ရင် Claude ကို
+      ဆက်အလုပ်လုပ်ခိုင်းပါတယ်။
+      [[mark:quiz-cap]] ဆက်တိုက် ရှစ်ခါ ပြန်ခိုင်းပြီးရင်တော့ Claude Code က turn ကို ပြီးခွင့်ပေးတဲ့ အကန့်အသတ်
+      ရှိတာမို့၊ hook က test ကို အမြဲ run ပေးပေမဲ့ pass ဖြစ်မယ်လို့တော့ အာမမခံပါဘူး။
+      [[mark:q-rule]] docs ရဲ့ ဥပမာနဲ့ ပြောရရင် env file ကို ဘယ်တော့မှ မပြင်ပါနဲ့လို့ skill ထဲ ရေးထားတာက တောင်းဆိုချက်
+      ပါ။ tool မသုံးခင် run တဲ့ hook ကတော့ တကယ် ပိတ်တာပါ။ ခြွင်းချက် မရှိရမယ့် စည်းကမ်းကို hook ထဲ ထားပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude Code (hook vs skill)",
+          url: "https://code.claude.com/docs/en/features-overview",
+        }
+      - {
+          title: "Claude Code Docs: Hooks reference (Stop, exit code 2)",
+          url: "https://code.claude.com/docs/en/hooks",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - { id: point-cap, type: whiteboard.point, at: { mark: quiz-cap }, target: { assetId: q-b } }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: five
+    chapter: Feature ငါးခု၊ မေးခွန်း ငါးခု
+    narration: >
+      [[mark:f-open]] ဒီ စည်းကမ်းကို feature ငါးခုလုံးအတွက် ချဲ့ကြည့်ရအောင်။ feature တစ်ခုစီမှာ မေးရမယ့် မေးခွန်း တစ်ခုစီ
+      ရှိပါတယ်။
+      [[mark:f-1]] ပထမ မေးခွန်းက session တိုင်းမှာ သိထားရမလား ဆိုတာပါ။ ဟုတ်ရင် CLAUDE.md ပါ။ CLAUDE.md ဆိုတာ project
+      အကြောင်း Claude Code အမြဲ သိထားရမယ့် အချက်တွေ ရေးထားတဲ့ file ပါ။ request တိုင်းမှာ token ကုန်တာမို့ docs က စာကြောင်း
+      ၂၀၀ အောက်မှာ ထားဖို့ ပြောပါတယ်။
+      [[mark:f-1b]] Claude က project ရဲ့ စည်းကမ်း တစ်ခုကို နှစ်ခါ မှားပြီဆိုရင် CLAUDE.md ထဲ ထည့်ဖို့
+      အချိန်ရောက်ပါပြီ။ ဒါပေမဲ့ Claude Code က CLAUDE.md ကို context အနေနဲ့ ဖတ်တာပါ။ အတင်းအကျပ် လိုက်နာစေတဲ့ setting
+      မဟုတ်ပါဘူး။
+      [[mark:f-2]] ဒုတိယ မေးခွန်းက ခုနက တွေ့ခဲ့တဲ့ ခြွင်းချက် မရှိ ဖြစ်ရမလား ဆိုတာပါ။ ဟုတ်ရင် hook ပါ။ Billing မှာ
+      format လုပ်ဖို့ CLAUDE.md ထဲ ရေးထားတာကို တစ်ပတ်အတွင်း ဆယ်ခါမှာ တစ်ခါလောက် ကျော်သွားလို့ hook နဲ့ အစားထိုးခဲ့တာ
+      ဒီ မေးခွန်းကြောင့်ပါ။ hook က output မပြန်ရင် context တစ်ခုမှ မကုန်ပါဘူး။
+      [[mark:f-3]] တတိယ မေးခွန်းက သီးသန့် context လိုလား ဆိုတာပါ။ output များတဲ့ အလုပ်ကို main session ထဲ မဝင်စေချင်ရင်
+      subagent ပါ။ subagent ဆိုတာ အလုပ် တစ်ပိုင်းကို သီးသန့် context နဲ့ လုပ်ပေးပြီး အကျဉ်းချုပ်ကိုပဲ ပြန်ပို့တဲ့ လက်ထောက်
+      agent ပါ။ ဘေးအလုပ် တစ်ခုက ကိုယ့် စကားဝိုင်းကို output တွေနဲ့ ပြည့်စေနေရင် subagent ကို စဉ်းစားပါ။
+      [[mark:f-4]] စတုတ္ထ မေးခွန်းက task တချို့မှာပဲ လိုတဲ့ လုပ်ငန်းစဉ်လား ဆိုတာပါ။ ဟုတ်ရင် skill ပါ။ session တိုင်း
+      ကုန်တာ description လောက်ပဲ ဖြစ်ပြီး၊ စာကိုယ်ကို လိုမှ ဖတ်ပါတယ်။ လုပ်ငန်းစဉ် တစ်ခုကို chat ထဲ သုံးခါမြောက်
+      ကူးထည့်ရပြီ ဆိုရင် skill လုပ်ဖို့ အချိန်ရောက်ပါပြီ။
+      [[mark:f-5]] ပဉ္စမ မေးခွန်းက အပြင်က system တစ်ခုနဲ့ ချိတ်ရမလား ဆိုတာပါ။ ဟုတ်ရင် MCP server ပါ။ MCP server ဆိုတာ
+      tool နဲ့ data ကို ထုတ်ပေးတဲ့ဘက်ပါ။ tool ကို မသုံးမချင်း context ကုန်တာ နည်းပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude Code (features overview, context costs)",
+          url: "https://code.claude.com/docs/en/features-overview",
+        }
+      - {
+          title: "Claude Code Docs: How Claude remembers your project (CLAUDE.md)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+      - { title: "Claude Code Docs: Subagents", url: "https://code.claude.com/docs/en/sub-agents" }
+    actions:
+      - {
+          id: draw-f-open,
+          type: whiteboard.apply,
+          at: { mark: f-open },
+          clear: true,
+          upsertIds: [f-title],
+        }
+      - {
+          id: draw-f-1,
+          type: whiteboard.apply,
+          at: { mark: f-1 },
+          upsertIds: [f-1, f-1q],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-f-2,
+          type: whiteboard.apply,
+          at: { mark: f-2 },
+          upsertIds: [f-2, f-2q],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-f-3,
+          type: whiteboard.apply,
+          at: { mark: f-3 },
+          upsertIds: [f-3, f-3q],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-f-4,
+          type: whiteboard.apply,
+          at: { mark: f-4 },
+          upsertIds: [f-4, f-4q],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-f-5,
+          type: whiteboard.apply,
+          at: { mark: f-5 },
+          upsertIds: [f-5, f-5q],
+          drawMs: 1200,
+        }
+
+  - id: together
+    chapter: တွဲသုံးတဲ့ feature များ
+    narration: >
+      ဒီ မေးခွန်း ငါးခုက တစ်ခုကို ရွေးရင် ကျန်တာ မသုံးရဘူး ဆိုတာ မဟုတ်ပါဘူး။ feature တွေက အတူ
+      အလုပ်လုပ်ပါတယ်။
+      [[mark:t-mcp]] ပထမ တွဲပုံက skill နဲ့ MCP server ပါ။ MCP server က Claude ကို system နဲ့ ချိတ်ပေးပြီး၊ skill က အဲဒီ
+      tool တွေကို ဘယ်လို ကောင်းကောင်း သုံးရမလဲ သင်ပေးပါတယ်။ docs ကလည်း ဒီ နှစ်ခုက သဘာဝကျကျ တွဲသုံးလို့ရတယ်လို့
+      ပြောပါတယ်။
+      [[mark:t-sub]] ဒုတိယ တွဲပုံက skill နဲ့ subagent ပါ။ subagent file ရဲ့ skills field မှာ skill နာမည်တွေ ရေးထားရင်၊ subagent
+      စတာနဲ့ အဲဒီ skill တွေရဲ့ စာကိုယ် အပြည့်ကို ကြိုထည့်ပေးပါတယ်။ အဲဒီ field မပါလည်း subagent က လိုရင် skill တွေကို ကိုယ်တိုင် ရှာပြီး
+      ခေါ်သုံးနိုင်ပါတယ်။ ပြောင်းပြန်အနေနဲ့ ပြီးခဲ့တဲ့ lesson က context fork
+      option ကို သုံးရင် skill တစ်ခုကို subagent ထဲမှာ run နိုင်ပါတယ်။
+      [[mark:t-back]] ဒါပေမဲ့ hook ကိုတော့ ဘယ် feature နဲ့မှ အစားထိုးလို့ မရပါဘူး။ အမြဲ ဖြစ်ရမယ့် အရာအတွက် hook ပဲ
+      Claude ရဲ့ ဆုံးဖြတ်ချက်အပေါ် မမူတည်လို့ပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude Code (MCP vs skill)",
+          url: "https://code.claude.com/docs/en/features-overview",
+        }
+      - {
+          title: "Claude Code Docs: Subagents (preload skills)",
+          url: "https://code.claude.com/docs/en/sub-agents",
+        }
+    actions:
+      - {
+          id: draw-t-mcp,
+          type: whiteboard.apply,
+          at: { mark: t-mcp },
+          upsertIds: [f-pair-mcp],
+          drawMs: 900,
+        }
+      - {
+          id: draw-t-sub,
+          type: whiteboard.apply,
+          at: { mark: t-sub },
+          upsertIds: [f-pair-sub],
+          drawMs: 900,
+        }
+      - {
+          id: point-t-hook,
+          type: whiteboard.point,
+          at: { mark: t-back },
+          target: { assetId: f-2q },
+        }
+
+  - id: table
+    chapter: Billing ရဲ့ လမ်းညွှန်
+    narration: >
+      [[mark:d-open]] ဒါဆို Network Tools အတွက် လမ်းညွှန်ကို Billing ရဲ့ လိုအပ်ချက် ခြောက်ခုနဲ့ ရေးကြည့်ရအောင်။ ပထမ
+      သုံးခုကို ရေးထားပြီးပါပြီ။
+      [[mark:sel-row1]] test command က session တိုင်း သိရမှာမို့ CLAUDE.md ထဲမှာ ရှိပါတယ်။ outage notice အဆင့်တွေက notice
+      ရေးတဲ့အခါမှ လိုလို့ skill ပါ။ test suite အပြည့်ကတော့ output ထောင်ချီ ထွက်လို့ subagent ကို လွှဲပါတယ်။
+      [[mark:type-hook]] စတုတ္ထ လိုအပ်ချက်က database migration file တွေကို ဘယ်တော့မှ မပြင်ရဘူး ဆိုတာပါ။ platform team ပဲ
+      ပြင်ခွင့်ရှိတာမို့ ခြွင်းချက် မရှိပါဘူး။ ဒါကြောင့် tool မသုံးခင် run တဲ့ hook နဲ့ ပိတ်ပါတယ်။
+      [[mark:type-mcp]] ပဉ္စမ လိုအပ်ချက်က Ticket system နဲ့ NMS ကို ဖတ်တာပါ။ အပြင် system နဲ့ ချိတ်တာမို့ MCP server ပါ။
+      Billing မှာ ticket MCP server ရှိပြီးသားပါ။
+      [[mark:type-pair]] ဆဋ္ဌမ လိုအပ်ချက်က အဲဒီ tool တွေကို ဘယ်လို သုံးရမလဲ ဆိုတာပါ။ ဥပမာ outage ကို ဘယ် field က ပြလဲ၊
+      ticket တွေကို ဘယ်လို ရှာရမလဲ ဆိုတာမျိုးပါ။ ဒါက MCP tool ကို သုံးတဲ့ skill ပါ။ ချိတ်တာက server ရဲ့ အလုပ်၊ သုံးပုံကတော့
+      skill ရဲ့ အလုပ်ပါ။
+      ဒီ ခြောက်ခုမြောက် အတန်းက မေးခွန်း ငါးခုထဲက နှစ်ခုကို ဟုတ်တယ်လို့ ဖြေတဲ့ လိုအပ်ချက်မို့ feature နှစ်ခုကို တွဲထားတာပါ။
+      [[mark:sel-hook]] ဒီ ဇယားထဲမှာ တန်ဖိုးအရှိဆုံး ကော်လံက ဘာကြောင့် ဆိုတဲ့ ကော်လံပါ။ feature နာမည်ကို မှတ်တာထက်၊ မေးခွန်း
+      ငါးခုထဲက ဘယ်ဟာကို ဖြေပြီး ရွေးလဲ ဆိုတာ ရေးထားမှ Network Tools က လိုအပ်ချက် အသစ်တွေကို ကိုယ်တိုင် ခွဲနိုင်မှာပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude Code (features overview)",
+          url: "https://code.claude.com/docs/en/features-overview",
+        }
+      - {
+          title: "Claude Code Docs: Hooks guide",
+          url: "https://code.claude.com/docs/en/hooks-guide",
+        }
+    actions:
+      - {
+          id: close-five,
+          type: whiteboard.apply,
+          at: { mark: d-open, offsetMs: -900 },
+          open: false,
+        }
+      - {
+          id: open-doc,
+          type: workspace.openFile,
+          at: { afterAction: close-five },
+          path: notebook/44-which-feature.md,
+        }
+      - id: sel-row1
+        type: editor.select
+        at: { mark: sel-row1 }
+        target:
+          file: notebook/44-which-feature.md
+          text: "| test နဲ့ lint command | CLAUDE.md | session တိုင်း သိထားရမယ် |"
+      - id: type-hook
+        type: editor.type
+        at: { mark: type-hook }
+        cadence: line-by-line
+        target: { file: notebook/44-which-feature.md, after: "report တစ်ခုပဲ ပြန်လို |\n" }
+        text: "| migration file တွေကို မပြင်ရ | hook (PreToolUse) | ခြွင်းချက်မရှိ အမြဲ ပိတ်ရမယ် |\n"
+      - id: type-mcp
+        type: editor.type
+        at: { mark: type-mcp }
+        cadence: line-by-line
+        target: { file: notebook/44-which-feature.md, after: "ခြွင်းချက်မရှိ အမြဲ ပိတ်ရမယ် |\n" }
+        text: "| Ticket system နဲ့ NMS ကို ဖတ် | MCP server | အပြင် system နဲ့ ချိတ်တာ |\n"
+      - id: type-pair
+        type: editor.type
+        at: { mark: type-pair }
+        cadence: line-by-line
+        target: { file: notebook/44-which-feature.md, after: "အပြင် system နဲ့ ချိတ်တာ |\n" }
+        text: "| ticket ရှာပုံ၊ outage ဖတ်ပုံ | skill + MCP tool | tool ကို ဘယ်လို သုံးရမလဲ သင်ပေး |\n"
+      - id: expect-hook
+        type: expect.file
+        at: { afterAction: type-pair }
+        path: notebook/44-which-feature.md
+        contains: "| migration file တွေကို မပြင်ရ | hook (PreToolUse) | ခြွင်းချက်မရှိ အမြဲ ပိတ်ရမယ် |\n"
+      - id: sel-hook
+        type: editor.select
+        at: { mark: sel-hook }
+        target:
+          file: notebook/44-which-feature.md
+          text: "ဘာကြောင့်"
+
+  - id: commands
+    chapter: Command အဟောင်းတွေ
+    narration: >
+      [[mark:type-cmd]] လမ်းညွှန်ရဲ့ အောက်ဆုံးမှာ ပြောင်းလဲမှု တစ်ခုကို မှတ်ထားပါမယ်။ အရင်က custom command ဆိုတာ သီးခြား
+      feature တစ်ခု ဖြစ်ခဲ့ပါတယ်။ အခုတော့ custom command တွေကို skill ထဲ ပေါင်းလိုက်ပါပြီ။ commands folder ထဲက file
+      တစ်ခုနဲ့ skills folder ထဲက နာမည်တူ skill တစ်ခုက command တစ်ခုတည်းကို ဖန်တီးပြီး၊ နှစ်ခုလုံး ရှိရင် skill က
+      ဦးစားပေး ရပါတယ်။
+      [[mark:sel-cmd]] command file အဟောင်းတွေက ဆက်အလုပ်လုပ်ပါသေးတယ်။ ဒါပေမဲ့ အခုဆိုရင် Claude က အဲဒီ command တွေကို
+      ကိုယ်တိုင်လည်း ခေါ်နိုင်ပါတယ်။ disable model invocation ကို true မထားရင်ပါ။
+      [[mark:sel-dmi]] docs ကလည်း deploy command ကို ဥပမာ ပေးထားပါတယ်။
+      deploy လုပ်မလား ဆိုတာ လူက ဆုံးဖြတ်ရမယ့် ကိစ္စမို့၊ code အဆင်သင့် ဖြစ်ပုံရတိုင်း Claude က စခေါ်လို့ မဖြစ်ပါဘူး။ ဒါကြောင့် လူကပဲ ခေါ်ရမယ့် command
+      အဟောင်း ရှိရင် အဲဒီ setting ကို ထည့်ပြီး၊ အသစ်ရေးမယ့်ဟာတွေကိုတော့ skill folder နဲ့ ရေးဖို့ မှတ်ထားပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills (custom commands merged into skills)",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+    actions:
+      - id: type-cmd
+        type: editor.type
+        at: { mark: type-cmd }
+        cadence: line-by-line
+        target: { file: notebook/44-which-feature.md, after: "tool ကို ဘယ်လို သုံးရမလဲ သင်ပေး |\n" }
+        text: "\n## Command အဟောင်း\n- `.claude/commands/` file တွေ ဆက်အလုပ်လုပ်တယ်။ Claude ကလည်း ခေါ်နိုင်ပြီ\n- လူကပဲ ခေါ်ရမယ့်ဟာမှာ `disable-model-invocation: true`။ အသစ်ကို skill နဲ့ ရေး\n"
+      - id: sel-cmd
+        type: editor.select
+        at: { mark: sel-cmd }
+        target:
+          file: notebook/44-which-feature.md
+          text: "- `.claude/commands/` file တွေ ဆက်အလုပ်လုပ်တယ်။ Claude ကလည်း ခေါ်နိုင်ပြီ"
+      - id: sel-dmi
+        type: editor.select
+        at: { mark: sel-dmi }
+        target:
+          file: notebook/44-which-feature.md
+          text: "`disable-model-invocation: true`"
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် team မှာ Claude Code ကို ပြင်ဆင်ချင်တဲ့ လိုအပ်ချက် လေးခုကို စဉ်းစားပါ။
+      [[mark:turn-2]] lesson ကို pause လုပ်ပြီး၊ ဒီ ဇယားအောက်မှာ အဲဒီ လေးခုကို တစ်ကြောင်းစီ ထည့်ရေးကြည့်ပါ။ feature
+      ကော်လံမှာ ငါးခုထဲက တစ်ခုကို ရွေးပြီး၊ ဘာကြောင့် ကော်လံမှာတော့ ဘယ်မေးခွန်းကို ဟုတ်တယ်လို့ ဖြေလို့ ရွေးလဲ ဆိုတာ
+      ရေးပါ။ ခြွင်းချက် မရှိရမယ့် စည်းကမ်း တစ်ခုခု skill ထဲ ရောက်နေလား ဆိုတာကိုလည်း ပြန်စစ်ကြည့်ပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude Code (features overview)",
+          url: "https://code.claude.com/docs/en/features-overview",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/44-which-feature.md
+          text: "| လိုအပ်ချက် | Feature | ဘာကြောင့် |"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ Claude Code ကို ပြင်ဆင်တဲ့ နည်း ငါးမျိုးကို ကျပန်း မသုံးဘဲ၊ မေးခွန်း တစ်ခုစီနဲ့
+      ရွေးပါတယ်။ session တိုင်း သိရရင် CLAUDE.md၊ task တချို့အတွက် လုပ်ငန်းစဉ်ဆိုရင် skill၊ သီးသန့် context လိုရင်
+      subagent၊ ခြွင်းချက်မရှိ ဖြစ်ရရင် hook၊ အပြင် system နဲ့ ချိတ်ရရင် MCP server ပါ။
+      [[mark:recap-2]] skill က Claude ကို တောင်းဆိုတာ ဖြစ်ပြီး hook က တကယ် ပိတ်တာ ဆိုတာကို အထူး မှတ်ထားပါ။
+      [[mark:next]] နောက် lesson မှာတော့ skill တွေကို team နဲ့ ကုမ္ပဏီ တစ်ခုလုံးကို မျှဝေပုံနဲ့၊ skill တစ်ခု မျှော်လင့်သလို
+      အလုပ်မလုပ်တဲ့အခါ အကြောင်းရင်းကို ရှာပုံကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude Code (features overview)",
+          url: "https://code.claude.com/docs/en/features-overview",
+        }
+    actions:
+      - id: sel-pair-row
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/44-which-feature.md
+          text: "| Feature |"
+      - id: sel-hook-row
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/44-which-feature.md
+          text: "| migration file တွေကို မပြင်ရ | hook (PreToolUse) | ခြွင်းချက်မရှိ အမြဲ ပိတ်ရမယ် |"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
