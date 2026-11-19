@@ -1,0 +1,693 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-12-entry-points
+  title: "Claude FDE 12: Entry point ကို ရွေးချယ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/12-entry-points.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/12-entry-points.md: |
+        # Claude ကို ဘယ်နေရာကနေ သုံးမလဲ
+
+        နေခြည်ရဲ့ အလုပ် 5 ခု · plan နဲ့ product နာမည်များက 2026-11 အတိုင်း
+
+        | အလုပ် | entry point | ဘာကြောင့် |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: five-places
+      contentType: html
+      name: Claude ကို သုံးနိုင်တဲ့ နေရာ ငါးမျိုး
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Claude ကို သုံးနိုင်တဲ့ နေရာ ငါးမျိုး · 2026-11</div>
+          <div class="row" style="top: 26vh"><span class="num">1</span><span class="term wide blue">Claude app</span>chat · Cowork · web, desktop, mobile</div>
+          <div class="row" style="top: 38vh"><span class="num">2</span><span class="term wide blue">Claude Code</span>terminal · IDE · desktop · web</div>
+          <div class="row" style="top: 50vh"><span class="num">3</span><span class="term wide blue">Claude Platform</span>Messages API · Managed Agents (beta)</div>
+          <div class="row" style="top: 62vh"><span class="num">4</span><span class="term wide blue">Cloud provider</span>Bedrock · Google Cloud · Foundry</div>
+          <div class="row" style="top: 74vh"><span class="num">5</span><span class="term wide blue">တခြား tool ထဲ</span>Chrome · Docs · Excel · Slack</div>
+        </div>
+    - id: four-questions
+      contentType: html
+      name: entry point ရွေးတဲ့ မေးခွန်း လေးခု
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">entry point ရွေးတဲ့ မေးခွန်း လေးခု</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term orange">ဘယ်သူ သုံးမလဲ</span>လူ တစ်ယောက်၊ developer၊ program</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term orange">အလုပ် ဘယ်မှာလဲ</span>chat ထဲ၊ repository ထဲ၊ system ထဲ</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term orange">ဘယ်သူ မြင်မလဲ</span>ကိုယ်တိုင်၊ team၊ customer</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term orange">ဘယ်သူ ထိန်းမလဲ</span>plan၊ API သုံးစွဲခ၊ cloud contract</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — three lanes: who uses it (white), the entry point (blue), the
+    # work at နေခြည် placed there (green), and the one idea (orange).
+    - {
+        id: l-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "ဘယ်နေရာမှာ ထားမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: l-h1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 235,
+        width: 260,
+        height: 35,
+        text: "လူ တစ်ယောက်",
+        fontSize: 28,
+      }
+    - {
+        id: l-b1,
+        kind: rectangle,
+        x: 270,
+        y: 285,
+        width: 260,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-b1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 305,
+        width: 260,
+        height: 35,
+        text: "Claude app",
+        fontSize: 28,
+      }
+    - {
+        id: l-w1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 395,
+        width: 260,
+        height: 35,
+        text: "နေ့စဉ် စာရေး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-h2,
+        kind: text,
+        align: center,
+        x: 545,
+        y: 235,
+        width: 260,
+        height: 35,
+        text: "developer",
+        fontSize: 28,
+      }
+    - {
+        id: l-b2,
+        kind: rectangle,
+        x: 545,
+        y: 285,
+        width: 260,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-b2-l,
+        kind: text,
+        align: center,
+        x: 545,
+        y: 305,
+        width: 260,
+        height: 35,
+        text: "Claude Code",
+        fontSize: 28,
+      }
+    - {
+        id: l-w2,
+        kind: text,
+        align: center,
+        x: 545,
+        y: 395,
+        width: 260,
+        height: 35,
+        text: "Billing code",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-h3,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 235,
+        width: 260,
+        height: 35,
+        text: "program",
+        fontSize: 28,
+      }
+    - {
+        id: l-b3,
+        kind: rectangle,
+        x: 820,
+        y: 285,
+        width: 260,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-b3-l,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 305,
+        width: 260,
+        height: 35,
+        text: "Claude API",
+        fontSize: 28,
+      }
+    - {
+        id: l-w3,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 395,
+        width: 260,
+        height: 35,
+        text: "Reply assistant",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-many,
+        kind: text,
+        x: 290,
+        y: 520,
+        width: 760,
+        height: 38,
+        text: "ကုမ္ပဏီ တစ်ခု၊ entry point အများ",
+        fontSize: 30,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ညတိုင်း ticket အနှစ်ချုပ် · ဘယ်ကနေ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) Claude app မှာ chat နဲ့ ရေးခိုင်း",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) program က API ကို ခေါ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 400,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 730,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "စခေါ်မယ့်သူ လူ မဟုတ်ရင်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "program ကနေ ခေါ်တဲ့ လမ်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9312
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: three-asks
+    chapter: တောင်းဆိုချက် သုံးခု
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ Diligence အကြောင်း လေ့လာခဲ့ပါတယ်။ AI နဲ့ လုပ်တဲ့ အလုပ်ကို ပို့တဲ့သူက
+      ကိုယ်တိုင် တာဝန်ယူရတယ် ဆိုတာနဲ့ နေခြည် ရဲ့ AI working agreement ကို ရေးခဲ့ပါတယ်။ ဒုတိယ ပတ်ရောက်တော့၊ Claude ကို သုံးချင်တယ် ဆိုတဲ့ တောင်းဆိုချက်
+      သုံးခု တစ်ပြိုင်တည်း ရောက်လာပါတယ်။
+      [[mark:ask-support]] ပထမ တစ်ခုက support manager လှလှ ဆီကပါ။ support agent တွေ Ticket system ထဲမှာ
+      ticket ကို ဖွင့်လိုက်တာနဲ့ အဖြေ မူကြမ်း တစ်ခု အသင့် ရှိနေစေချင်ပါတယ်။ ticket တစ်ခုချင်းကို chat ထဲ
+      ကူးထည့်နေရတာမျိုး မဖြစ်စေချင်ပါဘူး။
+      [[mark:ask-billing]] ဒုတိယ တစ်ခုက Billing team lead မောင်မောင် ဆီကပါ။ သူ့ team က သက်တမ်း ကိုးနှစ်ရှိတဲ့
+      Billing codebase ထဲမှာ bug ပြင်တာ၊ test ရေးတာတွေကို Claude နဲ့ ကူလုပ်ချင်ပါတယ်။ code ကို chat ထဲ
+      တစ်ပိုင်းချင်း ကူးထည့်ရရင်တော့ အလုပ် မဖြစ်ဘူးလို့ ပြောပါတယ်။
+      [[mark:ask-cto]] တတိယ တစ်ခုက CTO ဖြစ်တဲ့ အောင်အောင် ဆီကပါ။ မုန်တိုင်းကျတဲ့ညက personal account တွေနဲ့
+      သုံးခဲ့တာမျိုး ထပ်မဖြစ်စေချင်လို့၊ ဝန်ထမ်းတွေ နေ့စဉ် စာရေးဖို့ ကုမ္ပဏီက ထိန်းနိုင်တဲ့ နေရာ တစ်ခု
+      လိုချင်ပါတယ်။
+      [[mark:sel-title]] သုံးခုလုံးက Claude ကို လိုချင်တာချင်း တူပေမဲ့၊ အလုပ် ရှိနေတဲ့ နေရာ မတူသလို
+      သုံးမယ့်သူလည်း မတူပါဘူး။ ဒါကြောင့် prompt မရေးခင် ဆုံးဖြတ်ရမယ့် အရာ လေးခု ရှိပါတယ်။ prompt ဆိုတာ model ကို ပေးလိုက်တဲ့ စာ၊ model ဆိုတာ
+      အဲဒီ စာကို ဆက်ရေးပေးတဲ့ program ပါ။ ဘယ်နေရာကနေ သုံးမလဲ၊ ဘယ် feature တွေ လိုမလဲ၊ ဘယ် model ကို
+      သုံးမလဲ၊ model ကို ဘာတွေ မြင်စေမလဲ ဆိုတာပါ။
+      [[mark:first-decision]] ဒီ lesson မှာ ပထမ ဆုံးဖြတ်ချက်ဖြစ်တဲ့ entry point၊ ဆိုလိုတာက Claude
+      ကို ဘယ်နေရာကနေ သုံးမလဲ ဆိုတာကို ကြည့်ပါမယ်။
+    sources:
+      - { title: "Claude plans and pricing", url: "https://claude.com/pricing" }
+      - { title: "Claude Code overview", url: "https://code.claude.com/docs/en/overview" }
+    actions:
+      - {
+          id: open-table,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: notebook/12-entry-points.md,
+        }
+      - id: sel-title
+        type: editor.select
+        at: { mark: sel-title }
+        target:
+          file: notebook/12-entry-points.md
+          text: "# Claude ကို ဘယ်နေရာကနေ သုံးမလဲ"
+
+  - id: five-places
+    chapter: ဒီနေ့ ရှိတဲ့ entry point တွေ
+    narration: >
+      [[mark:ep-open]] Claude ကို သုံးလို့ရတဲ့ နေရာတွေကို အုပ်စု ငါးခု ခွဲလို့ ရပါတယ်။ နာမည်တွေနဲ့ plan
+      တွေက ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ ရှိတဲ့အတိုင်းပါ။ မကြာခဏ ပြောင်းတတ်တာမို့ နောက်ဆုံး အခြေအနေကို Claude ရဲ့
+      pricing စာမျက်နှာမှာ ပြန်စစ်ပါ။
+      [[mark:ep-app]] ပထမ အုပ်စုက Claude app ပါ။ web၊ desktop နဲ့ ဖုန်းမှာ သုံးလို့ရပြီး၊ chat ကတော့ Free
+      အပါအဝင် plan တိုင်းမှာ ပါပါတယ်။ app ထဲက Cowork ဆိုတာ လိုချင်တဲ့ ရလဒ်ကို
+      ပြောထားခဲ့ရုံနဲ့ Claude က အဆင့်ဆင့် လုပ်ပြီး file တွေနဲ့ ပြန်အပ်ပေးတဲ့ အလုပ်ပုံစံပါ။ Cowork ကတော့ paid
+      plan တွေမှာပဲ ရပါတယ်။ chat နဲ့ Cowork ကို တစ်ခုတည်း ပေါင်းနေတာမို့ account တစ်ခုနဲ့ တစ်ခု
+      မြင်ရတာ မတူနိုင်ပါဘူး။
+      [[mark:ep-code]] ဒုတိယ အုပ်စုက Claude Code ပါ။ Claude Code ဆိုတာ codebase ကို ဖတ်၊ file တွေကို ပြင်၊
+      command တွေကို run ပေးတဲ့ coding agent ပါ။ terminal ကနေ web အထိ နေရာ အများကြီးမှာ သုံးနိုင်ပြီး၊ engine တစ်ခုတည်းမို့ project ရဲ့ setting တွေက နေရာတိုင်းမှာ အတူတူ အလုပ်လုပ်ပါတယ်။ Free plan မှာတော့ Claude Code မပါပါဘူး။
+      [[mark:ep-api]] တတိယ အုပ်စုက Claude Platform ပါ။ ဒီမှာ လမ်း နှစ်လမ်း ရှိပါတယ်။ Messages API က ကိုယ့်
+      program ကနေ model ကို တိုက်ရိုက် ခေါ်တဲ့ လမ်းပါ။ Managed Agents ကတော့ agent run ဖို့ လိုတဲ့ အပိုင်းတွေကို Anthropic ဘက်က run ပေးတဲ့
+      ဝန်ဆောင်မှုပါ။ beta ဖြစ်နေသေးပြီး၊ ကြာကြာ run ရတဲ့ အလုပ်အတွက် သင့်ပါတယ်။ API သုံးစွဲခကိုတော့ chat plan နဲ့
+      သီးခြား တွက်ပါတယ်။
+      [[mark:ep-cloud]] စတုတ္ထ အုပ်စုက cloud provider တွေပါ။ Amazon Bedrock၊ Google Cloud နဲ့ Microsoft
+      Foundry ကနေလည်း သုံးလို့ရပါတယ်။ ကိုယ့် cloud contract ထဲကနေပဲ သုံးရမယ့် ကုမ္ပဏီအတွက်
+      ဒီလမ်းက အရေးကြီးပြီး၊ Bedrock မှာဆိုရင် ဈေးနှုန်းနဲ့ invoice ကို provider ကပဲ သတ်မှတ်ပါတယ်။
+      [[mark:ep-tools]] ပဉ္စမ အုပ်စုကတော့ တခြား tool တွေထဲမှာ ပါလာတဲ့ Claude ပါ။ browser၊ Google Docs၊ Excel နဲ့ Slack လို နေ့စဉ် သုံးနေတဲ့ tool တွေထဲကနေ Claude ကို တိုက်ရိုက်
+      ခေါ်သုံးလို့ ရပါတယ်။ Slack ထဲက Claude ကို Claude Tag လို့ ခေါ်ပါတယ်။
+      ဒီ အုပ်စုက paid plan တွေမှာပဲ ရပါတယ်။ တချို့က beta ဖြစ်နေသေးပြီး၊ Claude Tag ကိုတော့ Team
+      နဲ့ Enterprise plan မှာပဲ သုံးလို့ရပါတယ်။
+    sources:
+      - { title: "Claude plans and pricing", url: "https://claude.com/pricing" }
+      - {
+          title: "Get started with Claude Cowork",
+          url: "https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork",
+        }
+      - {
+          title: "Intro to Claude (Claude Platform docs)",
+          url: "https://platform.claude.com/docs/en/intro",
+        }
+    actions:
+      - {
+          id: show-places,
+          type: slide.show,
+          at: { mark: ep-open, offsetMs: -1200 },
+          slideId: five-places,
+        }
+      - { id: point-app, type: slide.point, at: { mark: ep-app }, target: { x: 0.15, y: 0.35 } }
+      - { id: point-code, type: slide.point, at: { mark: ep-code }, target: { x: 0.15, y: 0.47 } }
+      - { id: point-api, type: slide.point, at: { mark: ep-api }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-cloud, type: slide.point, at: { mark: ep-cloud }, target: { x: 0.15, y: 0.71 } }
+      - { id: point-tools, type: slide.point, at: { mark: ep-tools }, target: { x: 0.15, y: 0.83 } }
+
+  - id: four-questions
+    chapter: ရွေးတဲ့ မေးခွန်း လေးခု
+    narration: >
+      [[mark:q4-open]] နေရာ ငါးမျိုး ရှိတော့ ဘယ်အလုပ်ကို ဘယ်နေရာမှာ ထားမလဲ ဆိုတာ ရွေးရပါတယ်။ အသစ်ဆုံး
+      feature နဲ့ ရွေးမယ့်အစား မေးခွန်း လေးခုနဲ့ ရွေးပါ။
+      [[mark:q4-1]] ပထမ မေးခွန်းက ဘယ်သူ သုံးမလဲ ဆိုတာပါ။ စာရိုက်ပြီး ချက်ချင်း ဖတ်မယ့် လူလား၊ code ထဲမှာ အလုပ်လုပ်နေတဲ့ developer လား၊ ဒါမှမဟုတ် ကိုယ့် system ထဲက program လား
+      ဆိုတာပေါ်မှာ နေရာ ကွဲသွားပါတယ်။
+      [[mark:q4-2]] ဒုတိယ မေးခွန်းက အလုပ်က ဘယ်မှာ ရှိနေလဲ ဆိုတာပါ။ code က repository ထဲမှာ၊ ticket က
+      Ticket system ထဲမှာ ရှိနေရင်၊ Claude ကို အဲဒီ နေရာနား ခေါ်လာတာက data ကို chat ထဲ ကူးထည့်နေတာထက်
+      အမှား နည်းပါတယ်။
+      [[mark:q4-3]] တတိယ မေးခွန်းက ရလဒ်ကို ဘယ်သူ မြင်ရမလဲ ဆိုတာပါ။ ကိုယ်တိုင် ဖတ်မယ့် အကြမ်းလား၊ team က review လုပ်ရမယ့် code လား၊ customer ဆီ ရောက်မယ့် စာလား ဆိုတာပေါ်မှာ၊ ဘယ်နေရာမှာ
+      ဘယ်သူ စစ်မလဲ ဆိုတာ ပြောင်းသွားပါတယ်။
+      [[mark:q4-4]] စတုတ္ထ မေးခွန်းက ဘယ်သူ ငွေပေးပြီး ဘယ်သူ ထိန်းမလဲ ဆိုတာပါ။ app ကို plan နဲ့ ဝယ်ရပြီး၊ API
+      ကိုတော့ သုံးသလောက် ပေးရပါတယ်။ Team plan ကို seat ၂ ခုကနေ ၁၅၀ အထိ ဝယ်နိုင်ပြီး၊ Team နဲ့ Enterprise
+      မှာဆိုရင် ဘယ် feature ကို ဖွင့်မလဲ ဆိုတာ ကုမ္ပဏီဘက်က owner က ဆုံးဖြတ်ပါတယ်။ မုန်တိုင်းကျတဲ့ညက personal
+      account တွေမှာ မရှိခဲ့တာက ဒီ မေးခွန်းရဲ့ အဖြေပါပဲ။
+    sources:
+      - { title: "Claude plans and pricing", url: "https://claude.com/pricing" }
+      - {
+          title: "Enable and use web search (owner settings on Team and Enterprise)",
+          url: "https://support.claude.com/en/articles/10684626-enable-and-use-web-search",
+        }
+    actions:
+      - {
+          id: show-questions,
+          type: slide.show,
+          at: { mark: q4-open, offsetMs: -1200 },
+          slideId: four-questions,
+        }
+      - { id: point-q1, type: slide.point, at: { mark: q4-1 }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-q2, type: slide.point, at: { mark: q4-2 }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-q3, type: slide.point, at: { mark: q4-3 }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-q4, type: slide.point, at: { mark: q4-4 }, target: { x: 0.15, y: 0.81 } }
+
+  - id: three-lanes
+    chapter: နေခြည် ရဲ့ အလုပ်ကို နေရာချခြင်း
+    narration: >
+      [[mark:l-open]] ဒီ မေးခွန်းတွေနဲ့ နေခြည် ရဲ့ တောင်းဆိုချက် သုံးခုကို နေရာချကြည့်ရအောင်။
+      [[mark:l-app]] CTO တောင်းတဲ့ နေ့စဉ် စာရေးတဲ့ အလုပ်ကို သုံးမှာက ဝန်ထမ်း တစ်ယောက်ချင်းပါ။ ရလဒ်ကိုလည်း ရေးတဲ့သူ
+      ကိုယ်တိုင် ဖတ်ပြီး ပြင်ပါတယ်။ ဒါကြောင့် Claude app ထဲမှာ ထားပြီး၊ personal account အစား ကုမ္ပဏီက
+      ထိန်းတဲ့ plan နဲ့ သုံးတာ သင့်တော်ပါတယ်။ support agent ၄၅ ယောက်အတွက်ဆိုရင် seat ၁၅၀ အထိ ရတဲ့ Team plan နဲ့
+      လုံပါတယ်။
+      [[mark:l-code]] မောင်မောင် ရဲ့ team အလုပ်ကတော့ repository ထဲမှာ ရှိပါတယ်။ Claude က code ကို ကိုယ်တိုင်
+      ဖတ်ပြီး test ကို run ကြည့်နိုင်မှ အသုံးဝင်တာမို့ Claude Code က သင့်တော်ပါတယ်။ ရလဒ်ကိုလည်း team က
+      review လုပ်ပါတယ်။
+      [[mark:l-api]] လှလှ ရဲ့ အလုပ်ကတော့ ကွဲပြားပါတယ်။ Claude ကို တိုက်ရိုက် ခေါ်မှာက support agent မဟုတ်ဘဲ
+      Ticket system ထဲက program ပါ။ ticket တစ်ခု ဝင်လာတာနဲ့ program က ticket ရဲ့ စာကို API ကနေ ပို့ပြီး၊
+      ပြန်ရလာတဲ့ မူကြမ်းကို support agent မြင်ရမယ့် နေရာမှာ ထည့်ပေးပါတယ်။ ဒါက ဒီ course မှာ ကိုယ်တို့
+      တည်ဆောက်မယ့် Reply assistant ပါ။
+      [[mark:l-many]] နေခြည် လို ကုမ္ပဏီ တစ်ခုမှာတောင်
+      entry point အနည်းဆုံး သုံးခု လိုပါတယ်။ FDE ရဲ့ အလုပ်က အလုပ် တစ်ခုချင်းကို ကိုက်ညီတဲ့ နေရာမှာ
+      ထားပေးတာပါ။
+    sources:
+      - {
+          title: "Intro to Claude (Claude Platform docs)",
+          url: "https://platform.claude.com/docs/en/intro",
+        }
+      - { title: "Claude Code overview", url: "https://code.claude.com/docs/en/overview" }
+    actions:
+      - { id: close-questions, type: slide.close, at: { mark: l-open } }
+      - {
+          id: draw-l-title,
+          type: whiteboard.apply,
+          at: { afterAction: close-questions },
+          open: true,
+          clear: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-l-app,
+          type: whiteboard.apply,
+          at: { mark: l-app },
+          upsertIds: [l-h1, l-b1, l-b1-l, l-w1],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-l-code,
+          type: whiteboard.apply,
+          at: { mark: l-code },
+          upsertIds: [l-h2, l-b2, l-b2-l, l-w2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-l-api,
+          type: whiteboard.apply,
+          at: { mark: l-api },
+          upsertIds: [l-h3, l-b3, l-b3-l, l-w3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-l-many,
+          type: whiteboard.apply,
+          at: { mark: l-many },
+          upsertIds: [l-many],
+          drawMs: 1000,
+        }
+
+  - id: the-table
+    chapter: နေခြည် ရဲ့ entry point table
+    narration: >
+      [[mark:t-close]] အခု နေခြည် ရဲ့ အလုပ် ငါးခုကို table တစ်ခုနဲ့ ချရေးကြည့်ရအောင်။ အရေးအကြီးဆုံးက ဘာကြောင့်
+      ဆိုတဲ့ column ပါ။ နောက်တစ်လ ကြာလို့ ဒါကို ဘာလို့ app ထဲမှာ မလုပ်တာလဲ လို့ မေးလာရင် ဖြေနိုင်ဖို့ပါ။
+      [[mark:type-1]] ပထမ အလုပ်က Reply assistant ပါ။ Claude ကို ခေါ်မှာက Ticket system ဖြစ်ပြီး၊ မူကြမ်းကို
+      support agent က စစ်ပြီးမှ customer ဆီ ပို့ပါတယ်။ ဒါကြောင့် API ပါ။
+      [[mark:type-2]] ဒုတိယ အလုပ်က Billing codebase ကို ပြင်တာပါ။ code က repository ထဲမှာ ရှိပြီး၊ ပြောင်းလဲမှု
+      တိုင်းကို team က review လုပ်ရတာမို့ Claude Code ပါ။
+      [[mark:type-3]] တတိယ အလုပ်က support agent တွေရဲ့ နေ့စဉ် စာရေးတာပါ။ လူက တိုက်ရိုက် သုံးမှာမို့ Claude app
+      ပါ။ ဒါပေမဲ့ personal account မဟုတ်ဘဲ Team plan ပေါ်မှာပါ။
+      [[mark:type-4]] စတုတ္ထ အလုပ်က CTO လစဉ် ပြင်ဆင်ရတဲ့ report ပါ။ spreadsheet အများကြီးကို ဖတ်ပြီး ချုပ်ရတဲ့
+      အဆင့်များ အလုပ်ဖြစ်ပြီး ရလဒ်က file ပါ။ ဒါကြောင့် Cowork ပါ။ paid plan လိုတာကိုလည်း မှတ်ထားပါတယ်။
+      [[mark:type-5]] ပဉ္စမ အလုပ်က field technician တွေ လမ်းပေါ်ကနေ မေးတဲ့ မေးခွန်းတွေပါ။ ဖုန်းကနေ လူက
+      တိုက်ရိုက် မေးမှာမို့ Claude app ပါပဲ။
+      [[mark:t-month]] plan နာမည်တွေနဲ့ product နာမည်တွေက ပြောင်းတတ်တာမို့ ဒီ table ကို ဘယ်လက ရေးခဲ့လဲ
+      ဆိုတာကို ခေါင်းစဉ်အောက်မှာ မှတ်ထားပါတယ်။
+    sources:
+      - { title: "Claude plans and pricing", url: "https://claude.com/pricing" }
+      - {
+          title: "Get started with Claude Cowork",
+          url: "https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork",
+        }
+    actions:
+      - { id: close-lanes, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: open-table-2,
+          type: workspace.openFile,
+          at: { afterAction: close-lanes },
+          path: notebook/12-entry-points.md,
+        }
+      - id: type-1
+        type: editor.type
+        at: { mark: type-1 }
+        cadence: line-by-line
+        target: { file: notebook/12-entry-points.md, after: "|---|---|---|\n" }
+        text: "| Reply assistant: ticket အဖြေ မူကြမ်း | Claude API | Ticket system က ခေါ်၊ support agent စစ်ပြီး ပို့ |\n"
+      - id: type-2
+        type: editor.type
+        at: { mark: type-2 }
+        cadence: line-by-line
+        target: { file: notebook/12-entry-points.md, after: "support agent စစ်ပြီး ပို့ |\n" }
+        text: "| Billing codebase ပြင်၊ test ရေး | Claude Code | code က repository ထဲမှာ၊ team က review လုပ် |\n"
+      - id: type-3
+        type: editor.type
+        at: { mark: type-3 }
+        cadence: line-by-line
+        target: { file: notebook/12-entry-points.md, after: "team က review လုပ် |\n" }
+        text: "| support agent နေ့စဉ် စာရေး | Claude app · Team plan | လူက သုံး၊ account ကို ကုမ္ပဏီက ထိန်း |\n"
+      - id: type-4
+        type: editor.type
+        at: { mark: type-4 }
+        cadence: line-by-line
+        target: { file: notebook/12-entry-points.md, after: "account ကို ကုမ္ပဏီက ထိန်း |\n" }
+        text: "| CTO ရဲ့ လစဉ် report | Cowork · paid plan | spreadsheet အများ၊ အဆင့်များ၊ ရလဒ်က file |\n"
+      - id: type-5
+        type: editor.type
+        at: { mark: type-5 }
+        cadence: line-by-line
+        target: { file: notebook/12-entry-points.md, after: "ရလဒ်က file |\n" }
+        text: "| field technician ရဲ့ မေးခွန်း | Claude app · mobile | လမ်းပေါ်ကနေ ဖုန်းနဲ့ လူက မေး |\n"
+      - id: expect-row-1
+        type: expect.file
+        at: { afterAction: type-5 }
+        path: notebook/12-entry-points.md
+        contains: "| Reply assistant: ticket အဖြေ မူကြမ်း | Claude API | Ticket system က ခေါ်၊ support agent စစ်ပြီး ပို့ |\n"
+      - id: sel-month
+        type: editor.select
+        at: { mark: t-month }
+        target:
+          file: notebook/12-entry-points.md
+          text: "plan နဲ့ product နာမည်များက 2026-11 အတိုင်း"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ လှလှ က တောင်းဆိုချက် တစ်ခု ထပ်ပြောလာတယ် ဆိုပါစို့။ မနက်ဆိုင်း
+      ဝင်လာတဲ့ support agent တွေအတွက်၊ မနေ့က ticket တွေရဲ့ အနှစ်ချုပ်ကို ညတိုင်း အသင့် ဖြစ်နေစေချင်တယ်
+      ဆိုတာပါ။ ညဆိုင်းက ticket တွေနဲ့ အလုပ်များနေလို့ ဒီအလုပ်ကို လုပ်ပေးမယ့်သူ မရှိပါဘူး။
+      [[mark:q-a]] ပထမ ရွေးချယ်စရာက support agent တစ်ယောက်က Claude app ထဲမှာ ticket တွေကို ကူးထည့်ပြီး chat
+      နဲ့ အနှစ်ချုပ် ရေးခိုင်းတာပါ။
+      [[mark:q-b]] ဒုတိယ ရွေးချယ်စရာက program တစ်ခုက ညတိုင်း သတ်မှတ်ချိန်မှာ API ကို ခေါ်ပြီး၊ အနှစ်ချုပ်ကို
+      Ticket system ထဲ ထည့်ပေးတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ ရွေးချယ်စရာပါ။ ဘာကြောင့်လဲဆိုတော့ ဒီအလုပ်ကို စတင်ပေးမယ့် လူ
+      မရှိလို့ပါ။ chat app က လူ တစ်ယောက် စာရိုက်မှ အလုပ် စလုပ်ပါတယ်။ ticket တွေကလည်း Ticket system ထဲမှာ
+      ရှိပြီး၊ အနှစ်ချုပ်ကို ဖတ်မယ့် မနက်ဆိုင်းကလည်း အဲဒီထဲမှာပဲ ကြည့်ပါတယ်။ 
+      [[mark:q-rule]] ဒါကြောင့် Claude ကို စခေါ်မယ့်သူက လူ မဟုတ်ဘူးဆိုရင်၊ chat ကို မရွေးဘဲ program
+      ကနေ ခေါ်တဲ့ လမ်း ဒါမှမဟုတ် သတ်မှတ်ချိန်မှာ run တဲ့ လမ်းကို ရွေးပါ။
+    sources:
+      - {
+          title: "Intro to Claude (Claude Platform docs)",
+          url: "https://platform.claude.com/docs/en/intro",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် ကုမ္ပဏီ အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် ကုမ္ပဏီ ဒါမှမဟုတ်
+      ကိုယ့် team ရဲ့ အလုပ် သုံးခုကို ထည့်ရေးကြည့်ပါ။ အလုပ် တစ်ခုချင်းအတွက် မေးခွန်း လေးခုကို အရင် ဖြေပြီးမှ entry point ကို ရွေးပါ။
+      [[mark:turn-2]] ဘာကြောင့် ဆိုတဲ့ column ကို ချန်မထားပါနဲ့။ မသေချာတဲ့ အလုပ် ရှိရင်လည်း မသေချာဘူးလို့ပဲ
+      ရေးထားပါ။ နောက် lesson တွေမှာ feature နဲ့ model ကို ရွေးတဲ့အခါ ဒီ အလုပ်တွေကို ပြန်သုံးလို့ ရပါတယ်။
+    sources:
+      - { title: "Claude plans and pricing", url: "https://claude.com/pricing" }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/12-entry-points.md
+          text: "| အလုပ် | entry point | ဘာကြောင့် |"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ Claude ကို သုံးချင်တယ် ဆိုတဲ့ တောင်းဆိုချက် တိုင်းက ဘယ်နေရာကနေ
+      သုံးမလဲ ဆိုတဲ့ မေးခွန်းနဲ့ စပါတယ်။ ဘယ်သူ သုံးမလဲ ဆိုတာကစပြီး မေးခွန်း လေးခုကို ဖြေလိုက်ရင်၊ app လား၊
+      Claude Code လား၊ API လား ဆိုတာ ရှင်းလာပါတယ်။
+      [[mark:recap-2]] entry point အများကြီး ရှိတာ ပုံမှန်ပါပဲ။ အရေးကြီးတာက အလုပ် တစ်ခုချင်းကို
+      ဘာကြောင့် အဲဒီနေရာမှာ ထားလဲ ဆိုတာကို ရေးထားဖို့ပါ။
+      [[mark:next]] နောက် lesson မှာတော့ ဒုတိယ ဆုံးဖြတ်ချက်ကို ဆက်ကြည့်ပါမယ်။ support lead တွေက chat အသစ်
+      ဖွင့်တိုင်း tone guide နဲ့ ပြဿနာဖြေရှင်းနည်း မှတ်စုတွေကို ထပ်ခါထပ်ခါ ကူးထည့်နေရတာကနေ စပြီး၊ Claude app
+      ရဲ့ capability feature တွေကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Claude plans and pricing", url: "https://claude.com/pricing" }
+    actions:
+      - id: sel-why
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/12-entry-points.md
+          text: "ဘာကြောင့် |"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
