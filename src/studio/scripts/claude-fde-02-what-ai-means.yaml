@@ -1,0 +1,807 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-02-what-ai-means
+  title: "Claude FDE 02: AI ဆိုတာ ဘာကို ပြောတာလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/02-what-ai-is.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      examples/02-moving-draft.md: |
+        # Example: support agent တစ်ယောက်က chat AI နဲ့ ရေးခဲ့တဲ့ မူကြမ်း
+
+        ## Customer ရဲ့ စာ
+
+        နောက်လ အိမ်ပြောင်းမှာပါ။ internet ကို အိမ်အသစ်ကို ရွှေ့လို့ ရမလား။
+
+        ## AI ရေးပေးတဲ့ မူကြမ်း
+
+        မင်္ဂလာပါ ခင်ဗျာ။ အဆင်မပြေ ဖြစ်ရတဲ့အတွက် အရင်ဆုံး တောင်းပန်ပါတယ်။
+        အိမ်ပြောင်းတဲ့အခါ internet ကို အိမ်အသစ်ကို ရွှေ့ပေးနိုင်ပါတယ်။
+        ရွှေ့ပြောင်းခ မရှိပါဘူး၊ 2 ရက်အတွင်း ပြီးစီးပါမယ်။
+        လိပ်စာအသစ်ကို ပို့ပေးပါ။ ကူညီခွင့်ရတာ ဝမ်းသာပါတယ် ခင်ဗျာ။
+      notebook/02-what-ai-is.md: |
+        # AI အကြောင်း ထင်နေတာနဲ့ တကယ်
+
+        | ထင်နေတာ | တကယ် |
+        |---|---|
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — one customer question given to three kinds of program. Blue are the
+    # programs, violet what each gives back, orange the question.
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 780,
+        height: 45,
+        text: "မေးခွန်း တူတူ၊ program သုံးမျိုး",
+        fontSize: 36,
+      }
+    - {
+        id: c-q,
+        kind: text,
+        x: 290,
+        y: 225,
+        width: 780,
+        height: 35,
+        text: "customer: ညဘက်ဆို internet နှေးတယ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-b1,
+        kind: rectangle,
+        x: 270,
+        y: 295,
+        width: 250,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-l1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 313,
+        width: 250,
+        height: 35,
+        text: "search engine",
+        fontSize: 28,
+      }
+    - {
+        id: c-o1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 390,
+        width: 250,
+        height: 35,
+        text: "page link ရှာပေး",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-b2,
+        kind: rectangle,
+        x: 550,
+        y: 295,
+        width: 250,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-l2,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 313,
+        width: 250,
+        height: 35,
+        text: "rule program",
+        fontSize: 28,
+      }
+    - {
+        id: c-o2,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 390,
+        width: 250,
+        height: 35,
+        text: "ကြိုရေးထားတဲ့ စာ",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-b3,
+        kind: rectangle,
+        x: 830,
+        y: 295,
+        width: 250,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-l3,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 313,
+        width: 250,
+        height: 35,
+        text: "model",
+        fontSize: 28,
+      }
+    - {
+        id: c-o3,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 390,
+        width: 250,
+        height: 35,
+        text: "စာ အသစ် ရေးပေး",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-o3-mark,
+        kind: freedraw,
+        stroke: underline,
+        x: 845,
+        y: 395,
+        width: 225,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-conc,
+        kind: text,
+        x: 290,
+        y: 520,
+        width: 790,
+        height: 38,
+        text: "ရှာလာတာ မဟုတ်၊ သိမ်းထားတာ မဟုတ်၊ ရေးလိုက်တာ",
+        fontSize: 30,
+      }
+    # Board 2 — where Claude's behaviour comes from, drawn bottom up. Blue are the
+    # two layers that come with the model; orange the one this board is about (the
+    # one an FDE writes); green what an FDE can change, red what it cannot.
+    - {
+        id: l-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 780,
+        height: 45,
+        text: "Claude ရဲ့ အပြုအမူ ဘယ်က လာလဲ",
+        fontSize: 36,
+      }
+    - { id: l-b1, kind: rectangle, x: 290, y: 450, width: 500, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: l-b1-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 473,
+        width: 500,
+        height: 35,
+        text: "training",
+        fontSize: 28,
+      }
+    - { id: l-b2, kind: rectangle, x: 290, y: 355, width: 500, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: l-b2-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 378,
+        width: 500,
+        height: 35,
+        text: "Anthropic ရဲ့ constitution",
+        fontSize: 28,
+      }
+    - {
+        id: l-b3,
+        kind: rectangle,
+        x: 290,
+        y: 260,
+        width: 500,
+        height: 80,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: l-b3-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 283,
+        width: 500,
+        height: 35,
+        text: "system prompt",
+        fontSize: 28,
+      }
+    - {
+        id: l-yes,
+        kind: text,
+        x: 850,
+        y: 283,
+        width: 200,
+        height: 35,
+        text: "FDE ပြင်လို့ ရ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-yes-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 800,
+        y: 280,
+        width: 40,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-brace,
+        kind: freedraw,
+        stroke: brace-right,
+        x: 805,
+        y: 355,
+        width: 36,
+        height: 175,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-no,
+        kind: text,
+        x: 860,
+        y: 425,
+        width: 200,
+        height: 35,
+        text: "FDE ပြင်မရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-conc,
+        kind: text,
+        x: 290,
+        y: 575,
+        width: 790,
+        height: 38,
+        text: "FDE က model ကို မပြောင်း၊ ညွှန်ကြားချက်ကို ရေး",
+        fontSize: 30,
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "နွေးထွေးတဲ့ လေသံ ဘယ်က လာလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) နေခြည် ရဲ့ ညွှန်ကြားချက်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) model ရဲ့ training",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 300,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 620,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-rule,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 780,
+        height: 35,
+        text: "မကြိုက်တဲ့ အပြုအမူ ⇒ ဘယ်အလွှာက လာလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9302
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: drafts
+    chapter: လှလှ ရဲ့ မေးခွန်း
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ မုန်တိုင်းကျတဲ့ညက model မပျက်ခဲ့ဘဲ၊ model က ဘာကို မြင်ရမလဲ၊ ဘယ်သူ စစ်မလဲ
+      ဆိုတာကို ဘယ်သူမှ design မဆွဲခဲ့တာ ဖြစ်ကြောင်း တွေ့ခဲ့ပါတယ်။ ဒီတစ်ပတ်မှာတော့ ကိုယ်က နေခြည် ရဲ့
+      support team နဲ့ အတူ ထိုင်ပြီး၊ model တစ်ခု ဘယ်လို ပြုမူလဲ ဆိုတာကို တကယ့် မူကြမ်းတွေကနေ
+      လေ့လာနေပါတယ်။
+      [[mark:ex-open]] support manager လှလှ က support agent တွေ မုန်တိုင်းကျတဲ့ည မတိုင်ခင်ကရော အဲဒီညကပါ
+      chat AI နဲ့ ရေးခဲ့တဲ့ မူကြမ်းတွေကို စုပြီး ကိုယ့်ဆီ ယူလာပေးပါတယ်။ ဒါက အဲဒီထဲက ဥပမာ တစ်ခုပါ။
+      [[mark:sel-customer]] customer က နောက်လ အိမ်ပြောင်းမှာမို့ internet ကို အိမ်အသစ်ကို ရွှေ့လို့ ရမလား
+      လို့ မေးထားပါတယ်။
+      [[mark:sel-draft]] AI ရေးပေးတဲ့ မူကြမ်းကတော့ စာကြောင်းတိုင်း ယဉ်ကျေးပါတယ်။ customer ဘက်မှာ ဘာ
+      ပြဿနာမှ မဖြစ်သေးဘဲနဲ့ တောင်းပန်စကားကို အရင်ဆုံး ပြောထားပါတယ်။
+      [[mark:sel-sure]] ရွှေ့ပြောင်းခ မရှိဘူး၊ နှစ်ရက်အတွင်း ပြီးမယ် ဆိုတာကိုလည်း ယုံကြည်မှု အပြည့်နဲ့
+      ပြောထားပါတယ်။ ဒီ နှစ်ချက်ကို နေခြည် က AI ကို ဘယ်တုန်းကမှ မပြောထားပါဘူး။
+      [[mark:hla-ask]] ဒီ မူကြမ်းကို ဖတ်ပြီး လှလှ က မေးခွန်း နှစ်ခု မေးပါတယ်။ ပထမ တစ်ခုက
+      AI က ဒီအဖြေကို ဘယ်က ယူလာတာလဲ၊ Google လို internet ပေါ်ကနေ ရှာလာတာလား၊ ဒါမှမဟုတ် အဖြေ
+      အဆင်သင့်တွေ သိမ်းထားတဲ့ စက်လား ဆိုတာပါ။ ဒုတိယ တစ်ခုက ဘာကြောင့် ဒီလောက် သေချာသလို ပြောပြီး
+      ဒီလောက် ယဉ်ကျေးနေရတာလဲ ဆိုတာပါ။ ဒီ မေးခွန်းတွေကို ဖြေကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+    actions:
+      - {
+          id: open-ex,
+          type: workspace.openFile,
+          at: { mark: ex-open },
+          path: examples/02-moving-draft.md,
+        }
+      - id: sel-customer
+        type: editor.select
+        at: { mark: sel-customer }
+        target:
+          file: examples/02-moving-draft.md
+          text: "နောက်လ အိမ်ပြောင်းမှာပါ။ internet ကို အိမ်အသစ်ကို ရွှေ့လို့ ရမလား။"
+      - id: sel-draft
+        type: editor.select
+        at: { mark: sel-draft }
+        target:
+          file: examples/02-moving-draft.md
+          text: "မင်္ဂလာပါ ခင်ဗျာ။ အဆင်မပြေ ဖြစ်ရတဲ့အတွက် အရင်ဆုံး တောင်းပန်ပါတယ်။"
+      - id: sel-sure
+        type: editor.select
+        at: { mark: sel-sure }
+        target:
+          file: examples/02-moving-draft.md
+          text: "ရွှေ့ပြောင်းခ မရှိပါဘူး၊ 2 ရက်အတွင်း ပြီးစီးပါမယ်။"
+
+  - id: three-programs
+    chapter: ရှာတာလား၊ ရေးတာလား
+    narration: >
+      [[mark:p-open]] ပထမ မေးခွန်းကို ဖြေဖို့ program သုံးမျိုးကို customer မေးခွန်း တစ်ခုတည်း ပေးကြည့်ရအောင်။
+      [[mark:p-q]] မေးခွန်းက ညဘက်ဆို internet နှေးတယ်၊ ဘာလုပ်ရမလဲ ဆိုတာပါ။
+      [[mark:p-search]] ပထမ တစ်မျိုးက search engine ပါ။ search engine က စာ အသစ် မရေးပါဘူး။ internet ပေါ်မှာ
+      ရှိပြီးသား page တွေထဲက ဒီ စကားလုံးတွေ ပါတဲ့ page တွေကို ရှာပြီး link စာရင်း ပြန်ပေးတာပါ။ ဘယ် page က ကိုက်လဲ ရွေးရတာကတော့ ကိုယ့်တာဝန်ပါ။
+      [[mark:p-rule]] ဒုတိယ တစ်မျိုးက developer တွေ ရေးနေကျ ပုံမှန် program ပါ။ နှေး ဆိုတဲ့
+      စကားလုံး ပါရင် ဒီ စာကို ပို့ ဆိုပြီး rule တွေကို လူက ကြိုရေးထားရပါတယ်။ ရေးထားတဲ့ rule အတိုင်းပဲ လုပ်တာမို့
+      မေးခွန်း တူရင် အဖြေလည်း တူပါတယ်။ rule မရေးထားတဲ့ မေးခွန်း ရောက်လာရင်တော့ ဘာမှ မလုပ်နိုင်ပါဘူး။
+      [[mark:p-model]] တတိယ တစ်မျိုးက model ပါ။ model ဆိုတာ စာတွေ အများကြီးကနေ သင်ယူထားပြီး၊ ပေးလိုက်တဲ့
+      စာကို ဆက်ရေးပေးတဲ့ program ပါ။ model က ရှိပြီးသား page ကို ရှာမပေးသလို၊ လူက ကြိုရေးထားတဲ့ စာကိုလည်း
+      ထုတ်မပေးပါဘူး။ ဒီ မေးခွန်းနဲ့ ကိုက်မယ့် စာကို အဲဒီအချိန်မှာမှ အသစ် ရေးပေးတာပါ။
+      [[mark:p-gen]] ဒါကြောင့် ဒီလို စာ အသစ် ထုတ်ပေးတဲ့ AI အမျိုးအစားကို generative AI လို့ ခေါ်ပါတယ်။ Claude လည်း ဒီ အမျိုးအစားထဲ ပါပါတယ်။
+      [[mark:p-proof]] ကိုယ်က အိမ်ပြောင်း မူကြမ်းထဲက စာကြောင်းတွေကို Knowledge base ထဲမှာရော
+      internet ပေါ်မှာပါ ရှာကြည့်ပါတယ်။ စကားလုံး တစ်လုံးမကျန် တူတဲ့ page တစ်ခုမှ မတွေ့ပါဘူး။ ဆိုလိုတာက
+      လှလှ ရဲ့ ပထမ မေးခွန်းအတွက် အဖြေက ရှာလာတာလည်း မဟုတ်၊ သိမ်းထားတာလည်း မဟုတ်ဘဲ၊ ရေးလိုက်တာပါ။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+    actions:
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - { id: draw-p-q, type: whiteboard.apply, at: { mark: p-q }, upsertIds: [c-q], drawMs: 900 }
+      - {
+          id: draw-p-search,
+          type: whiteboard.apply,
+          at: { mark: p-search },
+          upsertIds: [c-b1, c-l1, c-o1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p-rule,
+          type: whiteboard.apply,
+          at: { mark: p-rule },
+          upsertIds: [c-b2, c-l2, c-o2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p-model,
+          type: whiteboard.apply,
+          at: { mark: p-model },
+          upsertIds: [c-b3, c-l3, c-o3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p-gen,
+          type: whiteboard.apply,
+          at: { mark: p-gen },
+          upsertIds: [c-o3-mark],
+          drawMs: 600,
+        }
+      - {
+          id: draw-p-proof,
+          type: whiteboard.apply,
+          at: { mark: p-proof },
+          upsertIds: [c-conc],
+          drawMs: 1200,
+        }
+
+  - id: training
+    chapter: အပြုအမူ ဘယ်က လာလဲ
+    narration: >
+      [[mark:l-open]] ဒါဆို model က ဘယ်လို စာမျိုး ရေးမလဲ ဆိုတာကို ဘာက ဆုံးဖြတ်လဲ။ Claude လို model
+      တစ်ခုရဲ့ အပြုအမူက အလွှာ သုံးလွှာကနေ လာပါတယ်။ အောက်ဆုံး အလွှာကနေ စကြည့်ရအောင်။
+      [[mark:l-train]] အောက်ဆုံး အလွှာက training ပါ။ training ဆိုတာ model ကို စာတွေနဲ့ သင်ပေးတဲ့
+      လုပ်ငန်းစဉ်ပါ။ ပထမ အဆင့်မှာ model က အလွန် များပြားတဲ့ စာသားတွေကို ဖတ်ပြီး၊ ရှေ့က စာကို ကြည့်ပြီး
+      နောက်လာမယ့် စကားလုံးကို ခန့်မှန်းတတ်အောင် သင်ယူပါတယ်။ ဒီလို စာသား အမြောက်အမြားနဲ့ train လုပ်ထားတဲ့
+      model အကြီးစားကို large language model လို့ ခေါ်ပါတယ်။
+      [[mark:l-train-2]] ဒါပေမဲ့ အဲဒီ အဆင့်မှာတင် ရပ်ထားရင် model က စာကို ဆက်ရေးတတ်ရုံပါပဲ။ မေးခွန်း ဖြေတာ၊
+      ညွှန်ကြားချက် လိုက်နာတာ မကောင်းသေးပါဘူး။ ဒါကြောင့် နောက်ထပ် training တွေ ထပ်လုပ်ပါတယ်။
+      [[mark:l-rlhf]] အဲဒီထဲမှာ လူတွေက အဖြေ နှစ်ခု သုံးခုကို ဘယ်ဟာ ပိုကောင်းလဲ အဆင့်စီပေးပြီး၊ model ကို ပိုကောင်းတဲ့ အဖြေမျိုးဘက်
+      ရောက်အောင် သင်တာလည်း ပါပါတယ်။ ရိုးသားမှု လို စရိုက်တွေ ရှိလာအောင် train လုပ်တာလည်း ပါပါတယ်။ ဒါကြောင့် Claude က စာ ဆက်ရေးရုံ model မဟုတ်ဘဲ၊ အကူအညီပေးတဲ့ assistant
+      တစ်ခု ဖြစ်အောင် train လုပ်ထားပြီးသား model ပါ။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+      - {
+          title: "Anthropic: Claude's character",
+          url: "https://www.anthropic.com/research/claude-character",
+        }
+    actions:
+      - {
+          id: draw-l-open,
+          type: whiteboard.apply,
+          at: { mark: l-open },
+          clear: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-l-train,
+          type: whiteboard.apply,
+          at: { mark: l-train },
+          upsertIds: [l-b1, l-b1-l],
+          drawMs: 1200,
+        }
+
+  - id: principles
+    narration: >
+      [[mark:l-const]] ဒုတိယ အလွှာက Anthropic ထုတ်ပြန်ထားတဲ့ Claude ရဲ့ constitution ပါ။ Claude ဘယ်လို
+      တန်ဖိုးတွေ ထားပြီး ဘယ်လို ပြုမူစေချင်လဲ ဆိုတာကို ရေးထားတဲ့ စာတမ်းပါ။ training အဆင့် အမျိုးမျိုးမှာ
+      ဒီ စာတမ်းကို သုံးပါတယ်။
+      [[mark:l-const-2]] ဒီ စာတမ်းမှာ ဘေးကင်းဖို့ကနေ တကယ် အသုံးဝင်ဖို့အထိ အဓိက တန်ဖိုး လေးခုကို ဦးစားပေး
+      အစဉ်လိုက် ရေးထားပါတယ်။ နေ့စဉ် အလုပ်တွေမှာ
+      ဒီ တန်ဖိုးတွေ အချင်းချင်း ဆန့်ကျင်တာ ရှားပါတယ်။
+      [[mark:l-why]] စိတ်ဝင်စားစရာ ကောင်းတာက rule တွေကို စာရင်း
+      ချပေးမယ့်အစား ဘာကြောင့်လဲ ဆိုတဲ့ အကြောင်းပြချက်ကို ရှင်းပြထားတာပါ။ ဘယ်သူမှ ကြိုမမြင်ခဲ့တဲ့ အခြေအနေမှာ
+      rule တစ်ခုကို မှားသုံးမိနိုင်လို့ပါ။
+      [[mark:l-sys]] အပေါ်ဆုံး အလွှာကတော့ Claude ကို သုံးတဲ့ app တစ်ခုချင်းစီက ပေးတဲ့ ညွှန်ကြားချက်ပါ။
+      အဓိကကတော့ system prompt ပါ။ system prompt ဆိုတာ စကားမပြောခင် model ကို ကြိုပေးထားတဲ့ တာဝန်နဲ့
+      စည်းကမ်းပါ။ Claude ကို ကိုယ့် product ထဲ ထည့်သုံးတဲ့ ကုမ္ပဏီကို operator လို့ ခေါ်ပြီး၊ operator က
+      အများအားဖြင့် system prompt ကနေ ညွှန်ကြားပါတယ်။ စကားပြောနေတဲ့ လူကိုတော့ user လို့ ခေါ်ပါတယ်။
+      [[mark:l-app]] Claude ရဲ့ ကိုယ်ပိုင် chat app တွေမှာတောင် Anthropic က system prompt တစ်ခုကို
+      စကားဝိုင်းတိုင်းရဲ့ အစမှာ ထည့်ထားပါတယ်။ ဒါပေမဲ့ အဲဒီ system prompt က API ကနေ ခေါ်တဲ့အခါ မပါပါဘူး။
+      ဒါကြောင့် model တစ်ခုတည်းကို chat app ထဲမှာ သုံးတာနဲ့ ကိုယ့် program ကနေ ခေါ်သုံးတာ ပြုမူပုံ
+      ကွာနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Anthropic: Claude's new constitution",
+          url: "https://www.anthropic.com/news/claude-new-constitution",
+        }
+      - { title: "Anthropic: Claude's constitution", url: "https://www.anthropic.com/constitution" }
+      - {
+          title: "Claude Docs: System prompts (release notes)",
+          url: "https://platform.claude.com/docs/en/release-notes/system-prompts/overview",
+        }
+    actions:
+      - {
+          id: draw-l-const,
+          type: whiteboard.apply,
+          at: { mark: l-const },
+          upsertIds: [l-b2, l-b2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-sys,
+          type: whiteboard.apply,
+          at: { mark: l-sys },
+          upsertIds: [l-b3, l-b3-l],
+          drawMs: 1200,
+        }
+
+  - id: what-fde-changes
+    narration: >
+      [[mark:l-yes]] FDE အနေနဲ့ ဒီ သုံးလွှာထဲက ဘယ်ဟာကို ပြင်လို့ ရလဲ။ အပေါ်ဆုံး အလွှာကိုပဲ ပြင်လို့ ရပါတယ်။
+      နေခြည် အတွက် Reply assistant ကို ဆောက်တဲ့အခါ system prompt ကို ကိုယ်တို့ ကိုယ်တိုင် ရေးရမှာပါ။
+      [[mark:l-no]] အောက်က နှစ်လွှာကိုတော့ ပြင်လို့ မရပါဘူး။ training ကို ထပ်လုပ်ပေးတဲ့ fine tuning ကိုလည်း
+      ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ Claude API က customer တွေကို မပေးသေးပါဘူး။
+      [[mark:l-conc]] ဆိုလိုတာက FDE ရဲ့ အလုပ်က model ကို ပြောင်းလဲတာ မဟုတ်ပါဘူး။ ရှိပြီးသား အပြုအမူ အပေါ်မှာ
+      နေခြည် ရဲ့ အလုပ်နဲ့ ကိုက်မယ့် ညွှန်ကြားချက်ကို သေသေချာချာ ရေးပေးတာ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+      - { title: "Anthropic: Claude's constitution", url: "https://www.anthropic.com/constitution" }
+    actions:
+      - {
+          id: draw-l-yes,
+          type: whiteboard.apply,
+          at: { mark: l-yes },
+          upsertIds: [l-yes-ok, l-yes],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-no,
+          type: whiteboard.apply,
+          at: { mark: l-no },
+          upsertIds: [l-brace, l-no],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-conc,
+          type: whiteboard.apply,
+          at: { mark: l-conc },
+          upsertIds: [l-conc],
+          drawMs: 1200,
+        }
+
+  - id: beliefs
+    chapter: ထင်နေတာနဲ့ တကယ်
+    narration: >
+      [[mark:b-open]] နေခြည် မှာ AI အကြောင်း ကြားရတဲ့ ယုံကြည်ချက် လေးခုကို ထင်နေတာနဲ့ တကယ် ဆိုပြီး table
+      တစ်ခုနဲ့ ချရေးကြည့်ရအောင်။
+      [[mark:type-1]] ပထမ ယုံကြည်ချက်က AI က internet ပေါ်ကနေ အဖြေ ရှာပေးတာ ဆိုတာပါ။ တကယ်တော့ ရှာတာ
+      မဟုတ်ဘဲ၊ သင်ယူထားတဲ့ pattern တွေကို သုံးပြီး စာ အသစ် ရေးတာပါ။ စာကြောင်း တစ်ကြောင်းချင်း နောက်မှာ မူရင်း page ရှိနေတာ မဟုတ်ပါဘူး။
+      [[mark:type-2]] ဒုတိယ ယုံကြည်ချက်က developer တွေ ရေးထားတဲ့ rule တွေအတိုင်း ဖြေတာ ဆိုတာပါ။ model ထဲမှာ
+      if else တွေ မရှိပါဘူး။ training ကနေ ရလာတဲ့ အလေ့အထ အတိုင်း ရေးတာမို့၊ မှားတဲ့ rule
+      တစ်ကြောင်းကို ရှာပြီး ပြင်လိုက်ရုံနဲ့ မရပါဘူး။
+      [[mark:type-3]] တတိယ ယုံကြည်ချက်က AI က နေခြည် အကြောင်း သိပြီးသား ဆိုတာပါ။ training စာသားထဲမှာ နေခြည်
+      ရဲ့ plan တွေ၊ စည်းကမ်းတွေ၊ လိုင်းကျမှု အခြေအနေတွေ မပါပါဘူး။ အိမ်ပြောင်း မူကြမ်းက ရွှေ့ပြောင်းခ
+      မရှိဘူးလို့ ပြောတာလည်း သိလို့ ပြောတာ မဟုတ်ဘဲ၊ ဖြစ်နိုင်ခြေ များတဲ့ စာကို ရေးလိုက်တာပါ။
+      [[mark:type-4]] စတုတ္ထ ယုံကြည်ချက်က prompt ကောင်းကောင်း ရေးရင် AI ကို ကြိုက်သလို ပြောင်းလို့ ရတယ်
+      ဆိုတာပါ။ prompt ဆိုတာ model ကို ပေးလိုက်တဲ့ စာပါ။ prompt က အပေါ်ဆုံး အလွှာကိုပဲ
+      ထိန်းပါတယ်။ အောက်က အလွှာ နှစ်ခုကိုတော့ ဘယ် prompt ကမှ ဖယ်ထုတ်လို့ မရပါဘူး။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+      - { title: "Anthropic: Claude's constitution", url: "https://www.anthropic.com/constitution" }
+    actions:
+      - { id: close-layers, type: whiteboard.apply, at: { mark: b-open }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-layers },
+          path: notebook/02-what-ai-is.md,
+        }
+      - id: type-1
+        type: editor.type
+        at: { mark: type-1 }
+        cadence: line-by-line
+        target: { file: notebook/02-what-ai-is.md, after: "|---|---|\n" }
+        text: "| AI က internet ပေါ်ကနေ အဖြေ ရှာပေးတာ | ရှာတာ မဟုတ်။ သင်ယူထားတဲ့ pattern နဲ့ စာ အသစ် ရေးတာ |\n"
+      - id: type-2
+        type: editor.type
+        at: { mark: type-2 }
+        cadence: line-by-line
+        target: { file: notebook/02-what-ai-is.md, after: "pattern နဲ့ စာ အသစ် ရေးတာ |\n" }
+        text: "| developer ရေးထားတဲ့ rule အတိုင်း ဖြေတာ | rule မရှိ။ training က ရလာတဲ့ အလေ့အထနဲ့ ရေးတာ |\n"
+      - id: type-3
+        type: editor.type
+        at: { mark: type-3 }
+        cadence: line-by-line
+        target: { file: notebook/02-what-ai-is.md, after: "အလေ့အထနဲ့ ရေးတာ |\n" }
+        text: "| နေခြည် အကြောင်း သိပြီးသား | training ထဲမှာ နေခြည် ရဲ့ data မပါ။ ပေးမှ မြင်ရ |\n"
+      - id: type-4
+        type: editor.type
+        at: { mark: type-4 }
+        cadence: line-by-line
+        target: { file: notebook/02-what-ai-is.md, after: "ပေးမှ မြင်ရ |\n" }
+        text: "| prompt ကောင်းရင် ကြိုက်သလို ပြောင်းလို့ရ | prompt က အပေါ်ဆုံး အလွှာကိုပဲ ပြောင်းနိုင် |\n"
+      - id: expect-row-4
+        type: expect.file
+        at: { afterAction: type-4 }
+        path: notebook/02-what-ai-is.md
+        contains: "| prompt ကောင်းရင် ကြိုက်သလို ပြောင်းလို့ရ | prompt က အပေါ်ဆုံး အလွှာကိုပဲ ပြောင်းနိုင် |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ မုန်တိုင်းကျတဲ့ညက AI ရေးခဲ့တဲ့ အဖြေတွေကို ပြန်ဖတ်ကြည့်ရင်
+      အားလုံးလိုလို နွေးထွေးပြီး တောင်းပန်စကား ပါပါတယ်။ အဲဒီ လေသံက ဘယ်က လာတာလဲ။
+      [[mark:q-a]] ပထမ အဖြေက နေခြည် ရဲ့ ညွှန်ကြားချက်ကနေ လာတာ ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက model ရဲ့ training ကနေ လာတာ ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ အဖြေပါ။ ဘာကြောင့်လဲဆိုတော့ support agent တွေက personal
+      account တွေကို သုံးခဲ့တာမို့၊ နေခြည် ဘက်က လေသံအတွက် ညွှန်ကြားချက် တစ်ကြောင်းမှ မရေးခဲ့ဘဲ အဲဒီ လေသံက
+      ရှိနေခဲ့လို့ပါ။ model ကို အကူအညီပေးတဲ့ assistant ဖြစ်အောင် train လုပ်တဲ့အခါ ယဉ်ယဉ်ကျေးကျေး ကူညီတတ်တဲ့ ပုံစံကပါ တစ်ပါတည်း ပါလာတာပါ။ လှလှ ရဲ့ ဒုတိယ မေးခွန်းထဲက ဘာကြောင့် ဒီလောက်
+      ယဉ်ကျေးလဲ ဆိုတဲ့ အပိုင်းရဲ့ အဖြေလည်း ဒါပါပဲ။
+      [[mark:q-rule]] ဒါကြောင့် AI ရဲ့ အပြုအမူ တစ်ခုကို မကြိုက်ရင် ပထမဆုံး မေးရမှာက ဒါ ဘယ်အလွှာက လာလဲ
+      ဆိုတာပါ။ training ကနေ လာတဲ့ ပုံမှန် အပြုအမူကိုတော့ system prompt ထဲမှာ နေခြည် လိုချင်တဲ့ ပုံစံကို ရေးပြီး
+      ချိန်ညှိလို့ ရပါတယ်။ ဒါပေမဲ့ Anthropic ရဲ့ ဘောင်ထဲမှာပဲ ရပါတယ်။
+    sources:
+      - { title: "Anthropic: Claude's constitution", url: "https://www.anthropic.com/constitution" }
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-rule],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် team မှာ AI အကြောင်း အများဆုံး
+      ကြားရတဲ့ ယုံကြည်ချက် နှစ်ခုကို ဒီ table ရဲ့ အောက်မှာ အတန်း နှစ်ခု ထပ်ရေးကြည့်ပါ။ ထင်နေတာ ဆိုတဲ့ column မှာ
+      လူတွေ ပြောနေကျ စကားကို ရေးပြီး၊ တကယ် ဆိုတဲ့ column မှာ အမှန်ကို ရေးပါ။
+      [[mark:turn-2]] အမှန်ကို ရေးတဲ့အခါ ဒီနေ့ ကြည့်ခဲ့တဲ့ အလွှာ သုံးလွှာနဲ့ ချိတ်ကြည့်ပါ။ ဒီလို ခွဲကြည့်ရင်
+      နည်းပညာ မသိတဲ့ လုပ်ဖော်ကိုင်ဖက်ကို ရှင်းပြရတာ ပိုရှင်းလာပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-table
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/02-what-ai-is.md
+          text: "| ထင်နေတာ | တကယ် |"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ Claude လို model က search engine လို ရှာပေးတာလည်း
+      မဟုတ်၊ rule program လို လူ ကြိုရေးထားတာကို လိုက်လုပ်တာလည်း မဟုတ်ပါဘူး။ စာ အများကြီးကနေ သင်ယူထားတဲ့
+      pattern နဲ့ စာ အသစ် ရေးပေးတဲ့ program ပါ။
+      [[mark:recap-2]] model ရဲ့ အပြုအမူက training၊ Anthropic ရဲ့ constitution၊ ပြီးတော့ app တစ်ခုချင်းစီရဲ့ system
+      prompt ဆိုတဲ့ အလွှာ သုံးလွှာကနေ လာပါတယ်။ FDE ရေးပြီး ပြင်နိုင်တာကတော့ အပေါ်ဆုံး အလွှာပါ။
+      [[mark:next]] နောက် lesson မှာတော့ လှလှ ရဲ့ မေးခွန်းထဲက ကျန်နေတဲ့ အပိုင်း၊ model က ဘာကြောင့် ဒီလောက်
+      ချောချောမွေ့မွေ့နဲ့ သေချာသလို ရေးနိုင်လဲ ဆိုတာကို ဖြေဖို့၊ model က စာကို token တစ်ခုချင်း ဘယ်လို
+      ဆက်ရေးလဲ ဆိုတဲ့ next token prediction ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+    actions:
+      - id: sel-row-1
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/02-what-ai-is.md
+          text: "| AI က internet ပေါ်ကနေ အဖြေ ရှာပေးတာ | ရှာတာ မဟုတ်။ သင်ယူထားတဲ့ pattern နဲ့ စာ အသစ် ရေးတာ |"
+      - id: sel-row-4
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/02-what-ai-is.md
+          text: "| prompt ကောင်းရင် ကြိုက်သလို ပြောင်းလို့ရ | prompt က အပေါ်ဆုံး အလွှာကိုပဲ ပြောင်းနိုင် |"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
