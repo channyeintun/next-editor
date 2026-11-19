@@ -1,0 +1,964 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-38-mcp-architecture
+  title: "Claude FDE 38: MCP ဆိုတာ ဘာလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/38-mcp-map.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/38-mcp-map.md: |
+        # ticket-mcp: ဘာ ပေးမလဲ၊ ဘယ်သူ ချိတ်မလဲ
+
+        ## Server
+        - ticket-mcp: Ticket system နဲ့ NMS ကို ဖတ်ပေးတဲ့ MCP server တစ်ခု (Python)
+
+        ## Tool များ
+
+        ## ချိတ်မယ့် host များ
+
+        ## စည်းကမ်း
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: call-path
+      contentType: html
+      name: Tool call တစ်ခုရဲ့ လမ်းကြောင်း
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Tool call လမ်းကြောင်း · spec 2026-07-28</div>
+          <div class="row" style="top: 26vh"><span class="num">1</span><span class="term wide violet">server/discover</span>version နဲ့ capability (မခေါ်လည်း ရ)</div>
+          <div class="row" style="top: 38vh"><span class="num">2</span><span class="term wide violet">tools/list</span>name၊ description၊ inputSchema</div>
+          <div class="row" style="top: 50vh"><span class="num">3</span><span class="term wide orange">model</span>tool တစ်ခုကို ရွေးပြီး တောင်းဆို</div>
+          <div class="row" style="top: 62vh"><span class="num">4</span><span class="term wide violet">tools/call</span>name နဲ့ arguments၊ _meta ပါ</div>
+          <div class="row" style="top: 74vh"><span class="num">5</span><span class="term wide green">result</span>content ကို စကားဝိုင်းထဲ ထည့်</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — without a standard: three apps and two systems in blue, a red tangle of six
+    # hand-written connections between them, and the red cost.
+    - {
+        id: m-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "MCP မရှိရင် app တိုင်းက သီးသန့် ချိတ်",
+        fontSize: 36,
+      }
+    - {
+        id: m-app1,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 300,
+        height: 35,
+        text: "Reply assistant",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-app2,
+        kind: text,
+        x: 290,
+        y: 370,
+        width: 300,
+        height: 35,
+        text: "Claude Code",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-app3,
+        kind: text,
+        x: 290,
+        y: 490,
+        width: 300,
+        height: 35,
+        text: "Claude Desktop",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-sys1,
+        kind: text,
+        x: 840,
+        y: 300,
+        width: 240,
+        height: 35,
+        text: "Ticket system",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-sys2,
+        kind: text,
+        x: 840,
+        y: 440,
+        width: 240,
+        height: 35,
+        text: "NMS",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-l1,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 600,
+        y: 262,
+        width: 220,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-l2,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 600,
+        y: 272,
+        width: 220,
+        height: 175,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-l3,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 600,
+        y: 322,
+        width: 220,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-l4,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 600,
+        y: 392,
+        width: 220,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-l5,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 600,
+        y: 330,
+        width: 220,
+        height: 175,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-l6,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 600,
+        y: 462,
+        width: 220,
+        height: 45,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-cost,
+        kind: text,
+        x: 290,
+        y: 585,
+        width: 790,
+        height: 35,
+        text: "3 × 2 = ချိတ်ဆက်မှု 6 ခု၊ တစ်ခုစီ သီးသန့် ရေး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — with MCP: the same three apps, violet arrows into one orange server, which reads
+    # both systems; the green result.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "MCP နဲ့ဆိုရင် system ကို server တစ်ခု",
+        fontSize: 36,
+      }
+    - {
+        id: s-a1,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 560,
+        y: 272,
+        width: 80,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 560,
+        y: 365,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-a3,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 560,
+        y: 425,
+        width: 80,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-box,
+        kind: rectangle,
+        x: 650,
+        y: 340,
+        width: 220,
+        height: 90,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: s-box-l,
+        kind: text,
+        align: center,
+        x: 650,
+        y: 368,
+        width: 220,
+        height: 35,
+        text: "ticket-mcp",
+        fontSize: 28,
+      }
+    - {
+        id: s-down,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 740,
+        y: 440,
+        width: 40,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-sys,
+        kind: text,
+        align: center,
+        x: 580,
+        y: 510,
+        width: 360,
+        height: 35,
+        text: "Ticket system · NMS",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-gain,
+        kind: text,
+        x: 290,
+        y: 590,
+        width: 790,
+        height: 35,
+        text: "app တစ်ခုကို ချိတ်ဆက်မှု 1 ခု၊ server ကို တစ်ခါ ရေး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — the roles: a dashed blue host boundary holding one client per server, violet
+    # arrows to two servers, the two transports in violet under the servers.
+    - {
+        id: h-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 820,
+        height: 45,
+        text: "host ထဲမှာ server တစ်ခုကို client တစ်ခု",
+        fontSize: 36,
+      }
+    - {
+        id: h-host,
+        kind: rectangle,
+        x: 290,
+        y: 230,
+        width: 360,
+        height: 330,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-c1,
+        kind: rectangle,
+        x: 330,
+        y: 280,
+        width: 280,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-c1-l,
+        kind: text,
+        align: center,
+        x: 330,
+        y: 303,
+        width: 280,
+        height: 35,
+        text: "client 1",
+        fontSize: 28,
+      }
+    - {
+        id: h-c2,
+        kind: rectangle,
+        x: 330,
+        y: 430,
+        width: 280,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-c2-l,
+        kind: text,
+        align: center,
+        x: 330,
+        y: 453,
+        width: 280,
+        height: 35,
+        text: "client 2",
+        fontSize: 28,
+      }
+    - {
+        id: h-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 660,
+        y: 300,
+        width: 100,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 660,
+        y: 450,
+        width: 100,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-s1,
+        kind: rectangle,
+        x: 770,
+        y: 280,
+        width: 310,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-s1-l,
+        kind: text,
+        align: center,
+        x: 770,
+        y: 303,
+        width: 310,
+        height: 35,
+        text: "ticket-mcp",
+        fontSize: 28,
+      }
+    - {
+        id: h-t1,
+        kind: text,
+        x: 770,
+        y: 370,
+        width: 310,
+        height: 35,
+        text: "stdio: စက်တစ်လုံးတည်း",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-s2,
+        kind: rectangle,
+        x: 770,
+        y: 430,
+        width: 310,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-s2-l,
+        kind: text,
+        align: center,
+        x: 770,
+        y: 453,
+        width: 310,
+        height: 35,
+        text: "remote server",
+        fontSize: 28,
+      }
+    - {
+        id: h-t2,
+        kind: text,
+        x: 770,
+        y: 520,
+        width: 310,
+        height: 35,
+        text: "Streamable HTTP",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    # Board 4 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ticket-mcp က စကားဝိုင်းကို မြင်ရလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) မြင်ရတယ်၊ အကုန် ပို့ပေးတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) tool နာမည်နဲ့ arguments ပဲ ရ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 430,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 750,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 790,
+        height: 35,
+        text: "server က model နဲ့ တိုက်ရိုက် မပြော",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 790,
+        height: 35,
+        text: "input ကို လိုသလောက်ပဲ design ဆွဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9338
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: App သုံးခု၊ system တစ်ခု
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ Billing team ရဲ့ agent၊ hook တွေကို plugin တစ်ခုထဲ ထုပ်ပြီး၊ Network Tools team ပါ
+      version တူ install လုပ်လို့ ရအောင် လုပ်ခဲ့ပါတယ်။
+      [[mark:n-open]] ဒီအပတ်မှာ နေခြည် ရဲ့ app သုံးခုက တစ်ချိန်တည်းမှာ Ticket system ကို ဖတ်ချင်လာပါတယ်။
+      [[mark:sel-ticket]] Ticket system ဆိုတာ customer တွေရဲ့ တိုင်ကြားချက် ticket တွေ သိမ်းထားတဲ့ system ပါ။ ပထမ
+      တစ်ခုက Reply assistant ပါ။ support ticket တစ်ခုအတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent ဖြစ်ပြီး၊ customer ရဲ့ အရင်
+      ticket တွေကို ဖတ်ဖို့ လိုပါတယ်။
+      [[mark:n-cc]] ဒုတိယ တစ်ခုက Billing developer တွေ သုံးတဲ့ Claude Code ပါ။ Claude Code ဆိုတာ terminal ထဲကနေ
+      code ကို ဖတ်၊ ပြင်၊ command run ပေးတဲ့ coding agent ပါ။ ငွေတောင်းခံမှု bug တစ်ခုကို ရှာတဲ့အခါ၊ အဲဒီ bug ကို
+      တိုင်ထားတဲ့ ticket တွေကို ဖတ်ချင်ပါတယ်။
+      [[mark:n-desk]] တတိယ တစ်ခုကတော့ support lead တွေ ခက်တဲ့ ticket အတွက် အဖြေရေးတဲ့ Claude Desktop app ပါ။
+      [[mark:sel-nms]] သုံးခုလုံးက NMS ကိုလည်း ဖတ်ချင်ပါတယ်။ NMS ဆိုတာ ဘယ်မြို့နယ်မှာ အခု လိုင်းကျနေလဲ ပြတဲ့ network
+      monitoring system ပါ။
+      [[mark:n-q]] app တစ်ခုစီက Ticket system နဲ့ NMS ကို သီးသန့် ချိတ်ရရင် အလုပ် ဘယ်လောက် များမလဲ။ ပြီးတော့ Ticket
+      system ရဲ့ API ပြောင်းတဲ့နေ့မှာ ဘယ်နှနေရာ လိုက်ပြင်ရမလဲ။ ဒီ lesson မှာ အဲဒီ မေးခွန်းကို ဖြေပေးတဲ့ Model Context
+      Protocol၊ အတိုကောက် MCP ကို လေ့လာပါမယ်။
+    sources:
+      - {
+          title: "Model Context Protocol: Architecture overview (2026-07-28)",
+          url: "https://modelcontextprotocol.io/docs/2026-07-28/learn/architecture",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: n-open }, path: README.md }
+      - id: sel-ticket
+        type: editor.select
+        at: { mark: sel-ticket }
+        target:
+          file: README.md
+          text: "- Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ"
+      - id: sel-nms
+        type: editor.select
+        at: { mark: sel-nms }
+        target:
+          file: README.md
+          text: "- NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ"
+
+  - id: tangle
+    chapter: Standard မရှိရင်
+    narration: >
+      [[mark:m-open]] standard တစ်ခု မရှိရင် ဘာဖြစ်မလဲ ဆိုတာ အရင် ကြည့်ရအောင်။
+      [[mark:m-parts]] app သုံးခု ရှိပြီး၊ ဖတ်ချင်တဲ့ system နှစ်ခု ရှိပါတယ်။
+      [[mark:m-lines]] app တစ်ခုစီက system တစ်ခုစီအတွက် သီးသန့် code ရေးရပါတယ်။ Reply assistant မှာ tool
+      definition နဲ့ API ခေါ်တဲ့ code၊ Claude Code အတွက် နောက်တစ်မျိုး၊ Claude Desktop အတွက် နောက်တစ်မျိုး ဆိုပြီး
+      ဖြစ်လာပါတယ်။
+      [[mark:m-cost]] ဆိုတော့ ချိတ်ဆက်မှု ခြောက်ခု ဖြစ်ပြီး၊ team တွေက တစ်ခုစီကို သီးသန့် ရေး၊ သီးသန့် ထိန်းရပါတယ်။ app
+      အသစ် တစ်ခု ထပ်လာတိုင်း၊ system အသစ် တစ်ခု ထပ်လာတိုင်း ချိတ်ဆက်မှုတွေက မြှောက်ပြီး တိုးလာပါတယ်။
+      [[mark:s-open]] MCP က ဒီပုံကို ပြောင်းပေးပါတယ်။ Model Context Protocol ဆိုတာ AI app တွေနဲ့ အပြင်က tool၊ data
+      တွေကို ချိတ်တဲ့ စံ သဘောတူညီချက်ပါ။
+      [[mark:s-server]] Ticket system နဲ့ NMS ကို ဖတ်ပေးတဲ့ code ကို ticket-mcp ဆိုတဲ့ MCP server တစ်ခုထဲ တစ်ခါပဲ
+      ရေးပါမယ်။ MCP server ဆိုတာ tool နဲ့ data ကို ထုတ်ပေးတဲ့ဘက်ပါ။
+      [[mark:s-apps]] app သုံးခုလုံးက MCP ကို နားလည်ရင် အဲဒီ server တစ်ခုတည်းကိုပဲ ချိတ်ရုံပါ။ tool ကို ဘယ်လို ခေါ်ရမလဲ၊
+      input က ဘာလဲ ဆိုတဲ့ definition ရော၊ tool ကို တကယ် run တဲ့ code ရော server ထဲမှာပဲ ရှိပြီး၊ app ဘက်က အဲဒါတွေကို
+      ပြန်ရေးစရာ မလိုတော့ပါဘူး။
+      [[mark:s-gain]] Ticket system ရဲ့ API ပြောင်းတဲ့နေ့မှာ server တစ်ခုကိုပဲ ပြင်ရပါတယ်။ ဒါပေမဲ့ server တစ်ခု
+      ရေးရုံနဲ့ လုံခြုံသွားတာတော့ မဟုတ်ပါဘူး။ server က ဘာတွေကို ဖတ်ခွင့်ပေးမလဲ ဆိုတာ ဆုံးဖြတ်ရတုန်းပါပဲ။
+    sources:
+      - {
+          title: "Model Context Protocol: Architecture overview (2026-07-28)",
+          url: "https://modelcontextprotocol.io/docs/2026-07-28/learn/architecture",
+        }
+      - {
+          title: "MCP Python SDK: First steps",
+          url: "https://py.sdk.modelcontextprotocol.io/get-started/first-steps/",
+        }
+    actions:
+      - {
+          id: draw-m-open,
+          type: whiteboard.apply,
+          at: { mark: m-open },
+          open: true,
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-m-parts,
+          type: whiteboard.apply,
+          at: { mark: m-parts },
+          upsertIds: [m-app1, m-app2, m-app3, m-sys1, m-sys2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-m-lines,
+          type: whiteboard.apply,
+          at: { mark: m-lines },
+          upsertIds: [m-l1, m-l2, m-l3, m-l4, m-l5, m-l6],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-m-cost,
+          type: whiteboard.apply,
+          at: { mark: m-cost },
+          upsertIds: [m-cost],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          clear: true,
+          upsertIds: [s-title, m-app1, m-app2, m-app3],
+        }
+      - {
+          id: draw-s-server,
+          type: whiteboard.apply,
+          at: { mark: s-server },
+          upsertIds: [s-box, s-box-l, s-down, s-sys],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-s-apps,
+          type: whiteboard.apply,
+          at: { mark: s-apps },
+          upsertIds: [s-a1, s-a2, s-a3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-gain,
+          type: whiteboard.apply,
+          at: { mark: s-gain },
+          upsertIds: [s-gain],
+          drawMs: 1000,
+        }
+
+  - id: roles
+    chapter: Host၊ client၊ server
+    narration: >
+      [[mark:h-open]] MCP မှာ အခန်းကဏ္ဍ သုံးခု ရှိပါတယ်။
+      [[mark:h-host]] ပထမ တစ်ခုက host ပါ။ host ဆိုတာ user က စကားပြောနေတဲ့ AI app ပါ။ Claude Code၊ Claude Desktop တို့လို
+      app တွေပါ။ ဒီ ဥပမာမှာ Claude Code က host ဖြစ်ပါတယ်။
+      [[mark:h-client]] ဒုတိယ တစ်ခုက client ပါ။ client ဆိုတာ host ထဲမှာ နေပြီး server တစ်ခုနဲ့ ချိတ်ထားတဲ့ အပိုင်းပါ။
+      host က server တစ်ခုကို client တစ်ခုစီ ဖန်တီးပြီး၊ client တစ်ခုစီက သက်ဆိုင်ရာ server နဲ့ သီးသန့် connection တစ်ခု
+      ထိန်းထားပါတယ်။
+      [[mark:h-server]] တတိယ တစ်ခုက server ပါ။ ကိုယ်တို့ ရေးမယ့် program ပါ။ tool တွေနဲ့ data တွေကို client ဆီ ထုတ်ပေးပါတယ်။
+      [[mark:h-stdio]] client နဲ့ server ကြားမှာ စာတွေ ဘယ်လို သွားလဲ ဆိုတာကို transport လို့ ခေါ်ပါတယ်။ spec မှာ
+      standard transport နှစ်မျိုးပဲ ရှိပါတယ်။ ပထမ တစ်မျိုးက stdio ပါ။ client က server ကို စက်တစ်လုံးတည်းပေါ်မှာ
+      subprocess အနေနဲ့ စ run ပြီး၊ standard input နဲ့ output ကနေ message တွေ ပို့ပါတယ်။ အများအားဖြင့် client တစ်ခုကိုပဲ
+      ဝန်ဆောင်မှု ပေးပါတယ်။
+      [[mark:h-http]] ဒုတိယ တစ်မျိုးက Streamable HTTP ပါ။ server မှာ URL တစ်ခု ရှိပြီး client ရဲ့ message တစ်ခုစီက POST
+      request တစ်ခုစီ ဖြစ်ပါတယ်။ ဒီလို server က client အများကြီးကို တစ်ပြိုင်တည်း ဝန်ဆောင်နိုင်ပါတယ်။ အရင်က HTTP နဲ့
+      SSE ကို တွဲသုံးတဲ့ transport အဟောင်း ရှိခဲ့ပေမဲ့ ကြာပြီ deprecated ဖြစ်နေပါပြီ။
+    sources:
+      - {
+          title: "Model Context Protocol: Architecture overview (2026-07-28)",
+          url: "https://modelcontextprotocol.io/docs/2026-07-28/learn/architecture",
+        }
+      - {
+          title: "MCP specification 2026-07-28: Transports",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports",
+        }
+    actions:
+      - {
+          id: draw-h-open,
+          type: whiteboard.apply,
+          at: { mark: h-open },
+          clear: true,
+          upsertIds: [h-title],
+        }
+      - {
+          id: draw-h-host,
+          type: whiteboard.apply,
+          at: { mark: h-host },
+          upsertIds: [h-host],
+          drawMs: 900,
+        }
+      - {
+          id: draw-h-client,
+          type: whiteboard.apply,
+          at: { mark: h-client },
+          upsertIds: [h-c1, h-c1-l, h-c2, h-c2-l],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-h-server,
+          type: whiteboard.apply,
+          at: { mark: h-server },
+          upsertIds: [h-a1, h-s1, h-s1-l, h-a2, h-s2, h-s2-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-h-stdio,
+          type: whiteboard.apply,
+          at: { mark: h-stdio },
+          upsertIds: [h-t1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-h-http,
+          type: whiteboard.apply,
+          at: { mark: h-http },
+          upsertIds: [h-t2],
+          drawMs: 900,
+        }
+
+  - id: path
+    chapter: မေးခွန်း တစ်ခုရဲ့ လမ်းကြောင်း
+    narration: >
+      [[mark:p-open]] အခု Billing developer တစ်ယောက်က Claude Code ကို ticket တစ်ခုအကြောင်း မေးလိုက်တယ် ဆိုပါစို့။ အဲဒီ
+      မေးခွန်းကနေ tool ရလဒ် ရလာတဲ့အထိ message တွေ ဘယ်လို သွားလဲ ကြည့်ရအောင်။ message တွေက JSON RPC ပုံစံနဲ့
+      သွားပါတယ်။ request တိုင်းမှာ id ပါပြီး response က အဲဒီ id နဲ့ ပြန်လာပါတယ်။
+      [[mark:p-1]] ပထမ အဆင့်က server discover ပါ။ client က server ဘယ် version တွေ ပံ့ပိုးလဲ၊ ဘာ capability တွေ ရှိလဲ
+      မေးကြည့်လို့ ရပါတယ်။ server တိုင်း ဒါကို ပံ့ပိုးရပေမဲ့၊ client က မခေါ်ဘဲ ကျော်လို့ ရပါတယ်။
+      [[mark:p-2]] ဒုတိယ အဆင့်မှာ client က tools list ကို ခေါ်ပြီး server ပေးတဲ့ tool စာရင်းကို ယူပါတယ်။ tool တစ်ခုစီမှာ
+      နာမည်၊ description နဲ့ input schema ပါပါတယ်။ host က server အားလုံးဆီက tool တွေကို စာရင်း တစ်ခုထဲ စုပြီး model ကို
+      ပေးပါတယ်။
+      [[mark:p-3]] တတိယ အဆင့်မှာ model က မေးခွန်းကို ဖတ်ပြီး ဒီ tool ကို ဒီ input နဲ့ ခေါ်ပေးပါလို့ တောင်းဆိုပါတယ်။
+      [[mark:p-4]] စတုတ္ထ အဆင့်မှာ host က အဲဒီ တောင်းဆိုချက်ကို သက်ဆိုင်တဲ့ client ဆီ ပို့ပြီး၊ client က tools call
+      request ကို tool နာမည်နဲ့ arguments တွေနဲ့ server ဆီ ပို့ပါတယ်။ server က tool ကို run ပါတယ်။
+      [[mark:p-5]] နောက်ဆုံး အဆင့်မှာ ရလဒ်က content စာရင်း တစ်ခုနဲ့ ပြန်လာပါတယ်။ host က အဲဒါကို စကားဝိုင်းထဲ ထည့်ပေးပြီး၊
+      model က ticket ကို ဖတ်ပြီးမှ developer ကို ဖြေပါတယ်။
+      [[mark:p-new]] ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ နောက်ဆုံး spec က ၂၀၂၆ ခုနှစ် ဇူလိုင်လ ထုတ်ထားတာပါ။ အဲဒီ spec မှာ
+      စကားမပြောခင် လုပ်ရတဲ့ initialize handshake နဲ့ session ကို ဖြုတ်လိုက်ပါပြီ။ request တိုင်းမှာ protocol version
+      နဲ့ client capability ပါလာတာမို့၊ server ဘက်က request တစ်ခုစီကို သီးသန့် ဖြေလို့ ရပါတယ်။
+      [[mark:p-legacy]] အရင် စာတွေမှာ initialize၊ ပြီးမှ tools list၊ ပြီးမှ tools call ဆိုပြီး တွေ့ရရင် အဲဒါက legacy flow ပါ။ client အများကြီးက
+      အဲဒီ flow ကို သုံးနေတုန်းဖြစ်ပြီး Python SDK version အသစ်နဲ့ ရေးတဲ့ server တွေကလည်း ဆက်ဖြေပေးပါတယ်။
+    sources:
+      - {
+          title: "Model Context Protocol: Architecture overview (2026-07-28)",
+          url: "https://modelcontextprotocol.io/docs/2026-07-28/learn/architecture",
+        }
+      - {
+          title: "MCP specification 2026-07-28: Changelog",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/changelog",
+        }
+      - {
+          title: "MCP specification 2026-07-28: Versioning",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning",
+        }
+    actions:
+      - {
+          id: close-roles,
+          type: whiteboard.apply,
+          at: { mark: p-open, offsetMs: -1400 },
+          open: false,
+        }
+      - { id: show-path, type: slide.show, at: { afterAction: close-roles }, slideId: call-path }
+      - { id: pt-1, type: slide.point, at: { mark: p-1 }, target: { x: 0.15, y: 0.35 } }
+      - { id: pt-2, type: slide.point, at: { mark: p-2 }, target: { x: 0.15, y: 0.47 } }
+      - { id: pt-3, type: slide.point, at: { mark: p-3 }, target: { x: 0.15, y: 0.59 } }
+      - { id: pt-4, type: slide.point, at: { mark: p-4 }, target: { x: 0.15, y: 0.71 } }
+      - { id: pt-5, type: slide.point, at: { mark: p-5 }, target: { x: 0.15, y: 0.83 } }
+      - { id: pt-new, type: slide.point, at: { mark: p-new }, target: { x: 0.15, y: 0.35 } }
+
+  - id: map
+    chapter: ticket-mcp ရဲ့ မြေပုံ
+    narration: >
+      [[mark:f-open]] ticket-mcp ကို မရေးခင် ဘာ ပေးမလဲ၊ ဘယ်သူ ချိတ်မလဲ ဆိုတာကို အရင် ချရေးကြည့်ရအောင်။
+      [[mark:sel-server]] server တစ်ခုတည်းက Ticket system နဲ့ NMS နှစ်ခုလုံးကို ဖတ်ပေးပြီး၊ Python နဲ့ ရေးပါမယ်။
+      [[mark:type-tools]] tool ဆိုတာ model က တောင်းဆိုရင် program က လုပ်ပေးတဲ့ လုပ်ဆောင်ချက် တစ်ခုပါ။ ပထမ tool က ticket
+      နံပါတ်နဲ့ ticket တစ်ခုကို ဖတ်ပေးပါတယ်။ ဒုတိယ tool က မြို့နယ် တစ်ခုမှာ အခု လိုင်းကျနေလား NMS ကနေ စစ်ပေးပါတယ်။
+      Reply assistant မှာ prototype အနေနဲ့ ရေးခဲ့တဲ့ tool ကို ဒီနေရာ ရွှေ့လိုက်တာပါ။
+      [[mark:type-hosts]] နောက်တစ်ပိုင်းက ချိတ်မယ့် host တွေပါ။ Claude Code နဲ့ Claude Desktop က developer နဲ့ support
+      lead ရဲ့ စက်ပေါ်မှာ server ကို stdio နဲ့ စ run ပါမယ်။ Reply assistant ကတော့ URL နဲ့ ချိတ်ရမှာမို့ Streamable HTTP
+      လိုပါတယ်။ Ticket system က ကုမ္ပဏီ network ထဲမှာ ရှိတာမို့ အဲဒီ HTTP server ကို ဘယ်မှာ ထားမလဲ ဆိုတာကိုတော့
+      security တာဝန်ခံ က ဆုံးဖြတ်ပါမယ်။
+      [[mark:type-rules]] နောက်ဆုံးပိုင်းက စည်းကမ်းပါ။ ဒီ server က ဖတ်ရုံပဲ ဖတ်ပြီး၊ ticket ကို ပြင်တာ၊ customer ဆီ စာပို့တာ
+      မလုပ်ပါဘူး။ stdio မှာ standard output က MCP message တွေ သွားတဲ့ လမ်းကြောင်း ဖြစ်နေတာမို့၊ log တွေကို standard
+      error ထဲမှာပဲ ရေးရပါမယ်။ spec က standard output ထဲကို MCP message မဟုတ်တာ ဘာမှ မရေးရဘူးလို့ ဆိုထားလို့ပါ။
+    sources:
+      - {
+          title: "MCP specification 2026-07-28: stdio transport",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio",
+        }
+      - {
+          title: "Model Context Protocol: Architecture overview (2026-07-28)",
+          url: "https://modelcontextprotocol.io/docs/2026-07-28/learn/architecture",
+        }
+    actions:
+      - { id: close-path, type: slide.close, at: { mark: f-open } }
+      - {
+          id: open-map,
+          type: workspace.openFile,
+          at: { afterAction: close-path },
+          path: notebook/38-mcp-map.md,
+        }
+      - id: sel-server
+        type: editor.select
+        at: { mark: sel-server }
+        target:
+          file: notebook/38-mcp-map.md
+          text: "- ticket-mcp: Ticket system နဲ့ NMS ကို ဖတ်ပေးတဲ့ MCP server တစ်ခု (Python)"
+      - id: type-tools
+        type: editor.type
+        at: { mark: type-tools }
+        cadence: line-by-line
+        target: { file: notebook/38-mcp-map.md, after: "## Tool များ\n" }
+        text: "- get_ticket: ticket id နဲ့ ticket တစ်ခုရဲ့ အခြေအနေနဲ့ စာတွေကို ဖတ်\n- check_outage: မြို့နယ် တစ်ခုမှာ အခု လိုင်းကျနေလား NMS ကနေ စစ်\n"
+      - id: type-hosts
+        type: editor.type
+        at: { mark: type-hosts }
+        cadence: line-by-line
+        target: { file: notebook/38-mcp-map.md, after: "## ချိတ်မယ့် host များ\n" }
+        text: "- Claude Code (Billing developer): stdio၊ developer စက်ပေါ်မှာ\n- Claude Desktop (support lead): stdio၊ support lead စက်ပေါ်မှာ\n- Reply assistant: Streamable HTTP၊ ဘယ်မှာ ထားမလဲ security တာဝန်ခံ ဆုံးဖြတ်\n"
+      - id: type-rules
+        type: editor.type
+        at: { mark: type-rules }
+        cadence: line-by-line
+        target: { file: notebook/38-mcp-map.md, after: "## စည်းကမ်း\n" }
+        text: "- ဖတ်ရုံပဲ။ ticket ပြင်တာ၊ customer ဆီ ပို့တာ မရှိ\n- log ကို stderr ထဲပဲ ရေး၊ stdout က MCP message အတွက်\n"
+      - id: expect-rules
+        type: expect.file
+        at: { afterAction: type-rules }
+        path: notebook/38-mcp-map.md
+        contains: "- ဖတ်ရုံပဲ။ ticket ပြင်တာ၊ customer ဆီ ပို့တာ မရှိ\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ security တာဝန်ခံ က ဒီ မြေပုံကို ဖတ်ပြီး စိုးရိမ်ချက် တစ်ခု ပြောလာပါတယ်။ support
+      lead တွေ Claude Desktop မှာ ပြောနေတဲ့ စကားဝိုင်းထဲမှာ customer ရဲ့ ဖုန်းနံပါတ်၊ လိပ်စာတွေ ပါတတ်ပါတယ်။ ticket-mcp
+      server ဆီကို အဲဒီ စကားဝိုင်း တစ်ခုလုံး ရောက်သွားမလား။
+      [[mark:q-a]] ပထမ အဖြေက ရောက်တယ်၊ server က စကားဝိုင်းကို ဖတ်ပြီးမှ ဘာ ပြန်ပေးရမလဲ ဆုံးဖြတ်တယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက မရောက်ဘူး၊ server ဆီ ရောက်တာက tool နာမည်နဲ့ arguments ပဲ ဆိုတာပါ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ စကားဝိုင်းက host ထဲမှာပဲ ရှိပြီး၊ server က model နဲ့
+      တိုက်ရိုက် စကားမပြောလို့ပါ။ tools call request မှာ ပါတာက model ရွေးလိုက်တဲ့ tool ရဲ့ နာမည်၊ arguments နဲ့ protocol
+      version လို metadata ပဲ ဖြစ်ပါတယ်။ server က အဲဒီ input နဲ့ tool ကို run ပြီး ရလဒ်ကို ပြန်ပေးရုံပါ။
+      [[mark:q-rule]] ဒါပေမဲ့ arguments ထဲမှာ ဘာပါမလဲ ဆိုတာကို model က ဖြည့်တာပါ။ ဒါကြောင့် tool ရဲ့ input ကို ticket
+      နံပါတ်၊ မြို့နယ် နာမည်လို လိုသလောက်ပဲ design ဆွဲပါ။ spec ကလည်း host ဘက်မှာ tool call ကို ငြင်းနိုင်တဲ့ လူ
+      အမြဲ ရှိသင့်တယ်လို့ ဆိုထားပါတယ်။
+    sources:
+      - {
+          title: "MCP specification 2026-07-28: Tools",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/server/tools",
+        }
+      - {
+          title: "MCP Python SDK: First steps",
+          url: "https://py.sdk.modelcontextprotocol.io/get-started/first-steps/",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် ကုမ္ပဏီရဲ့ ပထမ server
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် ကုမ္ပဏီမှာ AI app တွေက ဖတ်ချင်တဲ့ system တစ်ခုကို
+      ရွေးပါ။ app နှစ်ခု သုံးခုက တစ်ချိန်တည်း ဖတ်ချင်နေတဲ့ system ဆိုရင် server အတွက် အသင့်တော်ဆုံးပါ။
+      [[mark:turn-2]] ဒီ မြေပုံရဲ့ အောက်မှာ အဲဒီ system အတွက် ခေါင်းစဉ် လေးခုကို ပြန်ရေးကြည့်ပါ။ server ရဲ့ နာမည်၊ tool နှစ်ခု၊
+      ချိတ်မယ့် host တွေနဲ့ transport၊ ပြီးတော့ server က ဘာကို မလုပ်ရဘူး ဆိုတဲ့ စည်းကမ်း တစ်ကြောင်းပါ။
+    sources:
+      - {
+          title: "Model Context Protocol: Architecture overview (2026-07-28)",
+          url: "https://modelcontextprotocol.io/docs/2026-07-28/learn/architecture",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-headings
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/38-mcp-map.md
+          text: "## Tool များ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ standard မရှိရင် app တိုင်းက system တိုင်းကို သီးသန့် ချိတ်ရလို့ အလုပ်တွေ မြှောက်ပြီး
+      များလာပါတယ်။ MCP မှာတော့ system တစ်ခုကို server တစ်ခု ရေးပြီး၊ host ထဲက client တွေက အဲဒီ server ကို ချိတ်ပါတယ်။
+      tool ကို ခေါ်ဖို့ကတော့ model က ရွေးပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ticket-mcp server ကို Python နဲ့ တကယ် ရေးပြီး၊ tool နှစ်ခုကို ဘယ်လို
+      ထုတ်ပေးလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Model Context Protocol: Architecture overview (2026-07-28)",
+          url: "https://modelcontextprotocol.io/docs/2026-07-28/learn/architecture",
+        }
+    actions:
+      - id: sel-hosts
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/38-mcp-map.md
+          text: "## ချိတ်မယ့် host များ"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
