@@ -1,0 +1,621 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-20-thinking
+  title: "Claude FDE 20: Thinking နဲ့ effort"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: reply-assistant/src/dispute.ts
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      examples/dispute-response.example.json: |
+        {
+          "id": "msg_01Dp6tY2wK9mRc4vXn8bLq3F",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-opus-5-5",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "Compared the August, September and October invoices with the three payments. The plan changed from 35,000 to 45,000 on 12 September, so September holds two part-month charges, not a double charge.",
+              "signature": "EqQBCkgIARABGAIiQKz7c1mVb0sXr4uQe2Ld9hT6yNw3pJ8aGf5Rk1Ys0vBt"
+            },
+            {
+              "type": "text",
+              "text": "No double charge. September shows two part-month charges because the plan changed on 12 September. Suggest explaining the plan change to the customer."
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 3920,
+            "output_tokens": 2650
+          }
+        }
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      reply-assistant/src/dispute.ts: |
+        import Anthropic from "@anthropic-ai/sdk";
+
+        const client = new Anthropic();
+
+        // A billing dispute: three months of invoices and payments that the customer says do not match.
+        export async function reviewDispute(ticket: string, invoices: string) {
+          const response = await client.messages.create({
+            model: "claude-opus-5-5", // ID as of 2026-11
+            max_tokens: 16000,
+            system: "Check a disputed Naychi Fiber bill line by line. A support agent reviews your finding.",
+            messages: [{ role: "user", content: `${ticket}\n\n${invoices}` }],
+          });
+
+          for (const block of response.content) {
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the effort scale: white scale and levels, the jobs placed on it (orange = the one
+    # this lesson is about), red the cost and time that rise to the right.
+    - {
+        id: e-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "Effort: ဘယ်လောက် နက်နက် တွေးမလဲ",
+        fontSize: 36,
+      }
+    - { id: e-bar, kind: rectangle, x: 290, y: 330, width: 790, height: 26 }
+    - { id: e-low, kind: text, x: 300, y: 285, width: 70, height: 35, text: "low", fontSize: 28 }
+    - {
+        id: e-med,
+        kind: text,
+        x: 430,
+        y: 285,
+        width: 120,
+        height: 35,
+        text: "medium",
+        fontSize: 28,
+      }
+    - { id: e-high, kind: text, x: 620, y: 285, width: 90, height: 35, text: "high", fontSize: 28 }
+    - {
+        id: e-xhigh,
+        kind: text,
+        x: 790,
+        y: 285,
+        width: 100,
+        height: 35,
+        text: "xhigh",
+        fontSize: 28,
+      }
+    - { id: e-max, kind: text, x: 990, y: 285, width: 70, height: 35, text: "max", fontSize: 28 }
+    - {
+        id: m1-a,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 460,
+        y: 362,
+        width: 40,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m1-t,
+        kind: text,
+        align: center,
+        x: 340,
+        y: 428,
+        width: 280,
+        height: 35,
+        text: "Reply draft",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m2-a,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 645,
+        y: 362,
+        width: 40,
+        height: 110,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m2-t,
+        kind: text,
+        align: center,
+        x: 530,
+        y: 478,
+        width: 270,
+        height: 35,
+        text: "billing dispute",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-cost-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 545,
+        width: 760,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-cost-t,
+        kind: text,
+        x: 700,
+        y: 595,
+        width: 380,
+        height: 35,
+        text: "ပိုကြာ၊ token ပိုကုန်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Routing မှာ effort တင်လိုက်ရင်?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) routing ပိုမှန်လာမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) အဖြေ အတူတူ၊ ပိုကြာပြီး ပိုကုန်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 510,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 830,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "ရိုးရှင်းပြီး ခဏခဏ ခေါ်ရတာ → low",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "အဆင့်များပြီး ခက်တာ → high",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9320
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: အလုပ် နှစ်မျိုး
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ check outage tool ကို description ကောင်းကောင်းနဲ့ ကြေညာပြီး၊ Tool Runner ကို loop
+      ပတ်ခိုင်းခဲ့ပါတယ်။ Reply assistant က tool တွေကို သုံးတတ်လာပါပြီ။
+      [[mark:sel-billing]] အခု support manager လှလှ က အလုပ် နှစ်မျိုးကို ယူလာပါတယ်။ ပထမ တစ်မျိုးက ticket တစ်ခု
+      ဝင်လာတိုင်း ဘယ် team ဆီ ပို့ရမလဲ ဆုံးဖြတ်တဲ့ routing ပါ။ connection လား၊ billing လား၊ တပ်ဆင်တာလား၊ တခြားလား ဆိုတာ
+      ရွေးရုံပါပဲ။ တစ်ရက်ကို အကြိမ် ၁၈၀၀ လောက် လုပ်ရတဲ့ ချက်ချင်း ဆုံးဖြတ်ချက်ပါ။
+      [[mark:need-2]] ဒုတိယ တစ်မျိုးကတော့ ငွေတောင်းခံမှု အငြင်းပွားတဲ့ ticket ပါ။ customer တစ်ယောက်က သုံးလစာ
+      ငွေတောင်းခံလွှာနဲ့ ပေးခဲ့တဲ့ ငွေတွေ မကိုက်ဘူး၊ နှစ်ခါ ငွေဖြတ်ခံရတယ်လို့ တိုင်ကြားထားပါတယ်။ invoice သုံးစောင်၊
+      ငွေပေးချေမှု သုံးခု၊ လကြားမှာ plan ပြောင်းထားတာ စတာတွေကို တစ်ခုချင်း တိုက်စစ်ရပါတယ်။
+      [[mark:need-3]] ဒီ အလုပ် နှစ်ခုကို model က တူတူ စဉ်းစားသင့်သလား။ dispute ကို အမြန် ဖြေခိုင်းရင် မှားနိုင်ခြေ
+      များပါတယ်။ ဒါပေမဲ့ အလုပ်တိုင်းကို ကြာကြာ တွေးခိုင်းတာက ပိုကောင်းစေမလား ဆိုတာတော့ စဉ်းစားစရာပါ။ ဒီ lesson မှာ အလုပ်
+      တစ်ခုချင်းကို model က ဘယ်လောက် စဉ်းစားရမလဲ ဆိုတာ ဘယ်လို ချိန်မလဲ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Thinking",
+          url: "https://platform.claude.com/docs/en/build-with-claude/thinking",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: sel-billing }, path: README.md }
+      - id: sel-support
+        type: editor.select
+        at: { afterAction: open-readme }
+        target:
+          file: README.md
+          text: "- connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %"
+      - id: sel-bill
+        type: editor.select
+        at: { mark: need-2 }
+        target:
+          file: README.md
+          text: "- Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)"
+
+  - id: scale
+    chapter: Thinking နဲ့ effort
+    narration: >
+      [[mark:e-open]] thinking ဆိုတာ အဖြေ မရေးခင် model က ပြဿနာကို အဆင့်ဆင့် တွေးတာပါ။ ဒီနေ့ model တွေမှာ
+      thinking က adaptive ဖြစ်ပါတယ်။ ဆိုလိုတာက ဘယ်အချိန်မှာ တွေးမလဲ၊ ဘယ်လောက် တွေးမလဲ ဆိုတာကို model က
+      ကိုယ်တိုင် ဆုံးဖြတ်ပါတယ်။ Claude ရဲ့ နောက်ဆုံး model မျိုးဆက်မှာ ဘာမှ မသတ်မှတ်ရင်တောင် adaptive thinking က
+      ပွင့်နေပါတယ်။
+      [[mark:e-bar]] ကိုယ်တို့ဘက်က ချိန်လို့ရတာက effort ပါ။ effort ဆိုတာ model ကို ဘယ်လောက် နက်နက် တွေးခိုင်းမလဲ
+      ချိန်တဲ့ setting ပါ။ low ကနေ max အထိ အဆင့် ငါးဆင့် ရှိပါတယ်။ effort က thinking တစ်ခုတည်း မဟုတ်ဘဲ၊
+      အဖြေ စာသားနဲ့ tool ခေါ်တာ အပါအဝင် response တစ်ခုလုံးရဲ့ အလုပ်ပမာဏကို ချိန်တာပါ။
+      [[mark:e-levels]] docs ရဲ့ လမ်းညွှန်ချက်အရ low က ရိုးရှင်းတဲ့ အလုပ်တွေအတွက်၊ medium က agent အလုပ်တွေအတွက်
+      ချိန်ခွင်လျှာ ညီတဲ့ အဆင့်ပါ။ xhigh က မိနစ် သုံးဆယ်ထက် ကြာတဲ့ agent အလုပ် ရှည်ရှည်တွေအတွက် ဖြစ်ပြီး၊ max ကတော့
+      ကုန်ကျစရိတ်ကို မကြည့်ဘဲ အနက်ဆုံး တွေးခိုင်းတဲ့ အဆင့်ပါ။
+      [[mark:e-cost]] effort မြင့်လေ model က ပိုတွေးပြီး token ပိုထုတ်လေ ဖြစ်တာမို့ ပိုကြာပြီး ပိုကုန်ပါတယ်။ thinking
+      token တွေကို output token အဖြစ် ငွေတောင်းတာကို သတိထားပါ။ ပြန်မပြတဲ့ thinking အတွက်လည်း ငွေပေးရပါတယ်။
+      [[mark:e-draft]] ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ Opus ရဲ့ default effort က medium ပါ။ ပြီးခဲ့တဲ့ lesson တွေက
+      Reply draft ကလည်း effort မသတ်မှတ်ထားလို့ medium နဲ့ အလုပ်လုပ်နေတာပါ။ default တွေက model family
+      အလိုက် ကွာတာမို့ effort page မှာ ပြန်စစ်ပါ။
+      [[mark:e-dispute]] billing dispute ကိုတော့ high မှာ ထားပါမယ်။ docs ရဲ့ လမ်းညွှန်ချက်အရ high က ရှုပ်ထွေးတဲ့
+      ဆင်ခြင်မှုအတွက်ပါ။ invoice တွေကို တစ်ကြောင်းချင်း တိုက်ရတဲ့၊ ပထမ အမြင်က မှားတတ်တဲ့ အလုပ်မျိုးမှာ
+      ပိုတွေးတာက အကျိုးရှိပါတယ်။ docs မှာလည်း ပထမဆုံး စဉ်းစားမိတဲ့ နည်းလမ်းက အကောင်းဆုံး မဟုတ်တတ်တဲ့
+      ခက်ခဲတဲ့ bug တွေ၊ အဆင့် များတဲ့ agent အလုပ်တွေမှာ thinking က ပိုအသုံးဝင်တယ်လို့ ဆိုပါတယ်။
+      [[mark:e-lever]] docs က model ပြောင်းတာထက် effort ကို ချိန်တာက များသောအားဖြင့် ပိုကောင်းတဲ့
+      နည်းလမ်းလို့လည်း ဆိုပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Thinking",
+          url: "https://platform.claude.com/docs/en/build-with-claude/thinking",
+        }
+      - {
+          title: "Claude Docs: Effort",
+          url: "https://platform.claude.com/docs/en/build-with-claude/effort",
+        }
+      - {
+          title: "Claude Docs: Choosing a model",
+          url: "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model",
+        }
+    actions:
+      - {
+          id: draw-e-open,
+          type: whiteboard.apply,
+          at: { mark: e-open },
+          open: true,
+          clear: true,
+          upsertIds: [e-title],
+        }
+      - {
+          id: draw-e-bar,
+          type: whiteboard.apply,
+          at: { mark: e-bar },
+          upsertIds: [e-bar, e-low, e-med, e-high, e-xhigh, e-max],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-e-cost,
+          type: whiteboard.apply,
+          at: { mark: e-cost },
+          upsertIds: [e-cost-a, e-cost-t],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-draft,
+          type: whiteboard.apply,
+          at: { mark: e-draft },
+          upsertIds: [m1-a, m1-t],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-e-dispute,
+          type: whiteboard.apply,
+          at: { mark: e-dispute },
+          upsertIds: [m2-a, m2-t],
+          drawMs: 1000,
+        }
+
+  - id: code
+    chapter: Dispute request
+    narration: >
+      [[mark:c-open]] ဒါကို dispute အတွက် request မှာ ရေးကြည့်ရအောင်။ model၊ max tokens၊ system prompt နဲ့
+      message တွေက ပြီးခဲ့တဲ့ lesson တွေက အတိုင်းပါပဲ။
+      [[mark:type-thinking]] ပထမ စာကြောင်းက thinking ပါ။ adaptive လို့ ပေးထားပြီး၊ display ကို summarized လို့
+      ပေးထားပါတယ်။ ဒီ model မျိုးဆက်မှာ display ရဲ့ default က omitted ဖြစ်လို့ မပေးရင် thinking စာသား ဗလာ
+      ပြန်လာပါတယ်။ support agent က model ဘာကြောင့် ဒီလို ဆုံးဖြတ်လဲ ဖတ်ချင်လို့ summary ကို တောင်းထားတာပါ။
+      [[mark:old-way]] အရင်က thinking ကို token budget တစ်ခုနဲ့ ပေးခဲ့ကြပါတယ်။ အဲဒီ ပုံစံဟာ Opus၊ Sonnet နဲ့ Haiku
+      ရဲ့ လက်ရှိ model တွေမှာ error ပြန်ပေးပါတယ်။ Opus ရဲ့ လက်ရှိ model မှာ thinking ကို ပိတ်ဖို့ ကြိုးစားရင်လည်း error
+      ပါပဲ။ temperature လို sampling setting တွေကိုလည်း အရင်က ချိန်ခဲ့ကြပေမဲ့၊ လက်ရှိ model တွေမှာ default
+      မဟုတ်တဲ့ တန်ဖိုး ပေးရင် error ပြန်ပေးပါတယ်။ ဒါကြောင့် အဟောင်း ဥပမာတွေကို ကူးမသုံးဘဲ၊ effort နဲ့ prompt
+      နဲ့ပဲ ချိန်ပါ။
+      [[mark:type-effort]] ဒုတိယ စာကြောင်းက effort ပါ။ output config ထဲမှာ high လို့ ပေးလိုက်ပါတယ်။ effort က
+      အပြုအမူကို လမ်းညွှန်တဲ့ အချက်ပြ သက်သက်ပါ၊ token ကို တင်းကျပ်စွာ ကန့်သတ်တာ မဟုတ်ပါဘူး။ ကန့်သတ်ချက်
+      အစစ်ကတော့ max tokens ပါ။ thinking token တွေလည်း max tokens ထဲ ပါတာမို့ နေရာ လုံလုံလောက်လောက် ချန်ထားရပါမယ်။
+      [[mark:type-read]] နောက်ဆုံး အပိုင်းက response ကို ဖတ်တာပါ။ thinking block တွေက text block ရှေ့မှာ လာတာမို့
+      block အမျိုးအစားကို စစ်ပြီး၊ thinking summary နဲ့ နောက်ဆုံး ဆုံးဖြတ်ချက်ကို ခွဲထုတ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Thinking",
+          url: "https://platform.claude.com/docs/en/build-with-claude/thinking",
+        }
+      - {
+          title: "Claude Docs: Effort",
+          url: "https://platform.claude.com/docs/en/build-with-claude/effort",
+        }
+    actions:
+      - { id: close-scale, type: whiteboard.apply, at: { mark: c-open }, open: false }
+      - {
+          id: open-dispute,
+          type: workspace.openFile,
+          at: { afterAction: close-scale },
+          path: reply-assistant/src/dispute.ts,
+        }
+      - id: type-thinking
+        type: editor.type
+        at: { mark: type-thinking }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/dispute.ts, after: "    max_tokens: 16000,\n" }
+        text: "    thinking: { type: \"adaptive\", display: \"summarized\" },\n"
+      - id: sel-adaptive
+        type: editor.select
+        at: { mark: old-way }
+        target:
+          file: reply-assistant/src/dispute.ts
+          text: 'type: "adaptive"'
+      - id: type-effort
+        type: editor.type
+        at: { mark: type-effort }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/dispute.ts, after: "display: \"summarized\" },\n" }
+        text: "    output_config: { effort: \"high\" },\n"
+      - id: expect-effort
+        type: expect.file
+        at: { afterAction: type-effort }
+        path: reply-assistant/src/dispute.ts
+        contains: "    output_config: { effort: \"high\" },\n"
+      - id: type-read
+        type: editor.type
+        at: { mark: type-read }
+        cadence: line-by-line
+        target:
+          {
+            file: reply-assistant/src/dispute.ts,
+            after: "  for (const block of response.content) {\n",
+          }
+        text: "    if (block.type === \"thinking\") console.log(\"Thinking summary:\", block.thinking);\n    else if (block.type === \"text\") console.log(\"Finding:\", block.text);\n"
+
+  - id: returned
+    chapter: ပြန်လာတဲ့ thinking
+    narration: >
+      [[mark:r-open]] ဒီ request အတွက် ပြန်လာနိုင်တဲ့ response ဥပမာ တစ်ခုကို ကြည့်ရအောင်။
+      [[mark:sel-think]] content ရဲ့ ပထမ block က thinking ပါ။ ဒီ စာသားက model ရဲ့ တွေးခေါ်မှု အပြည့်အစုံ မဟုတ်ဘဲ
+      အကျဉ်းချုပ်ပါ။ plan ပြောင်းထားလို့ စက်တင်ဘာမှာ ငွေ နှစ်ခါ တောင်းထားသလို ဖြစ်နေတာ ဆိုတဲ့ ဆင်ခြင်ချက်ကို
+      support agent က ဖတ်ပြီး ကိုယ်တိုင် တိုက်စစ်နိုင်ပါတယ်။ summary ကို သက်သေ အဖြစ် မယူဘဲ၊ invoice
+      နဲ့ ပြန်တိုက်ဖို့ လမ်းပြ အဖြစ်ပဲ သုံးရပါမယ်။ customer ကို ပြန်ဖြေမယ့် စာကို ဆုံးဖြတ်တာက support agent ပါ။
+      [[mark:sel-sig]] signature ကတော့ တွေးခေါ်မှု အပြည့်အစုံကို encrypt လုပ်ထားတဲ့ အပိုင်းပါ။ ကိုယ်တို့ ဖတ်လို့ မရပါဘူး။
+      tool တွေနဲ့ loop ပတ်နေတဲ့ အလှည့်မှာဆိုရင် thinking block တွေကို မပြင်ဘဲ မူရင်းအတိုင်း ပြန်ပို့ပေးရပါမယ်။
+      ပြင်လိုက်ရင် API က error ပြန်ပေးပါတယ်။
+      [[mark:sel-out]] usage ကိုလည်း ကြည့်ပါ။ output token က ၂၆၅၀ ရှိပြီး၊ စာကြောင်း သုံးကြောင်းလောက်ပဲ ရှိတဲ့
+      ဆုံးဖြတ်ချက်ထက် အများကြီး ပိုများပါတယ်။ ကျန်တာတွေက thinking token တွေပါ။ ငွေတောင်းတာက အကျဉ်းချုပ်ကို
+      မဟုတ်ဘဲ တွေးခဲ့တဲ့ token အပြည့်အစုံကိုပါ။ dispute တစ်ခုအတွက် ဒါက တန်ပါတယ်။ ticket ၁၈၀၀ လုံးကို ဒီလို
+      တွေးခိုင်းရင်တော့ ပြီးခဲ့တဲ့ worksheet က ဂဏန်းတွေ အများကြီး ပြောင်းသွားပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Claude Docs: Thinking",
+          url: "https://platform.claude.com/docs/en/build-with-claude/thinking",
+        }
+    actions:
+      - {
+          id: open-ex,
+          type: workspace.openFile,
+          at: { mark: r-open },
+          path: examples/dispute-response.example.json,
+        }
+      - id: sel-think
+        type: editor.select
+        at: { mark: sel-think }
+        target:
+          file: examples/dispute-response.example.json
+          text: '"type": "thinking",'
+      - id: sel-sig
+        type: editor.select
+        at: { mark: sel-sig }
+        target:
+          file: examples/dispute-response.example.json
+          text: '"signature": "EqQBCkgIARABGAIiQKz7c1mVb0sXr4uQe2Ld9hT6yNw3pJ8aGf5Rk1Ys0vBt"'
+      - id: sel-out
+        type: editor.select
+        at: { mark: sel-out }
+        target:
+          file: examples/dispute-response.example.json
+          text: '"output_tokens": 2650'
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ routing မှာ တစ်ခါတလေ ticket တွေ မှားတဲ့ team ဆီ ရောက်နေလို့
+      တစ်ယောက်ယောက်က routing ရဲ့ effort ကို max အထိ တင်ကြည့်ရအောင်လို့ အကြံပေးတယ် ဆိုပါစို့။ ဘာ
+      ဖြစ်လာနိုင်မလဲ။
+      [[mark:q-a]] ပထမ အဖြေက routing ပိုမှန်လာမယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက အဖြေတွေက အရင်အတိုင်း နီးပါး ဖြစ်ပြီး၊ ပိုကြာပြီး ပိုကုန်လာမယ် ဆိုတာပါ။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ အုပ်စု လေးခုထဲက တစ်ခု ရွေးတာက
+      အဆင့်ဆင့် ဆင်ခြင်စရာ မလိုတဲ့ အလုပ်ပါ။ docs ကလည်း classification နဲ့ အကြိမ်ရေ များတဲ့ အလုပ်တွေက low
+      effort မှာ ကောင်းကောင်း အလုပ်လုပ်တတ်တယ်လို့ ဆိုပါတယ်။ routing မှားနေတာက effort နည်းလို့ ထက် team
+      တစ်ခုချင်းရဲ့ တာဝန်ကို prompt ထဲမှာ ရှင်းရှင်း မရေးထားလို့ ဖြစ်ဖို့ ပိုများပါတယ်။ effort တင်လိုက်ရင်တော့
+      အကြိမ် ၁၈၀၀ လုံးမှာ ပိုကြာပြီး ပိုကုန်တာပဲ ကျန်ပါမယ်။
+      [[mark:q-rule]] ဒါကြောင့် effort ကို မတင်ခင် ကိုယ့် ဥပမာ ticket တွေနဲ့ effort အဆင့် တစ်ခုချင်းကို တိုင်းကြည့်ပါ။
+      ရိုးရှင်းပြီး ခဏခဏ ခေါ်ရတဲ့ အလုပ်က low၊ အဆင့်များပြီး ခက်တဲ့ အလုပ်က high ပါ။ model အသစ် တစ်ခုကို
+      ပြောင်းသုံးတဲ့အခါမှာလည်း အရင် model က setting ကို ကူးမထားဘဲ ကိုယ့် ဥပမာတွေနဲ့ ပြန်တိုင်းရပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Effort",
+          url: "https://platform.claude.com/docs/en/build-with-claude/effort",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် အလုပ်တွေကို နေရာချခြင်း
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် project ထဲက AI နဲ့ လုပ်ချင်တဲ့ အလုပ်
+      သုံးခုကို ဒီ effort setting ရဲ့ ဘေးမှာ comment တစ်ကြောင်းနဲ့ ရေးကြည့်ပါ။ အလုပ် တစ်ခုစီကို low၊ medium၊ high
+      ထဲက ဘယ်နေရာမှာ ထားမလဲ ရေးပြီး၊ ဘာကြောင့်လဲ ဆိုတာကို စကားလုံး အနည်းငယ်နဲ့ ထည့်ပါ။
+      [[mark:turn-2]] ဆုံးဖြတ်ရ ခက်ရင် မေးခွန်း နှစ်ခု မေးကြည့်ပါ။ ဒီ အလုပ်က အဆင့် ဘယ်နှဆင့် ဆင်ခြင်ရလဲ၊ တစ်ရက်
+      ဘယ်နှကြိမ် ခေါ်ရမလဲ ဆိုတာပါ။ အဆင့် နည်းပြီး အကြိမ် များရင် low ဘက်ကို၊ အဆင့် များပြီး အကြိမ် နည်းရင် high
+      ဘက်ကို ကပ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Effort",
+          url: "https://platform.claude.com/docs/en/build-with-claude/effort",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - {
+          id: back-dispute,
+          type: workspace.openFile,
+          at: { afterAction: close-quiz },
+          path: reply-assistant/src/dispute.ts,
+        }
+      - id: sel-effort
+        type: editor.select
+        at: { mark: turn, offsetMs: 2600 }
+        target:
+          file: reply-assistant/src/dispute.ts
+          text: '    output_config: { effort: "high" },'
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ thinking ဆိုတာ အဖြေ မရေးခင် model က အဆင့်ဆင့် တွေးတာဖြစ်ပြီး၊ ဒီနေ့
+      model တွေမှာ adaptive ပါ။ ကိုယ်တို့က effort နဲ့ ဘယ်လောက် တွေးမလဲ ချိန်ပါတယ်။ effort မြင့်လေ ပိုကြာပြီး
+      ပိုကုန်လေ ဖြစ်လို့၊ routing လို ရိုးရှင်းတဲ့ အလုပ်ကို နိမ့်နိမ့်၊ dispute လို ခက်တဲ့ အလုပ်ကို မြင့်မြင့် ထားပါတယ်။
+      [[mark:recap-2]] ပြန်လာတဲ့ thinking က အကျဉ်းချုပ်သာ ဖြစ်ပြီး၊ ငွေကတော့ တွေးခဲ့သမျှ အပြည့်အစုံကို ပေးရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ကိုယ်တို့ program က မဟုတ်ဘဲ Anthropic ဘက်က run ပေးတဲ့ web search၊ web
+      fetch နဲ့ code execution လို built-in tool တွေကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Thinking",
+          url: "https://platform.claude.com/docs/en/build-with-claude/thinking",
+        }
+    actions:
+      - id: sel-recap-think
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: reply-assistant/src/dispute.ts
+          text: '    thinking: { type: "adaptive", display: "summarized" },'
+      - id: sel-recap-read
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: reply-assistant/src/dispute.ts
+          text: 'console.log("Thinking summary:", block.thinking);'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
