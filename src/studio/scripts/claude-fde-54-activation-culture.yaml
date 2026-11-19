@@ -1,0 +1,698 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-54-activation-culture
+  title: "Claude FDE 54: Activation: culture နဲ့ launch"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/54-launch-message.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/54-launch-message.md: |
+        # Launch message · CTO → ဝန်ထမ်းအားလုံး (launch day မနက် 9 နာရီ)
+
+        ဝန်ထမ်းအားလုံးကို၊
+
+        အောင်အောင် (CTO)
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: principles
+      contentType: html
+      name: အခြေခံ စည်းမျဉ်း သုံးခု
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Path ရဲ့ အခြေခံ စည်းမျဉ်း 3 ခု</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term wide blue">ဘာကြောင့်လဲ</span>leader က ကိုယ့်စကားနဲ့ ပြော</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term wide orange">Growth mindset</span>စမ်း၊ မှား၊ ပြော၊ သင်ယူ</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term wide green">Win မျှဝေ</span>အောင်မြင်မှုကို ပုံမှန် မျှဝေ</div>
+        </div>
+    - id: launch-plan
+      contentType: html
+      name: Launch အချိန်ဇယား
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Launch ရဲ့ အချိန်ဇယား</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term blue">2 ပတ် အလို</span>CTO က ဘာကြောင့်လဲ ပြော၊ မေးခွန်း ကြိုစု</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term orange">Launch day</span>CTO message၊ ပထမ task၊ training ဇယား</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term green">ပထမ ပတ်</span>pilot agent 10 ယောက်ရဲ့ tip</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term violet">ပုံမှန်</span>အပတ်စဉ် tip၊ လစဉ် newsletter၊ 6 ပတ် review</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the support agents' two worries, both in red (a risk).
+    - {
+        id: o-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "support agent တွေ စိုးရိမ်နေတာ",
+        fontSize: 36,
+      }
+    - {
+        id: o-b1,
+        kind: rectangle,
+        x: 290,
+        y: 260,
+        width: 380,
+        height: 90,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 287,
+        width: 380,
+        height: 35,
+        text: "အမှားအတွက် အပြစ်တင်ခံရမှာ",
+        fontSize: 28,
+      }
+    - {
+        id: o-b2,
+        kind: rectangle,
+        x: 700,
+        y: 260,
+        width: 380,
+        height: 90,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-l2,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 287,
+        width: 380,
+        height: 35,
+        text: "အလုပ် ပြုတ်မှာ",
+        fontSize: 28,
+      }
+    - {
+        id: o-reason,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 790,
+        height: 35,
+        text: "နှစ်ခုလုံး အကြောင်းရှိတဲ့ စိုးရိမ်ချက်",
+        fontSize: 28,
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "2 ပတ်အကြာ 11 → 12 မိနစ်: ဘာလုပ်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) roll out ကို ရပ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) မျှော်လင့်ထားတဲ့ ကျဆင်းမှု၊ ဆက်ကူညီ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 520,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 840,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 790,
+        height: 35,
+        text: "ကြိုသတ်မှတ်: ဘယ်နေ့ ကြည့်၊ ဘာဖြစ်ရင် ရပ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — the J-curve: white axes, red dip (the cost of learning), green rise, orange the
+    # one place this board is about.
+    - {
+        id: j-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "Productivity J curve",
+        fontSize: 36,
+      }
+    - { id: j-yaxis, kind: freedraw, stroke: arrow-up, x: 290, y: 225, width: 40, height: 330 }
+    - { id: j-xaxis, kind: freedraw, stroke: arrow-right, x: 300, y: 530, width: 760, height: 40 }
+    - {
+        id: j-xlabel,
+        kind: text,
+        x: 950,
+        y: 580,
+        width: 140,
+        height: 35,
+        text: "အချိန်",
+        fontSize: 28,
+      }
+    - {
+        id: j-cost-l,
+        kind: text,
+        x: 345,
+        y: 265,
+        width: 300,
+        height: 35,
+        text: "သင်ယူတဲ့ ကာလ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: j-down,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 350,
+        y: 320,
+        width: 170,
+        height: 100,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: j-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 455,
+        y: 375,
+        width: 130,
+        height: 80,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: j-dip-l,
+        kind: text,
+        x: 400,
+        y: 470,
+        width: 400,
+        height: 35,
+        text: "ဒီမှာ လက်မလျှော့ဖို့",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: j-up,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 525,
+        y: 240,
+        width: 430,
+        height: 180,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: j-up-l,
+        kind: text,
+        x: 820,
+        y: 400,
+        width: 260,
+        height: 35,
+        text: "ပြန်မြန်လာ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9354
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: open
+    chapter: စိုးရိမ်ချက် နှစ်ခု
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ဝန်ထမ်း ၄၃၀ အတွက် success team ကို ဖွဲ့ပြီး၊ login မဝင်ခင် setup လုပ်ရမယ့် ခေါင်းစဉ်
+      ငါးခုကို ချရေးခဲ့ပါတယ်။
+      [[mark:o-title]] account တွေ အသင့်ဖြစ်တဲ့ အပတ်မှာ support manager လှလှ က ကိုယ့်ဆီ လာပြောပါတယ်။ support
+      agent တွေကြားမှာ စိုးရိမ်ချက် နှစ်ခု ရှိနေတယ် ဆိုတာပါ။
+      [[mark:o-1]] ပထမ တစ်ခုက AI ရေးတဲ့ အမှားအတွက် သူတို့ အပြစ်တင်ခံရမှာပါ။ မုန်တိုင်းကျတဲ့ညက router ပြန်ဖွင့်ခိုင်းတဲ့
+      စာ ၆၄ စောင်ကို ပို့ခဲ့တာ support agent တွေပါ။ ဒါပေမဲ့ အဲဒီညက ဘယ်သူ ဘာစစ်ရမလဲ ဆိုတာကို ဘယ်သူမှ design
+      မဆွဲထားခဲ့ပါဘူး။ ဒီတစ်ခါလည်း နောက်ဆုံး ပို့တဲ့လူကပဲ တာဝန်ခံရမလား လို့ သူတို့ မေးနေကြပါတယ်။
+      [[mark:o-2]] ဒုတိယ တစ်ခုက AI က သူတို့ အလုပ်ကို ယူသွားမှာပါ။ draft ကို Claude က ရေးပေးနိုင်ရင် support agent
+      ၄၅ ယောက် ဆက်လိုပါဦးမလား ဆိုတဲ့ မေးခွန်းပါ။
+      [[mark:o-reason]] ဒီ နှစ်ခုလုံးက အကြောင်းရှိတဲ့ စိုးရိမ်ချက်တွေပါ။ မဖြေရှင်းဘဲ launch လုပ်ရင် account တွေ
+      ပွင့်နေပေမဲ့ သုံးမယ့်သူ နည်းနေမှာ၊ ဒါမှမဟုတ် personal account နဲ့ ဖုံးပြီး သုံးနေကြမှာပါ။ ဒါကြောင့် လူတွေကို
+      အပြောင်းအလဲအတွက် ပြင်ဆင်တာနဲ့၊ leader တစ်ယောက် ပို့နိုင်မယ့် launch message ကို ရေးကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-o-title,
+          type: whiteboard.apply,
+          at: { mark: o-title },
+          open: true,
+          clear: true,
+          upsertIds: [o-title],
+        }
+      - {
+          id: draw-o-1,
+          type: whiteboard.apply,
+          at: { mark: o-1 },
+          upsertIds: [o-b1, o-l1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-o-2,
+          type: whiteboard.apply,
+          at: { mark: o-2 },
+          upsertIds: [o-b2, o-l2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-o-reason,
+          type: whiteboard.apply,
+          at: { mark: o-reason },
+          upsertIds: [o-reason],
+          drawMs: 900,
+        }
+
+  - id: principles
+    chapter: အခြေခံ စည်းမျဉ်း သုံးခု
+    narration: >
+      [[mark:p-open]] Anthropic ရဲ့ FDE learning path က adoption အတွက် အခြေခံ စည်းမျဉ်း သုံးခုကို နာမည်တပ်ထားပါတယ်။
+      နာမည်တွေက path ကပါ၊ နေခြည် အတွက် ရှင်းပြချက်ကတော့ ကိုယ်တို့ဟာပါ။
+      [[mark:p-1]] ပထမ တစ်ခုက ဘာကြောင့် Claude ကို သုံးမလဲ ဆိုတဲ့ အကြောင်းပြချက်ကို leader ကိုယ်တိုင် ပြောတာပါ။
+      IT က ပို့တဲ့ email တစ်စောင်ဆိုရင် tool အသစ် တစ်ခု ထပ်ရလာတာလောက်ပဲ ဖြစ်သွားတတ်ပါတယ်။ CTO ဖြစ်တဲ့ အောင်အောင် က
+      မုန်တိုင်းကျတဲ့ညကနေ စပြီး သူ့စကားနဲ့ ပြောတော့မှ ဒါ ကုမ္ပဏီရဲ့ ဆုံးဖြတ်ချက် ဖြစ်ကြောင်း လူတွေ ယုံကြည်ပါတယ်။
+      ကိုယ်က draft ကို ကူရေးပေးနိုင်ပေမဲ့၊ စကားလုံးနဲ့ ကတိတွေက သူ့ဟာ ဖြစ်ရပါမယ်။
+      [[mark:p-2]] ဒုတိယ တစ်ခုက ကုမ္ပဏီ တစ်ခုလုံးရဲ့ growth mindset ပါ။ ကျွမ်းကျင်မှုဆိုတာ မွေးကတည်းက ပါလာတာ
+      မဟုတ်ဘဲ သင်ယူရင် တိုးတက်နိုင်တယ်လို့ ကုမ္ပဏီရဲ့ မူဝါဒတွေကနေ ပြတာပါ။ သုတေသန တစ်ခုအရ၊
+      talent ကို ပုံသေလို့ ယူဆတယ်လို့ မြင်ရတဲ့ ကုမ္ပဏီက ဝန်ထမ်းတွေဟာ ယုံကြည်မှု နည်းပြီး၊ အချင်းချင်း ပြိုင်ဆိုင်မှု
+      ပိုများကြောင်း ပြောကြပါတယ်။
+      [[mark:p-2b]] growth mindset နဲ့ တွဲပြီး လိုတာက psychological safety ပါ။ မှားမှာ၊ မေးမှာကို မကြောက်ရတဲ့ အဖွဲ့
+      အခြေအနေပါ။ ထုတ်လုပ်ရေး ကုမ္ပဏီ တစ်ခုထဲက team ၅၁ ခုကို လေ့လာတဲ့ သုတေသန တစ်ခုမှာ၊ psychological safety
+      ရှိတဲ့ team တွေက ပိုသင်ယူကြပြီး၊ အဲဒီ သင်ယူမှုက team ရဲ့ စွမ်းဆောင်ရည်နဲ့ ဆက်စပ်နေတာကို တွေ့ခဲ့ပါတယ်။
+      support agent တစ်ယောက်က Claude ရဲ့ draft မှားတာကို ပြောရဲမှ system ကို ပြင်လို့ ရမှာပါ။
+      [[mark:p-3]] တတိယ တစ်ခုက အောင်မြင်မှုတွေကို စနစ်တကျ မျှဝေတာပါ။ ကိုယ်နဲ့ အလုပ်တူတဲ့ လုပ်ဖော်ကိုင်ဖက်
+      တစ်ယောက်က ဘယ်လို အချိန် ချွေတာခဲ့လဲ ဆိုတာ ကြားရတာက ဘယ် presentation ထက်မဆို ပိုယုံကြည်စေပါတယ်။
+      ဒါကို ကြုံမှ မဟုတ်ဘဲ သတ်မှတ်ထားတဲ့ အချိန်မှာ ပုံမှန် လုပ်ရပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+      - {
+          title: "Edmondson, Psychological Safety and Learning Behavior in Work Teams (Administrative Science Quarterly, 1999)",
+          url: "https://citedrive.com/en/discovery/psychological-safety-and-learning-behavior-in-work-teams/",
+        }
+      - {
+          title: "Berkeley Haas: Cultures of Genius research (Canning, Murphy, Emerson, Chatman, Dweck, Kray, 2020)",
+          url: "https://newsroom.haas.berkeley.edu/?p=18013",
+        }
+    actions:
+      - {
+          id: close-worries,
+          type: whiteboard.apply,
+          at: { mark: p-open, offsetMs: -1400 },
+          open: false,
+        }
+      - {
+          id: show-principles,
+          type: slide.show,
+          at: { mark: p-open, offsetMs: -600 },
+          slideId: principles,
+        }
+      - { id: point-p-1, type: slide.point, at: { mark: p-1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-p-2, type: slide.point, at: { mark: p-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-p-3, type: slide.point, at: { mark: p-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ launch လုပ်ပြီး နှစ်ပတ်အကြာမှာ support ရဲ့ ticket တစ်ခုကို ဖြေရှင်းတဲ့
+      ပျမ်းမျှ အချိန်က ၁၁ မိနစ်ကနေ ၁၂ မိနစ် ဖြစ်သွားပါတယ်။ support agent တွေကတော့ training တက်နေကြပြီး draft
+      စစ်ပုံ အသစ်ကို ကျင့်နေကြပါတယ်။
+      [[mark:q-a]] ပထမ ရွေးချယ်စရာက အလုပ် နှေးသွားလို့ roll out ကို ရပ်လိုက်တာပါ။
+      [[mark:q-b]] ဒုတိယ ရွေးချယ်စရာက ဒါကို မျှော်လင့်ထားရမယ့် ကျဆင်းမှုလို့ ယူဆပြီး လူတွေကို ဆက်ကူညီတာပါ။ lesson
+      ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ အလုပ်လုပ်ပုံ အသစ်ကို သင်ယူနေတဲ့
+      အချိန်မှာ ခဏ နှေးသွားတာက ပုံမှန်ပါ။ training ချိန်၊ စစ်ပုံ အသစ်နဲ့ မကျင့်သေးတဲ့ လက်တွေက ဂဏန်းထဲမှာ
+      ကုန်ကျစရိတ်အဖြစ်ပဲ အရင် ပေါ်ပါတယ်။ ဒါပေမဲ့ ဘယ်လောက်ကြာကြာ စောင့်မလဲ ဆိုတာကိုတော့ launch မတိုင်ခင်
+      ဆုံးဖြတ်ထားရပါမယ်။
+      [[mark:q-rule]] ဒါကြောင့် ကျဆင်းမှု ရှိလာရင် ချက်ချင်း မရပ်ပါနဲ့။ ဘယ်နေ့ ပြန်ကြည့်မလဲ၊ ဘာဖြစ်ရင် ရပ်မလဲ
+      ဆိုတာကို ကြိုသတ်မှတ်ထားပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-principles, type: slide.close, at: { mark: quiz, offsetMs: -1400 } }
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz, offsetMs: -500 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1],
+          drawMs: 900,
+        }
+
+  - id: j-curve
+    chapter: J curve
+    narration: >
+      [[mark:j-title]] ဒီ ပုံစံကို productivity J curve လို့ ခေါ်ပါတယ်။ အသစ် စသုံးချိန်မှာ ထုတ်လုပ်နိုင်စွမ်း ခဏ
+      ကျပြီးမှ ပြန်တက်လာတဲ့ ပုံစံပါ။ FDE learning path ကလည်း ဒါကို AI အပြောင်းအလဲမှာ မျှော်လင့်ထားရမယ့် အပိုင်း
+      တစ်ခုလို့ ဆိုပါတယ်။
+      [[mark:j-down]] economist တွေရဲ့ သုတေသန တစ်ခုက အကြောင်းရင်းကို ရှင်းပြပါတယ်။
+      နေရာတိုင်းမှာ သုံးနိုင်တဲ့ နည်းပညာမျိုးဆိုရင် လုပ်ငန်းစဉ် အသစ်၊ ကျွမ်းကျင်မှု အသစ်တွေအတွက် မမြင်ရတဲ့ ရင်းနှီးမှု
+      အများကြီး လိုပါတယ်။ အစပိုင်းမှာ အဲဒီ ရင်းနှီးမှုတွေက ဂဏန်းထဲ မပေါ်သေးလို့ ထုတ်လုပ်နိုင်စွမ်းက တကယ်ထက်
+      နိမ့်နေသလို မြင်ရပါတယ်။
+      [[mark:j-dip]] အဲဒီ နိမ့်တဲ့ နေရာက လူတွေ လက်လျှော့ဖို့ အလွယ်ဆုံး နေရာပါ။ ဒါကြောင့် leader က ဒီ ကျဆင်းမှုကို
+      launch မတိုင်ခင်ကတည်းက ကြိုပြောထားရပါမယ်။ ကြိုပြောထားတဲ့ ကျဆင်းမှုက ယုံကြည်မှုကို သိပ် မထိခိုက်တတ်ပါဘူး။ မပြောဘဲ
+      ဖြစ်လာတဲ့ ကျဆင်းမှုကတော့ project တစ်ခုလုံးကို ရပ်သွားစေနိုင်ပါတယ်။
+      [[mark:j-up]] ပြန်တက်လာဖို့ကတော့ စောင့်နေရုံနဲ့ မရပါဘူး။ office hours၊ ဌာနအလိုက် training နဲ့ အမှားကို ပြောရဲတဲ့
+      အခြေအနေတွေက ဒီ ကွေးကို ပြန်တက်စေပါတယ်။ ဘယ်လောက် မြန်မြန် တက်မလဲ ဆိုတာကတော့ ကုမ္ပဏီ တစ်ခုနဲ့ တစ်ခု
+      မတူပါဘူး။
+    sources:
+      - {
+          title: "Brynjolfsson, Rock, Syverson: The Productivity J-Curve (NBER Working Paper 25148)",
+          url: "https://www.nber.org/papers/w25148",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-j-title,
+          type: whiteboard.apply,
+          at: { mark: j-title },
+          clear: true,
+          upsertIds: [j-title, j-yaxis, j-xaxis, j-xlabel],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-j-down,
+          type: whiteboard.apply,
+          at: { mark: j-down },
+          upsertIds: [j-cost-l, j-down],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-j-dip,
+          type: whiteboard.apply,
+          at: { mark: j-dip },
+          upsertIds: [j-circle, j-dip-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-j-up,
+          type: whiteboard.apply,
+          at: { mark: j-up },
+          upsertIds: [j-up, j-up-l],
+          drawMs: 1200,
+        }
+
+  - id: launch
+    chapter: Launch ရဲ့ အချိန်ဇယား
+    narration: >
+      [[mark:l-open]] ဒါဆို launch ကို တစ်နေ့တည်း ကြေညာပြီး ပြီးသွားတာ မဟုတ်ဘဲ၊ အချိန်ဇယား တစ်ခုအဖြစ်
+      ကြည့်ရအောင်။ Claude Enterprise Administrator Guide ထဲက ဆက်သွယ်ရေး အစီအစဉ်ကို နေခြည် အတွက် ညှိထားတာပါ။
+      [[mark:l-1]] launch မတိုင်ခင် နှစ်ပတ်မှာ အောင်အောင် က ဘာကြောင့် Claude ကို သုံးမလဲ ဆိုတာကို အရင် ပြောပါတယ်။
+      support agent တွေရဲ့ မေးခွန်းတွေကိုလည်း ဒီအချိန်မှာ ကြိုစုထားလို့ ရပါတယ်။
+      [[mark:l-2]] launch day မှာ CTO ရဲ့ launch message ထွက်ပြီး၊ လူတိုင်း ပထမ task တစ်ခုနဲ့ စကာ training ဇယားကိုလည်း
+      သိရပါတယ်။
+      [[mark:l-2b]] training ကလည်း လူတိုင်းအတွက် တစ်မျိုးတည်း မဟုတ်ပါဘူး။ ဝန်ထမ်းအားလုံးအတွက် မိနစ် ၃၀ ကနေ ၆၀
+      အထိ အခြေခံ workshop ရှိပြီး၊ ပြီးရင် ဌာနတစ်ခုစီရဲ့ ကိုယ်ပိုင် အလုပ်နဲ့ session တွေ ရှိပါတယ်။ support agent
+      တွေက ကိုယ့် ticket တွေနဲ့ ကျင့်ပြီး၊ finance က ကိုယ့် report တွေနဲ့ ကျင့်ပါတယ်။ ဌာန session တွေကို နှစ်ပတ်ကနေ
+      လေးပတ်အကြာမှာ ပြန်ဆက်ကြည့်ဖို့လည်း အဲဒီ guide က အကြံပေးပါတယ်။
+      [[mark:l-3]] ပထမ အပတ်မှာ pilot မှာ ပါခဲ့တဲ့ support agent ၁၀ ယောက်ရဲ့ tip တွေနဲ့ သူတို့ ကြုံခဲ့တဲ့ ဖြစ်ရပ်တွေကို
+      မျှဝေပါတယ်။
+      [[mark:l-4]] အဲဒီနောက်မှာတော့ အပတ်စဉ် tip နဲ့ လစဉ် newsletter တွေနဲ့ ဆက်သွားပါတယ်။ တတိယ စည်းမျဉ်းဖြစ်တဲ့
+      အောင်မြင်မှု မျှဝေတာကို ဒီလို အချိန်ဇယားထဲ ထည့်ထားမှ မပျောက်သွားမှာပါ။
+    sources:
+      - {
+          title: "Claude Enterprise Administrator Guide (Anthropic Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+    actions:
+      - {
+          id: close-jcurve,
+          type: whiteboard.apply,
+          at: { mark: l-open, offsetMs: -1400 },
+          open: false,
+        }
+      - {
+          id: show-launch,
+          type: slide.show,
+          at: { mark: l-open, offsetMs: -600 },
+          slideId: launch-plan,
+        }
+      - { id: point-l-1, type: slide.point, at: { mark: l-1 }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-l-2, type: slide.point, at: { mark: l-2 }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-l-3, type: slide.point, at: { mark: l-3 }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-l-4, type: slide.point, at: { mark: l-4 }, target: { x: 0.15, y: 0.81 } }
+
+  - id: message
+    chapter: Launch message
+    narration: >
+      [[mark:m-open]] အခု အောင်အောင် ပို့မယ့် launch message ကို ရေးကြည့်ရအောင်။ ကိုယ်က draft ကို ရေးပေးပြီး၊ အောင်အောင်
+      က သူ့စကား ဖြစ်အောင် ပြန်ပြင်မှာပါ။
+      [[mark:type-why]] ပထမ အပိုင်းက ဘာကြောင့်လဲ ဆိုတာပါ။ မုန်တိုင်းကျတဲ့ညကနေ စပြီး၊ ရလာမယ့် အချိန်ကို ဘာအတွက်
+      သုံးမလဲ ဆိုတာ ပြောပါတယ်။ အလုပ်ပြုတ်မှာ စိုးရိမ်ချက်ကိုလည်း ဒီမှာ တိုက်ရိုက် ဖြေပါတယ်။ ဒီ ကတိကို အောင်အောင်
+      တကယ် ထိန်းနိုင်မှသာ ရေးရပါမယ်။
+      [[mark:type-mistake]] ဒုတိယ အပိုင်းက အမှားအကြောင်းပါ။ draft ကို support agent က အမြဲ ဖတ်ပြီးမှ ပို့တာမို့
+      စစ်တဲ့ တာဝန်က ရှင်းပါတယ်။ အမှား တွေ့ရင် ပြောတဲ့သူကို အပြစ်မတင်ဘဲ system ကို ပြင်မယ်လို့ leader ကိုယ်တိုင်
+      ကတိပေးတာက psychological safety ရဲ့ အစပါ။
+      [[mark:type-dip]] တတိယ အပိုင်းက ကျဆင်းမှုကို ကြိုပြောတာပါ။ ပထမ အပတ်တွေမှာ နှေးနိုင်ကြောင်းနဲ့၊ ခြောက်ပတ်ကြာမှ
+      ဂဏန်းကို ပြန်ကြည့်မယ် ဆိုတာ ရေးထားပါတယ်။
+      [[mark:type-task]] စတုတ္ထ အပိုင်းက ဒီနေ့ လုပ်ရမယ့် ပထမ task ပါ။ ကိုယ့် အလုပ်ထဲက စာ တစ်စောင်ကို Claude နဲ့
+      မူကြမ်းရေးပြီး ကိုယ်တိုင် စစ်ကြည့်ဖို့ပါ။ ကြေညာချက် ဖတ်ပြီး ဘာလုပ်ရမလဲ မသိတဲ့ launch day ထက်၊ ပထမ task
+      တစ်ခု ပါတဲ့ launch day က အများကြီး ပိုအလုပ်ဖြစ်ပါတယ်။ အောက်ဆုံး စာကြောင်းကတော့ ခုနက ပြောခဲ့တဲ့ training ဇယားကို
+      message ထဲမှာ ပြန်သတိပေးတာပါ။
+    sources:
+      - {
+          title: "Claude Enterprise Administrator Guide (Anthropic Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-launch, type: slide.close, at: { mark: m-open } }
+      - {
+          id: open-message,
+          type: workspace.openFile,
+          at: { afterAction: close-launch },
+          path: notebook/54-launch-message.md,
+        }
+      - id: type-why
+        type: editor.type
+        at: { mark: type-why }
+        cadence: line-by-line
+        target: { file: notebook/54-launch-message.md, after: "ဝန်ထမ်းအားလုံးကို၊\n\n" }
+        text: "မုန်တိုင်းကျတဲ့ညက AI ကို စနစ်မရှိဘဲ သုံးခဲ့ရတယ်။ ဒီနေ့ကစပြီး စနစ်တကျ သုံးမယ်။\nရလာတဲ့ အချိန်က ခက်တဲ့ ticket တွေအတွက်ပါ။ Claude ကြောင့် ဘယ်သူ့ အလုပ်မှ မဖြုတ်ပါဘူး။\n\n"
+      - id: type-mistake
+        type: editor.type
+        at: { mark: type-mistake }
+        cadence: line-by-line
+        target: { file: notebook/54-launch-message.md, after: "ဘယ်သူ့ အလုပ်မှ မဖြုတ်ပါဘူး။\n\n" }
+        text: "Draft ကို support agent က အမြဲ ဖတ်ပြီးမှ ပို့မယ်။\nအမှား တွေ့ရင် ပြောပါ။ ပြောတဲ့သူကို အပြစ်မတင်ဘဲ system ကို ပြင်မယ်။\n\n"
+      - id: type-dip
+        type: editor.type
+        at: { mark: type-dip }
+        cadence: line-by-line
+        target: { file: notebook/54-launch-message.md, after: "system ကို ပြင်မယ်။\n\n" }
+        text: "ပထမ အပတ်တွေမှာ အလုပ် နည်းနည်း နှေးနိုင်တယ်။ ဒါ မျှော်လင့်ထားပြီးသားပါ။\n6 ပတ်ကြာမှ ဂဏန်းကို ပြန်ကြည့်ပြီး ဆက်လုပ်ပုံကို ဆုံးဖြတ်မယ်။\n\n"
+      - id: type-task
+        type: editor.type
+        at: { mark: type-task }
+        cadence: line-by-line
+        target: { file: notebook/54-launch-message.md, after: "ဆက်လုပ်ပုံကို ဆုံးဖြတ်မယ်။\n\n" }
+        text: "ဒီနေ့ ပထမ task: ကိုယ့်အလုပ်ထဲက စာ 1 စောင်ကို Claude နဲ့ မူကြမ်းရေးပြီး ကိုယ်တိုင် စစ်ပါ။\ntraining: ဝန်ထမ်းအားလုံး 45 မိနစ် workshop၊ ဌာန session က နောက်အပတ်။\n\n"
+      - id: expect-mistake
+        type: expect.file
+        at: { afterAction: type-task }
+        path: notebook/54-launch-message.md
+        contains: "အမှား တွေ့ရင် ပြောပါ။ ပြောတဲ့သူကို အပြစ်မတင်ဘဲ system ကို ပြင်မယ်။\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် team ကို AI tool အသစ် တစ်ခု စသုံးဖို့ ပို့မယ့်
+      launch message ရဲ့ ပထမ စာကြောင်း နှစ်ကြောင်းကို ရေးကြည့်ပါ။ ဘာကြောင့်လဲ ဆိုတာကို ကိုယ့် team ကြုံခဲ့တဲ့ ဖြစ်ရပ်
+      တစ်ခုကနေ စပါ။
+      [[mark:turn-2]] tool ရဲ့ feature စာရင်းနဲ့ မစပါနဲ့။ ရေးပြီးရင် ကိုယ့် team lead ဒါမှမဟုတ် manager ကို ပြပြီး၊ သူ့စကား
+      ဖြစ်အောင် ပြန်ပြင်ခိုင်းကြည့်ပါ။ သူ မပြင်ချင်တဲ့ ကတိ ပါနေရင် အဲဒီ စာကြောင်းကို ဖျက်ရပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-why
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/54-launch-message.md
+          text: "မုန်တိုင်းကျတဲ့ညက AI ကို စနစ်မရှိဘဲ သုံးခဲ့ရတယ်။ ဒီနေ့ကစပြီး စနစ်တကျ သုံးမယ်။\nရလာတဲ့ အချိန်က ခက်တဲ့ ticket တွေအတွက်ပါ။ Claude ကြောင့် ဘယ်သူ့ အလုပ်မှ မဖြုတ်ပါဘူး။"
+      - id: sel-promise
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/54-launch-message.md
+          text: "Claude ကြောင့် ဘယ်သူ့ အလုပ်မှ မဖြုတ်ပါဘူး။"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ account တွေ အသင့်ဖြစ်ရုံနဲ့ လူတွေ မသုံးကြပါဘူး။ support agent တွေရဲ့
+      စိုးရိမ်ချက်ကို ဖြေဖို့ leader က ဘာကြောင့်လဲ ဆိုတာကို ကိုယ့်စကားနဲ့ ပြောရပြီး၊ အမှားကို ပြောရဲတဲ့ အခြေအနေကို
+      ဖန်တီးရပါမယ်။
+      [[mark:recap-2]] ကျဆင်းမှုကို ကြိုပြောထားရပါမယ်။ training ကို role အလိုက် ပေးပြီး၊ launch day ကို ပထမ task
+      တစ်ခုနဲ့ စရပါမယ်။
+      [[mark:next]] နောက် lesson မှာတော့ launch ပြီး သုံးလအကြာ ဌာနတိုင်းက ကိုယ့်နည်း၊ ကိုယ့်အမှားတွေနဲ့ သွားနေတဲ့အခါ၊
+      Center of Excellence ကို ဖွဲ့ပြီး Acceleration အဆင့်ကို ဘယ်လို စမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-mistake
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/54-launch-message.md
+          text: "အမှား တွေ့ရင် ပြောပါ။ ပြောတဲ့သူကို အပြစ်မတင်ဘဲ system ကို ပြင်မယ်။"
+      - id: sel-task
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/54-launch-message.md
+          text: "ဒီနေ့ ပထမ task: ကိုယ့်အလုပ်ထဲက စာ 1 စောင်ကို Claude နဲ့ မူကြမ်းရေးပြီး ကိုယ်တိုင် စစ်ပါ။"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
