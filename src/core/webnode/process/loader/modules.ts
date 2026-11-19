@@ -30,6 +30,7 @@ import {
   STATIC_IMPORT_BINDING,
   stripTypes,
 } from "./transform";
+import { preparedFromStore } from "./prepared";
 import type { PreparedSource } from "./transform";
 
 type Namespace = Record<string | symbol, unknown>;
@@ -790,7 +791,9 @@ function linkGraph(record: EsmRecord, linked: EsmRecord[]): void {
   }
   record.state = "linked";
   linked.push(record);
-  record.prepared ??= prepareSource(readText(record.filename), record.filename, "esm");
+  record.prepared ??=
+    preparedFromStore(record.filename) ??
+    prepareSource(readText(record.filename), record.filename, "esm");
   const exportNames = record.prepared.exportNames;
   record.exportNames = exportNames === null ? null : new Set(exportNames);
   record.starExports = record.prepared.starExports;

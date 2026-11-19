@@ -5,6 +5,7 @@
 import { BUILD_ID, versionedPath } from "./buildId";
 import { systemErrorFromRecord } from "./errors";
 import type { DirEntry } from "./kernel/vfs/types";
+import { openPreparedStorage } from "./preparedStorage";
 import { signalExitStatus } from "./signals";
 import {
   PREVIEW_CLEAR_PATH,
@@ -381,6 +382,8 @@ export class WebNode {
     { output: ReadableStreamDefaultController<string> | null; exit: (code: number) => void }
   >();
   private readonly watchers = new Map<number, WatchListener>();
+  /** Large modules' prepared forms, kept between visits for the kernel. */
+  private readonly prepared = openPreparedStorage();
   private readonly bridge: { dispose(): void };
   /** Takes what the runtime frame reports after boot (a kernel worker that failed). */
   private readonly onFrameMessage: (event: MessageEvent) => void;
@@ -453,6 +456,7 @@ export class WebNode {
       coep: options.coep ?? "require-corp",
       forwardPreviewErrors: options.forwardPreviewErrors ?? false,
       editorOrigin: window.location.origin,
+      preparedStore: typeof indexedDB !== "undefined",
     };
     const { port } = runtime;
     const origin = runtimeOrigin(options.previewBase);
@@ -690,6 +694,19 @@ export class WebNode {
         for (const listener of this.listeners.error) {
           listener({ message: message.message });
         }
+        return;
+      case "prepared-get":
+        void this.prepared.get(message.version, message.key).then((entry) => {
+          // Torn down meanwhile: nobody waits for it.
+          this.request(
+            "preparedEntry",
+            [message.ask, entry],
+            entry ? [entry.buffer as ArrayBuffer] : [],
+          ).catch(() => undefined);
+        });
+        return;
+      case "prepared-put":
+        void this.prepared.put(message.version, message.key, message.entry);
         return;
     }
   }

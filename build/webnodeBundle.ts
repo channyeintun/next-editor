@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { build } from "rolldown";
@@ -102,13 +104,42 @@ function sucraseModuleBindings(): RolldownPlugin {
   };
 }
 
+/**
+ * Names the loader's rewrite of a module (process/loader/transform.ts): the
+ * prepared forms a browser keeps between visits (process/loader/preparedEntry.ts)
+ * are used only by a build whose rewrite has the same name. It is a hash of
+ * everything the rewritten code depends on: the rewrite's own source (which
+ * imports nothing else of the engine; webnodeBundle.test.ts holds it to that),
+ * this file (which renames sucrase's bindings) and the two packages it calls.
+ * So a deploy that changes none of them keeps what its visitors' browsers hold.
+ */
+export function webnodeTransformId(): string {
+  const hash = createHash("sha256");
+  hash.update(readFileSync(`${ENGINE_ROOT}process/loader/transform.ts`));
+  hash.update(readFileSync(fileURLToPath(import.meta.url)));
+  for (const name of ["sucrase", "es-module-lexer"]) {
+    // Not `<name>/package.json`: a package's exports need not offer it.
+    const entry = require.resolve(name);
+    const inside = `/node_modules/${name}/`;
+    const root = entry.slice(0, entry.lastIndexOf(inside) + inside.length);
+    const manifest = JSON.parse(readFileSync(`${root}package.json`, "utf8")) as { version: string };
+    hash.update(`${name}@${manifest.version}`);
+  }
+  return hash.digest("hex").slice(0, 16);
+}
+
 async function bundle(entry: string, file: string, options: WebnodeBundleOptions): Promise<void> {
   await build({
     input: `${ENGINE_ROOT}${entry}`,
     platform: "browser",
     plugins: [nodeBuiltinAliases(), sucraseModuleBindings()],
     logLevel: "warn",
-    transform: { define: { __WEBNODE_BUILD_ID__: JSON.stringify(options.buildId ?? "") } },
+    transform: {
+      define: {
+        __WEBNODE_BUILD_ID__: JSON.stringify(options.buildId ?? ""),
+        __WEBNODE_TRANSFORM_ID__: JSON.stringify(webnodeTransformId()),
+      },
+    },
     output: {
       file: `${options.outDir}/${file}`,
       // Classic worker scripts: one file each, no imports.

@@ -380,6 +380,16 @@ export interface ThreadBackend {
   spawn(request: ThreadSpawnRequest): ThreadHandle;
 }
 
+/** The kernel's entries for large modules already rewritten for the loader (kernel/preparedModules.ts). */
+export interface PreparedModuleBackend {
+  /**
+   * The file that holds the prepared form of ES module file `filename`
+   * (loader/preparedEntry.ts), once the kernel has it there; null when the
+   * kernel has none to offer.
+   */
+  locate(filename: string): string | null;
+}
+
 export interface ProcessRuntime {
   /** This process's pid: a new one once it has gone on as a new process (`processes.forkAndExit`). */
   readonly pid: number;
@@ -410,6 +420,7 @@ export interface ProcessRuntime {
   readonly processes: ProcessBackend;
   readonly net: NetBackend;
   readonly threads: ThreadBackend;
+  readonly prepared: PreparedModuleBackend;
   /**
    * Counts one thing that keeps the process alive: a listening server, an open
    * socket, a pending timer, a running child. The process exits when the count

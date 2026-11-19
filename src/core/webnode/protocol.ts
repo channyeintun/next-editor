@@ -23,6 +23,12 @@ export interface BootOptions {
   forwardPreviewErrors: boolean | "exceptions-only";
   /** The origin of the page that booted the runtime: the only one a preview takes a connection from. */
   editorOrigin: string;
+  /**
+   * The page keeps large modules' prepared forms between visits and answers
+   * the kernel's `prepared-get` (preparedStorage.ts). Left out, each session
+   * prepares them anew.
+   */
+  preparedStore?: boolean;
 }
 
 export interface TerminalSize {
@@ -58,7 +64,15 @@ export type KernelEvent =
   | { event: "exit"; pid: number; code: number }
   | { event: "port"; port: number; type: "open" | "close" }
   | { event: "watch"; watchId: number; eventType: "rename" | "change"; filename: string }
-  | { event: "error"; message: string };
+  | { event: "error"; message: string }
+  /**
+   * The kernel's entries for large modules (kernel/preparedModules.ts), which
+   * the page keeps between visits. `prepared-get` asks for the entry kept
+   * under `key` for `version`; the page answers with a `preparedEntry`
+   * request that names the same `ask`. `prepared-put` hands it one to keep.
+   */
+  | { event: "prepared-get"; ask: number; version: string; key: string }
+  | { event: "prepared-put"; version: string; key: string; entry: Uint8Array };
 
 /** An error flattened for a thread crossing. `system` is set for a failed system call. */
 export interface SerializedError {
@@ -122,8 +136,26 @@ export interface ProcessInit {
   ipc: MessagePort | null;
 }
 
+/**
+ * What the kernel sends, in place of `init`, to a worker it starts only to
+ * make one large module's entry (kernel/preparedModules.ts): the file's name
+ * and its bytes. The worker is no process: it answers and is ended.
+ */
+export interface PrepareRequest {
+  type: "prepare";
+  filename: string;
+  source: Uint8Array;
+}
+
+/** That worker's answer: the entry (process/loader/preparedEntry.ts), or null for a file that cannot be rewritten. */
+export interface PrepareReply {
+  type: "prepared";
+  entry: Uint8Array | null;
+}
+
 /** Messages a process worker sends the kernel. */
 export type ProcessMessage =
+  | PrepareReply
   /** A blocking call: the worker waits on its sync buffer for the answer. */
   | { type: "sync"; op: string; args: unknown[] }
   /** The worker supplies a bigger sync buffer and asks for the last answer again. */
@@ -136,6 +168,7 @@ export type ProcessMessage =
 /** Messages the kernel sends a process worker. */
 export type KernelMessage =
   | ProcessInit
+  | PrepareRequest
   | { type: "reply"; id: number; ok: true; value: unknown }
   | { type: "reply"; id: number; ok: false; error: SerializedError }
   /**

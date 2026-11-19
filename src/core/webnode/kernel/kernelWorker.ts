@@ -15,8 +15,10 @@ import type {
   TerminalSize,
 } from "../protocol";
 import { serializeError } from "../protocol";
+import { PREPARED_VERSION } from "../process/loader/preparedEntry";
 import { Kernel } from "./kernel";
 import type { KernelWorker } from "./kernel";
+import { PagePreparedStore } from "./preparedModules";
 import { Vfs } from "./vfs/vfs";
 import { createSharedFilesystem } from "../sharedfs/boot";
 
@@ -38,6 +40,8 @@ const send = (message: PageReply | KernelEvent) => page?.postMessage(message);
 
 let kernel: Kernel | null = null;
 let gateway: PreviewGateway | null = null;
+/** The page's store of large modules' entries, where the page keeps one and this build names its entries. */
+let preparedStore: PagePreparedStore | null = null;
 let previewScript = "";
 
 function booted(): Kernel {
@@ -53,12 +57,17 @@ const methods: Record<string, (args: never, ports: readonly MessagePort[]) => un
     // else the one that lives here, which each process asks for every call.
     const sharedFs = options.sharedFilesystem === false ? null : createSharedFilesystem();
     const vfs = sharedFs ? sharedFs.fs : new Vfs();
+    preparedStore =
+      options.preparedStore && PREPARED_VERSION !== ""
+        ? new PagePreparedStore(send, PREPARED_VERSION)
+        : null;
     kernel = new Kernel(
       vfs,
       {
         createWorker: (name) => new Worker(PROCESS_SCRIPT_URL, { name }) as unknown as KernelWorker,
         emit: send,
         sharedFs,
+        preparedStore,
       },
       options.workdirName,
     );
@@ -108,11 +117,15 @@ const methods: Record<string, (args: never, ports: readonly MessagePort[]) => un
   previewAttach([serverPort]: [number], ports) {
     gateway?.attach(ports[0], serverPort);
   },
+  preparedEntry([ask, entry]: [number, Uint8Array | null]) {
+    preparedStore?.answer(ask, entry);
+  },
   teardown() {
     gateway?.dispose();
     kernel?.dispose();
     gateway = null;
     kernel = null;
+    preparedStore = null;
   },
 };
 

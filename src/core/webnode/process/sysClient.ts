@@ -703,6 +703,10 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
       },
     },
 
+    prepared: {
+      locate: (filename) => callSync("module.prepared", filename) as string | null,
+    },
+
     ref() {
       refs += 1;
     },

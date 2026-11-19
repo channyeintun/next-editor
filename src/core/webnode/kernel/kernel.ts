@@ -44,6 +44,8 @@ import type { EncodedPayload } from "./codec";
 import { installBuiltinCommands, resolveExec } from "./exec";
 import { createPageFiles } from "./pageFiles";
 import type { PageFiles } from "./pageFiles";
+import { PreparedModules, prepareInWorker } from "./preparedModules";
+import type { PreparedStore } from "./preparedModules";
 import type { ByteSource } from "./streams";
 import { Delivery, Pipe, PIPE_CAPACITY, Terminal, TerminalDelivery } from "./streams";
 import type { SharedFilesystem } from "../sharedfs/boot";
@@ -88,6 +90,8 @@ export interface KernelHost {
    * (sharedfs/README.md).
    */
   sharedFs?: SharedFilesystem | null;
+  /** Where large modules' entries are kept between visits (preparedModules.ts); null or left out: nowhere. */
+  preparedStore?: PreparedStore | null;
 }
 
 /**
@@ -348,12 +352,18 @@ export class Kernel {
   private nextConnectionPort = EPHEMERAL_PORT_START;
   private disposed = false;
   private readonly handlers: Record<string, Handler>;
+  private readonly prepared: PreparedModules;
 
   constructor(vfs: PermissionedVfs, host: KernelHost, workdirName: string) {
     this.vfs = vfs;
     this.host = host;
     this.workdir = `${HOME_DIR}/projects/${workdirName}`;
     this.pageFiles = createPageFiles(vfs.privileged, (path) => this.resolveWorkdirPath(path));
+    this.prepared = new PreparedModules(
+      vfs.privileged,
+      host.preparedStore ?? null,
+      prepareInWorker((name) => host.createWorker(name)),
+    );
     const setup = vfs.privileged;
     setup.mkdir(this.workdir, true, 0o755);
     setup.mkdir(TMP_DIR, true, 0o777);
@@ -602,6 +612,7 @@ export class Kernel {
   /** Ends every process and stops everything. */
   dispose(): void {
     this.disposed = true;
+    this.prepared.dispose();
     for (const proc of Array.from(this.procs.values())) {
       this.stopWorker(proc);
     }
@@ -2973,6 +2984,7 @@ export class Kernel {
         }
       },
       "net.connect": (proc: Proc, port: number) => this.connectFromProcess(proc, port),
+      "module.prepared": (_proc: Proc, filename: string) => this.prepared.locate(filename),
       "net.closed": (proc: Proc, channelId: number) => {
         proc.channels.delete(channelId);
         const channel = this.channels.get(channelId);

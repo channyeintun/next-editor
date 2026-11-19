@@ -49,6 +49,8 @@ export interface FakeRuntimeOptions {
   tty?: boolean;
   /** Runs a spawned child; returns its exit code (or a promise of it). Default: throws ENOENT (syscall "spawn <command>"). */
   spawn?: (request: SpawnRequest, io: FakeChildIo) => number | Promise<number>;
+  /** Where the kernel's entry for a large module is (`prepared.locate`). Default: it has none. */
+  preparedEntry?: (filename: string) => string | null;
 }
 
 export interface FakeRuntime extends ProcessRuntime {
@@ -988,6 +990,7 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
     processes,
     net,
     threads,
+    prepared: { locate: (filename) => options.preparedEntry?.(filename) ?? null },
     ref: () => {
       refCount++;
     },
