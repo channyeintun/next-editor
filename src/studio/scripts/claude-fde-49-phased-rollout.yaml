@@ -1,0 +1,635 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-49-phased-rollout
+  title: "Claude FDE 49: အဆင့်လိုက် rollout"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/49-rollout-plan.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/49-rollout-plan.md: |
+        # Delivery Plan Pack · နောက်ဆက်တွဲ A. Rollout plan
+
+        ကြီးကြပ်ပြီး သုံးတာကနေ အလုပ်လွှဲအပ်တာအထိ အဆင့် 3 ဆင့်၊ အဆင့်တိုင်းကို condition နဲ့ ကျော်
+
+        | အဆင့် | Claude Code mode | ဘယ်သူ | နောက်အဆင့် condition |
+        |---|---|---|---|
+
+        ## Wave နဲ့ setting
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: habits
+      contentType: html
+      name: အလုပ်လုပ်ပုံ ပြောင်းဖို့
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">အလုပ်လုပ်ပုံ ပြောင်းဖို့ လိုတာ</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term blue">ဘာကြောင့်</span>ဒီ team အတွက် ဘာကြောင့် လိုလဲ သိ</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term orange">လက်တွေ့</span>ကိုယ့် codebase မှာ တွဲလုပ်ကြည့်</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term green">ထိန်း</span>အပတ်စဉ် ပြန်ကြည့်၊ နည်းဟောင်းဆီ မပြန်</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the stair: three white steps (the stages), the Claude Code mode
+    # of each in blue, the condition to climb in orange, a green check for
+    # runs verified afterwards.
+    - {
+        id: st-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ကြီးကြပ်ကနေ လွှဲအပ်အထိ",
+        fontSize: 36,
+      }
+    - { id: st-r1, kind: rectangle, x: 290, y: 520, width: 250, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: st-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 538,
+        width: 250,
+        height: 35,
+        text: "1 · ကြီးကြပ်",
+        fontSize: 28,
+      }
+    - {
+        id: st-m1,
+        kind: text,
+        x: 290,
+        y: 600,
+        width: 250,
+        height: 35,
+        text: "Manual · plan",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - { id: st-r2, kind: rectangle, x: 550, y: 430, width: 250, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: st-l2,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 448,
+        width: 250,
+        height: 35,
+        text: "2 · routine",
+        fontSize: 28,
+      }
+    - {
+        id: st-m2,
+        kind: text,
+        x: 550,
+        y: 510,
+        width: 250,
+        height: 35,
+        text: "acceptEdits",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - { id: st-r3, kind: rectangle, x: 810, y: 340, width: 260, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: st-l3,
+        kind: text,
+        align: center,
+        x: 810,
+        y: 358,
+        width: 260,
+        height: 35,
+        text: "3 · လွှဲအပ်",
+        fontSize: 28,
+      }
+    - {
+        id: st-m3,
+        kind: text,
+        x: 810,
+        y: 420,
+        width: 150,
+        height: 35,
+        text: "auto",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: st-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 900,
+        y: 417,
+        width: 40,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: st-c1,
+        kind: text,
+        x: 550,
+        y: 385,
+        width: 255,
+        height: 35,
+        text: "စည်းကမ်း + သင်ပြီး",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: st-c2,
+        kind: text,
+        x: 810,
+        y: 295,
+        width: 280,
+        height: 35,
+        text: "check အလိုအလျောက်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "တတိယ အဆင့်ကို ဘာက ဖွင့်ပေးသင့်လဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) ဒုတိယ အဆင့်မှာ 4 ပတ် ပြည့်၊ ပြဿနာ မရှိ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) turn တိုင်း test အလိုအလျောက် run၊ ကျရင် ဆက်ပြင်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 640,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 1000,
+        y: 300,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "အချိန် ကုန်တာ condition မဟုတ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "ပြည့်ရမယ့် အခြေအနေကို ရေး",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9349
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: သူ့အလိုလို မဖြစ်ဘူး
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ baseline နဲ့ ROI ကို ပြင်ဆင်ခဲ့ပါတယ်။ ပထမ နေ့ မတိုင်ခင် ဂဏန်းတွေ ယူထားပြီး၊
+      လုပ်ဆောင်မှု ဘယ်လောက် များလဲ မဟုတ်ဘဲ ရလဒ်ကို တိုင်းမယ်လို့ ဆုံးဖြတ်ခဲ့ပါတယ်။
+      [[mark:two]] ရက် ၃၀ activation ကို ဆက်ဆွဲနေရင်း ပြဿနာ နှစ်ခုကို ကြိုမြင်ရပါတယ်။ activation ဆိုတာ သုံးစွဲမှုကို
+      တကယ် စတင်နိုင်အောင် ပြင်ဆင်တဲ့ အဆင့်ပါ။ ပထမ ပြဿနာက trial တုန်းက မြင်ခဲ့တာပါ။ Billing developer တွေက
+      Claude Code ရဲ့ ပြင်ဆင်ချက် တစ်ခုချင်းစီကို ကိုယ်တိုင် ခွင့်ပြုပြီး သုံးခဲ့ကြပါတယ်။ Claude Code ဆိုတာ
+      terminal ထဲကနေ code ကို ဖတ်၊ ပြင်၊ command run ပေးတဲ့ coding agent ပါ။ ခွင့်ပြုချက် တစ်ခုချင်း တောင်းနေရင်
+      job ၁၄၀ ကို သုံးပတ်နဲ့ ရွှေ့ဖို့ ခက်ပါတယ်။
+      [[mark:other]] ဒုတိယ ပြဿနာက ဆန့်ကျင်ဘက်ပါ။ ရက် ၃၀ ပြီးရင် ကျန်တဲ့ developer ၁၆ ယောက်လည်း စသုံးကြမှာပါ။
+      သူတို့ကို ပထမ နေ့ကစပြီး ဘာမှ မမေးဘဲ လုပ်ခွင့် ပေးလိုက်ရင်၊ စစ်ပေးမယ့် check တွေ မရှိသေးတဲ့ codebase ထဲမှာ
+      Claude Code ကို ဘယ်သူမှ မစစ်ဘဲ အကြာကြီး လွှတ်ထားသလို ဖြစ်ပါလိမ့်မယ်။
+      [[mark:path]] Anthropic ရဲ့ FDE learning path ဖော်ပြချက်က ဒီအချက်ကို တိုက်ရိုက် ပြောထားပါတယ်။ ကြီးကြပ်ပြီး
+      သုံးတာကနေ agent ကို အလုပ် လွှဲအပ်တာဆီ ပြောင်းတာက သူ့အလိုလို မဖြစ်ဘဲ၊ activation ထဲမှာ design ဆွဲထားရမယ်
+      ဆိုတာပါ။ agent ဆိုတာ ရည်မှန်းချက် ရောက်တဲ့အထိ tool တွေကို ကိုယ်တိုင် ရွေးသုံးပြီး အဆင့်ဆင့် လုပ်သွားတဲ့ model
+      ပါ။ ဒါကြောင့် pilot design ရဲ့ နောက်ဆက်တွဲအဖြစ် roll out plan ကို Delivery Plan Pack ထဲ ထည့်ရေးပါမယ်။ roll out ဆိုတာ
+      အဆင့်လိုက် ဖြန့်သုံးတာပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: open-rollout,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: notebook/49-rollout-plan.md,
+        }
+      - id: sel-intro
+        type: editor.select
+        at: { mark: path }
+        target:
+          file: notebook/49-rollout-plan.md
+          text: "ကြီးကြပ်ပြီး သုံးတာကနေ အလုပ်လွှဲအပ်တာအထိ အဆင့် 3 ဆင့်"
+
+  - id: stair
+    chapter: လှေကား သုံးထစ်
+    narration: >
+      [[mark:st-title]] ဒီ ပြောင်းလဲမှုကို လှေကား သုံးထစ်နဲ့ ကြည့်ရအောင်။ အထစ်တိုင်းမှာ Claude Code ရဲ့ permission
+      mode တစ်ခုစီ ရှိပါတယ်။ permission mode ဆိုတာ ဘယ်အရာတွေကို မမေးဘဲ လုပ်ခွင့်ပေးမလဲ သတ်မှတ်တဲ့ mode ပါ။
+      [[mark:st-1]] ပထမ အထစ်က ကြီးကြပ်ပြီး သုံးတာပါ။ Manual mode မှာ Claude Code က file ဖတ်တာကလွဲရင်၊ ပြင်တာ၊
+      command run တာ အားလုံးအတွက် ခွင့်ပြုချက် တောင်းပါတယ်။ ဘာမှ မပြင်ဘဲ အရင် ဖတ်ပြီး အစီအစဉ် ဆွဲခိုင်းတဲ့ plan
+      mode ကလည်း ဒီ အထစ်မှာ အသုံးဝင်ပါတယ်။ developer က Claude Code ဘယ်လို အလုပ်လုပ်လဲ ဆိုတာကို တစ်ဆင့်ချင်း
+      မြင်ရတဲ့ အထစ်ပါ။
+      [[mark:st-2]] ဒုတိယ အထစ်က ယုံကြည်ရတဲ့ routine တွေပါ။ ကြိုသိပြီးသား အလုပ်၊ ဥပမာ report job တစ်ခု ရွှေ့တာမျိုးမှာ
+      file ပြင်တာနဲ့ file တွေကို ဖန်တီး၊ ရွှေ့တဲ့ သာမန် command တွေကို မမေးဘဲ လုပ်ခွင့် ပေးပါတယ်။ ဒါက accept edits mode ပါ။ အလုပ်ပုံစံကို
+      သိပြီးသားဖြစ်ပြီး၊ ရလဒ်ကို စစ်ပေးမယ့် check ရှိနေလို့ ခွင့်ပေးတာပါ။
+      [[mark:st-3]] တတိယ အထစ်က အလုပ်ကို လွှဲအပ်တာပါ။ auto mode မှာ Claude Code က နောက်ကွယ်က safety check တွေနဲ့
+      အရာအားလုံးကို ဆက်လုပ်သွားလို့၊ အချိန်ကြာကြာ run နိုင်ပါတယ်။ လူက တစ်ဆင့်ချင်း မကြည့်တော့ပေမဲ့ run ပြီးတဲ့အခါ
+      diff နဲ့ ရလဒ်ကို စစ်ပါတယ်။ deny rule နဲ့ ပိတ်ထားတာကိုတော့ ဘယ် mode မှာမဆို လုပ်ခွင့် မရပါဘူး။
+      [[mark:st-anth]] ဒီ လှေကားက ကိုယ်တို့ ဆွဲထားတဲ့ ပုံပါ။ Anthropic က ကိုယ်ပိုင် ဝန်ထမ်းတွေကို လေ့လာထားတဲ့
+      စာတမ်းမှာလည်း၊ လူတွေက ရိုးရှင်းတဲ့ အလုပ်ကနေ စပြီး ယုံကြည်မှု တိုးလာမှ ပိုရှုပ်တဲ့ အလုပ်တွေကို လွှဲအပ်လာကြတယ်လို့
+      ဆိုပါတယ်။ အများစုက ကိုယ့်အလုပ်ရဲ့ ၂၀ ရာခိုင်နှုန်းအထိပဲ အပြည့်အဝ လွှဲအပ်နိုင်သေးတယ်လို့လည်း ဖော်ပြထားပါတယ်။
+    sources:
+      - {
+          title: "Claude Code docs: permission modes",
+          url: "https://code.claude.com/docs/en/permission-modes",
+        }
+      - {
+          title: "Anthropic: how AI is transforming work at Anthropic",
+          url: "https://www.anthropic.com/research/how-ai-is-transforming-work-at-anthropic",
+        }
+    actions:
+      - {
+          id: draw-st-title,
+          type: whiteboard.apply,
+          at: { mark: st-title },
+          open: true,
+          clear: true,
+          upsertIds: [st-title],
+        }
+      - {
+          id: draw-st-1,
+          type: whiteboard.apply,
+          at: { mark: st-1 },
+          upsertIds: [st-r1, st-l1, st-m1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-st-2,
+          type: whiteboard.apply,
+          at: { mark: st-2 },
+          upsertIds: [st-r2, st-l2, st-m2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-st-3,
+          type: whiteboard.apply,
+          at: { mark: st-3 },
+          upsertIds: [st-r3, st-l3, st-m3, st-ok],
+          drawMs: 1600,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ရက် ၃၀ ပြီးလို့ Customer App team က ဒုတိယ အဆင့်ကို ရောက်နေပြီ ဆိုပါစို့။
+      team ထဲက developer တွေက auto mode နဲ့ အကြာကြီး လွှတ်ထားချင်လာပါတယ်။ ဘယ်အချက်က သူတို့ကို တတိယ အဆင့်
+      တက်ခွင့် ပေးသင့်လဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက ဒုတိယ အဆင့်မှာ လေးပတ် ပြည့်ပြီး ဘာပြဿနာမှ မကြုံရသေးတာပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုက turn တိုင်းရဲ့ အဆုံးမှာ team ရဲ့ test တွေ အလိုအလျောက် run ပြီး၊ မအောင်ရင် Claude Code
+      ကို ဆက်ပြင်ခိုင်းတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ လေးပတ်လုံး ပြဿနာ မရှိခဲ့တာက လူတွေ
+      တစ်ဆင့်ချင်း ကြည့်နေခဲ့လို့ ဖြစ်နိုင်ပါတယ်။ auto mode မှာ လူ မကြည့်တော့တဲ့အခါ အဲဒီ နေရာကို တစ်ခုခုက ယူရပါမယ်။
+      အဲဒါကို ယူပေးတာက အလိုအလျောက် run တဲ့ check ပါ။ အချိန်က အတွေ့အကြုံ ပေးနိုင်ပေမဲ့ check ကို မပေးနိုင်ပါဘူး။
+      [[mark:q-rule]] ဒါကြောင့် နောက်အဆင့် တက်ဖို့ condition ကို ရေးတိုင်း မေးကြည့်ပါ။ ဒါက အချိန် ကုန်သွားတာလား၊
+      တကယ် ပြည့်ရမယ့် အခြေအနေ တစ်ခုလား ဆိုတာပါ။
+    sources:
+      - {
+          title: "Claude Code docs: hooks guide",
+          url: "https://code.claude.com/docs/en/hooks-guide",
+        }
+      - {
+          title: "Claude Code docs: permission modes",
+          url: "https://code.claude.com/docs/en/permission-modes",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule, offsetMs: 2500 },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: conditions
+    chapter: အထစ် တက်ဖို့ condition
+    narration: >
+      [[mark:cd-open]] ဒါဆို အထစ် တစ်ထစ်ချင်းကို တက်ဖို့ ပြည့်ရမယ့် condition တွေကို လှေကားပေါ်မှာ ထည့်ကြည့်ရအောင်။
+      [[mark:cd-1]] ပထမကနေ ဒုတိယကို တက်ဖို့ စည်းကမ်းနဲ့ သင်ယူမှု လိုပါတယ်။ repo မှာ CLAUDE.md ရှိရမယ်၊ secret file
+      တွေနဲ့ production ကို deny rule နဲ့ ပိတ်ထားရမယ်။ developer ကလည်း cohort ထဲက တစ်ယောက်နဲ့ အတူထိုင်ပြီး အနည်းဆုံး
+      နှစ်ကြိမ် လုပ်ကြည့်ပြီး ဖြစ်ရပါမယ်။ CLAUDE.md ဆိုတာ project အကြောင်း Claude Code အမြဲ သိထားရမယ့် အချက်တွေ
+      ရေးထားတဲ့ file ပါ။
+      [[mark:cd-2]] ဒုတိယကနေ တတိယကို တက်ဖို့ကတော့ check တွေ အလိုအလျောက် run ရပါမယ်။ report job အတွက်ဆိုရင် output
+      တိုက်စစ်တာကို hook နဲ့ ချိတ်ထားတာပါ။ hook ဆိုတာ Claude Code ရဲ့ အဆင့် တစ်ခုခုမှာ အလိုအလျောက် run တဲ့ ကိုယ့်
+      command ပါ။ Claude Code က အလုပ် ပြီးပြီလို့ ရပ်တော့မယ် ဆိုတိုင်း hook က စစ်ပြီး၊ မအောင်ရင် ဆက်ပြင်ခိုင်းပါတယ်။
+      လူ မကြည့်တဲ့အချိန်မှာ check က ကြည့်ပေးနေတာပါ။
+      [[mark:cd-admin]] admin ဘက်ကလည်း လူတိုင်းရဲ့ စတင်တဲ့ mode ကို သတ်မှတ်လို့ ရပြီး၊ auto mode ကို ဖယ်ထားလို့လည်း
+      ရပါတယ်။ ဒါကြောင့် developer အသစ်တွေ ပထမ အထစ်ကနေ စဖို့ကို setting နဲ့ပါ ထိန်းထားနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Code docs: hooks guide",
+          url: "https://code.claude.com/docs/en/hooks-guide",
+        }
+      - {
+          title: "Claude Code docs: admin setup",
+          url: "https://code.claude.com/docs/en/admin-setup",
+        }
+      - {
+          title: "Claude Code docs: permission modes",
+          url: "https://code.claude.com/docs/en/permission-modes",
+        }
+    actions:
+      - {
+          id: redraw-stair,
+          type: whiteboard.apply,
+          at: { mark: cd-open },
+          clear: true,
+          upsertIds:
+            [st-title, st-r1, st-l1, st-m1, st-r2, st-l2, st-m2, st-r3, st-l3, st-m3, st-ok],
+          drawMs: 3300,
+        }
+      - {
+          id: draw-st-c1,
+          type: whiteboard.apply,
+          at: { mark: cd-1 },
+          upsertIds: [st-c1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-st-c2,
+          type: whiteboard.apply,
+          at: { mark: cd-2 },
+          upsertIds: [st-c2],
+          drawMs: 900,
+        }
+      - {
+          id: point-st-1,
+          type: whiteboard.point,
+          at: { mark: cd-admin },
+          target: { assetId: st-m1 },
+        }
+
+  - id: people
+    chapter: လူတွေရဲ့ အလုပ်လုပ်ပုံ
+    narration: >
+      [[mark:pp-open]] condition တွေက setting နဲ့ tool ဘက်က ပြင်ဆင်မှုတွေပါ။ ဒါပေမဲ့ တကယ် ပြောင်းရမှာက လူတွေရဲ့
+      နေ့စဉ် အလုပ်လုပ်ပုံ ဖြစ်ပါတယ်။ change management ဆိုတာ လူတွေရဲ့ အလုပ်လုပ်ပုံ ပြောင်းလဲမှုကို စီမံတာပါ။
+      [[mark:pp-1]] လူ တစ်ယောက်ချင်းရဲ့ ပြောင်းလဲမှုကို လေ့လာတဲ့ လူသုံးများ model တစ်ခုက၊ ပြောင်းရမယ်လို့ ကြားရုံနဲ့
+      မလုံလောက်ဘူးလို့ ဆိုပါတယ်။ ပထမဆုံး ဘာကြောင့်လဲ ဆိုတာ သိဖို့ လိုပါတယ်။ Network Tools အတွက် ဘာကြောင့်လဲ
+      ဆိုတာက Billing အတွက်နဲ့ မတူနိုင်ပါဘူး။
+      [[mark:pp-2]] နောက်တစ်ခုက လက်တွေ့ လုပ်နိုင်တာပါ။ ဖတ်ထားရုံနဲ့ မရဘဲ ကိုယ့် codebase ထဲမှာ ကိုယ့်အလုပ်နဲ့
+      လုပ်ကြည့်မှ ရပါတယ်။ Anthropic ရဲ့ scaling guide ကလည်း pilot ပြီးရင် hackathon တစ်ခု လုပ်ဖို့နဲ့၊ pilot ထဲက
+      လူတွေကို အဖွဲ့တွင်း အကြံပေးအဖြစ် ထားဖို့ အကြံပြုပါတယ်။
+      [[mark:pp-3]] နောက်ဆုံးက ပြန်မကျအောင် ထိန်းတာပါ။ အဆင်မပြေတဲ့ ပထမ ပတ်မှာ လူတွေက နည်းဟောင်းဆီ ပြန်သွားတတ်ပါတယ်။
+      ဒါကြောင့် အပတ်စဉ် ပြန်ကြည့်ပြီး ကူညီပေးမယ့် အချိန်ကို plan ထဲ ကြိုထည့်ထားရပါတယ်။
+      [[mark:pp-wave]] လူ ၁၆ ယောက်ကို တစ်ပြိုင်တည်း မစဘဲ wave လိုက် စရတဲ့ အကြောင်းရင်း နောက်တစ်ခုလည်း ရှိပါတယ်။ Claude
+      Enterprise ရဲ့ သုံးစွဲမှု လမ်းညွှန်က၊ Claude Code လို သုံးစွဲမှု များတဲ့ tool တွေကို ပထမ နေ့ကတည်းက လူတိုင်း
+      ပေးလိုက်တာဟာ မမျှော်လင့်တဲ့ ကုန်ကျစရိတ် ဖြစ်စေတဲ့ အမြန်ဆုံး နည်းလမ်းလို့ သတိပေးထားပါတယ်။
+    sources:
+      - {
+          title: "Prosci ADKAR model of individual change",
+          url: "https://www.prosci.com/methodology/adkar",
+        }
+      - {
+          title: "Claude blog: scaling agentic coding across your organization",
+          url: "https://claude.com/blog/scaling-agentic-coding",
+        }
+      - {
+          title: "Claude Help Center: Claude Enterprise consumption guide",
+          url: "https://support.claude.com/en/articles/14782391-claude-enterprise-consumption-guide",
+        }
+    actions:
+      - { id: close-stair, type: whiteboard.apply, at: { mark: pp-open }, open: false }
+      - { id: show-habits, type: slide.show, at: { afterAction: close-stair }, slideId: habits }
+      - { id: point-h-1, type: slide.point, at: { mark: pp-1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-h-2, type: slide.point, at: { mark: pp-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-h-3, type: slide.point, at: { mark: pp-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: plan
+    chapter: Rollout plan
+    narration: >
+      [[mark:f-close]] ဒါတွေကို roll out plan ထဲမှာ အဆင့် တစ်ခုချင်း ချရေးကြည့်ရအောင်။
+      [[mark:type-s1]] ပထမ အဆင့်က ရက် ၃၀ ပြီးမှ ဝင်လာမယ့် developer ၁၆ ယောက်အတွက်ပါ။ သူတို့ရဲ့ codebase တွေမှာ
+      စည်းကမ်းနဲ့ check တွေ မရှိသေးလို့၊ ခွင့်ပြုချက် တစ်ခုချင်း ပေးရင်း Claude Code နဲ့ အလုပ်လုပ်ပုံကို အရင် မြင်ရပါမယ်။
+      [[mark:type-s2]] ဒုတိယ အဆင့်မှာ cohort ထဲက နေ့စဉ် အလုပ်နဲ့ သုံးနေတဲ့ ခြောက်ယောက် ရှိပါတယ်။ သူတို့ တတိယ အဆင့်
+      တက်ဖို့ condition က ကိုယ့် routine ရဲ့ check ကို hook က အလိုအလျောက် run နေဖို့ပါ။
+      [[mark:type-s3]] တတိယ အဆင့်မှာတော့ report job ရွှေ့နေတဲ့ developer နှစ်ယောက်ပဲ ရှိပါတယ်။ output တိုက်စစ်တာ
+      hook နဲ့ run နေပြီ ဖြစ်လို့ပါ။ ဒီ အဆင့်မှာ ဆက်နေဖို့ condition လည်း ရှိပါတယ်။ run တိုင်းရဲ့ diff ကို review
+      လုပ်ရမယ်၊ output စစ်တာ မအောင်တဲ့ job ကို merge မလုပ်ရပါဘူး။
+      [[mark:type-wave]] အောက်ဆုံးမှာ wave နှစ်ခုနဲ့ admin setting ကို ရေးပါတယ်။ ဒုတိယ wave မှာ team တစ်ခုချင်း
+      ဝင်ပြီး၊ team တိုင်းကို cohort ထဲက တစ်ယောက်နဲ့ တွဲပေးပါမယ်။ admin က စတင်တဲ့ mode ကို Manual လို့
+      သတ်မှတ်ထားလို့၊ developer အသစ် ဘယ်သူမှ လှေကား အလယ်ကနေ မစပါဘူး။
+    sources:
+      - {
+          title: "Claude Code docs: admin setup",
+          url: "https://code.claude.com/docs/en/admin-setup",
+        }
+      - {
+          title: "Claude Code docs: permission modes",
+          url: "https://code.claude.com/docs/en/permission-modes",
+        }
+    actions:
+      - { id: close-habits, type: slide.close, at: { mark: f-close } }
+      - id: type-s1
+        type: editor.type
+        at: { mark: type-s1 }
+        cadence: line-by-line
+        target: { file: notebook/49-rollout-plan.md, after: "|---|---|---|---|\n" }
+        text: "| 1. ကြီးကြပ် | Manual, plan | Day 30 နောက် ဝင်မယ့် 16 ယောက် | CLAUDE.md နဲ့ deny rule ရှိ၊ cohort နဲ့ တွဲလုပ် 2 ကြိမ် |\n"
+      - id: type-s2
+        type: editor.type
+        at: { mark: type-s2 }
+        cadence: line-by-line
+        target: { file: notebook/49-rollout-plan.md, after: "တွဲလုပ် 2 ကြိမ် |\n" }
+        text: "| 2. Routine | acceptEdits | cohort ထဲက နေ့စဉ် သုံးသူ 6 ယောက် | routine ရဲ့ check ကို hook က အလိုအလျောက် run |\n"
+      - id: type-s3
+        type: editor.type
+        at: { mark: type-s3 }
+        cadence: line-by-line
+        target: { file: notebook/49-rollout-plan.md, after: "hook က အလိုအလျောက် run |\n" }
+        text: "| 3. လွှဲအပ် | auto | report job ရွှေ့တဲ့ 2 ယောက် | ဆက်နေဖို့: run တိုင်း diff review၊ output မအောင်ရင် merge မလုပ် |\n"
+      - id: expect-s3
+        type: expect.file
+        at: { afterAction: type-s3 }
+        path: notebook/49-rollout-plan.md
+        contains: "| 2. Routine | acceptEdits | cohort ထဲက နေ့စဉ် သုံးသူ 6 ယောက် | routine ရဲ့ check ကို hook က အလိုအလျောက် run |\n"
+      - id: type-wave
+        type: editor.type
+        at: { mark: type-wave }
+        cadence: line-by-line
+        target: { file: notebook/49-rollout-plan.md, after: "## Wave နဲ့ setting\n" }
+        text: "- wave 1 (Day 1–30): cohort 8 ယောက်\n- wave 2 (Day 30 နောက်): ကျန် 16 ယောက်၊ team တစ်ခုချင်း၊ team တိုင်း cohort က 1 ယောက်နဲ့ တွဲ\n- admin: permissions.defaultMode = default (Manual) ကို wave 2 မစခင် သတ်မှတ်\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် team ရဲ့ အထစ်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် team က ဒီ လှေကားရဲ့ ဘယ်အထစ်မှာ ရှိလဲ
+      စဉ်းစားကြည့်ပါ။ ဒီ table ထဲမှာ ကိုယ့် team အတွက် အတန်း တစ်တန်း ထပ်ရေးပြီး၊ နောက်တစ်ထစ် တက်ဖို့ လိုတဲ့
+      condition တစ်ခုကို ရေးပါ။
+      [[mark:turn-2]] condition က ရက်စွဲ မဖြစ်ရပါဘူး။ ကိုယ့် team မှာ ဘာ ရှိလာရမလဲ၊ ဘာ အလိုအလျောက် run နေရမလဲ
+      ဆိုတာ ဖြစ်ရပါမယ်။ AI coding tool မသုံးရသေးတဲ့ team ဆိုရင်တော့ ပထမ အထစ်ကနေ စပါတယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/49-rollout-plan.md
+          text: "| အဆင့် | Claude Code mode | ဘယ်သူ | နောက်အဆင့် condition |"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ ကြီးကြပ်ပြီး သုံးတာကနေ အလုပ်ကို လွှဲအပ်တာဆီ ပြောင်းတာက သူ့အလိုလို မဖြစ်ပါဘူး။
+      ကြီးကြပ်၊ routine၊ လွှဲအပ် ဆိုတဲ့ အထစ် သုံးထစ်ကို ကြိုဆွဲထားပြီး၊ တစ်ထစ်ချင်းကို အချိန်နဲ့ မဟုတ်ဘဲ condition
+      နဲ့ တက်ပါတယ်။
+      [[mark:recap-2]] တကယ် ပြောင်းရတာက လူတွေရဲ့ အလုပ်လုပ်ပုံမို့၊ ဘာကြောင့်လဲ ရှင်းပြတာ၊ တွဲလုပ်ပေးတာ၊ ပြန်မကျအောင်
+      ထိန်းတာကိုပါ plan ထဲမှာ ထည့်ရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ကိုယ် ထွက်သွားပြီးရင် ဒီ အလုပ်တွေကို ဘယ်သူ ဆက်ထိန်းမလဲ ဆိုတဲ့ မေးခွန်းကနေ
+      စပြီး၊ champion နဲ့ documentation ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-s1
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/49-rollout-plan.md
+          text: "| 1. ကြီးကြပ် | Manual, plan |"
+      - id: sel-wave
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/49-rollout-plan.md
+          text: "- wave 2 (Day 30 နောက်): ကျန် 16 ယောက်၊ team တစ်ခုချင်း၊ team တိုင်း cohort က 1 ယောက်နဲ့ တွဲ"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
