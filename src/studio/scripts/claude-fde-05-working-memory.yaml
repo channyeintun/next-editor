@@ -1,0 +1,690 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-05-working-memory
+  title: "Claude FDE 05: Working memory နဲ့ context window"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/05-context-for-one-ticket.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      examples/05-long-chat.md: |
+        # Example: တစ်နေ့လုံး ticket 40 ကို ကူးထည့်ခဲ့တဲ့ chat တစ်ခု (အတိုချုံး)
+
+        မနက် 9:10 · ticket 3 · လှိုင်သာယာ · router မီး လုံးဝ မလင်း
+        AI မူကြမ်း: router အသစ် လဲပေးဖို့ technician ကို မှာထားပါမယ်။
+
+        ... ticket 4 ကနေ 39 အထိ ...
+
+        ညနေ 5:40 · ticket 40 · မန္တလေး ချမ်းအေးသာစံ · ညဘက် internet နှေး
+        AI မူကြမ်း: လှိုင်သာယာက router အသစ်ကို မနက်က မှာထားပြီးပါပြီ။ ခဏ စောင့်ပေးပါ။
+      notebook/05-context-for-one-ticket.md: |
+        # Ticket တစ်ခုအတွက် context
+
+        ## ထည့်မယ်
+
+        ## မထည့်ဘူး
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the long chat's context window by ticket 40: a tall dashed white
+    # window, blue boxes inside, red for the 39 tickets that do not belong to this
+    # request; orange the size, red what too much text does.
+    - {
+        id: w-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 780,
+        height: 45,
+        text: "ticket 40 ရောက်တဲ့ အချိန်က context",
+        fontSize: 36,
+      }
+    - { id: w-win, kind: rectangle, x: 290, y: 220, width: 440, height: 400, strokeStyle: dashed }
+    - { id: w-b1, kind: rectangle, x: 310, y: 230, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: w-l1,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 248,
+        width: 400,
+        height: 35,
+        text: "ညွှန်ကြားချက်",
+        fontSize: 28,
+      }
+    - { id: w-b2, kind: rectangle, x: 310, y: 310, width: 400, height: 130, strokeColor: "#e03131" }
+    - {
+        id: w-l2,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 358,
+        width: 400,
+        height: 35,
+        text: "ticket 1–39 နဲ့ မူကြမ်းတွေ",
+        fontSize: 28,
+      }
+    - { id: w-b3, kind: rectangle, x: 310, y: 450, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: w-l3,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 468,
+        width: 400,
+        height: 35,
+        text: "ticket 40",
+        fontSize: 28,
+      }
+    - { id: w-b4, kind: rectangle, x: 310, y: 530, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: w-l4,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 548,
+        width: 400,
+        height: 35,
+        text: "model ရေးမယ့် reply",
+        fontSize: 28,
+      }
+    - {
+        id: w-size,
+        kind: text,
+        x: 760,
+        y: 250,
+        width: 330,
+        height: 35,
+        text: "1M token ထိ (2026-11)",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: w-rot,
+        kind: text,
+        x: 770,
+        y: 345,
+        width: 320,
+        height: 35,
+        text: "စာ များလေ ညံ့လေ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-mix,
+        kind: text,
+        x: 770,
+        y: 440,
+        width: 320,
+        height: 35,
+        text: "customer ရောထွေး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "အင်္ဂါနေ့ chat အသစ်က သိလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 780,
+        height: 35,
+        text: "က) သိတယ်၊ တနင်္လာနေ့က ပြောထားပြီ",
+        fontSize: 28,
+      }
+    - { id: q-b, kind: text, x: 290, y: 345, width: 780, height: 35, text: "ခ) မသိဘူး", fontSize: 28 }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 150,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 470,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-rule,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 780,
+        height: 35,
+        text: "context ထဲ မရှိရင် model မမြင်ရ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — one ticket, one fresh context: the same window with only what this
+    # ticket needs, all blue; green says it is this ticket's alone.
+    - {
+        id: o-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 780,
+        height: 45,
+        text: "ticket တစ်ခု၊ context တစ်ခု",
+        fontSize: 36,
+      }
+    - { id: o-win, kind: rectangle, x: 290, y: 220, width: 440, height: 410, strokeStyle: dashed }
+    - { id: o-b1, kind: rectangle, x: 310, y: 230, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: o-l1,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 248,
+        width: 400,
+        height: 35,
+        text: "system prompt",
+        fontSize: 28,
+      }
+    - { id: o-b2, kind: rectangle, x: 310, y: 310, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: o-l2,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 328,
+        width: 400,
+        height: 35,
+        text: "ဒီ ticket တစ်ခုတည်း",
+        fontSize: 28,
+      }
+    - { id: o-b3, kind: rectangle, x: 310, y: 390, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: o-l3,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 408,
+        width: 400,
+        height: 35,
+        text: "plan နဲ့ မြို့နယ် (Billing)",
+        fontSize: 28,
+      }
+    - { id: o-b4, kind: rectangle, x: 310, y: 470, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: o-l4,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 488,
+        width: 400,
+        height: 35,
+        text: "လိုင်း အခြေအနေ (NMS)",
+        fontSize: 28,
+      }
+    - { id: o-b5, kind: rectangle, x: 310, y: 550, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: o-l5,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 568,
+        width: 400,
+        height: 35,
+        text: "ကိုက်တဲ့ article 1–2 ခု",
+        fontSize: 28,
+      }
+    - {
+        id: o-ok,
+        kind: text,
+        x: 770,
+        y: 408,
+        width: 320,
+        height: 35,
+        text: "ဒီ ticket အတွက်ပဲ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9305
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: forty-tickets
+    chapter: Ticket လေးဆယ်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ model ရဲ့ knowledge က training စာသားကနေ လာပြီး cut off မှာ ရပ်တာမို့၊ နေခြည် ရဲ့
+      အချက်အလက်တွေကို model ရှေ့မှာ ချပေးရမယ် ဆိုတာ တွေ့ခဲ့ပါတယ်။ ဒီနေ့တော့ support manager လှလှ
+      စုပေးထားတဲ့ မူကြမ်းတွေထဲက တစ်ခုက ဆန့်ကျင်ဘက် ပြဿနာကို ပြပါတယ်။ model ရှေ့မှာ စာ နည်းလွန်းတာ မဟုတ်ဘဲ၊ များလွန်းတာပါ။
+      [[mark:ex-open]] support agent တစ်ယောက်က အလုပ်မြန်အောင် chat တစ်ခုတည်းကို တစ်နေ့လုံး သုံးခဲ့ပါတယ်။ ticket
+      တစ်ခု ဝင်လာတိုင်း အဲဒီ chat ထဲကို ကူးထည့်ပြီး မူကြမ်း ရေးခိုင်းတာပါ။ ဒါက အဲဒီ chat ကို အတိုချုံးထားတဲ့ ဥပမာပါ။
+      [[mark:sel-t3]] မနက်ပိုင်း ticket သုံးက လှိုင်သာယာက customer ပါ။ router မီး လုံးဝ မလင်းလို့ router အသစ် လဲပေးဖို့
+      မှာခဲ့ပါတယ်။
+      [[mark:sel-t40]] ညနေ ticket လေးဆယ်ကတော့ မန္တလေးက customer ပါ။ ညဘက် internet နှေးတယ်လို့ပဲ ပြောထားပါတယ်။
+      [[mark:sel-draft]] ဒါပေမဲ့ ticket လေးဆယ်အတွက် မူကြမ်းက လှိုင်သာယာက router အသစ်ကို မှာထားပြီးပြီလို့ ရေးထားပါတယ်။
+      မနက်က customer ရဲ့ အချက်အလက်က ညနေ customer ရဲ့ အဖြေထဲ ရောက်လာတာပါ။ ညနေပိုင်းမှာ ဒီလို ရောထွေးတဲ့
+      မူကြမ်း အတော်များများ ထွက်လာခဲ့ပါတယ်။
+      [[mark:puzzle]] model က မေ့သွားတာ မဟုတ်ပါဘူး။ ပြဿနာက model မြင်နေရတဲ့ စာ အများကြီးထဲမှာ ရှိပါတယ်။ ဒါကို
+      နားလည်ဖို့ context window ကို ကြည့်ရပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+    actions:
+      - {
+          id: open-ex,
+          type: workspace.openFile,
+          at: { mark: ex-open },
+          path: examples/05-long-chat.md,
+        }
+      - id: sel-t3
+        type: editor.select
+        at: { mark: sel-t3 }
+        target:
+          file: examples/05-long-chat.md
+          text: "မနက် 9:10 · ticket 3 · လှိုင်သာယာ · router မီး လုံးဝ မလင်း"
+      - id: sel-t40
+        type: editor.select
+        at: { mark: sel-t40 }
+        target:
+          file: examples/05-long-chat.md
+          text: "ညနေ 5:40 · ticket 40 · မန္တလေး ချမ်းအေးသာစံ · ညဘက် internet နှေး"
+      - id: sel-draft
+        type: editor.select
+        at: { mark: sel-draft }
+        target:
+          file: examples/05-long-chat.md
+          text: "AI မူကြမ်း: လှိုင်သာယာက router အသစ်ကို မနက်က မှာထားပြီးပါပြီ။"
+
+  - id: the-window
+    chapter: Context window
+    narration: >
+      [[mark:w-open]] context window ဆိုတာ request တစ်ခုမှာ model မြင်နိုင်တဲ့ စာ အားလုံးအတွက် နေရာပါ။ ဒီ နေရာထဲမှာ
+      ရှိတာကိုပဲ model က မြင်ပြီး၊ အဖြေ ရေးတဲ့အခါ သုံးနိုင်ပါတယ်။ ဒါကြောင့် ဒါကို model ရဲ့ working memory လို့လည်း
+      ခေါ်ပါတယ်။ အခု လုပ်နေတဲ့ အလုပ်အတွက် လက်ထဲမှာ ရှိနေတဲ့ အချက်အလက်ပါ။ training ကနေ ရထားတဲ့ knowledge နဲ့
+      သီးခြားစီပါ။
+      [[mark:w-inst]] အထဲမှာ ဘာတွေ ရှိလဲ ကြည့်ရအောင်။ အပေါ်ဆုံးမှာ ညွှန်ကြားချက်ပါ။ system prompt လို့ ခေါ်တဲ့ စကားမပြောခင်
+      ကြိုပေးထားတဲ့ တာဝန်နဲ့ စည်းကမ်းတွေ ဒီထဲမှာ ပါပါတယ်။
+      [[mark:w-hist]] ပြီးတော့ စကားဝိုင်း တစ်ခုလုံး ပါပါတယ်။ ဒီ chat မှာဆိုရင် မနက်ကတည်းက ကူးထည့်ခဲ့တဲ့ ticket
+      သုံးဆယ့်ကိုးခုနဲ့ model ရေးခဲ့တဲ့ မူကြမ်း သုံးဆယ့်ကိုးစောင်ပါ။ API ကနေ ခေါ်တဲ့အခါ document တွေ၊ tool ကနေ
+      ပြန်ရလာတဲ့ ရလဒ်တွေလည်း ဒီ နေရာထဲမှာပဲ ဝင်ပါတယ်။
+      [[mark:w-now]] အဲဒီနောက်မှာ ဒီ ticket လေးဆယ်ပါ။ နောက်ဆုံးမှာတော့ model ရေးမယ့် reply ကိုယ်တိုင်ပါ။ model ရေးလိုက်တဲ့
+      စာလည်း ဒီ နေရာထဲမှာပဲ နေရာ ယူပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+      - {
+          title: "Claude Docs: Working with the Messages API",
+          url: "https://platform.claude.com/docs/en/build-with-claude/working-with-messages",
+        }
+    actions:
+      - {
+          id: draw-w-open,
+          type: whiteboard.apply,
+          at: { mark: w-open },
+          open: true,
+          clear: true,
+          upsertIds: [w-title, w-win],
+          drawMs: 900,
+        }
+      - {
+          id: draw-w-inst,
+          type: whiteboard.apply,
+          at: { mark: w-inst },
+          upsertIds: [w-b1, w-l1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-w-hist,
+          type: whiteboard.apply,
+          at: { mark: w-hist },
+          upsertIds: [w-b2, w-l2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-w-now,
+          type: whiteboard.apply,
+          at: { mark: w-now },
+          upsertIds: [w-b3, w-l3, w-b4, w-l4],
+          drawMs: 1800,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ တနင်္လာနေ့မှာ support agent တစ်ယောက်က chat တစ်ခုထဲမှာ ငွေ ပြန်အမ်းတဲ့
+      စည်းကမ်း အသစ်ကို model ကို အသေးစိတ် ရှင်းပြထားပါတယ်။ အင်္ဂါနေ့မှာတော့ chat အသစ် တစ်ခု ဖွင့်ပြီး၊ ဘာမှ ထပ်မထည့်ဘဲ
+      ငွေ ပြန်အမ်းတဲ့ ticket အတွက် မူကြမ်း ရေးခိုင်းပါတယ်။ model က စည်းကမ်း အသစ်ကို သိပါသလား။
+      [[mark:q-a]] ပထမ အဖြေက သိတယ်၊ တနင်္လာနေ့က ပြောထားပြီးပြီ ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက မသိဘူး ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ အဖြေပါ။ ဘာကြောင့်လဲဆိုတော့ model မြင်ရတာက ဒီ request ရဲ့ context window
+      ထဲက စာပဲ ဖြစ်လို့ပါ။ chat အသစ်မှာ တနင်္လာနေ့က စကားဝိုင်း မပါတော့ပါဘူး။ ရှင်းပြခဲ့တာက model ကို train
+      လုပ်လိုက်တာ မဟုတ်ဘဲ၊ အဲဒီ chat ရဲ့ context ထဲကို ထည့်ပေးခဲ့တာ သက်သက်ပါ။
+      [[mark:q-state]] Claude ရဲ့ API ကိုယ်တိုင်က
+      request တစ်ခုနဲ့ တစ်ခုကြား ဘာမှ မှတ်မထားပါဘူး။ chat တစ်ခုက စကားဝိုင်းကို မှတ်မိနေသလို ထင်ရတာက၊ ပို့တိုင်း
+      အရင် စကားဝိုင်း တစ်ခုလုံးကို ပြန်ထည့်ပို့ပေးနေလို့ပါ။ ticket လေးဆယ်ရဲ့ request ထဲမှာ အရင် ticket တွေ အကုန်
+      ပါနေခဲ့တာလည်း ဒါကြောင့်ပါ။
+      [[mark:q-rule]] ဒါကြောင့် ဘယ်အချက်ကိုမဆို model သိစေချင်ရင် request တိုင်းရဲ့ context ထဲကို တစ်ခုခုက ထည့်ပေးရပါမယ်။
+      စည်းကမ်း document ကို program က ထည့်ပေးတာလား၊ app ရဲ့ memory လို feature က သယ်လာတာလား ဆိုတာကတော့
+      ဆုံးဖြတ်ရမယ့် design ပါ။
+    sources:
+      - {
+          title: "Claude Docs: Working with the Messages API",
+          url: "https://platform.claude.com/docs/en/build-with-claude/working-with-messages",
+        }
+      - {
+          title: "Claude Docs: Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-rule],
+          drawMs: 1200,
+        }
+
+  - id: bigger-not-better
+    chapter: နေရာ ကျယ်တာနဲ့ ကောင်းတာ
+    narration: >
+      [[mark:b-open]] ဒါဆို ticket လေးဆယ်လုံး ဆံ့နေရင် ဘာကြောင့် ပြဿနာ ဖြစ်ရတာလဲ။ ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ
+      Opus၊ Sonnet နဲ့ Haiku ရဲ့ နောက်ဆုံး model တွေရဲ့ context window က token တစ်သန်းအထိ ရှိပါတယ်။ အခု တန်ဖိုးကိုတော့
+      Claude docs ရဲ့ context windows page မှာ ကြည့်လို့ ရပါတယ်။ ticket လေးဆယ် ဆိုတာ အဲဒီ နေရာရဲ့ အစိတ်အပိုင်း
+      နည်းနည်းလေးပဲ ယူပါတယ်။ ဒီလောက် နေရာ ကျယ်ရင် ရှိသမျှ အကုန် ထည့်ထားတာ ပိုကောင်းမယ်လို့ ထင်စရာ ရှိပါတယ်။
+      [[mark:b-rot]] ပြဿနာက ဆံ့တာနဲ့ ကောင်းကောင်း သုံးနိုင်တာ မတူတာပါ။ context ထဲက token တွေ များလာလေ၊ model ရဲ့
+      တိကျမှုနဲ့ လိုတဲ့ အချက်ကို ပြန်ရှာနိုင်မှု ကျလာလေ ဖြစ်ပါတယ်။ Anthropic ရဲ့ engineering ဆောင်းပါး တစ်ခုက ဒါကို
+      အာရုံစိုက်နိုင်မှုရဲ့ ဘတ်ဂျက်လို့ ရှင်းပြပါတယ်။ token တိုင်းက ကျန်တဲ့ token တိုင်းနဲ့ ဆက်စပ်နေရတာမို့ စာ များလာရင်
+      တစ်ခုချင်းစီအပေါ် ထားနိုင်တဲ့ အာရုံ နည်းသွားပါတယ်။
+      [[mark:b-mix]] ticket လေးဆယ်ရဲ့ မူကြမ်းမှာ မြင်ရတာလည်း ဒီလို ပြဿနာမျိုးပါ။ router မီး မလင်းတဲ့ ticket နဲ့ internet
+      နှေးတဲ့ ticket မှာ ဆင်တူ စကားလုံးတွေ ပါတာမို့၊ မဆိုင်တဲ့ customer ရဲ့ အချက်အလက်ကို ယူသုံးလိုက်မိတာ ဖြစ်နိုင်ပါတယ်။ ပြီးတော့ privacy အရလည်း
+      customer တစ်ယောက်ရဲ့ အချက်အလက်က တခြား customer အဖြေထဲ မရောက်သင့်ပါဘူး။
+      [[mark:b-cost]] နောက်ထပ် အချက်က ကုန်ကျစရိတ်ပါ။ API မှာ context ထဲ ထည့်လိုက်တဲ့ token တိုင်းအတွက် ပိုက်ဆံ ပေးရပါတယ်။
+      chat ရှည်လာလေ request တစ်ခုချင်းက အရင် ticket တွေ အကုန်လုံးကို ထပ်ပို့နေရတာမို့ ပိုဈေးကြီးလာပါတယ်။ ဒါကြောင့်
+      ရည်မှန်းချက်က context ကို ပြည့်အောင် ဖြည့်တာ မဟုတ်ဘဲ၊ လိုတဲ့ အချက်ကို အနည်းဆုံးနဲ့ အသေချာဆုံး ထည့်ပေးတာပါ။
+    sources:
+      - {
+          title: "Claude Docs: Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+      - {
+          title: "Anthropic engineering: Effective context engineering for AI agents",
+          url: "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
+        }
+      - {
+          title: "Claude Docs: Pricing",
+          url: "https://platform.claude.com/docs/en/about-claude/pricing",
+        }
+    actions:
+      - {
+          id: back-to-window,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          clear: true,
+          upsertIds: [w-title, w-win, w-b1, w-l1, w-b2, w-l2, w-b3, w-l3, w-b4, w-l4],
+        }
+      - {
+          id: draw-b-size,
+          type: whiteboard.apply,
+          at: { mark: b-open, offsetMs: 2500 },
+          upsertIds: [w-size],
+          drawMs: 900,
+        }
+      - {
+          id: draw-b-rot,
+          type: whiteboard.apply,
+          at: { mark: b-rot },
+          upsertIds: [w-rot],
+          drawMs: 900,
+        }
+      - {
+          id: draw-b-mix,
+          type: whiteboard.apply,
+          at: { mark: b-mix },
+          upsertIds: [w-mix],
+          drawMs: 900,
+        }
+      - { id: point-b2, type: whiteboard.point, at: { mark: b-cost }, target: { assetId: w-b2 } }
+
+  - id: one-ticket
+    chapter: Ticket တစ်ခု၊ context တစ်ခု
+    narration: >
+      [[mark:o-open]] ဒါကြောင့် Reply assistant အတွက် ကိုယ်တို့ ဆုံးဖြတ်ချက်က ရှင်းပါတယ်။ ticket တစ်ခုကို context
+      အသစ် တစ်ခုနဲ့ ရေးမယ်၊ အဲဒီ context ထဲမှာ ဒီ ticket လိုတာကိုပဲ ထည့်မယ် ဆိုတာပါ။
+      [[mark:o-base]] အပေါ်ဆုံးမှာ system prompt ရှိပြီး၊ သူ့အောက်မှာ ဒီ ticket တစ်ခုတည်းရဲ့ စာ အကုန်ပါ။ customer
+      ဘာပြောခဲ့လဲ ဆိုတာ ဒီထဲမှာ ပြည့်စုံရပါမယ်။ ticket ထဲမှာ message တွေ အများကြီး ရှိရင်တောင် တစ်ခုမှ မချန်ပါဘူး။
+      ဒါက ဒီ ticket နဲ့ တိုက်ရိုက် ဆိုင်တဲ့ စာ ဖြစ်လို့ပါ။
+      [[mark:o-facts]] ပြီးရင် အသုံးဝင်တဲ့ အချက် သုံးခုကို ထည့်ပေးပါတယ်။ Billing ကနေ customer ရဲ့ plan နဲ့ မြို့နယ်၊
+      NMS ကနေ အဲဒီ မြို့နယ်ရဲ့ လိုင်း အခြေအနေ၊ ပြီးတော့ Knowledge base ထဲက ဒီ ပြဿနာနဲ့ ကိုက်တဲ့ article တစ်ခု
+      နှစ်ခုပါ။ article သုံးရာ လေးဆယ်လုံးကို မထည့်ပါဘူး။
+      [[mark:o-ok]] ဒီ context ထဲမှာ တခြား customer တစ်ယောက်မှ မရှိတော့ ရောထွေးစရာ မရှိပါဘူး။ ticket တိုင်းက
+      သီးသန့် request ဖြစ်တာမို့၊ ticket တစ်ခုမှာ ဖြစ်တဲ့ အမှားက နောက် ticket ကို မကူးပါဘူး။
+    sources:
+      - {
+          title: "Claude Docs: Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+      - {
+          title: "Anthropic engineering: Effective context engineering for AI agents",
+          url: "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
+        }
+    actions:
+      - {
+          id: draw-o-open,
+          type: whiteboard.apply,
+          at: { mark: o-open },
+          clear: true,
+          upsertIds: [o-title, o-win],
+          drawMs: 900,
+        }
+      - {
+          id: draw-o-base,
+          type: whiteboard.apply,
+          at: { mark: o-base },
+          upsertIds: [o-b1, o-l1, o-b2, o-l2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-o-facts,
+          type: whiteboard.apply,
+          at: { mark: o-facts },
+          upsertIds: [o-b3, o-l3, o-b4, o-l4, o-b5, o-l5],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-o-ok,
+          type: whiteboard.apply,
+          at: { mark: o-ok },
+          upsertIds: [o-ok],
+          drawMs: 900,
+        }
+
+  - id: context-list
+    chapter: ထည့်မယ်၊ မထည့်ဘူး
+    narration: >
+      [[mark:c-open]] ဒီ ဆုံးဖြတ်ချက်ကို ticket တစ်ခုအတွက် ထည့်မယ်၊ မထည့်ဘူး ဆိုပြီး စာရင်း နှစ်ခုနဲ့ ချရေးကြည့်ရအောင်။
+      စာကြောင်း တိုင်းမှာ အကြောင်းပြချက် ပါရပါမယ်။ နောက်တစ်ယောက်က ဘာကြောင့်လဲ မေးရင် ဖြေနိုင်ဖို့ပါ။
+      [[mark:type-in-1]] ထည့်မယ့်ထဲမှာ ပထမဆုံးက ticket ရဲ့ စာ အကုန်ပါ။ customer ပြောခဲ့တာ တစ်ခုခု ကျန်ရင် တတိယ message
+      မှာ ပြောပြီးသားကို ထပ်မေးမိနိုင်ပါတယ်။ ဒုတိယက Billing ကနေ plan နဲ့ မြို့နယ်ပါ။
+      [[mark:type-in-2]] တတိယက NMS ကနေ မြို့နယ်ရဲ့ လိုင်း အခြေအနေပါ။ မုန်တိုင်းကျတဲ့ညက မရှိခဲ့တဲ့ အချက်ပါ။ စတုတ္ထက
+      ကိုက်တဲ့ article တစ်ခု နှစ်ခုပါ။ ပြင်နည်း အဆင့်တွေ နေခြည် ရဲ့ စက်နဲ့ ကိုက်ဖို့ပါ။
+      [[mark:type-out]] မထည့်ဘူး ဆိုတဲ့ စာရင်းမှာတော့ တခြား customer တွေရဲ့ ticket ပါ။ ရောထွေးမှာ စိုးလို့ရော၊ privacy
+      အတွက်ပါ မထည့်ပါဘူး။ article အားလုံးကိုလည်း မထည့်ပါဘူး။ မဆိုင်တဲ့ စာ များလေ အဖြေ ညံ့လေ ဖြစ်ပြီး၊ ကုန်ကျစရိတ်
+      လည်း များလို့ပါ။ customer ရဲ့ ငွေပေးချေမှု မှတ်တမ်း တစ်ခုလုံးကိုလည်း connection ticket မှာ မထည့်ပါဘူး။
+    sources:
+      - {
+          title: "Claude Docs: Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+    actions:
+      - { id: close-board, type: whiteboard.apply, at: { mark: c-open }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-board },
+          path: notebook/05-context-for-one-ticket.md,
+        }
+      - id: type-in-1
+        type: editor.type
+        at: { mark: type-in-1 }
+        cadence: line-by-line
+        target: { file: notebook/05-context-for-one-ticket.md, after: "## ထည့်မယ်\n" }
+        text: "- ticket ရဲ့ စာ အကုန်: customer ပြောပြီးသားကို ထပ်မမေးမိဖို့\n- plan နဲ့ မြို့နယ် (Billing): အဖြေက ဒီ customer နဲ့ ကိုက်ဖို့\n"
+      - id: type-in-2
+        type: editor.type
+        at: { mark: type-in-2 }
+        cadence: line-by-line
+        target: { file: notebook/05-context-for-one-ticket.md, after: "ဒီ customer နဲ့ ကိုက်ဖို့\n" }
+        text: "- မြို့နယ်ရဲ့ လိုင်း အခြေအနေ (NMS): router မှားမခိုင်းဖို့\n- ကိုက်တဲ့ article 1–2 ခု: ပြင်နည်း အဆင့် မှန်ဖို့\n"
+      - id: type-out
+        type: editor.type
+        at: { mark: type-out }
+        cadence: line-by-line
+        target: { file: notebook/05-context-for-one-ticket.md, after: "## မထည့်ဘူး\n" }
+        text: "- တခြား customer ရဲ့ ticket: ရောထွေးမှာ စိုး၊ privacy\n- article 340 ခု အကုန်: မဆိုင်တာ များရင် ညံ့၊ ဈေးကြီး\n- ငွေပေးချေမှု မှတ်တမ်း အကုန်: connection ticket နဲ့ မဆိုင်\n"
+      - id: expect-out
+        type: expect.file
+        at: { afterAction: type-out }
+        path: notebook/05-context-for-one-ticket.md
+        contains: "- တခြား customer ရဲ့ ticket: ရောထွေးမှာ စိုး၊ privacy\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် အလုပ်အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် အလုပ်ထဲက AI ကို ပေးချင်တဲ့ task တစ်ခုကို
+      ရွေးပါ။ အဲဒီ task အတွက် ထည့်မယ်၊ မထည့်ဘူး ဆိုတဲ့ စာရင်း နှစ်ခုကို ဒီ ပုံစံအတိုင်း ရေးကြည့်ပါ။
+      [[mark:turn-2]] စာကြောင်း တိုင်းရဲ့ နောက်မှာ အကြောင်းပြချက်ကို တိုတိုလေး ရေးပါ။ ထည့်မယ့် စာရင်းထဲက တစ်ခုခုကို
+      ဘယ်ကနေ ယူရမလဲ မသိသေးရင်၊ အဲဒါက ကိုယ် ဆောက်ရမယ့် ချိတ်ဆက်မှု တစ်ခုပါ။
+    sources:
+      - {
+          title: "Claude Docs: Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+    actions:
+      - id: sel-headings
+        type: editor.select
+        at: { mark: turn }
+        target:
+          file: notebook/05-context-for-one-ticket.md
+          text: "## ထည့်မယ်"
+      - id: sel-out-head
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/05-context-for-one-ticket.md
+          text: "## မထည့်ဘူး"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ context window ဆိုတာ request တစ်ခုမှာ model မြင်ရတဲ့ အရာ အားလုံးပါ။
+      ညွှန်ကြားချက်နဲ့ စကားဝိုင်းကနေ model ရေးမယ့် reply အထိ အကုန် ပါပါတယ်။ ထည့်မပေးတာကို model မမြင်ရသလို၊
+      မဆိုင်တာ များလာရင်လည်း အဖြေ ညံ့လာပါတယ်။ ဒါကြောင့် ticket တစ်ခုကို context အသစ် တစ်ခုနဲ့၊ အဲဒီ ticket
+      လိုတာကိုပဲ ထည့်ပြီး ရေးပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ context ထဲက ညွှန်ကြားချက် အပိုင်းကို ကြည့်ပါမယ်။ လှလှ က reply
+      တွေကို တိုတို၊ ယဉ်ယဉ်ကျေးကျေး၊ မြန်မာလို ရေးစေချင်ပြီး၊ ပြင်ပေးမယ့် အချိန်ကို ဘယ်တော့မှ ကတိ မပေးစေချင်ပါဘူး။
+      model ရဲ့ အပြုအမူကို ညွှန်ကြားချက်နဲ့ ပြောင်းတဲ့ steerability ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+    actions:
+      - id: sel-in-1
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/05-context-for-one-ticket.md
+          text: "- ticket ရဲ့ စာ အကုန်: customer ပြောပြီးသားကို ထပ်မမေးမိဖို့"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
