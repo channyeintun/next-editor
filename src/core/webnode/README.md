@@ -53,6 +53,8 @@ about a day) goes to the owner first.
 **The numbers** come from `bun scripts/webnode-scenarios/measure.ts`: one
 lesson per setup and every starter, on webnode and on WebContainer, in
 headless Chrome (`--list` prints the setups and the lessons it measures).
+What they were on 2026-11-19, to compare a later run with, is in
+[MEASUREMENTS.md](MEASUREMENTS.md).
 
 **WebContainer stays as the fallback.** `?runtime=webcontainer` opts a browser
 out (and is remembered), WebContainer is the default outside Chromium and for
