@@ -1,0 +1,823 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-01-what-is-an-fde
+  title: "Claude FDE 01: FDE ဆိုတာ ဘာလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/01-ai-at-naychi.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/01-ai-at-naychi.md: |+
+        # နေခြည်မှာ AI ကို အခု ဘယ်လို သုံးနေလဲ
+
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: three-kinds
+      contentType: html
+      name: FDE အလုပ် သုံးမျိုး
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">FDE ရဲ့ အလုပ် သုံးမျိုး</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term blue">နားလည်</span>Lesson 01–15 · model ရဲ့ သဘာဝ</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term orange">တည်ဆောက်</span>Lesson 16–45 · API, Claude Code, MCP, Skills</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term green">ဖြန့်ကျက်</span>Lesson 46–56 · pilot, ROI, adoption</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the storm night, top to bottom: blue is what happened in the
+    # systems, orange the pressure, red what went wrong.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 500,
+        height: 45,
+        text: "မုန်တိုင်းကျတဲ့ည",
+        fontSize: 36,
+      }
+    - {
+        id: s-b1,
+        kind: rectangle,
+        x: 400,
+        y: 235,
+        width: 540,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-l1,
+        kind: text,
+        align: center,
+        x: 400,
+        y: 250,
+        width: 540,
+        height: 35,
+        text: "မြို့နယ် 3 ခုမှာ လိုင်းကျ",
+        fontSize: 28,
+      }
+    - {
+        id: s-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 650,
+        y: 303,
+        width: 40,
+        height: 33,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-b2,
+        kind: rectangle,
+        x: 400,
+        y: 340,
+        width: 540,
+        height: 64,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-l2,
+        kind: text,
+        align: center,
+        x: 400,
+        y: 355,
+        width: 540,
+        height: 35,
+        text: "ticket ပုံမှန်ရဲ့ 4 ဆ",
+        fontSize: 28,
+      }
+    - {
+        id: s-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 650,
+        y: 408,
+        width: 40,
+        height: 33,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-b3,
+        kind: rectangle,
+        x: 400,
+        y: 445,
+        width: 540,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-l3,
+        kind: text,
+        align: center,
+        x: 400,
+        y: 460,
+        width: 540,
+        height: 35,
+        text: "chat AI နဲ့ အဖြေ ရေးခိုင်း",
+        fontSize: 28,
+      }
+    - {
+        id: s-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 650,
+        y: 513,
+        width: 40,
+        height: 33,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-b4,
+        kind: rectangle,
+        x: 400,
+        y: 550,
+        width: 540,
+        height: 64,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-l4,
+        kind: text,
+        align: center,
+        x: 400,
+        y: 565,
+        width: 540,
+        height: 35,
+        text: "အဖြေ 64 စောင် မှားပို့မိ",
+        fontSize: 28,
+      }
+    # Board 2 — the model did its job; three things around it were never
+    # designed. Blue is the model, orange the three gaps this board is about.
+    - {
+        id: n-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "AI အမှားလား၊ လူ့အမှားလား?",
+        fontSize: 36,
+      }
+    - {
+        id: n-model,
+        kind: rectangle,
+        x: 290,
+        y: 335,
+        width: 220,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-model-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 360,
+        width: 220,
+        height: 40,
+        text: "model",
+        fontSize: 32,
+      }
+    - {
+        id: n-a1,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 520,
+        y: 280,
+        width: 80,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: n-r1,
+        kind: rectangle,
+        x: 610,
+        y: 235,
+        width: 470,
+        height: 70,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-r1-l,
+        kind: text,
+        align: center,
+        x: 610,
+        y: 253,
+        width: 470,
+        height: 35,
+        text: "မြင်နိုင်တာ: NMS မပါ",
+        fontSize: 28,
+      }
+    - {
+        id: n-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 520,
+        y: 360,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: n-r2,
+        kind: rectangle,
+        x: 610,
+        y: 345,
+        width: 470,
+        height: 70,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-r2-l,
+        kind: text,
+        align: center,
+        x: 610,
+        y: 363,
+        width: 470,
+        height: 35,
+        text: "စစ်ဆေးသူ: မသတ်မှတ်ထား",
+        fontSize: 28,
+      }
+    - {
+        id: n-a3,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 520,
+        y: 420,
+        width: 80,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: n-r3,
+        kind: rectangle,
+        x: 610,
+        y: 455,
+        width: 470,
+        height: 70,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-r3-l,
+        kind: text,
+        align: center,
+        x: 610,
+        y: 473,
+        width: 470,
+        height: 35,
+        text: "တိုင်းတာမှု: မရှိ",
+        fontSize: 28,
+      }
+    - {
+        id: n-conc,
+        kind: text,
+        x: 290,
+        y: 580,
+        width: 760,
+        height: 38,
+        text: "စွမ်းရည် ရှိတယ်၊ သုံးပုံ design မရှိဘူး",
+        fontSize: 30,
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဘယ်မေးခွန်းကို အရင် မေးမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) ဘယ် model က အတော်ဆုံးလဲ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) ဂဏန်း ဘယ်က ယူ၊ ဘယ်သူ စစ်မလဲ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 520,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 850,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 700,
+        height: 35,
+        text: "model က ဘာကို မြင်ရမလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 700,
+        height: 35,
+        text: "ရလဒ်ကို ဘယ်သူ စစ်မလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9301
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: welcome
+    chapter: မုန်တိုင်းကျတဲ့ည
+    narration: >
+      မင်္ဂလာပါ ခင်ဗျာ။ Claude FDE course ကို ကြိုဆိုပါတယ်။ ဒီ course က Claude ကို ကုမ္ပဏီ တစ်ခုရဲ့ တကယ့်
+      အလုပ်ထဲမှာ အသုံးဝင်အောင် တပ်ဆင်ပေးချင်တဲ့ developer တွေအတွက် ရည်ရွယ်ပါတယ်။ အဲဒီလို အလုပ်မျိုး
+      လုပ်တဲ့သူကို forward deployed engineer၊ အတိုကောက် FDE လို့ ခေါ်ပါတယ်။
+      [[mark:path]] course ရဲ့ အကြောင်းအရာ အစီအစဉ်ကိုတော့ Anthropic ရဲ့ Claude Forward Deployed Engineer
+      learning path ကို လိုက်ပြီး စီထားပါတယ်။ ဒါပေမဲ့ Anthropic ရဲ့ တရားဝင် course မဟုတ်ဘဲ၊ ရှင်းပြချက်နဲ့
+      ဥပမာ အားလုံးကို သီးခြား ပြင်ဆင်ထားတာ ဖြစ်ပါတယ်။
+      [[mark:company]] course တစ်လျှောက်လုံးမှာ ကုမ္ပဏီ တစ်ခုရဲ့ ဇာတ်လမ်းနဲ့ တွဲပြီး လေ့လာသွားမှာပါ။ အဲဒီ
+      ကုမ္ပဏီရဲ့ နာမည်က နေခြည် Fiber ပါ။ နေခြည် Fiber ဆိုတာ ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့
+      ကုမ္ပဏီပါ။
+      [[mark:sel-company]] နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးနေပြီး၊ customer
+      ၆၂၀၀၀ လောက် ရှိပါတယ်။ ဝန်ထမ်း ၄၃၀ ထဲမှာ support agent ၄၅ ယောက်နဲ့ developer ၂၄ ယောက် ပါပါတယ်။
+      [[mark:sel-support]] support ဘက်ကို တစ်ရက်မှာ ticket ၁၈၀၀ လောက် ဝင်ပါတယ်။ ticket ဆိုတာ customer
+      တစ်ယောက်ရဲ့ တိုင်ကြားချက် ဒါမှမဟုတ် မေးခွန်း တစ်ခုပါ။ ထက်ဝက်ကျော်က internet မရဘူး၊ နှေးတယ် ဆိုတဲ့
+      connection ပြဿနာတွေ ဖြစ်ပါတယ်။
+      [[mark:s-open]] ဒီနှစ် မိုးတွင်းမှာ နေခြည် Fiber အတွက် မမေ့နိုင်တဲ့ည တစ်ည ရှိခဲ့ပါတယ်။
+      [[mark:s-rain]] မုန်တိုင်းကျတဲ့ အဲဒီညမှာ မြို့နယ် သုံးခုမှာ လိုင်းကျသွားပါတယ်။
+      [[mark:s-tickets]] customer တွေက တစ်ပြိုင်တည်း စာပို့ကြတော့ ticket က ပုံမှန်ရဲ့ လေးဆ ဖြစ်သွားပါတယ်။
+      [[mark:s-ai]] support agent တချို့က အလုပ်နိုင်အောင် personal chat AI account တွေနဲ့ အဖြေတွေကို
+      ရေးခိုင်းပြီး ပြန်ပို့ကြပါတယ်။ AI ရေးပေးတဲ့ အဖြေတွေက ယဉ်ကျေးပြီး ဖတ်လို့လည်း ကောင်းပါတယ်။
+      [[mark:s-wrong]] ဒါပေမဲ့ အဲဒီထဲက ၆၄ စောင်က လိုင်းကျနေတဲ့ မြို့နယ်ထဲက customer တွေကို router ကို ပိတ်ပြီး
+      ပြန်ဖွင့်ကြည့်ဖို့ ပြောခဲ့တာပါ။ လိုင်းကိုယ်တိုင် ကျနေတာမို့ router ကို ဘယ်နှခါ ပြန်ဖွင့်ဖွင့် internet
+      ရလာမှာ မဟုတ်ပါဘူး။ နောက်တစ်နေ့မှာတော့ မကျေနပ်တဲ့ customer တွေရဲ့ စာတွေ ထပ်ဝင်လာပါတော့တယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: company }, path: README.md }
+      - id: sel-company
+        type: editor.select
+        at: { mark: sel-company }
+        target:
+          file: README.md
+          text: "- customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)\n- ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24"
+      - id: sel-support
+        type: editor.select
+        at: { mark: sel-support }
+        target:
+          file: README.md
+          text: "- တစ်ရက် ticket 1,800 ခန့်\n- connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %"
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          open: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-rain,
+          type: whiteboard.apply,
+          at: { mark: s-rain },
+          upsertIds: [s-b1, s-l1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-tickets,
+          type: whiteboard.apply,
+          at: { mark: s-tickets },
+          upsertIds: [s-a1, s-b2, s-l2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-s-ai,
+          type: whiteboard.apply,
+          at: { mark: s-ai },
+          upsertIds: [s-a2, s-b3, s-l3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-s-wrong,
+          type: whiteboard.apply,
+          at: { mark: s-wrong },
+          upsertIds: [s-a3, s-b4, s-l4],
+          drawMs: 1500,
+        }
+
+  - id: whose-mistake
+    chapter: ဘယ်သူ့အမှားလဲ
+    narration: >
+      [[mark:n-open]] ဒီ ဖြစ်ရပ်ကို ကြားရင် လူအများစုက AI မှားတာပဲ၊ ဒါမှမဟုတ် support agent တွေ ပေါ့ဆတာပဲလို့
+      ထင်ကြပါတယ်။ တကယ်တော့ နှစ်ခုလုံး မဟုတ်ပါဘူး။
+      [[mark:n-model]] အလယ်မှာ model ရှိပါတယ်။ model ဆိုတာ စာတွေ အများကြီးကနေ သင်ယူထားပြီး၊ ပေးလိုက်တဲ့ စာကို
+      ဆက်ရေးပေးတဲ့ program ပါ။ အဲဒီညက model က လုပ်နေကျ အလုပ်ကို ပုံမှန်အတိုင်း လုပ်ခဲ့တာပါ။ ရလာတဲ့ ticket
+      စာသားကို ကြည့်ပြီး၊ အဖြစ်နိုင်ဆုံး အဖြေကို ချောချောမွေ့မွေ့ ရေးပေးခဲ့ပါတယ်။ လိုနေခဲ့တာက model ရဲ့
+      ပတ်ဝန်းကျင်မှာပါ။
+      [[mark:n-see]] ပထမ ကွက်လပ်က model မြင်နိုင်တဲ့ အရာပါ။ ဘယ်မြို့နယ်မှာ လိုင်းကျနေလဲ ဆိုတာကို နေခြည် ရဲ့
+      network monitoring system၊ အတိုကောက် NMS ကပဲ သိပါတယ်။ model ကတော့ NMS ကို မမြင်ရပါဘူး။ မမြင်ရတဲ့အခါ
+      မသိဘူးလို့ မပြောဘဲ၊ internet မရတဲ့ ပြဿနာအတွက် အဖြစ်များဆုံး အကြံကို ပေးလိုက်တာပါ။
+      [[mark:n-check]] ဒုတိယ ကွက်လပ်က စစ်ဆေးတဲ့သူပါ။ AI ရေးတဲ့ အဖြေကို မပို့ခင် ဘယ်သူက ဘာနဲ့ တိုက်စစ်ရမလဲ
+      ဆိုတာ ဘယ်သူမှ မသတ်မှတ်ထားခဲ့ပါဘူး။ ticket တွေ လေးဆ ဝင်နေတဲ့ညမှာ support agent တွေအနေနဲ့ တစ်စောင်ချင်း
+      ထိုင်စစ်ဖို့ အချိန်လည်း မရှိခဲ့ပါဘူး။
+      [[mark:n-own]] တတိယ ကွက်လပ်က တိုင်းတာမှုပါ။ personal account တွေနဲ့ သုံးနေတာမို့ ကုမ္ပဏီအနေနဲ့ ဘယ်သူတွေ
+      သုံးနေလဲ၊ customer ရဲ့ အချက်အလက်တွေ ဘယ်ကို ရောက်သွားလဲ၊ အဖြေတွေ ဘယ်လောက် မှန်လဲ ဆိုတာ တစ်ခုမှ
+      မသိခဲ့ပါဘူး။
+      [[mark:n-point]] ဆိုလိုတာက model ရဲ့ စွမ်းရည်က ရှိနေပြီးသားပါ။ မရှိခဲ့တာက အဲဒီ စွမ်းရည်ကို နေခြည် ရဲ့
+      အလုပ်ထဲ ဘယ်လို ထည့်သုံးမလဲ ဆိုတဲ့ design ပါ။ အဲဒီ design ကို ဆွဲပြီး လက်တွေ့ အလုပ်ဖြစ်လာအောင်
+      လုပ်ပေးတာက forward deployed engineer ရဲ့ အလုပ် ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-n-open,
+          type: whiteboard.apply,
+          at: { mark: n-open },
+          clear: true,
+          upsertIds: [n-title],
+        }
+      - {
+          id: draw-n-model,
+          type: whiteboard.apply,
+          at: { mark: n-model },
+          upsertIds: [n-model, n-model-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-n-see,
+          type: whiteboard.apply,
+          at: { mark: n-see },
+          upsertIds: [n-a1, n-r1, n-r1-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-n-check,
+          type: whiteboard.apply,
+          at: { mark: n-check },
+          upsertIds: [n-a2, n-r2, n-r2-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-n-own,
+          type: whiteboard.apply,
+          at: { mark: n-own },
+          upsertIds: [n-a3, n-r3, n-r3-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-n-conc,
+          type: whiteboard.apply,
+          at: { mark: n-point },
+          upsertIds: [n-conc],
+          drawMs: 1000,
+        }
+
+  - id: the-fde
+    chapter: FDE ရဲ့ အလုပ်
+    narration: >
+      [[mark:f-close]] forward deployed engineer ဆိုတာ customer ရဲ့ အဖွဲ့ထဲ ဝင်ထိုင်ပြီး၊ AI ကို အဲဒီ လုပ်ငန်းရဲ့
+      တကယ့် အလုပ်ထဲမှာ အသုံးဝင်အောင် တပ်ဆင်ပေးတဲ့ engineer ပါ။ အကြံပေးစာတမ်း တစ်စောင် ရေးပေးပြီး
+      ပြန်သွားတဲ့သူ မဟုတ်သလို၊ software ကို ရောင်းပြီး ကျန်တာကို customer ဘက်က ဆက်လုပ်ပါစေ ဆိုတဲ့သူလည်း
+      မဟုတ်ပါဘူး။ customer ရဲ့ system တွေကို ကိုယ်တိုင် ဖတ်တယ်၊ code ကို ကိုယ်တိုင် ရေးတယ်၊ သုံးမယ့်သူတွေနဲ့
+      အတူ ထိုင်တယ်၊ ပြီးတော့ ရလဒ်ကို ဂဏန်းနဲ့ ပြနိုင်တဲ့အထိ တာဝန်ယူပါတယ်။
+      [[mark:f-cto]] မုန်တိုင်းကျတဲ့ည ပြီးတော့ နေခြည် ရဲ့ CTO ဖြစ်တဲ့ အောင်အောင် က ဆုံးဖြတ်ချက် တစ်ခု
+      ချပါတယ်။ AI ကို ပိတ်ပင်မယ့်အစား စနစ်တကျ သုံးမယ် ဆိုတာပါ။ အဲဒီအတွက် Claude ကို လုပ်ငန်းတွေမှာ
+      တပ်ဆင်ပေးနေတဲ့ ကိုယ့် ကုမ္ပဏီဆီ အကူအညီ တောင်းလာပါတယ်။ ဒီ course တစ်လျှောက်လုံးမှာ ကိုယ်က နေခြည် ဆီ
+      ၁၂ ပတ် သွားလုပ်ရမယ့် FDE ဖြစ်ပါတယ်။
+      [[mark:sel-work]] ၁၂ ပတ်အတွင်း လုပ်ရမယ့် အလုပ်က သုံးခု ရှိပါတယ်။ ပထမ တစ်ခုက Reply assistant ပါ။ support
+      ticket တစ်ခုအတွက် အဖြေ မူကြမ်းကို ရေးပေးပြီး၊ support agent က စစ်ပြီးမှ ပို့ရမယ့် agent ဖြစ်ပါတယ်။ agent
+      ဆိုတာ ရည်မှန်းချက် ရောက်တဲ့အထိ tool တွေကို ရွေးသုံးပြီး အဆင့်ဆင့် လုပ်သွားတဲ့ model ကို ခေါ်တာပါ။
+      [[mark:work-2]] ဒုတိယ တစ်ခုက နေခြည် ရဲ့ developer တွေ Claude Code နဲ့ အလုပ်လုပ်တတ်လာအောင် ကူညီပေးဖို့ပါ။
+      တတိယ တစ်ခုကတော့ ကုမ္ပဏီ တစ်ခုလုံးက Claude ကို စနစ်တကျ သုံးနိုင်အောင် ပြင်ဆင်ပေးဖို့ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-gaps, type: whiteboard.apply, at: { mark: f-close }, open: false }
+      - id: sel-storm
+        type: editor.select
+        at: { mark: f-cto }
+        target:
+          file: README.md
+          text: "- chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်"
+      - id: sel-work
+        type: editor.select
+        at: { mark: sel-work }
+        target:
+          file: README.md
+          text: "- Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent"
+      - id: sel-work-2
+        type: editor.select
+        at: { mark: work-2 }
+        target:
+          file: README.md
+          text: "- Billing team နဲ့ Claude Code\n- ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude"
+
+  - id: three-kinds
+    chapter: အလုပ် သုံးမျိုး
+    narration: >
+      [[mark:m-open]] FDE တစ်ယောက်ရဲ့ အလုပ်ကို သုံးမျိုး ခွဲကြည့်လို့ ရပါတယ်။ ဒီ course ရဲ့ lesson ၅၆ ခုကိုလည်း
+      အဲဒီ သုံးမျိုးအတိုင်း စီထားပါတယ်။
+      [[mark:m-1]] ပထမ တစ်မျိုးက နားလည်တာပါ။ model က ဘာကြောင့် ဒီလို ပြုမူလဲ၊ ဘာကို ယုံလို့ရပြီး ဘာကို
+      စစ်ရမလဲ ဆိုတာကို သိမှ ကျန်တာတွေကို ဆုံးဖြတ်နိုင်ပါတယ်။ မုန်တိုင်းကျတဲ့ညက အဖြေတွေ ဘာကြောင့် အဲဒီလို
+      ထွက်လာခဲ့လဲ ဆိုတာကိုလည်း ဒီအပိုင်းမှာ အသေးစိတ် ပြန်ကြည့်ပါမယ်။
+      [[mark:m-2]] ဒုတိယ တစ်မျိုးက တည်ဆောက်တာပါ။ model ကို နေခြည် ရဲ့ system တွေနဲ့ ချိတ်ပေးရပါမယ်။ Claude
+      Platform ပေါ်မှာ Reply assistant ကို ဆောက်တာ၊ developer တွေအတွက် Claude Code ကို ပြင်ဆင်ပေးတာ၊ ticket နဲ့
+      လိုင်းကျမှု အချက်အလက်တွေကို Claude မြင်နိုင်အောင် ချိတ်ပေးတာတွေ ပါဝင်ပါတယ်။
+      [[mark:m-3]] တတိယ တစ်မျိုးက ဖြန့်ကျက်တာပါ။ ဆောက်ပြီးသား အရာကို လူတွေ တကယ် သုံးလာအောင်၊ သုံးလို့
+      ရလာတဲ့ အကျိုးကို ဂဏန်းနဲ့ ပြနိုင်အောင် လုပ်ရပါတယ်။ နည်းပညာကို တပ်ဆင်တာက ပိုလွယ်တဲ့ အပိုင်းပါ။
+      ပိုခက်တာက လူတွေရဲ့ အလုပ်လုပ်ပုံကို ပြောင်းတာနဲ့၊ ရလဒ်ကို သက်သေပြတာ ဖြစ်ပါတယ်။ FDE ကို engineer
+      သက်သက်နဲ့ ကွာစေတာလည်း ဒီ တတိယ အပိုင်းပါပဲ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: show-kinds,
+          type: slide.show,
+          at: { mark: m-open, offsetMs: -1200 },
+          slideId: three-kinds,
+        }
+      - { id: point-kind-1, type: slide.point, at: { mark: m-1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-kind-2, type: slide.point, at: { mark: m-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-kind-3, type: slide.point, at: { mark: m-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: today
+    chapter: အခု အခြေအနေကို ချရေးခြင်း
+    narration: >
+      [[mark:d-open]] FDE တစ်ယောက် customer ဆီ ရောက်ရင် ပထမဆုံး လုပ်တာက ဘာမှ မဆောက်သေးဘဲ၊ အခု လက်ရှိ ဘယ်လို
+      သုံးနေလဲ ဆိုတာကို ရိုးရိုးသားသား ချရေးတာပါ။ နေခြည် အတွက် မေးခွန်း လေးခုနဲ့ ရေးကြည့်ရအောင်။
+      [[mark:type-who]] ပထမ မေးခွန်းက ဘယ်သူတွေ သုံးနေလဲ ဆိုတာပါ။ support agent တချို့က personal account နဲ့
+      သုံးနေပြီး၊ ဘယ်နှယောက်လဲ ဆိုတာကိုတောင် ကုမ္ပဏီက မသိပါဘူး။
+      [[mark:type-see]] ဒုတိယ မေးခွန်းက AI က ဘာကို မြင်နိုင်လဲ ဆိုတာပါ။ support agent က ကူးထည့်ပေးတဲ့ ticket
+      စာသားကိုပဲ မြင်ရပါတယ်။ လိုင်းကျမှု အခြေအနေ၊ customer သုံးနေတဲ့ plan နဲ့ ပြဿနာဖြေရှင်းနည်း article တွေကိုတော့
+      မမြင်ရပါဘူး။
+      [[mark:type-check]] တတိယ မေးခွန်းက မပို့ခင် ဘယ်သူ စစ်လဲ ဆိုတာပါ။ စည်းကမ်း မရှိတဲ့အတွက် support agent
+      တစ်ယောက်ချင်းစီရဲ့ အချိန်နဲ့ သတိအပေါ်မှာပဲ မူတည်နေပါတယ်။
+      [[mark:type-measure]] စတုတ္ထ မေးခွန်းက အကျိုးရှိမရှိ ဘယ်လို တိုင်းလဲ ဆိုတာပါ။ အခုတော့ မတိုင်းသေးပါဘူး။
+      support ရဲ့ ပထမဆုံး ပြန်ဖြေချိန်က ပျမ်းမျှ ၃၈ မိနစ် ဆိုတာကို သိပေမဲ့၊ AI သုံးလို့ အဲဒါ ပိုမြန်လာလား၊ အမှား
+      ပိုများလာလား ဆိုတာကိုတော့ ဘယ်သူမှ မပြောနိုင်ပါဘူး။
+      [[mark:d-point]] ဒီ လေးချက်ကို ကြည့်ရင် မုန်တိုင်းကျတဲ့ညက ဖြစ်ရပ်ဟာ မတော်တဆ မဟုတ်ဘဲ၊ တစ်နေ့နေ့ ဖြစ်လာမယ့်
+      အရာ တစ်ခု ဆိုတာ မြင်ရပါတယ်။ ကိုယ်တို့ ၁၂ ပတ်အတွင်း ပြောင်းရမယ့် အရာတွေကလည်း ဒီ လေးချက်ပါပဲ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-kinds, type: slide.close, at: { mark: d-open } }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-kinds },
+          path: notebook/01-ai-at-naychi.md,
+        }
+      - id: type-who
+        type: editor.type
+        at: { mark: type-who }
+        cadence: line-by-line
+        target: { file: notebook/01-ai-at-naychi.md, after: "# နေခြည်မှာ AI ကို အခု ဘယ်လို သုံးနေလဲ\n\n" }
+        text: "## ဘယ်သူတွေ သုံးနေလဲ\n- support agent တချို့၊ personal account နဲ့။ ဘယ်နှယောက်လဲ မသိ\n\n"
+      - id: type-see
+        type: editor.type
+        at: { mark: type-see }
+        cadence: line-by-line
+        target: { file: notebook/01-ai-at-naychi.md, after: "ဘယ်နှယောက်လဲ မသိ\n\n" }
+        text: "## AI က ဘာကို မြင်နိုင်လဲ\n- ကူးထည့်ပေးတဲ့ ticket စာသားပဲ။ NMS၊ Billing၊ Knowledge base မမြင်ရ\n\n"
+      - id: type-check
+        type: editor.type
+        at: { mark: type-check }
+        cadence: line-by-line
+        target: { file: notebook/01-ai-at-naychi.md, after: "Knowledge base မမြင်ရ\n\n" }
+        text: "## မပို့ခင် ဘယ်သူ စစ်လဲ\n- စည်းကမ်း မရှိ။ support agent တစ်ယောက်ချင်းအပေါ် မူတည်\n\n"
+      - id: type-measure
+        type: editor.type
+        at: { mark: type-measure }
+        cadence: line-by-line
+        target: { file: notebook/01-ai-at-naychi.md, after: "တစ်ယောက်ချင်းအပေါ် မူတည်\n\n" }
+        text: "## အကျိုးကို ဘယ်လို တိုင်းလဲ\n- မတိုင်းသေးဘူး။ ပထမဆုံး ပြန်ဖြေချိန် 38 မိနစ် ဆိုတာပဲ သိ\n"
+      - id: expect-measure
+        type: expect.file
+        at: { afterAction: type-measure }
+        path: notebook/01-ai-at-naychi.md
+        contains: "## အကျိုးကို ဘယ်လို တိုင်းလဲ\n- မတိုင်းသေးဘူး။ ပထမဆုံး ပြန်ဖြေချိန် 38 မိနစ် ဆိုတာပဲ သိ\n"
+      - id: sel-four
+        type: editor.select
+        at: { mark: d-point }
+        target:
+          file: notebook/01-ai-at-naychi.md
+          text: "## ဘယ်သူတွေ သုံးနေလဲ"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ နေခြည် ရဲ့ finance team က လစဉ် ဝင်ငွေ report ကို AI နဲ့
+      ရေးခိုင်းချင်တယ်လို့ ပြောလာတယ် ဆိုပါစို့။ FDE အနေနဲ့ ဘယ်မေးခွန်းကို အရင် မေးသင့်မလဲ။
+      [[mark:q-a]] ပထမ မေးခွန်းက ဒီအလုပ်အတွက် ဘယ် model က အတော်ဆုံးလဲ ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ မေးခွန်းက report ထဲက ဂဏန်းတွေကို ဘယ်ကနေ ယူမလဲ၊ ထွက်လာတဲ့ ဂဏန်းကို ဘယ်သူက တိုက်စစ်မလဲ
+      ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ မေးခွန်းပါ။ ဘာကြောင့်လဲဆိုတော့ နေခြည် ရဲ့ ဝင်ငွေ ဂဏန်းတွေကို ဘယ် model
+      ကမှ ကြိုသိထားတာ မဟုတ်လို့ပါ။ Billing system ထဲက data ကို မမြင်ရဘဲ ရေးခိုင်းရင်၊ ဖတ်လို့ကောင်းပေမဲ့ ဂဏန်း
+      မှားနေတဲ့ report တစ်စောင် ထွက်လာနိုင်ပါတယ်။ finance report မှာ ဂဏန်း တစ်လုံး မှားတာက စာသား မချောတာထက်
+      အများကြီး ပိုဆိုးပါတယ်။ ဘယ် model ကို သုံးမလဲ ဆိုတာကတော့ အဲဒီနောက်မှ စဉ်းစားရမယ့် ကိစ္စပါ။
+      [[mark:q-rule]] ဒါကြောင့် AI ကို အလုပ် တစ်ခုထဲ ထည့်တော့မယ် ဆိုတိုင်း မေးခွန်း နှစ်ခုကို အရင် မေးပါ။ model က
+      ဘာကို မြင်ရမလဲ၊ ရလဒ်ကို ဘယ်သူ စစ်မလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule, offsetMs: 2500 },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ ခေါင်းစဉ် လေးခုအောက်မှာ ကိုယ့် team အတွက်
+      တစ်ကြောင်းစီ ရေးကြည့်ပါ။ နေခြည် အတွက် ရေးထားတာတွေကို ဖျက်ပြီး ကိုယ့် team ရဲ့ လက်ရှိ အခြေအနေနဲ့
+      အစားထိုးလိုက်ပါ။
+      [[mark:turn-2]] ကိုယ့် team မှာ AI ကို မသုံးသေးဘူး ဆိုရင်လည်း ရပါတယ်။ သုံးတော့မယ် ဆိုရင် ဒီ မေးခွန်း
+      လေးခုကို ဘယ်လို ဖြေမလဲ ဆိုတာကို ရေးကြည့်ပါ။ မသိသေးတဲ့ ခေါင်းစဉ်အောက်မှာတော့ မသိသေးဘူးလို့ပဲ ရေးထားပါ။
+      FDE တစ်ယောက်အတွက် အဲဒီ ကွက်လပ်တွေက အလုပ် စရမယ့် နေရာတွေ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-headings
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/01-ai-at-naychi.md
+          text: "## ဘယ်သူတွေ သုံးနေလဲ\n- support agent တချို့၊ personal account နဲ့။ ဘယ်နှယောက်လဲ မသိ\n\n## AI က ဘာကို မြင်နိုင်လဲ\n- ကူးထည့်ပေးတဲ့ ticket စာသားပဲ။ NMS၊ Billing၊ Knowledge base မမြင်ရ\n\n## မပို့ခင် ဘယ်သူ စစ်လဲ\n- စည်းကမ်း မရှိ။ support agent တစ်ယောက်ချင်းအပေါ် မူတည်\n\n## အကျိုးကို ဘယ်လို တိုင်းလဲ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ မုန်တိုင်းကျတဲ့ညက နေခြည် မှာ model လည်း မပျက်ခဲ့သလို၊ လူတွေလည်း
+      မပေါ့ဆခဲ့ပါဘူး။ model က ဘာကို မြင်ရမလဲ၊ ရလဒ်ကို ဘယ်သူ စစ်မလဲ၊ အကျိုးကို ဘယ်လို တိုင်းမလဲ ဆိုတာကို
+      ဘယ်သူမှ design မဆွဲခဲ့တာပါ။
+      [[mark:recap-2]] forward deployed engineer ဆိုတာ customer ရဲ့ အဖွဲ့ထဲ ဝင်ပြီး အဲဒီ design ကို ဆွဲပေးသူပါ။
+      model ကို နားလည်တာ၊ system တွေထဲ တည်ဆောက်တာနဲ့ လူတွေဆီ ဖြန့်ကျက်တာ ဆိုတဲ့ အလုပ် သုံးမျိုးကို
+      လုပ်ရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ support manager လှလှ မေးတဲ့ မေးခွန်း တစ်ခုကနေ စပါမယ်။ AI ဆိုတာ search
+      engine လိုမျိုးလား၊ အဖြေတွေ သိမ်းထားတဲ့ စက်လား ဆိုတာပါ။ AI လို့ ပြောတဲ့အခါ တကယ်တော့ ဘာကို ပြောနေတာလဲ
+      ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-see
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/01-ai-at-naychi.md
+          text: "## AI က ဘာကို မြင်နိုင်လဲ"
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/01-ai-at-naychi.md
+          text: "# နေခြည်မှာ AI ကို အခု ဘယ်လို သုံးနေလဲ"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
