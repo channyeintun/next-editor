@@ -1,0 +1,780 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-53-activation-foundations
+  title: "Claude FDE 53: Activation: team နဲ့ provisioning"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/53-activation-checklist.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/53-activation-checklist.md: |
+        # Activation checklist · နေခြည် Fiber (ဝန်ထမ်း 430)
+
+        plan: Claude Enterprise (Team plan က seat 150 အထိပဲ · 2026-11)
+
+        ## Success team
+
+        ## Provisioning · login မဝင်ခင်
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: provisioning
+      contentType: html
+      name: Provisioning ခေါင်းစဉ် ငါးခု
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Provisioning: login မဝင်ခင် ခေါင်းစဉ် 5 ခု</div>
+          <div class="row" style="top: 26vh"><span class="num">1</span><span class="term blue">Login</span>SSO: company account တစ်ခုတည်း</div>
+          <div class="row" style="top: 38vh"><span class="num">2</span><span class="term orange">Account</span>invite၊ JIT၊ SCIM: ဝင်ရင် ဖွင့်၊ ထွက်ရင် ပိတ်</div>
+          <div class="row" style="top: 50vh"><span class="num">3</span><span class="term violet">Role</span>Primary Owner၊ Owner၊ Admin၊ User</div>
+          <div class="row" style="top: 62vh"><span class="num">4</span><span class="term green">Feature</span>ဘယ် feature၊ ဘယ် connector ဖွင့်မလဲ</div>
+          <div class="row" style="top: 74vh"><span class="num">5</span><span class="term red">Data နဲ့ cost</span>retention၊ audit log၊ spend limit</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the path's three phases, top to bottom: the one we are in (Activation) in
+    # orange, the two still ahead dashed blue, flow between them violet.
+    - {
+        id: ph-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "Adoption ရဲ့ အဆင့် သုံးဆင့်",
+        fontSize: 36,
+      }
+    - {
+        id: ph-b1,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 330,
+        height: 70,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: ph-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 252,
+        width: 330,
+        height: 35,
+        text: "Activation",
+        fontSize: 28,
+      }
+    - {
+        id: ph-d1,
+        kind: text,
+        x: 645,
+        y: 252,
+        width: 440,
+        height: 35,
+        text: "setup နဲ့ လူတွေ အသင့်ဖြစ်အောင်",
+        fontSize: 28,
+      }
+    - {
+        id: ph-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 435,
+        y: 309,
+        width: 40,
+        height: 33,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: ph-b2,
+        kind: rectangle,
+        x: 290,
+        y: 346,
+        width: 330,
+        height: 70,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: ph-l2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 363,
+        width: 330,
+        height: 35,
+        text: "Acceleration",
+        fontSize: 28,
+      }
+    - {
+        id: ph-d2,
+        kind: text,
+        x: 645,
+        y: 363,
+        width: 440,
+        height: 35,
+        text: "CoE နဲ့ governance",
+        fontSize: 28,
+      }
+    - {
+        id: ph-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 435,
+        y: 420,
+        width: 40,
+        height: 33,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: ph-b3,
+        kind: rectangle,
+        x: 290,
+        y: 457,
+        width: 330,
+        height: 70,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: ph-l3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 474,
+        width: 330,
+        height: 35,
+        text: "Expansion",
+        fontSize: 28,
+      }
+    - {
+        id: ph-d3,
+        kind: text,
+        x: 645,
+        y: 474,
+        width: 440,
+        height: 35,
+        text: "use case အသစ်တွေ",
+        fontSize: 28,
+      }
+    - {
+        id: ph-now,
+        kind: text,
+        x: 290,
+        y: 575,
+        width: 790,
+        height: 35,
+        text: "ဒီ lesson: success team နဲ့ provisioning",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the success team: the programme in orange in the middle, the people (white)
+    # around it.
+    - {
+        id: t-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "Success team",
+        fontSize: 36,
+      }
+    - {
+        id: t-center,
+        kind: rectangle,
+        x: 530,
+        y: 345,
+        width: 300,
+        height: 90,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: t-center-l,
+        kind: text,
+        align: center,
+        x: 530,
+        y: 372,
+        width: 300,
+        height: 35,
+        text: "Claude roll out",
+        fontSize: 28,
+      }
+    - {
+        id: t-sponsor,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 420,
+        height: 35,
+        text: "sponsor: CTO အောင်အောင်",
+        fontSize: 28,
+      }
+    - {
+        id: t-owner,
+        kind: text,
+        x: 760,
+        y: 245,
+        width: 330,
+        height: 35,
+        text: "owner: နေ့စဉ် run",
+        fontSize: 28,
+      }
+    - {
+        id: t-admin,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 420,
+        height: 35,
+        text: "administrator: IT",
+        fontSize: 28,
+      }
+    - {
+        id: t-sec,
+        kind: text,
+        x: 760,
+        y: 480,
+        width: 330,
+        height: 35,
+        text: "security တာဝန်ခံ",
+        fontSize: 28,
+      }
+    - {
+        id: t-champ,
+        kind: text,
+        x: 330,
+        y: 575,
+        width: 740,
+        height: 35,
+        text: "champion: ဌာနတိုင်းက 2–3 ယောက်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဘာကို အရင် ဆုံးဖြတ်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) ဘယ်ဌာနကို အရင် ပေးမလဲ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) account ဘယ်လို ဖွင့်၊ ဘယ်လို ပိတ်မလဲ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 515,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 835,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 760,
+        height: 35,
+        text: "ဌာန အစဉ်က ပြင်လို့ရ၊ account က အခြေခံ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9353
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: open
+    chapter: ဝန်ထမ်း ၄၃၀ အတွက်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ရက် ၃၀ activation ကို အပတ်လိုက် ချရေးပြီး run ခဲ့ကာ၊ developer နှစ်ယောက်က report job
+      ၁၄၀ လုံးကို အလုပ်ရက် ၁၇ ရက်နဲ့ ရွှေ့ပြီးခဲ့တာကို ကြည့်ခဲ့ပါတယ်။
+      [[mark:open-2]] အဲဒီ ရလဒ်ကို ကြည့်ပြီး နေခြည် ရဲ့ ဒါရိုက်တာ အဖွဲ့က Claude ကို ကုမ္ပဏီ တစ်ခုလုံး သုံးဖို့
+      ခွင့်ပြုလိုက်ပါတယ်။ ဒီတစ်ခါ developer ၈ ယောက် မဟုတ်တော့ဘဲ ဝန်ထမ်း ၄၃၀ ပါ။ support agent တွေ၊ field
+      technician တွေ၊ finance နဲ့ ရုံးဝန်ထမ်းတွေ အားလုံး ပါပါတယ်။ [[mark:open-3]] CTO ဖြစ်တဲ့ အောင်အောင် က မုန်တိုင်းကျတဲ့ညကို
+      မမေ့ပါဘူး။ အဲဒီညက support agent တချို့ personal account တွေနဲ့ သုံးနေခဲ့ပြီး၊ ဘယ်သူ ဘာသုံးနေလဲ၊ customer
+      data ဘယ်ကို ရောက်သွားလဲ ဆိုတာ ဘယ်သူမှ မသိခဲ့ပါဘူး။ ဒီတစ်ခါတော့ စကတည်းက သိနေချင်ပါတယ်။
+      [[mark:ph-title]] Anthropic ရဲ့ FDE learning path က ကုမ္ပဏီ တစ်ခုလုံး Claude ကို ကျင့်သုံးလာအောင်
+      လုပ်တာကို အဆင့် သုံးဆင့် ခွဲပြပါတယ်။ အဆင့်တွေရဲ့ နာမည်က path ကပါ၊ နေခြည် အတွက် ရှင်းပြချက်တွေကတော့
+      ကိုယ်တို့ ကိုယ်တိုင် ပြင်ထားတာပါ။
+      [[mark:ph-1]] ပထမ အဆင့်က Activation ပါ။ နေခြည် အတွက်ဆိုရင် ဝန်ထမ်း ၄၃၀ လုံး company account နဲ့ ဝင်နိုင်ပြီး၊
+      ဘာကြောင့် သုံးတာလဲ နားလည်ကာ စသုံးရဲလာတဲ့အထိ ပြင်ဆင်တဲ့ အဆင့်ပါ။ ဒီ lesson နဲ့ နောက် lesson က ဒီ အဆင့်ထဲမှာ
+      ရှိပါတယ်။
+      [[mark:ph-23]] ဒုတိယ အဆင့် Acceleration မှာတော့ ဌာနတစ်ခုစီ ကိုယ့်နည်းကိုယ် သုံးနေတာတွေကို စုစည်းပြီး၊ အလုပ်ဖြစ်တဲ့
+      နည်းကို တခြားဌာနတွေဆီ မြန်မြန် ရောက်အောင် လုပ်ပါတယ်။ အဲဒီအတွက် Center of Excellence၊ အတိုကောက် CoE လို့ ခေါ်တဲ့
+      အဖွဲ့ငယ် တစ်ခုနဲ့၊ ဘာကို ခွင့်ပြုလဲ ရေးထားတဲ့ governance လိုပါတယ်။ တတိယ အဆင့် Expansion မှာတော့ အလုပ်ဖြစ်ပြီးသား
+      နေရာတွေကနေ AI နဲ့ ဖြေရှင်းမယ့် အလုပ်အသစ်၊ use case အသစ်တွေဆီ ဆက်သွားပါတယ်။
+      [[mark:ph-now]] Activation ရဲ့ ပထမ အလုပ်ကတော့ ဘယ်သူမှ login မဝင်ခင် လုပ်ရမယ့် ကြိုတင် ပြင်ဆင်မှုပါ။ လူ
+      ဘယ်သူတွေ လိုလဲ၊ ဘာတွေကို setup လုပ်ထားရမလဲ ဆိုတဲ့ မေးခွန်း နှစ်ခုပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-ph-title,
+          type: whiteboard.apply,
+          at: { mark: ph-title },
+          open: true,
+          clear: true,
+          upsertIds: [ph-title],
+        }
+      - {
+          id: draw-ph-1,
+          type: whiteboard.apply,
+          at: { mark: ph-1 },
+          upsertIds: [ph-b1, ph-l1, ph-d1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-ph-23,
+          type: whiteboard.apply,
+          at: { mark: ph-23 },
+          upsertIds: [ph-a1, ph-b2, ph-l2, ph-d2, ph-a2, ph-b3, ph-l3, ph-d3],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-ph-now,
+          type: whiteboard.apply,
+          at: { mark: ph-now },
+          upsertIds: [ph-now],
+          drawMs: 900,
+        }
+
+  - id: team
+    chapter: Success team
+    narration: >
+      [[mark:t-title]] ပထမ မေးခွန်းက လူပါ။ ဝန်ထမ်း ၄၃၀ ဆီ Claude ကို အဆင့်လိုက် ဖြန့်သုံးတဲ့ roll out ကို FDE
+      တစ်ယောက်တည်း လုပ်လို့ မရပါဘူး။ ဒီ အလုပ်အတွက် success team တစ်ခု ဖွဲ့ရပါမယ်။
+      [[mark:t-sponsor]] ပထမ တစ်ယောက်က sponsor ပါ။ ဘာကြောင့် ဒီ အလုပ်ကို လုပ်တာလဲ ဆိုတာကို ကုမ္ပဏီ တစ်ခုလုံးရှေ့မှာ
+      ပြောနိုင်ပြီး၊ ဆုံးဖြတ်ချက် လိုတဲ့အခါ ဆုံးဖြတ်ပေးနိုင်တဲ့သူပါ။ နေခြည် မှာတော့ အောင်အောင် ပါ။
+      [[mark:t-owner]] ဒုတိယ တစ်ယောက်က owner ပါ။ roll out ကို နေ့စဉ် run ပေးမယ့်သူပါ။ sponsor က ဘာကြောင့်လဲ
+      ကို ပြောရင်၊ owner က ဘယ်လိုလဲ၊ ဘယ်တော့လဲ ဆိုတာကို တာဝန်ယူပါတယ်။ နေခြည် က Internal Tools ရဲ့ team lead
+      ကို owner အဖြစ် ရွေးပြီး၊ သူ့ အလုပ်ချိန်ရဲ့ ထက်ဝက်ကို ဒီ အလုပ်အတွက် သီးသန့် ပေးထားပါတယ်။
+      [[mark:t-admin]] တတိယ တစ်ယောက်က administrator ပါ။ IT ဘက်ကနေ account၊ login နဲ့ setting တွေကို
+      ပြင်ပေးမယ့်သူပါ။ စတုတ္ထ တစ်ယောက်ကတော့ security တာဝန်ခံပါ။ data ဘယ်မှာ သိမ်းလဲ၊ ဘယ်လောက်ကြာ သိမ်းလဲ
+      ဆိုတာကို စကတည်းက ပါဝင် ဆုံးဖြတ်ရပါမယ်။ security ကို နောက်ဆုံးမှ မေးရင် launch တစ်ခုလုံး ရပ်သွားတတ်တာကို
+      Part ၉ မှာ ကြည့်ခဲ့ပြီးပါပြီ။
+      [[mark:t-champ]] နောက်ဆုံးက ဌာန တစ်ခုစီက champion တွေပါ။ champion ဆိုတာ ဌာနထဲမှာ ရှေ့ကနေ သုံးပြပြီး
+      တခြားသူတွေကို ကူညီပေးမယ့်သူပါ။ Claude Enterprise Administrator Guide က ဌာနတိုင်းမှာ champion နှစ်ယောက်
+      သုံးယောက်စီ ထားဖို့ အကြံပေးပါတယ်။ developer ဘက်မှာ Billing team lead မောင်မောင် ရှိပြီးသားပါ။ support
+      ဘက်အတွက်တော့ support manager လှလှ က သူ့ team ထဲက support agent နှစ်ယောက်ကို ရွေးပေးပါတယ်။
+    sources:
+      - {
+          title: "Claude Enterprise Administrator Guide (Anthropic Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-t-title,
+          type: whiteboard.apply,
+          at: { mark: t-title },
+          clear: true,
+          upsertIds: [t-title, t-center, t-center-l],
+          drawMs: 900,
+        }
+      - {
+          id: draw-t-sponsor,
+          type: whiteboard.apply,
+          at: { mark: t-sponsor },
+          upsertIds: [t-sponsor],
+          drawMs: 900,
+        }
+      - {
+          id: draw-t-owner,
+          type: whiteboard.apply,
+          at: { mark: t-owner },
+          upsertIds: [t-owner],
+          drawMs: 900,
+        }
+      - {
+          id: draw-t-admin,
+          type: whiteboard.apply,
+          at: { mark: t-admin },
+          upsertIds: [t-admin, t-sec],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-t-champ,
+          type: whiteboard.apply,
+          at: { mark: t-champ },
+          upsertIds: [t-champ],
+          drawMs: 900,
+        }
+
+  - id: provisioning
+    chapter: Login မဝင်ခင် setup
+    narration: >
+      [[mark:v-open]] ဒုတိယ မေးခွန်းက ဘယ်သူမှ login မဝင်ခင် ဘာတွေ setup လုပ်ထားရမလဲ ဆိုတာပါ။ account၊
+      ခွင့်ပြုချက်နဲ့ setting တွေကို ကြိုပြင်ဆင်တာကို provisioning လို့ ခေါ်ပါတယ်။ အရင်ဆုံး plan ကို ရွေးရပါမယ်။ ဒီ
+      lesson ကို ရေးတဲ့ အချိန်မှာ Claude ရဲ့ Team plan က seat ၁၅၀ အထိပဲ ရတာမို့၊ ဝန်ထမ်း ၄၃၀ အတွက် Enterprise plan
+      လိုပါတယ်။ လက်ရှိ ကန့်သတ်ချက်ကိုတော့ Claude Help Center ရဲ့ plan စာမျက်နှာတွေမှာ ကြည့်ပါ။
+      [[mark:v-1]] ပထမ ခေါင်းစဉ်က login ပါ။ single sign on၊ အတိုကောက် SSO ဆိုတာ ကုမ္ပဏီ account တစ်ခုတည်းနဲ့ login
+      ဝင်တာပါ။ Claude မှာ SAML ဒါမှမဟုတ် OIDC နဲ့ ချိတ်နိုင်ပြီး၊ မချိတ်ခင် ကုမ္ပဏီရဲ့ domain ဟာ ကိုယ့်ဟာ ဖြစ်ကြောင်း
+      DNS record တစ်ခုနဲ့ အရင် verify လုပ်ရပါတယ်။
+      [[mark:v-2]] ဒုတိယ ခေါင်းစဉ်က account တွေ ဝင်တာ ထွက်တာပါ။ နည်း သုံးမျိုး ရှိပါတယ်။ တစ်ယောက်ချင်း ဖိတ်တဲ့
+      invite၊ ပထမဆုံး login ဝင်တဲ့အခါ account ကို အလိုလို ဖွင့်ပေးတဲ့ just in time၊ အတိုကောက် JIT၊ ပြီးတော့ ကုမ္ပဏီရဲ့
+      ဝန်ထမ်းစာရင်းနဲ့ ချိတ်ပြီး ဝင်ရင် ဖွင့်၊ ထွက်ရင် ပိတ်ပေးတဲ့ SCIM ပါ။
+      [[mark:v-2b]] JIT က account ကို ဖွင့်ပေးပေမဲ့ ဘယ်တော့မှ အလိုအလျောက် မဖယ်ပေးပါဘူး။ SCIM ကတော့ Enterprise
+      မှာ ရပြီး Team plan မှာ မပါပါဘူး။
+      [[mark:v-3]] တတိယ ခေါင်းစဉ်က role ပါ။ Claude မှာ Primary Owner တစ်ယောက်တည်း၊ Owner၊ Admin နဲ့ User ဆိုတဲ့
+      role တွေ ရှိပြီး၊ Enterprise မှာ Custom role တွေလည်း ထပ်ဖွဲ့နိုင်ပါတယ်။ သတိထားရမှာက Admin က အကုန် မလုပ်နိုင်တာပါ။ data သိမ်းချိန် သတ်မှတ်တာ၊ ဘယ်သူ ဘာလုပ်ခဲ့လဲ
+      ဆိုတဲ့ audit log ကို ထုတ်တာလို အလုပ်တွေကို Owner ဒါမှမဟုတ် Primary Owner ပဲ လုပ်နိုင်ပါတယ်။
+      [[mark:v-4]] စတုတ္ထ ခေါင်းစဉ်က ဘယ် feature၊ ဘယ် connector တွေကို ဖွင့်မလဲ ဆိုတာပါ။ connector ဆိုတာ Claude ကို
+      တခြား tool၊ data တွေနဲ့ ချိတ်ပေးတဲ့ အဆက်ပါ။ Anthropic ရဲ့ Enterprise consumption guide က Claude Code လို
+      အသုံးများတဲ့ feature တွေကို ပထမနေ့မှာ လူတိုင်းကို ဖွင့်ပေးတာဟာ မမျှော်လင့်တဲ့ အသုံးစရိတ်ကို အမြန်ဆုံး
+      ဖြစ်စေတယ်လို့ သတိပေးပါတယ်။
+      [[mark:v-5]] ပဉ္စမ ခေါင်းစဉ်က data နဲ့ cost ပါ။ Enterprise မှာ data ကို ဘယ်လောက်ကြာ သိမ်းမလဲ သတ်မှတ်နိုင်ပြီး၊
+      အနည်းဆုံး ရက် ၃၀ ပါ။ မသတ်မှတ်ရင်တော့ အချိန်အကန့်အသတ် မရှိ သိမ်းထားပါတယ်။ Team နဲ့ Enterprise plan မှာ
+      prompt နဲ့ code ကို Anthropic က model train လုပ်ဖို့ မသုံးပါဘူး။
+      [[mark:v-5b]] cost ဘက်မှာတော့ လက်ရှိ Enterprise plan က seat တစ်မျိုးတည်း ရှိပြီး၊ အသုံးပြုမှု အားလုံးကို API ဈေးနှုန်းနဲ့
+      တွက်ပါတယ်။ ကုမ္ပဏီ တစ်ခုလုံးအတွက် spend limit တစ်ခုတည်း ထားရင် ပြည့်သွားတဲ့နေ့မှာ လူတိုင်း တစ်ပြိုင်တည်း
+      ရပ်သွားမှာမို့၊ ဌာနအလိုက်နဲ့ လူတစ်ယောက်ချင်းအလိုက် limit တွေနဲ့ စဖို့ အဲဒီ guide က အကြံပေးပါတယ်။
+    sources:
+      - {
+          title: "Claude Help Center: What is the Team plan?",
+          url: "https://support.claude.com/en/articles/9266767-what-is-the-team-plan",
+        }
+      - {
+          title: "Claude Help Center: Setting up JIT or SCIM provisioning",
+          url: "https://support.claude.com/en/articles/13133195-setting-up-jit-or-scim-provisioning",
+        }
+      - {
+          title: "Claude Help Center: Claude Enterprise consumption guide",
+          url: "https://support.claude.com/en/articles/14782391-claude-enterprise-consumption-guide",
+        }
+      - {
+          title: "Claude Help Center: What is the Enterprise plan?",
+          url: "https://support.claude.com/en/articles/9797531-what-is-the-enterprise-plan",
+        }
+      - {
+          title: "Claude Help Center: Roles and permissions",
+          url: "https://support.claude.com/en/articles/9267276-roles-and-permissions",
+        }
+      - {
+          title: "Claude Code docs: admin setup",
+          url: "https://code.claude.com/docs/en/admin-setup",
+        }
+    actions:
+      - {
+          id: close-team,
+          type: whiteboard.apply,
+          at: { mark: v-open, offsetMs: -1400 },
+          open: false,
+        }
+      - {
+          id: show-prov,
+          type: slide.show,
+          at: { mark: v-open, offsetMs: -600 },
+          slideId: provisioning,
+        }
+      - { id: point-v-1, type: slide.point, at: { mark: v-1 }, target: { x: 0.15, y: 0.35 } }
+      - { id: point-v-2, type: slide.point, at: { mark: v-2 }, target: { x: 0.15, y: 0.47 } }
+      - { id: point-v-3, type: slide.point, at: { mark: v-3 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-v-4, type: slide.point, at: { mark: v-4 }, target: { x: 0.15, y: 0.71 } }
+      - { id: point-v-5, type: slide.point, at: { mark: v-5 }, target: { x: 0.15, y: 0.83 } }
+
+  - id: checklist
+    chapter: Checklist ကို ချရေးခြင်း
+    narration: >
+      [[mark:c-open]] ဒါတွေကို နေခြည် ရဲ့ activation checklist အဖြစ် ချရေးကြည့်ရအောင်။
+      [[mark:c-plan]] plan ကို ထိပ်ဆုံးမှာ လနဲ့တကွ ရေးထားပါတယ်။ plan နဲ့ ကန့်သတ်ချက်တွေက မကြာခဏ
+      ပြောင်းတတ်လို့ပါ။
+      [[mark:type-team]] ပထမ အပိုင်းက success team ပါ။ နာမည်နဲ့ role ကို တိတိကျကျ ရေးထားမှ ပြဿနာ တစ်ခု
+      ပေါ်လာတဲ့အခါ ဘယ်သူ့ကို မေးရမလဲ ဆိုတာ လူတိုင်း သိပါတယ်။
+      [[mark:type-login]] provisioning ရဲ့ ပထမ တစ်ကြောင်းက login ပါ။ domain ကို verify လုပ်ပြီးမှ SSO ကို ချိတ်ပါမယ်။
+      [[mark:type-account]] account အတွက်တော့ SCIM ကို HR ရဲ့ ဝန်ထမ်းစာရင်းနဲ့ ချိတ်ပါမယ်။ ဝန်ထမ်း တစ်ယောက်
+      ထွက်သွားတဲ့နေ့မှာ သူ့ Claude account ပါ အလိုလို ပိတ်သွားမှာပါ။
+      [[mark:type-role]] role မှာတော့ အောင်အောင် က Primary Owner ဖြစ်ပြီး၊ roll out ကို run တဲ့ owner နဲ့ security
+      တာဝန်ခံက Owner role ယူပါတယ်။ IT ကတော့ Admin ပါ။
+      [[mark:type-feature]] feature မှာ ပထမ လအတွက် Claude Code ကို developer တွေကိုပဲ ဖွင့်ပေးပါမယ်။ connector
+      အသစ် တစ်ခုခုကိုလည်း security က ခွင့်ပြုမှ ဖွင့်ပါမယ်။
+      [[mark:type-data]] နောက်ဆုံး တစ်ကြောင်းက data နဲ့ cost ပါ။ security တာဝန်ခံနဲ့ တိုင်ပင်ပြီး data ကို ရက် ၉၀
+      သိမ်းဖို့ ဆုံးဖြတ်ထားပြီး၊ spend limit ကို ဌာနအလိုက် ခွဲထားပါတယ်။
+    sources:
+      - {
+          title: "Claude Help Center: Setting up single sign-on (SSO)",
+          url: "https://support.claude.com/en/articles/13132885-setting-up-single-sign-on-sso",
+        }
+      - {
+          title: "Claude Help Center: Roles and permissions",
+          url: "https://support.claude.com/en/articles/9267276-roles-and-permissions",
+        }
+      - {
+          title: "Claude Help Center: Custom data retention controls for Enterprise plans",
+          url: "https://support.claude.com/en/articles/10440198-custom-data-retention-controls-for-enterprise-plans",
+        }
+    actions:
+      - { id: close-prov, type: slide.close, at: { mark: c-open } }
+      - {
+          id: open-checklist,
+          type: workspace.openFile,
+          at: { afterAction: close-prov },
+          path: notebook/53-activation-checklist.md,
+        }
+      - id: sel-plan
+        type: editor.select
+        at: { mark: c-plan }
+        target:
+          file: notebook/53-activation-checklist.md
+          text: "plan: Claude Enterprise (Team plan က seat 150 အထိပဲ · 2026-11)"
+      - id: type-team
+        type: editor.type
+        at: { mark: type-team }
+        cadence: line-by-line
+        target: { file: notebook/53-activation-checklist.md, after: "## Success team\n" }
+        text: "- sponsor: CTO အောင်အောင် · owner: Internal Tools team lead (အချိန် 50 %)\n- admin: IT · security တာဝန်ခံ · champion: ဌာနတိုင်းက 2–3 ယောက်\n"
+      - id: type-login
+        type: editor.type
+        at: { mark: type-login }
+        cadence: line-by-line
+        target:
+          { file: notebook/53-activation-checklist.md, after: "## Provisioning · login မဝင်ခင်\n" }
+        text: "- login: domain verify လုပ်ပြီးမှ SSO ချိတ်\n"
+      - id: type-account
+        type: editor.type
+        at: { mark: type-account }
+        cadence: line-by-line
+        target: { file: notebook/53-activation-checklist.md, after: "SSO ချိတ်\n" }
+        text: "- account: SCIM ကို HR စာရင်းနဲ့ ချိတ်။ ထွက်တဲ့နေ့ ပိတ် (JIT က မဖယ်ပေး)\n"
+      - id: type-role
+        type: editor.type
+        at: { mark: type-role }
+        cadence: line-by-line
+        target: { file: notebook/53-activation-checklist.md, after: "(JIT က မဖယ်ပေး)\n" }
+        text: "- role: Primary Owner = CTO · Owner = owner၊ security · Admin = IT\n"
+      - id: type-feature
+        type: editor.type
+        at: { mark: type-feature }
+        cadence: line-by-line
+        target: { file: notebook/53-activation-checklist.md, after: "Admin = IT\n" }
+        text: "- feature: ပထမ လ Claude Code က developer ပဲ · connector အသစ်က security ခွင့်ပြုမှ\n"
+      - id: type-data
+        type: editor.type
+        at: { mark: type-data }
+        cadence: line-by-line
+        target: { file: notebook/53-activation-checklist.md, after: "security ခွင့်ပြုမှ\n" }
+        text: "- data နဲ့ cost: retention 90 ရက် · spend limit ဌာနအလိုက်\n"
+      - id: expect-account
+        type: expect.file
+        at: { afterAction: type-data }
+        path: notebook/53-activation-checklist.md
+        contains: "- account: SCIM ကို HR စာရင်းနဲ့ ချိတ်။ ထွက်တဲ့နေ့ ပိတ် (JIT က မဖယ်ပေး)\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဒီ checklist ကို ရေးနေတဲ့ အပတ်မှာပဲ လှလှ က support agent ၄၅ ယောက်ကို အမြန်ဆုံး
+      စသုံးစေချင်ပါတယ်။ finance ဌာနကလည်း သူတို့ကို အရင် ပေးပါလို့ တောင်းဆိုလာပါတယ်။ owner အနေနဲ့ ဘာကို အရင်
+      ဆုံးဖြတ်သင့်မလဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက ဘယ်ဌာနကို အရင် ပေးမလဲ ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုက ဝန်ထမ်း ဝင်လာရင် account ကို ဘယ်လို ဖွင့်မလဲ၊ ထွက်သွားရင် ဘယ်လို ပိတ်မလဲ ဆိုတာပါ။
+      lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ ဘယ်ဌာနကို အရင် ပေးပေး၊ လူတိုင်းက
+      account လမ်းကြောင်း တစ်ခုတည်းကနေ ဝင်ရလို့ပါ။ အဲဒါ မရှိခင် လက်နဲ့ ဖိတ်ပြီး စလိုက်ရင်၊ နောက်ပိုင်း ထွက်သွားတဲ့
+      ဝန်ထမ်းတွေရဲ့ account တွေက တစ်ယောက်ယောက် သတိရတဲ့အထိ ပွင့်နေပြီး customer data ပါတဲ့ chat တွေကို ဆက်ဖွင့်ကြည့်နိုင်ပါတယ်။
+      မုန်တိုင်းကျတဲ့ညကလိုပဲ ဘယ်သူ ဘာကို မြင်နေလဲ ဆိုတာ ဘယ်သူမှ မသိတော့ပါဘူး။ ဘယ်ဌာနကို အရင် ပေးမလဲ ဆိုတာကတော့ အပတ်တိုင်း ပြန်ပြင်လို့ ရပါတယ်။
+      [[mark:q-rule]] ဒါကြောင့် ဌာနတွေရဲ့ အစဉ်က ပြင်လို့ရတဲ့ ဆုံးဖြတ်ချက်ပါ။ account ဖွင့်ပိတ်တဲ့ လမ်းကြောင်းကတော့
+      အားလုံးရဲ့ အခြေခံမို့ အရင် ဆုံးဖြတ်ပါ။
+    sources:
+      - {
+          title: "Claude Help Center: Setting up JIT or SCIM provisioning",
+          url: "https://support.claude.com/en/articles/13133195-setting-up-jit-or-scim-provisioning",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1],
+          drawMs: 900,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် ကုမ္ပဏီအတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် ကုမ္ပဏီမှာ AI tool တစ်ခုကို ကုမ္ပဏီ
+      တစ်ခုလုံးအတွက် roll out လုပ်မယ်ဆိုရင် success team မှာ ဘယ်သူတွေ ပါမလဲ ဆိုတာ ဒီ နှစ်ကြောင်းအတိုင်း
+      ရေးကြည့်ပါ။ နာမည် မသိရင် role ကိုပဲ ရေးပါ။
+      [[mark:turn-2]] sponsor နဲ့ owner ကို တစ်ယောက်တည်း မဖြစ်စေဖို့ သတိထားပါ။ owner အတွက် အချိန် ဘယ်လောက်
+      ပေးမလဲ ဆိုတာလည်း ထည့်ရေးပါ။ အချိန် မပေးထားတဲ့ owner ဆိုတာ နာမည်သက်သက်ပဲ ဖြစ်သွားတတ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Enterprise Administrator Guide (Anthropic Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-team
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/53-activation-checklist.md
+          text: "- sponsor: CTO အောင်အောင် · owner: Internal Tools team lead (အချိန် 50 %)\n- admin: IT · security တာဝန်ခံ · champion: ဌာနတိုင်းက 2–3 ယောက်"
+      - id: sel-time
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/53-activation-checklist.md
+          text: "(အချိန် 50 %)"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ ကုမ္ပဏီ တစ်ခုလုံး Claude ကို စသုံးဖို့ ပထမဆုံး လိုတာက လူနဲ့ setup ပါ။ လူဘက်မှာ
+      sponsor၊ owner၊ administrator၊ security တာဝန်ခံနဲ့ ဌာနတိုင်းက champion တွေ ပါတဲ့ success team ရှိရပါမယ်။
+      [[mark:recap-2]] setup ဘက်မှာတော့ login၊ account ဖွင့်ပိတ်၊ role၊ feature နဲ့ data၊ cost ဆိုတဲ့ ခေါင်းစဉ်
+      ငါးခုကို ဘယ်သူမှ login မဝင်ခင် ဆုံးဖြတ်ထားရပါမယ်။ ဒါမှ မုန်တိုင်းကျတဲ့ညကလို ဘယ်သူ ဘာသုံးနေလဲ မသိတာမျိုး
+      ထပ်မဖြစ်တော့မှာပါ။
+      [[mark:next]] ဒါပေမဲ့ account တွေ အသင့်ဖြစ်ရုံနဲ့ လူတွေ သုံးလာမှာ မဟုတ်ပါဘူး။ နောက် lesson မှာတော့ AI
+      အမှားအတွက် အပြစ်တင်ခံရမှာ၊ အလုပ်ပြုတ်မှာကို စိုးရိမ်နေတဲ့ support agent တွေအတွက် culture ကို ပြင်ဆင်တာနဲ့
+      launch ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/53-activation-checklist.md
+          text: "## Success team"
+      - id: sel-prov
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/53-activation-checklist.md
+          text: "## Provisioning · login မဝင်ခင်"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
