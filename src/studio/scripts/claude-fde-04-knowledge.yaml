@@ -1,0 +1,643 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-04-knowledge
+  title: "Claude FDE 04: Model ရဲ့ knowledge"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/04-where-truth-lives.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      examples/04-two-drafts.md: |
+        # Example: chat AI နဲ့ ရေးခဲ့တဲ့ မူကြမ်း နှစ်စောင် (ticket နှစ်ခု)
+
+        ## Ticket 1: game ဆော့ရင် ထစ်ထစ် ဖြစ်တယ်
+
+        ဂိမ်းဆော့ရင် ထစ်တာက packet loss ကြောင့် ဖြစ်နိုင်ပါတယ်။
+        packet loss ဆိုတာ ပို့လိုက်တဲ့ data အစိတ်အပိုင်း တချို့ လမ်းမှာ ပျောက်သွားတာပါ။
+        Wi-Fi အစား cable နဲ့ ချိတ်ပြီး ထပ်စမ်းကြည့်ပေးပါ။
+
+        ## Ticket 2: ဈေးသက်သာတဲ့ plan ရှိလား
+
+        ဈေးအသက်သာဆုံးက Home Lite plan ပါ။ တစ်လ 30,000 ကျပ်ပါ။
+        ဒီနေ့ပဲ ပြောင်းပေးလို့ ရပါတယ်။
+      notebook/04-where-truth-lives.md: |
+        # အမှန် ဘယ်မှာ ရှိလဲ
+
+        | customer ရဲ့ မေးခွန်း | အမှန် ရှိတဲ့ နေရာ | model ဘယ်လို ရမလဲ |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: fill-gaps
+      contentType: html
+      name: မသိတဲ့ နေရာကို ဖြည့်ခြင်း
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Fact မရှိတဲ့ နေရာ မဖြည့်ခိုင်းနဲ့</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term wide blue">Fact ကို ရှေ့မှာ ချ</span>document၊ search၊ tool</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term wide orange">မသိရင် ပြောခွင့်</span>မသိဘူး ဆိုတာ မှန်တဲ့ အဖြေ</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term wide green">ရင်းမြစ် တောင်း</span>အချက်တိုင်းမှာ ကိုးကားချက်</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — where the true answer lives: three dashed zones (scopes), green the
+    # one the model can answer from its own knowledge, blue the two that live in
+    # နေခြည်'s systems; white example questions; violet how the model gets each.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 780,
+        height: 45,
+        text: "အမှန် ဘယ်မှာ ရှိလဲ",
+        fontSize: 36,
+      }
+    - {
+        id: z-b1,
+        kind: rectangle,
+        x: 290,
+        y: 225,
+        width: 790,
+        height: 110,
+        strokeStyle: dashed,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-h1,
+        kind: text,
+        x: 305,
+        y: 237,
+        width: 370,
+        height: 35,
+        text: "public၊ cutoff မတိုင်ခင်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 690,
+        y: 237,
+        width: 385,
+        height: 35,
+        text: "packet loss ဆိုတာ ဘာလဲ",
+        fontSize: 28,
+      }
+    - {
+        id: z-w1,
+        kind: text,
+        x: 690,
+        y: 287,
+        width: 385,
+        height: 35,
+        text: "training ကနေ သိ",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: z-b2,
+        kind: rectangle,
+        x: 290,
+        y: 350,
+        width: 790,
+        height: 110,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: z-h2,
+        kind: text,
+        x: 305,
+        y: 362,
+        width: 370,
+        height: 35,
+        text: "နေခြည် ရဲ့ document",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 690,
+        y: 362,
+        width: 385,
+        height: 35,
+        text: "Home Lite ရောင်းသေးလား",
+        fontSize: 28,
+      }
+    - {
+        id: z-w2,
+        kind: text,
+        x: 690,
+        y: 412,
+        width: 385,
+        height: 35,
+        text: "document ကို ထည့်ပေး",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: z-b3,
+        kind: rectangle,
+        x: 290,
+        y: 475,
+        width: 790,
+        height: 110,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: z-h3,
+        kind: text,
+        x: 305,
+        y: 487,
+        width: 370,
+        height: 35,
+        text: "အခုချိန်မှာပဲ မှန်",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: z-q3,
+        kind: text,
+        x: 690,
+        y: 487,
+        width: 385,
+        height: 35,
+        text: "သာကေတ အခု လိုင်းကျလား",
+        fontSize: 28,
+      }
+    - {
+        id: z-w3,
+        kind: text,
+        x: 690,
+        y: 537,
+        width: 385,
+        height: 35,
+        text: "tool နဲ့ NMS ကို မေး",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "model က ကိုယ်တိုင် ဖြေနိုင်တာ ဘယ်ဟာလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 780,
+        height: 35,
+        text: "က) Wi-Fi 2.4 GHz နဲ့ 5 GHz ဘာကွာလဲ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 780,
+        height: 35,
+        text: "ခ) ဒီမနက် ပေးတဲ့ ငွေ ရောက်ပြီလား",
+        fontSize: 28,
+      }
+    - {
+        id: q-a-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 275,
+        width: 480,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-a-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 800,
+        y: 263,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-rule,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 780,
+        height: 35,
+        text: "ပြောင်းတတ်တဲ့ fact ⇒ model ရှေ့ကို ယူလာ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9304
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: two-drafts
+    chapter: မှန်တဲ့ မူကြမ်း၊ မှားတဲ့ မူကြမ်း
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ model က စာကို token တစ်ခုချင်း ခန့်မှန်းပြီး ရေးတာမို့၊ ချောမွေ့တဲ့ စာက စစ်ပြီးသား စာ
+      မဟုတ်ကြောင်း ကြည့်ခဲ့ပါတယ်။ ဒီနေ့တော့ ဒီ ပြဿနာကို နောက်တစ်ဆင့် တက်ကြည့်ပါမယ်။
+      [[mark:ex-open]] support manager လှလှ စုပေးထားတဲ့ မူကြမ်းတွေထဲမှာ ticket နှစ်ခုအတွက် ရေးထားတဲ့ ဥပမာ နှစ်စောင် ရှိပါတယ်။
+      [[mark:sel-good]] ပထမ တစ်စောင်က game ဆော့ရင် ထစ်တယ် ဆိုတဲ့ customer ကို packet loss အကြောင်း ရှင်းပြထားတာပါ။
+      ရှင်းလင်းချက်က မှန်ပြီး၊ ပေးထားတဲ့ အကြံကလည်း လက်တွေ့ကျပါတယ်။ နေခြည် ရဲ့ network engineer တွေ ဖတ်ကြည့်တော့
+      ပြင်စရာ မတွေ့ပါဘူး။
+      [[mark:sel-bad]] ဒုတိယ တစ်စောင်ကတော့ ဈေးသက်သာတဲ့ plan ကို မေးတဲ့ customer ကို Home Lite plan ကို ရွေးခိုင်းထားပါတယ်။
+      ဒါပေမဲ့ Home Lite ကို နေခြည် က ဩဂုတ်လကတည်းက ရောင်းတာ ရပ်ထားပြီ ဖြစ်ပြီး၊ အခု ဈေးအသက်သာဆုံး plan
+      ကလည်း ကျပ် ၂၅၀၀၀ ပါ။
+      [[mark:puzzle]] model တစ်ခုတည်းက မူကြမ်း တစ်စောင်ကို ပြည့်ပြည့်စုံစုံ မှန်အောင် ရေးနိုင်ပြီး၊ နောက်တစ်စောင်ကို
+      ယုံကြည်မှု အပြည့်နဲ့ မှားရေးတာ ဘာကြောင့်လဲ။ အဖြေကတော့ model ရဲ့ knowledge၊ ဆိုလိုတာက model သိထားတဲ့
+      အရာတွေ ဘယ်ကနေ လာပြီး ဘယ်မှာ ဆုံးလဲ ဆိုတာ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+    actions:
+      - {
+          id: open-ex,
+          type: workspace.openFile,
+          at: { mark: ex-open },
+          path: examples/04-two-drafts.md,
+        }
+      - id: sel-good
+        type: editor.select
+        at: { mark: sel-good }
+        target:
+          file: examples/04-two-drafts.md
+          text: "packet loss ဆိုတာ ပို့လိုက်တဲ့ data အစိတ်အပိုင်း တချို့ လမ်းမှာ ပျောက်သွားတာပါ။"
+      - id: sel-bad
+        type: editor.select
+        at: { mark: sel-bad }
+        target:
+          file: examples/04-two-drafts.md
+          text: "ဈေးအသက်သာဆုံးက Home Lite plan ပါ။ တစ်လ 30,000 ကျပ်ပါ။"
+
+  - id: cutoff
+    chapter: Model ဘာကို သိလဲ
+    narration: >
+      [[mark:z-open]] model ရဲ့ knowledge က training စာသားကနေ လာပါတယ်။ training ဆိုတာ model ကို စာတွေနဲ့ သင်ပေးတဲ့
+      လုပ်ငန်းစဉ်ပါ။ training စာသားကို ရက်စွဲ တစ်ခုမှာ ရပ်ပြီး စုထားတာမို့၊ model ရဲ့ သင်ယူမှုလည်း အဲဒီ ရက်စွဲမှာ
+      ရပ်သွားပါတယ်။ အဲဒီ ရက်စွဲကို knowledge cut off လို့ ခေါ်ပါတယ်။
+      [[mark:z-dates]] Anthropic က model တစ်ခုစီအတွက် ရက်စွဲ နှစ်မျိုး ပြထားပါတယ်။ model ရဲ့ knowledge အပြည့်စုံဆုံး
+      ယုံကြည်ရဆုံး ဖြစ်တဲ့ ရက်စွဲနဲ့၊ training မှာ သုံးခဲ့တဲ့ data ရဲ့ ပိုကျယ်တဲ့ အပိုင်းအခြား ဆိုပြီးပါ။ ဒီ lesson ကို
+      ရေးတဲ့ အချိန်မှာ နောက်ဆုံး Claude model တွေအတွက် နှစ်ခုလုံးက ၂၀၂၆ ခုနှစ် ဇွန်လ ပါ။ အခု တန်ဖိုးကိုတော့
+      Claude docs ရဲ့ Models overview page မှာ ကြည့်လို့ ရပါတယ်။
+      [[mark:z-1]] ဒီတော့ model က ကိုယ်တိုင် ကောင်းကောင်း ဖြေနိုင်တာက public စာတွေထဲမှာ အများကြီး ပါပြီး၊ cut off
+      မတိုင်ခင်ကတည်းက မပြောင်းလဲတဲ့ အရာတွေပါ။ packet loss ဆိုတာ ဘာလဲ ဆိုတာက ဒီလို မေးခွန်းမျိုးပါ။ network
+      စာအုပ်တွေ၊ forum တွေ၊ article တွေ အများကြီးမှာ ပါပြီး၊ နှစ်တွေကြာလည်း အဓိပ္ပာယ် မပြောင်းပါဘူး။ ဒါကြောင့်
+      ပထမ မူကြမ်းက မှန်နေတာပါ။
+    sources:
+      - {
+          title: "Claude Docs: Models overview",
+          url: "https://platform.claude.com/docs/en/models/overview",
+        }
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+    actions:
+      - {
+          id: draw-z-open,
+          type: whiteboard.apply,
+          at: { mark: z-open },
+          open: true,
+          clear: true,
+          upsertIds: [z-title],
+        }
+      - {
+          id: draw-z-1,
+          type: whiteboard.apply,
+          at: { mark: z-1 },
+          upsertIds: [z-b1, z-h1, z-q1, z-w1],
+          drawMs: 2000,
+        }
+
+  - id: private-and-now
+    narration: >
+      [[mark:z-2]] ဒုတိယ အမျိုးအစားက နေခြည် ရဲ့ ကိုယ်ပိုင် document တွေထဲမှာပဲ ရှိတဲ့ အရာတွေပါ။ plan စာရင်း၊ ငွေ ပြန်အမ်းတဲ့
+      စည်းကမ်း၊ Knowledge base article တွေ ဆိုတာ ကုမ္ပဏီ အတွင်းမှာပဲ ရှိတာမို့ training စာသားထဲ မပါပါဘူး။ public page
+      ပေါ်မှာ တစ်ခါက ပါခဲ့ရင်တောင် cut off နောက်ပိုင်း ပြောင်းသွားတာကို model က မသိပါဘူး။ Home Lite ကို ရပ်လိုက်တာက
+      ဒီလို ပြောင်းလဲမှု မျိုးပါ။
+      [[mark:z-3]] တတိယ အမျိုးအစားက အခုချိန်မှာပဲ မှန်တဲ့ အရာတွေပါ။ သာကေတ မြို့နယ်မှာ အခု လိုင်းကျနေလား၊ ဒီ customer
+      ရဲ့ ဒီလ bill ပေးပြီးပြီလား ဆိုတာမျိုးပါ။ ဒီ အဖြေတွေက မိနစ်တိုင်း ပြောင်းနိုင်ပြီး NMS တို့ Billing တို့ထဲမှာပဲ ရှိပါတယ်။
+      ဘယ်လောက် training လုပ်ထားတဲ့ model မဆို ဘာမှ ထည့်မပေးရင် ဒီနေ့ ဖြစ်နေတာကို မသိနိုင်ပါဘူး။
+      [[mark:z-how]] ကျန်တဲ့ မေးခွန်းက model ဆီကို အဲဒီ အမှန် ဘယ်လို ရောက်လာမလဲ ဆိုတာပါ။ ပထမ အမျိုးအစားက
+      training ကနေ ရပြီးသား ဖြစ်ပါတယ်။ ဒုတိယ အမျိုးအစားအတွက်တော့ မေးခွန်းနဲ့ သက်ဆိုင်တဲ့ document ကို ရှာပြီး
+      model ရှေ့မှာ ချပေးရပါမယ်။ တတိယ အမျိုးအစားအတွက်တော့ NMS လို system ကို အခုချိန်မှာ မေးပေးမယ့် tool တစ်ခု
+      လိုပါတယ်။ tool ဆိုတာ model က တောင်းဆိုရင် program က လုပ်ပေးတဲ့ လုပ်ဆောင်ချက် တစ်ခုပါ။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+      - {
+          title: "Claude Docs: Web search tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool",
+        }
+    actions:
+      - {
+          id: draw-z-2,
+          type: whiteboard.apply,
+          at: { mark: z-2 },
+          upsertIds: [z-b2, z-h2, z-q2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-z-3,
+          type: whiteboard.apply,
+          at: { mark: z-3 },
+          upsertIds: [z-b3, z-h3, z-q3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-z-how,
+          type: whiteboard.apply,
+          at: { mark: z-how },
+          upsertIds: [z-w2, z-w3],
+          drawMs: 1200,
+        }
+
+  - id: filling-gaps
+    chapter: မသိတဲ့ အခါ
+    narration: >
+      [[mark:g-open]] ဒါဆို model မသိတဲ့ မေးခွန်းကို မေးလိုက်ရင် ဘာဖြစ်လဲ။ model က မသိဘူးလို့ ပြောတာထက်
+      ဖြစ်နိုင်ခြေ ရှိတဲ့ စာနဲ့ ကွက်လပ်ကို ဖြည့်ရေးတတ်ပါတယ်။ ပြီးခဲ့တဲ့ lesson မှာ ကြည့်ခဲ့သလို ရှေ့က စာနဲ့
+      ကိုက်ညီမယ့် token ကို ဆက်ရေးတာမို့၊ customer service စာ တစ်စောင်မှာ plan နာမည်နဲ့ ဈေး ပါလာတာ ပုံမှန်ပါပဲ။
+      ဒီလို မသိတာကို သိသလို ချောချောမွေ့မွေ့ ရေးလိုက်တာကို hallucination လို့ ခေါ်ပါတယ်။
+      [[mark:g-why]] Home Lite ဘယ်က ရောက်လာလဲ ဆိုတာ ကိုယ်တို့ သေချာ မသိနိုင်ပါဘူး။ ဈေးနှုန်း page အဟောင်း တစ်ခု
+      training ထဲ ပါခဲ့တာ ဖြစ်နိုင်သလို၊ ဖြစ်နိုင်ခြေ များတဲ့ နာမည်နဲ့ ဂဏန်း တစ်ခုကို ဖြည့်ရေးလိုက်တာလည်း ဖြစ်နိုင်ပါတယ်။
+      ဘယ်လိုပဲ ဖြစ်ဖြစ် ပြင်ရမှာက တူတူပါပဲ။
+      [[mark:g-1]] ပထမ နည်းက fact ကို model ရှေ့မှာ ချပေးတာပါ။ document ကို ရှာပြီး ထည့်ပေးတာ၊ web search နဲ့
+      နောက်ဆုံး အချက်အလက်ကို ယူခိုင်းတာ၊ tool နဲ့ system ကို မေးခိုင်းတာ စတဲ့ နည်းတွေ ရှိပါတယ်။ ဒါပေမဲ့ ရှာလာတဲ့
+      document မှားနေရင် အဖြေလည်း မှားမှာမို့၊ ထည့်ပေးတာ မှန်ဖို့ အရေးကြီးပါတယ်။
+      [[mark:g-2]] ဒုတိယ နည်းက မသိရင် မသိဘူးလို့ ပြောခွင့် ပေးထားတာပါ။ Anthropic ရဲ့ docs အရ ဒီလို ခွင့်ပြုချက်
+      တစ်ကြောင်းက မှားတဲ့ အချက်အလက်ကို သိသိသာသာ လျှော့ချနိုင်ပါတယ်။ support agent အတွက်တော့ ဒါကို မသိဘူး၊
+      စစ်ပေးပါ ဆိုတဲ့ မူကြမ်းက ယုံကြည်မှု အပြည့်နဲ့ မှားနေတဲ့ မူကြမ်းထက် အများကြီး ပိုအသုံးဝင်ပါတယ်။
+      [[mark:g-3]] တတိယ နည်းက ရင်းမြစ် တောင်းတာပါ။ ရေးလိုက်တဲ့ အချက် တိုင်းအတွက် ပေးထားတဲ့ document ထဲက
+      ကိုးကားချက်ကို ပြခိုင်းပြီး၊ ကိုးကားချက် မရှိတဲ့ အချက်ကို ပြန်ရုတ်ခိုင်းတာပါ။ ဒီ နည်းတွေက hallucination ကို
+      လျှော့ချပေးပေမဲ့ လုံးဝ မပျောက်စေပါဘူး။ အရေးကြီးတဲ့ အချက်ကို လူက ဆက်စစ်ရပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Reduce hallucinations",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations",
+        }
+      - {
+          title: "Claude Docs: Web search tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool",
+        }
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+    actions:
+      - { id: close-zones, type: whiteboard.apply, at: { mark: g-open }, open: false }
+      - { id: show-gaps, type: slide.show, at: { mark: g-1, offsetMs: -1200 }, slideId: fill-gaps }
+      - {
+          id: point-gap-1,
+          type: slide.point,
+          at: { mark: g-1, offsetMs: 400 },
+          target: { x: 0.15, y: 0.43 },
+        }
+      - { id: point-gap-2, type: slide.point, at: { mark: g-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-gap-3, type: slide.point, at: { mark: g-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ Reply assistant ကို ဘာမှ ထည့်မပေးဘဲ၊ model ရဲ့ ကိုယ်ပိုင် knowledge
+      နဲ့ပဲ ဖြေခိုင်းမယ် ဆိုပါစို့။ အောက်က မေးခွန်း နှစ်ခုထဲက ဘယ်ဟာကို ယုံကြည်လို့ ရလောက်အောင် ဖြေနိုင်မလဲ။
+      [[mark:q-a]] ပထမ မေးခွန်းက Wi-Fi ရဲ့ ၂ ဒသမ ၄ GHz နဲ့ ၅ GHz ဘာကွာလဲ ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ မေးခွန်းက customer တစ်ယောက် ဒီမနက် ပေးလိုက်တဲ့ ငွေ နေခြည် ဆီ ရောက်ပြီလား ဆိုတာပါ။ lesson
+      ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ပထမ မေးခွန်းပါ။ ဘာကြောင့်လဲဆိုတော့ Wi-Fi band တွေရဲ့ ကွာခြားချက်က public
+      စာတွေထဲ အများကြီး ပါပြီး cut off မတိုင်ခင်ကတည်းက မပြောင်းတဲ့ အချက်မို့ပါ။ ဒုတိယ မေးခွန်းရဲ့ အဖြေကတော့
+      Billing ထဲမှာပဲ ရှိပြီး၊ ဒီမနက်ကမှ ဖြစ်ခဲ့တာပါ။ model က ဖြေမယ်ဆိုရင် ကွက်လပ်ကို ဖြည့်ရေးနေတာ ဖြစ်မှာပါ။
+      [[mark:q-rule]] ဒါကြောင့် မေးခွန်း တိုင်းအတွက် အမှန်က ဘယ်မှာ ရှိလဲလို့ အရင် မေးပါ။ ပြောင်းလဲတတ်တဲ့ fact
+      ဖြစ်ရင် model ရှေ့ကို ယူလာပေးရပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Models overview",
+          url: "https://platform.claude.com/docs/en/models/overview",
+        }
+      - {
+          title: "Claude Docs: Reduce hallucinations",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations",
+        }
+    actions:
+      - { id: close-gaps, type: slide.close, at: { mark: quiz } }
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { afterAction: close-gaps },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-a-line, q-a-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-rule],
+          drawMs: 1200,
+        }
+
+  - id: where-truth-lives
+    chapter: အမှန် ရှိတဲ့ နေရာ
+    narration: >
+      [[mark:w-open]] ဒီ မေးခွန်းကို နေခြည် ရဲ့ customer တွေ မကြာခဏ မေးတဲ့ မေးခွန်းတွေနဲ့ table တစ်ခုထဲမှာ ချရေးကြည့်ရအောင်။
+      Reply assistant က ဘာတွေ မြင်ရမလဲ ဆိုတာကို ဒီ table က ဆုံးဖြတ်ပေးပါလိမ့်မယ်။
+      [[mark:type-1]] ပထမ မေးခွန်းက fibre နဲ့ ADSL ဘာကွာလဲ ဆိုတာပါ။ public နည်းပညာ အချက်ဖြစ်လို့ model ရဲ့ ကိုယ်ပိုင်
+      knowledge နဲ့ ဖြေလို့ ရပါတယ်။ ဘာမှ ထပ်ထည့်ပေးစရာ မလိုပါဘူး။
+      [[mark:type-2]] ဒုတိယ က plan ပြောင်းရင် ဈေး ဘယ်လောက်လဲ ဆိုတာပါ။ အမှန်က Billing ရဲ့ plan စာရင်းထဲမှာ ရှိပါတယ်။
+      ဒီနေ့ ရောင်းနေတဲ့ စာရင်းကို ထည့်ပေးပြီး၊ စာရင်းထဲ မပါတဲ့ plan ကို မပြောဖို့ ညွှန်ကြားရပါမယ်။
+      [[mark:type-3]] တတိယ က ကျွန်တော့် လိုင်း အခု ကျနေလား ဆိုတာပါ။ မုန်တိုင်းကျတဲ့ညက မှားခဲ့တဲ့ မေးခွန်းမျိုးပါ။ အမှန်က
+      NMS ထဲမှာ အခုချိန်မှာပဲ ရှိတာမို့ tool နဲ့ မေးခိုင်းရပါမယ်။ NMS ကို မမေးနိုင်သေးရင် မသိဘူးလို့ ရေးခိုင်းရပါမယ်။
+      [[mark:type-4]] စတုတ္ထ က ONT မှာ မီးနီ လင်းနေရင် ဘာလုပ်ရမလဲ ဆိုတာပါ။ နေခြည် သုံးတဲ့ စက်နဲ့ ပြင်နည်းက
+      Knowledge base article ထဲမှာ ရှိပါတယ်။ article ကို ထည့်ပေးပြီး၊ ဘယ် article ကနေ ယူလဲ ဆိုတာ ကိုးကားခိုင်းရပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+      - {
+          title: "Claude Docs: Reduce hallucinations",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: w-open }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-quiz },
+          path: notebook/04-where-truth-lives.md,
+        }
+      - id: type-1
+        type: editor.type
+        at: { mark: type-1 }
+        cadence: line-by-line
+        target: { file: notebook/04-where-truth-lives.md, after: "|---|---|---|\n" }
+        text: "| fibre နဲ့ ADSL ဘာကွာလဲ | public၊ cutoff မတိုင်ခင် | model သိပြီးသား၊ ထည့်ပေးစရာ မလို |\n"
+      - id: type-2
+        type: editor.type
+        at: { mark: type-2 }
+        cadence: line-by-line
+        target: { file: notebook/04-where-truth-lives.md, after: "ထည့်ပေးစရာ မလို |\n" }
+        text: "| plan ပြောင်းရင် ဈေး ဘယ်လောက်လဲ | Billing ရဲ့ plan စာရင်း | ဒီနေ့ စာရင်းကို ထည့်ပေး |\n"
+      - id: type-3
+        type: editor.type
+        at: { mark: type-3 }
+        cadence: line-by-line
+        target: { file: notebook/04-where-truth-lives.md, after: "ဒီနေ့ စာရင်းကို ထည့်ပေး |\n" }
+        text: "| ကျွန်တော့် လိုင်း အခု ကျနေလား | NMS (အခုချိန်) | tool နဲ့ မေး၊ မရရင် မသိဘူး ပြော |\n"
+      - id: type-4
+        type: editor.type
+        at: { mark: type-4 }
+        cadence: line-by-line
+        target: { file: notebook/04-where-truth-lives.md, after: "မရရင် မသိဘူး ပြော |\n" }
+        text: "| ONT မီးနီ လင်းရင် ဘာလုပ်ရမလဲ | Knowledge base article | article ထည့်ပေး၊ ကိုးကားခိုင်း |\n"
+      - id: expect-row-3
+        type: expect.file
+        at: { afterAction: type-4 }
+        path: notebook/04-where-truth-lives.md
+        contains: "| ကျွန်တော့် လိုင်း အခု ကျနေလား | NMS (အခုချိန်) | tool နဲ့ မေး၊ မရရင် မသိဘူး ပြော |\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် project အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် project ကို customer တွေ ဒါမှမဟုတ် user တွေ
+      မကြာခဏ မေးတဲ့ မေးခွန်း ငါးခုကို ဒီ table ထဲ ထပ်ရေးကြည့်ပါ။
+      [[mark:turn-2]] မေးခွန်း တစ်ခုချင်းအတွက် အမှန်က public knowledge ထဲမှာလား၊ ကိုယ့် document ထဲမှာလား၊ live
+      system ထဲမှာလား ဆိုတာ ခွဲရေးပါ။ ပြီးရင် model ဆီ ဘယ်လို ရောက်လာမလဲ ဆိုတာကို နောက်ဆုံး column မှာ ရေးပါ။
+      အဲဒီ column ထဲက tool တွေနဲ့ document တွေက ကိုယ် တည်ဆောက်ရမယ့် အရာတွေ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn }
+        target:
+          file: notebook/04-where-truth-lives.md
+          text: "| customer ရဲ့ မေးခွန်း | အမှန် ရှိတဲ့ နေရာ | model ဘယ်လို ရမလဲ |"
+      - id: sel-how-col
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/04-where-truth-lives.md
+          text: "model ဘယ်လို ရမလဲ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ model ရဲ့ knowledge က training စာသားကနေ လာပြီး cut off ရက်စွဲမှာ ရပ်ပါတယ်။
+      packet loss လို public အချက်ကို ကောင်းကောင်း ဖြေနိုင်ပေမဲ့၊ နေခြည် ရဲ့ document တွေနဲ့ ဒီနေ့ ဖြစ်နေတာကိုတော့
+      မသိပါဘူး။ မသိတဲ့ အခါ ကွက်လပ်ကို ဖြည့်ရေးတတ်တာမို့၊ အမှန်ကို model ရှေ့မှာ ချပေးပြီး မသိရင် မသိဘူး
+      ပြောခွင့် ပေးထားရပါမယ်။
+      [[mark:next]] နောက် lesson မှာတော့ အဲဒီ အမှန်တွေကို model ရှေ့မှာ ချပေးတဲ့ နေရာကို ကြည့်ပါမယ်။ support agent
+      တစ်ယောက်က ticket လေးဆယ်ကို chat တစ်ခုတည်းထဲ ထည့်သွားတော့ ညနေပိုင်းမှာ customer တွေ ရောထွေးကုန်တဲ့
+      ဖြစ်ရပ်ကနေ စပြီး၊ working memory နဲ့ context window ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+    actions:
+      - id: sel-row-1
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/04-where-truth-lives.md
+          text: "| fibre နဲ့ ADSL ဘာကွာလဲ | public၊ cutoff မတိုင်ခင် | model သိပြီးသား၊ ထည့်ပေးစရာ မလို |"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
