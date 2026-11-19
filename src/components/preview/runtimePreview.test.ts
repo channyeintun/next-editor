@@ -5,7 +5,7 @@ import {
   runtimePreviewSrcNeedsReset,
 } from "./runtimePreview";
 
-// The WebContainer server-ready URL is origin-only (no trailing slash). The
+// The Node.js runtime server-ready URL is origin-only (no trailing slash). The
 // `iframe.src` PROPERTY reflects the parsed/re-serialized URL — which gains a
 // trailing "/" — so it never equals the raw runtime URL. The guard must compare
 // the exact attribute string instead: any `src` assignment (even of the same

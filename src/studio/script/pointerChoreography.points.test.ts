@@ -31,7 +31,7 @@ function goCubeTour(): LessonScript {
   return parseLessonScript(raw);
 }
 
-/** javascript-minimal: a WebContainer lesson, the only kind with a preview. */
+/** javascript-minimal: a Node.js lesson, the only kind with a preview. */
 function javascriptMinimal(): LessonScript {
   return parseLessonScript(
     YAML.parse(readFileSync(resolve(__dirname, "./__fixtures__/javascript-minimal.yaml"), "utf8")),

@@ -14,7 +14,7 @@ export type LiveRuntimeRecordingState = Required<
  * The runtime as a recording frame stores it: the live runtime's fields, then the
  * dock's recordable state. The fields are listed one by one, in the order the
  * frame has always stored them, so a field the live runtime gains is not recorded
- * until it is added here. A runtime with a preview URL is the WebContainer one;
+ * until it is added here. A runtime with a preview URL is the Node.js runtime one;
  * otherwise the lesson runs single-file.
  */
 export function readRuntimeRecordingState(

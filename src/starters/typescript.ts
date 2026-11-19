@@ -4,7 +4,7 @@ import { createWorkspaceFile } from "./shared";
 
 /**
  * TypeScript lesson starter: a small multi-file script executed with `tsx`
- * (no build step) by the WebContainer's Node runtime. The runner's `pnpm dev`
+ * (no build step) by the Node.js runtime. The runner's `pnpm dev`
  * resolves to `tsx main.ts`, which prints to the Runner console and exits,
  * then re-runs on save. The full Node.js runtime is available — lessons can
  * `pnpm add` packages or start servers (the Preview panel appears when a

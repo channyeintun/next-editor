@@ -168,7 +168,7 @@ export function loadKiteCompiler(): Promise<KiteCompiler> {
       )
       .catch((error: unknown) => {
         // A transient chunk failure (offline, a stale tab after a deploy) must
-        // not leave every later Run replaying it; sharedContainer.ts resets its
+        // not leave every later Run replaying it; sharedNodeRuntime.ts resets its
         // boot promise the same way.
         pending = null;
         throw error;

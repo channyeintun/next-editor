@@ -1,16 +1,12 @@
 import { createContext } from "react";
-import type {
-  EnvironmentVariables,
-  RunnerConfig,
-  WebContainerRuntimeStatus,
-} from "../runtime/webcontainer/types";
+import type { EnvironmentVariables, RunnerConfig, NodeRuntimeStatus } from "../runtime/node/types";
 import type {
   RuntimeLifecycleEvent,
   RuntimePreviewMessage,
   RuntimeTerminalSessionSnapshot,
 } from "../types/runtime";
 
-export interface WebContainerRuntimeActions {
+export interface NodeRuntimeActions {
   startRuntime: () => Promise<void>;
   /**
    * Stops everything and tears the container down for a fresh mount and install.
@@ -50,8 +46,8 @@ export interface WebContainerRuntimeActions {
   setReverseSyncEnabled: (enabled: boolean) => void;
 }
 
-export interface WebContainerRuntimeRecordingSnapshot {
-  status: WebContainerRuntimeStatus;
+export interface NodeRuntimeRecordingSnapshot {
+  status: NodeRuntimeStatus;
   previewUrl: string | null;
   previewPort: number | null;
   lastOutput: string | null;
@@ -70,8 +66,8 @@ export interface WebContainerRuntimeRecordingSnapshot {
  * event, so they have a context of their own and only the components that
  * render them re-render while a process streams or a preview logs errors.
  */
-export type WebContainerRuntimeOutput = Pick<
-  WebContainerRuntimeRecordingSnapshot,
+export type NodeRuntimeOutput = Pick<
+  NodeRuntimeRecordingSnapshot,
   "lastOutput" | "terminalSessions" | "latestPreviewMessage" | "latestLifecycleEvent"
 >;
 
@@ -80,9 +76,9 @@ export type WebContainerRuntimeOutput = Pick<
  * output and the always-null activeCommand, plus the runtime's support and
  * settings.
  */
-export interface WebContainerRuntimeMetadata extends Omit<
-  WebContainerRuntimeRecordingSnapshot,
-  keyof WebContainerRuntimeOutput | "activeCommand"
+export interface NodeRuntimeMetadata extends Omit<
+  NodeRuntimeRecordingSnapshot,
+  keyof NodeRuntimeOutput | "activeCommand"
 > {
   isSupported: boolean;
   /** The variables processes for the workspace on screen get. */
@@ -92,9 +88,7 @@ export interface WebContainerRuntimeMetadata extends Omit<
   ambientStartEnabled: boolean;
 }
 
-export const WebContainerRuntimeActionsContext = createContext<WebContainerRuntimeActions | null>(
-  null,
-);
+export const NodeRuntimeActionsContext = createContext<NodeRuntimeActions | null>(null);
 export interface SaveWorkspaceOptions {
   /**
    * Skip the run-on-save rerun when the runner last ran exactly this project (a replay
@@ -103,16 +97,12 @@ export interface SaveWorkspaceOptions {
   rerunOnlyIfChanged?: boolean;
 }
 
-export const WebContainerRuntimeSaveWorkspaceContext = createContext<
+export const NodeRuntimeSaveWorkspaceContext = createContext<
   ((options?: SaveWorkspaceOptions) => Promise<void>) | null
 >(null);
-export const WebContainerRuntimeSnapshotGetterContext = createContext<
-  (() => WebContainerRuntimeRecordingSnapshot) | null
+export const NodeRuntimeSnapshotGetterContext = createContext<
+  (() => NodeRuntimeRecordingSnapshot) | null
 >(null);
 
-export const WebContainerRuntimeMetadataContext = createContext<WebContainerRuntimeMetadata | null>(
-  null,
-);
-export const WebContainerRuntimeOutputContext = createContext<WebContainerRuntimeOutput | null>(
-  null,
-);
+export const NodeRuntimeMetadataContext = createContext<NodeRuntimeMetadata | null>(null);
+export const NodeRuntimeOutputContext = createContext<NodeRuntimeOutput | null>(null);

@@ -60,10 +60,10 @@ vi.mock("../contexts/WhiteboardStoreContext", () => ({
   useWhiteboardStore: () => ({ store: {} }),
 }));
 vi.mock("../hooks/useWorkspace", () => ({ useWorkspaceActions: () => ({}) }));
-vi.mock("../hooks/useWebContainerRuntime", () => ({
-  useWebContainerRuntimeActions: () => ({}),
-  useWebContainerRuntimeMetadata: () => ({}),
-  useWebContainerRuntimeSnapshotGetter: () => () => null,
+vi.mock("../hooks/useNodeRuntime", () => ({
+  useNodeRuntimeActions: () => ({}),
+  useNodeRuntimeMetadata: () => ({}),
+  useNodeRuntimeSnapshotGetter: () => () => null,
 }));
 vi.mock("../contexts/PreviewPanelContext", () => ({
   usePreviewPanel: () => ({ openPreview: () => {}, closePreview: () => {} }),

@@ -1,4 +1,4 @@
-import type { WebContainerRuntimeRecordingSnapshot } from "../../contexts/WebContainerRuntimeContext";
+import type { NodeRuntimeRecordingSnapshot } from "../../contexts/NodeRuntimeContext";
 import type {
   StudioPreviewCommandResult,
   StudioPreviewTargetBox,
@@ -12,7 +12,7 @@ import { isCoveredAt, pointAndRest, roundPoint, type StudioPointer } from "./poi
 import { RECORDER_ASSIGNS_TIMESTAMP } from "./recorderTimestamp";
 
 /**
- * The WebContainer runtime and its preview: starting the runtime, waiting for
+ * The Node.js runtime and its preview: starting the runtime, waiting for
  * its server, the preview.open handshake, preview commands and expectations,
  * and where a preview element sits on screen for the pointer.
  */
@@ -26,9 +26,9 @@ import { RECORDER_ASSIGNS_TIMESTAMP } from "./recorderTimestamp";
 export const PREVIEW_HANDSHAKE_PING_TIMEOUT_MS = 500;
 export const PREVIEW_HANDSHAKE_RETRY_INTERVAL_MS = 100;
 
-type StudioWebContainerRuntime = Extract<StudioRuntime, { kind: "webcontainer" }>;
+type StudioNodeRuntime = Extract<StudioRuntime, { kind: "webcontainer" }>;
 
-function webContainerDiagnostic(snapshot: WebContainerRuntimeRecordingSnapshot) {
+function nodeRuntimeDiagnostic(snapshot: NodeRuntimeRecordingSnapshot) {
   return {
     status: snapshot.status,
     previewUrl: snapshot.previewUrl,
@@ -41,17 +41,17 @@ function webContainerDiagnostic(snapshot: WebContainerRuntimeRecordingSnapshot) 
   };
 }
 
-function assertWebContainerHealthy(snapshot: WebContainerRuntimeRecordingSnapshot): void {
+function assertNodeRuntimeHealthy(snapshot: NodeRuntimeRecordingSnapshot): void {
   if (snapshot.status === "error" || snapshot.errorMessage) {
     throw new StudioActionError(
-      `WebContainer runtime failed: ${snapshot.errorMessage ?? "unknown runtime error"}`,
-      { runtime: webContainerDiagnostic(snapshot) },
+      `Node.js runtime failed: ${snapshot.errorMessage ?? "unknown runtime error"}`,
+      { runtime: nodeRuntimeDiagnostic(snapshot) },
     );
   }
   if (snapshot.latestPreviewMessage) {
     throw new StudioActionError(
       `Preview ${snapshot.latestPreviewMessage.kind}: ${snapshot.latestPreviewMessage.text}`,
-      { runtime: webContainerDiagnostic(snapshot) },
+      { runtime: nodeRuntimeDiagnostic(snapshot) },
     );
   }
 }
@@ -120,10 +120,10 @@ export function previewPointAim(box: StudioPreviewTargetBox): { x: number; y: nu
     : { x, y: (top + bottom) / 2 };
 }
 
-export function webContainerCommands(
+export function nodeRuntimeCommands(
   deps: Pick<
     StudioDriverDeps,
-    "runtime" | "webContainerRuntime" | "preview" | "notifyPreviewEvent" | "signal"
+    "runtime" | "nodeRuntime" | "preview" | "notifyPreviewEvent" | "signal"
   >,
   pointer: StudioPointer,
 ): Pick<
@@ -137,13 +137,13 @@ export function webContainerCommands(
 > {
   const { signal } = deps;
 
-  // The WebContainer commands' guard. Returns the narrowed runtime so a caller
+  // The Node.js runtime commands' guard. Returns the narrowed runtime so a caller
   // that captures it keeps the narrowing inside its closures. `verb` agrees
   // with a plural subject ("Preview commands require …").
-  const requireWebContainerRuntime = (
+  const requireNodeRuntime = (
     actionLabel: string,
     verb: "requires" | "require" = "requires",
-  ): StudioWebContainerRuntime => {
+  ): StudioNodeRuntime => {
     if (deps.runtime.kind !== "webcontainer") {
       throw new StudioActionError(
         `${actionLabel} ${verb} runtime kind "webcontainer", got "${deps.runtime.kind}"`,
@@ -158,24 +158,24 @@ export function webContainerCommands(
     error instanceof StudioActionError && error.detail
       ? error
       : new StudioActionError(error instanceof Error ? error.message : String(error), {
-          runtime: webContainerDiagnostic(deps.webContainerRuntime.getSnapshot()),
+          runtime: nodeRuntimeDiagnostic(deps.nodeRuntime.getSnapshot()),
         });
 
   return {
     async startRuntime() {
-      const runtime = requireWebContainerRuntime("runtime.start");
+      const runtime = requireNodeRuntime("runtime.start");
       try {
-        await deps.webContainerRuntime.getActions().startRuntime();
+        await deps.nodeRuntime.getActions().startRuntime();
       } catch (error) {
         throw new StudioActionError(
-          `WebContainer startup failed: ${error instanceof Error ? error.message : String(error)}`,
-          { runtime: webContainerDiagnostic(deps.webContainerRuntime.getSnapshot()) },
+          `Node.js runtime startup failed: ${error instanceof Error ? error.message : String(error)}`,
+          { runtime: nodeRuntimeDiagnostic(deps.nodeRuntime.getSnapshot()) },
         );
       }
       // JS/TS runners acknowledge once the process has spawned;
       // runtime.waitForReady owns their later server/port gate.
-      const snapshot = deps.webContainerRuntime.getSnapshot();
-      assertWebContainerHealthy(snapshot);
+      const snapshot = deps.nodeRuntime.getSnapshot();
+      assertNodeRuntimeHealthy(snapshot);
       return {
         adapterVersion: runtime.adapterVersion,
         initCommand: runtime.initCommand,
@@ -185,12 +185,12 @@ export function webContainerCommands(
     },
 
     async waitForRuntimeReady(timeoutMs) {
-      const runtime = requireWebContainerRuntime("runtime.waitForReady");
+      const runtime = requireNodeRuntime("runtime.waitForReady");
       try {
         await waitUntil(
           () => {
-            const snapshot = deps.webContainerRuntime.getSnapshot();
-            assertWebContainerHealthy(snapshot);
+            const snapshot = deps.nodeRuntime.getSnapshot();
+            assertNodeRuntimeHealthy(snapshot);
             return (
               snapshot.status === "ready" &&
               Boolean(snapshot.previewUrl) &&
@@ -200,14 +200,14 @@ export function webContainerCommands(
           {
             timeoutMs,
             signal,
-            description: `WebContainer server${runtime.expectedPort ? ` on port ${runtime.expectedPort}` : ""} to become ready`,
+            description: `Node.js runtime server${runtime.expectedPort ? ` on port ${runtime.expectedPort}` : ""} to become ready`,
             intervalMs: 50,
           },
         );
       } catch (error) {
         throw withRuntimeDiagnostic(error);
       }
-      const snapshot = deps.webContainerRuntime.getSnapshot();
+      const snapshot = deps.nodeRuntime.getSnapshot();
       return {
         status: snapshot.status,
         previewUrl: snapshot.previewUrl,
@@ -216,8 +216,8 @@ export function webContainerCommands(
     },
 
     async openPreview({ mode, timeoutMs }) {
-      requireWebContainerRuntime("preview.open");
-      assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+      requireNodeRuntime("preview.open");
+      assertNodeRuntimeHealthy(deps.nodeRuntime.getSnapshot());
       // Both phases below share this single deadline: `timeoutMs` is the whole
       // action's budget, matching what the Performer races the call against.
       // Spending it once per phase made the action unsatisfiable by
@@ -242,7 +242,7 @@ export function webContainerCommands(
       let handshakeError: unknown = null;
       while (acknowledgement === null && remainingMs() > 0) {
         throwIfAborted(signal);
-        assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+        assertNodeRuntimeHealthy(deps.nodeRuntime.getSnapshot());
         try {
           acknowledgement = await deps.preview.executeCommand(
             { type: "ping" },
@@ -268,16 +268,16 @@ export function webContainerCommands(
               : String(handshakeError);
         throw new StudioActionError(
           `Preview iframe did not become ready within ${timeoutMs}ms: ${cause}`,
-          { runtime: webContainerDiagnostic(deps.webContainerRuntime.getSnapshot()) },
+          { runtime: nodeRuntimeDiagnostic(deps.nodeRuntime.getSnapshot()) },
         );
       }
-      assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+      assertNodeRuntimeHealthy(deps.nodeRuntime.getSnapshot());
       return { mode, bridge: "ready", route: acknowledgement.route };
     },
 
     async executePreviewCommand({ command, timeoutMs }) {
-      requireWebContainerRuntime("Preview commands", "require");
-      assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+      requireNodeRuntime("Preview commands", "require");
+      assertNodeRuntimeHealthy(deps.nodeRuntime.getSnapshot());
       let acknowledgement: StudioPreviewCommandResult;
       try {
         acknowledgement = await deps.preview.executeCommand(command, { timeoutMs, signal });
@@ -287,12 +287,12 @@ export function webContainerCommands(
           { command },
         );
       }
-      assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+      assertNodeRuntimeHealthy(deps.nodeRuntime.getSnapshot());
       return { acknowledgement };
     },
 
     async pointPreview({ target, durationMs, timeoutMs }) {
-      requireWebContainerRuntime("preview.point");
+      requireNodeRuntime("preview.point");
       const described = `preview element "${target.value}"`;
       const deadlineAt = performance.now() + timeoutMs;
       const remainingMs = () => Math.max(0, deadlineAt - performance.now());
@@ -304,7 +304,7 @@ export function webContainerCommands(
       let lookupError: unknown = null;
       while (box === undefined) {
         throwIfAborted(signal);
-        assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+        assertNodeRuntimeHealthy(deps.nodeRuntime.getSnapshot());
         frame = resolveStudioTarget({ kind: "preview", testId: target.value });
         if (frame) {
           try {
@@ -365,10 +365,10 @@ export function webContainerCommands(
     },
 
     async expectPreview({ actionId, target, textContains, value, route, attribute, timeoutMs }) {
-      requireWebContainerRuntime("expect.preview");
+      requireNodeRuntime("expect.preview");
 
       try {
-        assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+        assertNodeRuntimeHealthy(deps.nodeRuntime.getSnapshot());
         const inspection = await deps.preview.executeCommand(
           { type: "inspect", target: previewCommandTarget(target) },
           { timeoutMs, signal },
@@ -382,7 +382,7 @@ export function webContainerCommands(
             inspection,
           });
         }
-        assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+        assertNodeRuntimeHealthy(deps.nodeRuntime.getSnapshot());
         deps.notifyPreviewEvent({
           type: "preview_checkpoint",
           timestamp: RECORDER_ASSIGNS_TIMESTAMP,

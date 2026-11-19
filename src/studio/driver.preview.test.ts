@@ -40,7 +40,7 @@ function makeDriver(options: { runtime?: StudioDriverDeps["runtime"] } = {}) {
     previewPort: 5173,
     errorMessage: null,
     latestPreviewMessage: null,
-  } as ReturnType<StudioDriverDeps["webContainerRuntime"]["getSnapshot"]>;
+  } as ReturnType<StudioDriverDeps["nodeRuntime"]["getSnapshot"]>;
 
   const deps = {
     getEditor: () => null,
@@ -70,7 +70,7 @@ function makeDriver(options: { runtime?: StudioDriverDeps["runtime"] } = {}) {
     }) as StudioDriverDeps["runtime"],
     planSeed: 29,
     whiteboardAssets: [],
-    webContainerRuntime: {
+    nodeRuntime: {
       getActions: () => ({
         startRuntime,
         resetRuntime: () => {},
@@ -103,7 +103,7 @@ function makeDriver(options: { runtime?: StudioDriverDeps["runtime"] } = {}) {
   };
 }
 
-describe("StudioDriver WebContainer preview adapter", () => {
+describe("StudioDriver Node.js runtime preview adapter", () => {
   it("starts, awaits, opens, acknowledges, and records a DOM checkpoint", async () => {
     const { driver, executeCommand, previewEvents, startRuntime } = makeDriver();
 
@@ -189,7 +189,8 @@ describe("StudioDriver WebContainer preview adapter", () => {
 
     await expect(driver.waitForRuntimeReady(60)).rejects.toMatchObject({
       name: StudioActionError.name,
-      message: "Timed out after 60ms waiting for WebContainer server on port 5173 to become ready",
+      message:
+        "Timed out after 60ms waiting for Node.js runtime server on port 5173 to become ready",
       detail: { runtime: expect.objectContaining({ status: "starting", previewPort: null }) },
     });
   });
@@ -203,7 +204,7 @@ describe("StudioDriver WebContainer preview adapter", () => {
 
     await expect(driver.waitForRuntimeReady(100)).rejects.toMatchObject({
       name: StudioActionError.name,
-      message: "WebContainer runtime failed: Vite exited before opening its port",
+      message: "Node.js runtime failed: Vite exited before opening its port",
       detail: {
         runtime: expect.objectContaining({
           status: "error",
@@ -213,7 +214,7 @@ describe("StudioDriver WebContainer preview adapter", () => {
     });
   });
 
-  it("refuses every WebContainer command on another runtime, naming the action", async () => {
+  it("refuses every Node.js runtime command on another runtime, naming the action", async () => {
     const { captureScreenshot, driver, startRuntime } = makeDriver({ runtime: { kind: "none" } });
     const got = 'runtime kind "webcontainer", got "none"';
 

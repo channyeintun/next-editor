@@ -43,7 +43,7 @@ Core responsibilities:
 - Normalize recordings into the `Recording` shape used across the app.
 - Expose stable controls such as `startRecording`, `play`, `seekTo`, `loadRecording`, `extendRecording`, and caption-track management (`addCaptionTrack`).
 
-The app layer is responsible for React composition, WebContainer integration, IndexedDB persistence, import/export UI, and route-level behavior.
+The app layer is responsible for React composition, Node.js runtime integration, IndexedDB persistence, import/export UI, and route-level behavior.
 
 Core's dependencies point inward: nothing under `src/core` imports the app layer. The models the recording stores (`runtime.ts`, `cursor.ts`, `slides.ts`, `preview.ts`, `textEdit.ts`, `chat.ts`, `workspace.ts`) are defined in core, and `src/types/*` re-exports them for app code. `src/core/src/coreBoundary.test.ts` fails on any non-test module under `src/core` whose relative import resolves outside it.
 

@@ -17,13 +17,10 @@ import {
   useWorkspaceLessonType,
   useWorkspaceSaveVersion,
 } from "../../hooks/useWorkspace";
-import {
-  useWebContainerRuntimeActions,
-  useWebContainerRuntimeMetadata,
-} from "../../hooks/useWebContainerRuntime";
+import { useNodeRuntimeActions, useNodeRuntimeMetadata } from "../../hooks/useNodeRuntime";
 import { IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE } from "../../utils/iframeInteractionCapture";
 import { requestPreviewScreenshot } from "../../utils/iframeScreenshotBridge";
-import { isRuntimeBusy, type WebContainerRuntimeStatus } from "../../runtime/webcontainer/types";
+import { isRuntimeBusy, type NodeRuntimeStatus } from "../../runtime/node/types";
 import type {
   ApiClientRecordedRequest,
   ApiClientRecordedResult,
@@ -37,7 +34,7 @@ import type {
   PreviewPanelMode,
   PreviewSize,
 } from "../../types/slides";
-import { lessonRunsInWebContainer } from "../../types/lessonTypes";
+import { lessonRunsInNodeRuntime } from "../../types/lessonTypes";
 import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
 import type { ApiClientHistoryEntry } from "../../stores/apiClientStore";
@@ -202,11 +199,10 @@ function forceIframeRepaint(iframeRef: RefObject<HTMLIFrameElement | null>): voi
  * inherits its embedder's origin, so recorded HTML from a `.ne` would run as
  * first-party script on the app's origin.
  *
- * On the live WebContainer URL the flag is REQUIRED, not merely harmless. That
+ * On the live Node.js runtime URL the flag is REQUIRED, not merely harmless. That
  * document is cross-origin, so the flag only preserves *its own* origin — and
  * without it the preview lands in an opaque origin where its service worker
- * cannot register, and WebContainer replaces the app with its "enable storage
- * partitioning" placeholder.
+ * cannot register, so nothing can serve the preview's pages.
  *
  * The condition mirrors the effect that actually assigns `iframe.src`, rather
  * than `isLiveRuntimePreviewActive` (which additionally requires
@@ -216,18 +212,18 @@ function forceIframeRepaint(iframeRef: RefObject<HTMLIFrameElement | null>): voi
 export function shouldAllowSameOriginPreview({
   hasRecording,
   isPlaybackPreviewActive,
-  runsInWebContainer,
+  runsInNodeRuntime,
   hasRuntimePreviewUrl,
 }: {
   hasRecording: boolean;
   isPlaybackPreviewActive: boolean;
-  runsInWebContainer: boolean;
+  runsInNodeRuntime: boolean;
   hasRuntimePreviewUrl: boolean;
 }): boolean {
   // No recording open: ordinary authoring of the user's own content.
   if (!hasRecording) return true;
   // Showing the live runtime URL — cross-origin, and it needs the flag.
-  return !isPlaybackPreviewActive && runsInWebContainer && hasRuntimePreviewUrl;
+  return !isPlaybackPreviewActive && runsInNodeRuntime && hasRuntimePreviewUrl;
 }
 
 export function shouldUsePlaybackPreview({
@@ -293,7 +289,7 @@ export function usePreviewController(): PreviewController {
     setDockWidth,
     applyPreviewPanelState,
   } = usePreviewPanel();
-  const { startRuntime } = useWebContainerRuntimeActions();
+  const { startRuntime } = useNodeRuntimeActions();
   const { subscribeWorkspaceSync, getFile } = useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
   const saveVersion = useWorkspaceSaveVersion();
@@ -305,7 +301,7 @@ export function usePreviewController(): PreviewController {
     isSupported: isRuntimeSupported,
     runnerConfig,
     ambientStartEnabled,
-  } = useWebContainerRuntimeMetadata();
+  } = useNodeRuntimeMetadata();
 
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
   const isPlaybackPreviewActive = shouldUsePlaybackPreview({
@@ -320,7 +316,7 @@ export function usePreviewController(): PreviewController {
   // replayed, so such a recording keeps the iframe and its snapshot-HTML fallback.
   const hasPreviewPatchReplay = hasRrwebPreviewSeed(currentRecording?.previewInitialDocuments);
   const isRuntimePlaybackPreviewActive =
-    lessonRunsInWebContainer(lessonType) && isPlaybackPreviewActive;
+    lessonRunsInNodeRuntime(lessonType) && isPlaybackPreviewActive;
   // The rrweb replay preview is shown ONLY while the recording is actively playing.
   // When paused/ended (or never started) — even with a recording loaded — the live
   // runtime preview is shown instead (see `isLiveRuntimePreviewActive`).
@@ -328,9 +324,7 @@ export function usePreviewController(): PreviewController {
   const recordedRuntimeSnapshot = isRuntimePlaybackPreviewActive
     ? (currentRecording?.runtimeSnapshot ?? null)
     : null;
-  const recordedRuntimeStatus = recordedRuntimeSnapshot?.status as
-    | WebContainerRuntimeStatus
-    | undefined;
+  const recordedRuntimeStatus = recordedRuntimeSnapshot?.status as NodeRuntimeStatus | undefined;
   const effectiveRuntimeStatus =
     runtimeStatus === "idle" ? (recordedRuntimeStatus ?? runtimeStatus) : runtimeStatus;
   const effectiveRuntimePreviewUrl =
@@ -340,26 +334,26 @@ export function usePreviewController(): PreviewController {
   const effectiveRuntimeErrorMessage =
     runtimeErrorMessage || recordedRuntimeSnapshot?.errorMessage || null;
   const isLiveRuntimePreviewActive =
-    lessonRunsInWebContainer(lessonType) &&
+    lessonRunsInNodeRuntime(lessonType) &&
     !isRuntimePlaybackPreviewActive &&
     runtimeStatus === "ready" &&
     Boolean(runtimePreviewUrl);
   const isRuntimePreviewActive =
-    lessonRunsInWebContainer(lessonType) &&
+    lessonRunsInNodeRuntime(lessonType) &&
     effectiveRuntimeStatus === "ready" &&
     Boolean(effectiveRuntimePreviewUrl);
   // True in exactly the states where the effect below points this frame at the
-  // cross-origin WebContainer URL via `src` (see the `runtimePreviewSrcNeedsReset`
+  // cross-origin Node.js runtime URL via `src` (see the `runtimePreviewSrcNeedsReset`
   // branch). Deliberately mirrors that condition rather than
   // `isLiveRuntimePreviewActive`, which also requires `runtimeStatus === "ready"`
   // and so would miss the window where the URL is already assigned.
   const allowSameOriginPreview = shouldAllowSameOriginPreview({
     hasRecording: Boolean(currentRecording),
     isPlaybackPreviewActive,
-    runsInWebContainer: lessonRunsInWebContainer(lessonType),
+    runsInNodeRuntime: lessonRunsInNodeRuntime(lessonType),
     hasRuntimePreviewUrl: Boolean(runtimePreviewUrl),
   });
-  const isRuntimeManagedPreview = lessonRunsInWebContainer(lessonType) && runnerConfig.enabled;
+  const isRuntimeManagedPreview = lessonRunsInNodeRuntime(lessonType) && runnerConfig.enabled;
   const runtimePreviewState = getRuntimePreviewState(
     effectiveRuntimeStatus,
     effectiveRuntimeErrorMessage,
@@ -371,11 +365,11 @@ export function usePreviewController(): PreviewController {
     runtimePreviewState.description,
   );
 
-  // The frame selector is shown for every WebContainer lesson on a supported
+  // The frame selector is shown for every Node.js lesson on a supported
   // environment — independent of boot progress — so it doesn't "pop in" mid-boot.
   // The API frame itself surfaces a "waiting for the server" state until the
   // runtime is ready (see `isRuntimeReady`).
-  const showModeToggle = lessonRunsInWebContainer(lessonType) && isRuntimeSupported;
+  const showModeToggle = lessonRunsInNodeRuntime(lessonType) && isRuntimeSupported;
   const isRuntimeReady = effectiveRuntimeStatus === "ready";
   const canSendApiRequest = isRuntimeReady && !isPlaybackPreviewActive;
 
@@ -761,7 +755,7 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
-    if (lessonRunsInWebContainer(lessonType) && runtimePreviewUrl) {
+    if (lessonRunsInNodeRuntime(lessonType) && runtimePreviewUrl) {
       // Guarded via the src *attribute* (see runtimePreviewSrcNeedsReset): any
       // `src` assignment navigates the frame, so re-assigning on every effect
       // run would reload the live preview and lose its state.
@@ -870,7 +864,7 @@ export function usePreviewController(): PreviewController {
     }
 
     if (
-      !lessonRunsInWebContainer(lessonType) ||
+      !lessonRunsInNodeRuntime(lessonType) ||
       !ambientStartEnabled ||
       isPlaybackPreviewActive ||
       !isRuntimeSupported ||

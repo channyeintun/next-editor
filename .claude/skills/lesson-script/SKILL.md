@@ -74,7 +74,7 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      use; a maximized board looks bad in the recorded lesson).
    - The fixture result is the program's exact output, every line
      `\n`-terminated — `result.output` for Go/Kotlin/Zig, `result.stdout` for
-     Rust/Haskell/Kite/asm (WebContainer lessons pin the workspace instead of
+     Rust/Haskell/Kite/asm (Node.js lessons pin the workspace instead of
      a fixture).
    - Studio automatically reserves two quiet seconds before the first dialog
      and after the final dialog/action. Do not add filler narration, blank
@@ -98,7 +98,7 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      ink and label sizes. Fix every `✗` error. (The registry test,
      `npx vp test run src/studio/plans/index.test.ts`, estimates by
      whitespace tokens and misses overlaps that only Burmese audio causes.)
-   - For a WebContainer (Vite) lesson, also run
+   - For a Node.js (Vite) lesson, also run
      `bun scripts/studio-verify-lesson.ts src/studio/scripts/<slug>.yaml`.
      It replays every action against a real Vite server and headless Chrome,
      and fails on half-typed JSX that breaks the preview, console errors, and

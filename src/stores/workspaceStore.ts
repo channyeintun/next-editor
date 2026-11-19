@@ -283,7 +283,7 @@ type WorkspaceProjectChange = Partial<
 >;
 
 /**
- * Commits a change that subscribeWorkspaceSync listeners (the WebContainer
+ * Commits a change that subscribeWorkspaceSync listeners (the Node.js runtime
  * runtime, the preview) must see: syncVersion always moves, and treeVersion
  * too when files or folders were added, removed or renamed. The derived slices
  * and the dirty state are then recomputed from the result.

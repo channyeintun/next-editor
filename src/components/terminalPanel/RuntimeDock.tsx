@@ -20,10 +20,10 @@ const AsmPlaygroundRunnerPanel = lazyWithRecovery(
   "AsmPlaygroundRunnerPanel",
 );
 
-// One entry per non-webcontainer execution kind. The `Record` is what makes a new
+// One entry per non-node-runtime execution kind. The `Record` is what makes a new
 // playground kind a compile error here rather than a lesson that renders an editor
 // with no dock at all — no Run button, no console, and nothing to point at.
-const RUNNER_PANELS: Record<Exclude<WorkspaceExecutionKind, "webcontainer">, ComponentType> = {
+const RUNNER_PANELS: Record<Exclude<WorkspaceExecutionKind, "node-runtime">, ComponentType> = {
   "go-playground": GoPlaygroundRunnerPanel,
   "kotlin-playground": KotlinPlaygroundRunnerPanel,
   "rust-playground": RustPlaygroundRunnerPanel,
@@ -35,11 +35,11 @@ const RUNNER_PANELS: Record<Exclude<WorkspaceExecutionKind, "webcontainer">, Com
 
 /**
  * The dock under the editor that runs the lesson: the terminal for a lesson
- * that runs in the WebContainer, its playground's runner panel otherwise.
+ * that runs in the Node.js runtime, its playground's runner panel otherwise.
  */
 export default function RuntimeDock({ lessonType }: { lessonType: WorkspaceLessonType }) {
   const executionKind = executionKindForLessonType(lessonType);
-  if (executionKind === "webcontainer") return <TerminalPanel />;
+  if (executionKind === "node-runtime") return <TerminalPanel />;
   const RunnerPanel = RUNNER_PANELS[executionKind];
   return (
     // Only the asm panel is lazy; the rest resolve synchronously and

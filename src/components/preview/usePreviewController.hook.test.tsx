@@ -12,11 +12,11 @@ import {
 import { clampPreviewDockWidth, PreviewPanelProvider } from "../../contexts/PreviewPanelContext";
 import { RuntimePanelStoreProvider } from "../../contexts/RuntimePanelStoreContext";
 import {
-  WebContainerRuntimeActionsContext,
-  WebContainerRuntimeMetadataContext,
-  type WebContainerRuntimeActions,
-  type WebContainerRuntimeMetadata,
-} from "../../contexts/WebContainerRuntimeContext";
+  NodeRuntimeActionsContext,
+  NodeRuntimeMetadataContext,
+  type NodeRuntimeActions,
+  type NodeRuntimeMetadata,
+} from "../../contexts/NodeRuntimeContext";
 import type { WorkspaceActions } from "../../stores/workspaceActions";
 import { WorkspaceProvider } from "../../contexts/WorkspaceProvider";
 import { useWorkspaceActions } from "../../hooks/useWorkspace";
@@ -66,12 +66,12 @@ const idleRuntimeMetadata = {
     runCommand: "",
   },
   ambientStartEnabled: false,
-} as unknown as WebContainerRuntimeMetadata;
+} as unknown as NodeRuntimeMetadata;
 let runtimeMetadata = idleRuntimeMetadata;
 
 const runtimeActions = {
   startRuntime: vi.fn<() => Promise<void>>(async () => undefined),
-} as unknown as WebContainerRuntimeActions;
+} as unknown as NodeRuntimeActions;
 
 // The real workspace boots the react starter, so edits go through the same
 // store transitions the editor drives.
@@ -82,11 +82,11 @@ function Providers({ children }: PropsWithChildren) {
         <PreviewPanelProvider>
           <RuntimePanelStoreProvider>
             <ApiClientStoreProvider>
-              <WebContainerRuntimeActionsContext value={runtimeActions}>
-                <WebContainerRuntimeMetadataContext value={runtimeMetadata}>
+              <NodeRuntimeActionsContext value={runtimeActions}>
+                <NodeRuntimeMetadataContext value={runtimeMetadata}>
                   {children}
-                </WebContainerRuntimeMetadataContext>
-              </WebContainerRuntimeActionsContext>
+                </NodeRuntimeMetadataContext>
+              </NodeRuntimeActionsContext>
             </ApiClientStoreProvider>
           </RuntimePanelStoreProvider>
         </PreviewPanelProvider>
@@ -413,7 +413,7 @@ describe("usePreviewController API client sending", () => {
     status: "ready",
     previewUrl: "https://runtime.example/",
     previewPort: 3000,
-  } as unknown as WebContainerRuntimeMetadata;
+  } as unknown as NodeRuntimeMetadata;
   const recordedReady = {
     id: "recording-1",
     runtimeSnapshot: { status: "ready", previewUrl: "https://runtime.example/", previewPort: 3000 },

@@ -213,7 +213,7 @@ async function invokeWithDeadline(
 type RuntimeStartAction = Extract<StudioPlanAction, { type: "runtime.start" }>;
 
 /**
- * The one action the Performer runs in the background. A JS/TS WebContainer
+ * The one action the Performer runs in the background. A JS/TS lesson's
  * runtime.start boots, mounts, installs and spawns the dev server — 12–58 s
  * that no lesson can plan around, since install time varies run to run.
  * Lessons start it early, during whiteboard and editor scenes, so the server

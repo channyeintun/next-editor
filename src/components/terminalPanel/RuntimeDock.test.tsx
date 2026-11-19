@@ -23,13 +23,13 @@ const LESSON_TYPES = Object.keys(WORKSPACE_LESSON_TYPE_LABELS) as WorkspaceLesso
 
 describe("RuntimeDock", () => {
   // RuntimeDock decides by execution kind alone. That matches the terminal
-  // capability only while every lesson type either runs in the WebContainer
+  // capability only while every lesson type either runs in the Node.js runtime
   // or has a playground; a type with neither must be decided here first.
   it.each(LESSON_TYPES)(
-    "offers the terminal for %s exactly when it runs in the WebContainer",
+    "offers the terminal for %s exactly when it runs in the Node.js runtime",
     (type) => {
       expect(lessonSupportsTerminal(type)).toBe(
-        executionKindForLessonType(type) === "webcontainer",
+        executionKindForLessonType(type) === "node-runtime",
       );
     },
   );

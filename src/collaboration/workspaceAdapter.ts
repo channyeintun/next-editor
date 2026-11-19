@@ -29,7 +29,7 @@ export function reprojectCollaborationWorkspace(
  * text correctness fallback.
  * Tree/metadata transactions rebuild the path projection once. This prevents
  * a keystroke from replacing the entire path-based project while still making
- * remote edits to inactive files visible to WebContainer sync and recording.
+ * remote edits to inactive files visible to Node.js runtime sync and recording.
  */
 export function projectCollaborationTransaction(
   doc: Y.Doc,

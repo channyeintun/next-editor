@@ -1,15 +1,15 @@
 import { act, render } from "@testing-library/react";
 import type { WebNode, WebNodeProcess } from "../core/webnode/api";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { EnvironmentVariables } from "../runtime/webcontainer/types";
+import type { EnvironmentVariables } from "../runtime/node/types";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
-import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
+import { useNodeRuntimeSession } from "./useNodeRuntimeSession";
 
-vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
+vi.mock("../runtime/node/sharedNodeRuntime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runtime/node/sharedNodeRuntime")>();
   return {
     ...actual,
-    getOrBootSharedWebContainer: vi.fn<() => Promise<WebNode>>(),
+    getOrBootSharedNodeRuntime: vi.fn<() => Promise<WebNode>>(),
   };
 });
 
@@ -47,11 +47,11 @@ function renderRuntimeSessionHook(
   } = {},
 ) {
   const captured: {
-    hook: ReturnType<typeof useWebContainerRuntimeSession> | null;
+    hook: ReturnType<typeof useNodeRuntimeSession> | null;
   } = { hook: null };
 
   function Harness() {
-    captured.hook = useWebContainerRuntimeSession({
+    captured.hook = useNodeRuntimeSession({
       getEnvironmentVariables: options.getEnvironmentVariables ?? (() => ({})),
       onServerReady: options.onServerReady,
     });
@@ -101,12 +101,12 @@ function createControlledRunner() {
 /** Renders the hook and keeps the latest render's value and the render count. */
 function renderTrackedRuntimeSession() {
   const tracked: {
-    hook: ReturnType<typeof useWebContainerRuntimeSession> | null;
+    hook: ReturnType<typeof useNodeRuntimeSession> | null;
     renders: number;
   } = { hook: null, renders: 0 };
 
   function Harness() {
-    tracked.hook = useWebContainerRuntimeSession({ getEnvironmentVariables: () => ({}) });
+    tracked.hook = useNodeRuntimeSession({ getEnvironmentVariables: () => ({}) });
     tracked.renders += 1;
     return null;
   }
@@ -142,7 +142,7 @@ function stubAnimationFrames() {
   };
 }
 
-describe("useWebContainerRuntimeSession", () => {
+describe("useNodeRuntimeSession", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
@@ -237,8 +237,8 @@ describe("useWebContainerRuntimeSession", () => {
   // cannot compile here while the recording disagrees.
   it("records a preview message in the shape the runtime track stores", async () => {
     const { instance, listeners } = createFakeInstance();
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
     const hook = renderRuntimeSessionHook();
 
     await act(async () => {
@@ -287,8 +287,8 @@ describe("useWebContainerRuntimeSession", () => {
 
   it("invokes onServerReady when the dev server reports ready with an active runner", async () => {
     const { instance, listeners } = createFakeInstance();
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
 
     const onServerReady = vi.fn<() => void>();
     const hook = renderRuntimeSessionHook({ onServerReady });
@@ -313,8 +313,8 @@ describe("useWebContainerRuntimeSession", () => {
 
   it("does not invoke onServerReady before a runner process has started", async () => {
     const { instance, listeners } = createFakeInstance();
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
 
     const onServerReady = vi.fn<() => void>();
     const hook = renderRuntimeSessionHook({ onServerReady });

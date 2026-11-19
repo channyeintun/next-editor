@@ -44,8 +44,8 @@ export function RuntimePreviewRenderer({
   }
 
   // `allow-same-origin` is safe for the live runtime, where this frame is
-  // pointed at a cross-origin WebContainer URL via `src` — there the flag only
-  // preserves that frame's own origin, which WebContainer needs, and the parent
+  // pointed at a cross-origin Node.js runtime URL via `src` — there the flag only
+  // preserves that frame's own origin, which the preview needs, and the parent
   // still cannot reach into it.
   //
   // It is NOT safe for `srcdoc`. An about:srcdoc document inherits its

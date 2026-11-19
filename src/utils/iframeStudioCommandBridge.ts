@@ -142,7 +142,7 @@ export function requestStudioPreviewCommand(
  */
 export const STUDIO_PREVIEW_FRAME_FALLBACK_MS = 100;
 
-/** Raw script injected by WebContainer.setPreviewScript into every HTML response. */
+/** Raw script injected by WebNode.setPreviewScript into every HTML response. */
 export function createStudioPreviewCommandBridgeScript(setupMarker: string): string {
   return `
     (function() {

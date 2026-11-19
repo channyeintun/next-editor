@@ -78,7 +78,7 @@ export default ({ mode }: { mode: string }) => {
     plugins: [
       rrwebRecorderBundlePlugin(),
       // The webnode runtime's worker scripts and, in dev, its preview hosts
-      // (`*.localhost`); see src/runtime/webcontainer/engine.ts.
+      // (`*.localhost`); see src/runtime/node/engine.ts.
       webnodeBundlePlugin(),
       // Dev-server equivalent of infra/worker/routes/proxy.ts: lets
       // `bun run dev` resolve the same /api/proxy route the Worker

@@ -6,8 +6,8 @@ import {
   readWorkspaceProject,
   shouldIgnoreRuntimeImportPath,
   syncWorkspaceProject,
-} from "../runtime/webcontainer/files";
-import { runSerializedWebContainerTask } from "../runtime/webcontainer/sharedContainer";
+} from "../runtime/node/files";
+import { runSerializedNodeRuntimeTask } from "../runtime/node/sharedNodeRuntime";
 import type { WorkspaceActions } from "../stores/workspaceActions";
 import {
   areWorkspaceProjectsEqual,
@@ -24,9 +24,9 @@ import { incrementPerformanceCounter, startPerformanceSpan } from "../utils/perf
 // server-ready / Enter-key reverse-sync triggers, and suppression is purely an
 // optimization — a spurious reverse sync no-ops on the project-equality check.
 const FORWARD_SYNC_ECHO_WINDOW_MS = 1000;
-export const WEBCONTAINER_FILE_SYNC_WINDOW_MS = 75;
+export const NODE_RUNTIME_FILE_SYNC_WINDOW_MS = 75;
 // Reverse-sync requests closer together than this coalesce into one container read.
-export const WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS = 150;
+export const NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS = 150;
 
 const watchFilenameDecoder = new TextDecoder();
 
@@ -155,7 +155,7 @@ function settleFileSyncWaiters(result: Promise<void>, waiters: FileSyncWaiter[])
  * store, when the fs.watch below reports it or a caller asks (see
  * requestReverseSync).
  */
-export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
+export function useNodeRuntimeWorkspaceSync(options: WorkspaceSyncOptions) {
   const mountedInstanceRef = useRef<WebNode | null>(null);
   const lastSyncedProjectRef = useRef<WorkspaceProject | null>(null);
   const queuedProjectRef = useRef<WorkspaceProject | null>(null);
@@ -282,10 +282,10 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
     const generation = syncGenerationRef.current;
 
     onMountStart?.();
-    const endMountSpan = startPerformanceSpan("webcontainer.initial_mount");
+    const endMountSpan = startPerformanceSpan("node_runtime.initial_mount");
     await withSyncOutcome(
       () =>
-        runSerializedWebContainerTask(instance, async () =>
+        runSerializedNodeRuntimeTask(instance, async () =>
           instance.mount(await createWorkspaceTree(project)),
         ),
       (outcome) => endMountSpan({ outcome }),
@@ -321,13 +321,13 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
         return;
       }
 
-      const endSyncSpan = startPerformanceSpan("webcontainer.file_sync", {
+      const endSyncSpan = startPerformanceSpan("node_runtime.file_sync", {
         path_count: files.length,
       });
       let mutationCount = 0;
       await withSyncOutcome(
         () =>
-          runSerializedWebContainerTask(instance, async () => {
+          runSerializedNodeRuntimeTask(instance, async () => {
             for (const file of files) {
               recordForwardSyncWrite(file.path);
               await instance.fs.writeFile(file.path, await getWorkspaceRuntimeFileContents(file));
@@ -336,7 +336,7 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
           }),
         (outcome) => {
           endSyncSpan({ outcome });
-          incrementPerformanceCounter("webcontainer.fs_mutations", mutationCount, {
+          incrementPerformanceCounter("node_runtime.fs_mutations", mutationCount, {
             outcome,
             source: "file_queue",
           });
@@ -370,7 +370,7 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
       fileSyncTimerRef.current = setTimeout(() => {
         fileSyncTimerRef.current = null;
         void flushQueuedFiles({ instance }).catch(() => undefined);
-      }, WEBCONTAINER_FILE_SYNC_WINDOW_MS);
+      }, NODE_RUNTIME_FILE_SYNC_WINDOW_MS);
     }
     return result;
   };
@@ -400,11 +400,11 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
           continue;
         }
 
-        const endSyncSpan = startPerformanceSpan("webcontainer.project_sync");
+        const endSyncSpan = startPerformanceSpan("node_runtime.project_sync");
         let mutationCount = 0;
         await withSyncOutcome(
           () =>
-            runSerializedWebContainerTask(instance, () =>
+            runSerializedNodeRuntimeTask(instance, () =>
               syncWorkspaceProject(instance, lastSyncedProjectRef.current, nextProject, (path) => {
                 mutationCount += 1;
                 recordForwardSyncWrite(path);
@@ -412,7 +412,7 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
             ),
           (outcome) => {
             endSyncSpan({ outcome });
-            incrementPerformanceCounter("webcontainer.fs_mutations", mutationCount, { outcome });
+            incrementPerformanceCounter("node_runtime.fs_mutations", mutationCount, { outcome });
           },
         );
 
@@ -449,7 +449,7 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
         return undefined;
       }
 
-      const result = await runSerializedWebContainerTask(instance, task);
+      const result = await runSerializedNodeRuntimeTask(instance, task);
 
       return syncGenerationRef.current === generation && mountedInstanceRef.current === instance
         ? result
@@ -555,7 +555,7 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
           },
         });
       })().catch(reportErrorFor(generation));
-    }, WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    }, NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
   };
 
   /** Clears a queued reverse sync; the new request ID makes one in flight return unapplied. */

@@ -121,7 +121,7 @@ describe("detectImportedLessonType", () => {
       "asm",
     );
     // Kite compiles in the page, so a Kite archive carries no manifest at all;
-    // without a rule it landed in the WebContainer as an html-css lesson and the
+    // without a rule it landed in the Node.js runtime as an html-css lesson and the
     // Kite Runner panel never appeared.
     expect(
       detectImportedLessonType({

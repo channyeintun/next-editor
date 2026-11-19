@@ -10,7 +10,7 @@ import {
   Variable,
 } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
-import { useWebContainerRuntimeActions } from "../../hooks/useWebContainerRuntime";
+import { useNodeRuntimeActions } from "../../hooks/useNodeRuntime";
 import { analytics } from "../../utils/analytics";
 import { downloadWorkspaceProjectAsZip } from "../../utils/workspaceZip";
 import {
@@ -25,7 +25,7 @@ import {
 } from "../../hooks/useWorkspace";
 import type { WorkspaceLessonType, WorkspaceProject } from "../../types/workspace";
 import {
-  lessonRunsInWebContainer,
+  lessonRunsInNodeRuntime,
   WORKSPACE_LESSON_TYPE_LABELS,
   WORKSPACE_LESSON_TYPES,
 } from "../../types/lessonTypes";
@@ -49,7 +49,7 @@ export default function WorkspaceSettingsButton({ isAuthoring }: { isAuthoring: 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const { resetRuntime, updateRunnerConfig } = useWebContainerRuntimeActions();
+  const { resetRuntime, updateRunnerConfig } = useNodeRuntimeActions();
   const { exportAsFile, importFromFile, loadRecording } = useNextEditorActions();
   const { currentRecording } = useNextEditorMetadata();
   const { getProject, reconcileExternalProject, saveProject } = useWorkspaceActions();
@@ -363,7 +363,7 @@ export default function WorkspaceSettingsButton({ isAuthoring }: { isAuthoring: 
                   />
                 </>
               ) : null}
-              {lessonRunsInWebContainer(lessonType) ? (
+              {lessonRunsInNodeRuntime(lessonType) ? (
                 <SettingsMenuItem
                   icon={Variable}
                   label="Edit Environment"

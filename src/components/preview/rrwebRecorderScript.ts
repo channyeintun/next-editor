@@ -1,7 +1,7 @@
 // A build-time virtual module materializes @rrweb/record's pinned, minified,
 // recorder-only IIFE. It executes in the preview realm and exposes
 // `window.rrwebRecord`; replay code never enters the injected payload. It is
-// ~77 KB of text that only a booting WebContainer needs, so it lives apart from
+// ~77 KB of text that only a booting Node.js runtime needs, so it lives apart from
 // rrwebPreview.ts (which playback imports) and is loaded with the preview script.
 import rrwebRecorderBundle from "virtual:rrweb-recorder-bundle";
 import { RRWEB_EVENT_TYPE, RRWEB_INCREMENTAL_SOURCE } from "../../core/src/preview";
@@ -383,7 +383,7 @@ export function createRrwebPreviewRecorderScript({
             sampling: { mousemove: 100, scroll: ${JSON.stringify(RRWEB_SCROLL_SAMPLING_MS)}, media: 800 },
             inlineStylesheet: true,
             // Bake image pixels into the snapshot (rr_dataURL). The preview page
-            // is served from an ephemeral per-boot WebContainer origin, so any
+            // is served from an ephemeral per-boot Node.js runtime origin, so any
             // project-served image recorded as a URL is unreachable in replay
             // (the host no longer resolves) — stable external URLs still work
             // either way. Same-origin loaded images inline synchronously during

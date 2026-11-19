@@ -73,7 +73,7 @@ describe("runStudioRender report timing", () => {
       iso: "2026-10-01T00:00:00.000Z",
       performanceNowMs: performance.now() - 5_000,
     };
-    // A WebContainer render asked to replay a fixture fails at preflight,
+    // A Node.js runtime render asked to replay a fixture fails at preflight,
     // before any dependency is touched.
     const failingPlan = {
       ...plan,
@@ -96,7 +96,7 @@ describe("runStudioRender report timing", () => {
 
     expect(result.report.outcome).toBe("failed");
     expect(result.report.errors).toEqual([
-      'WebContainer Studio renders require runtime mode "live"',
+      'Studio renders of a Node.js lesson require runtime mode "live"',
     ]);
     expect(result.report.startedAtIso).toBe(startedAt.iso);
     expect(result.report.wallDurationMs).toBeGreaterThanOrEqual(5_000);

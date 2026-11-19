@@ -1,10 +1,7 @@
 import { useEffect, useRef } from "react";
 import { usePreviewAdapterHandle } from "../contexts/PreviewAdapterHandleContext";
 import { isNonZeroWidthDelta, type WorkspaceRecordingSnapshot } from "../types/workspace";
-import {
-  useWebContainerRuntimeSaveWorkspace,
-  useWebContainerRuntimeSnapshotGetter,
-} from "./useWebContainerRuntime";
+import { useNodeRuntimeSaveWorkspace, useNodeRuntimeSnapshotGetter } from "./useNodeRuntime";
 import { useWorkspaceActions } from "./useWorkspace";
 
 /**
@@ -26,8 +23,8 @@ export function useWorkspaceRecordingAdapter() {
     setSidebarWidth,
     startSidebarCollapsed,
   } = useWorkspaceActions();
-  const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
-  const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
+  const saveRuntimeWorkspace = useNodeRuntimeSaveWorkspace();
+  const getRuntimeRecordingSnapshot = useNodeRuntimeSnapshotGetter();
   const previewHandle = usePreviewAdapterHandle();
   const workspaceSnapshotRef = useRef<WorkspaceRecordingSnapshot | null>(null);
   const suppressWorkspaceEventsRef = useRef(false);

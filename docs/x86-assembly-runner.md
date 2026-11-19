@@ -112,7 +112,7 @@ compilers are remote.
 - **CheerpX / WebVM** runs unmodified x86-64 Linux binaries client-side and is
   proprietary, with a paid licence required for any multi-person company.
 - **Piston** became whitelist-only in February 2026. **Wandbox** has no
-  assembly. **WebContainer** cannot execute native binaries at all.
+  assembly. The in-browser **Node.js runtime** cannot execute native binaries at all.
 
 ## Wiring
 

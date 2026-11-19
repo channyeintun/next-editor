@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { RECORDED_CURSOR_VISIBILITY_EVENT } from "../core/src/utils/recordedCursorVisibility";
 import type { StudioPreviewTargetBox } from "../utils/iframeStudioCommandBridge";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
-import { previewPointAim } from "./driver/webContainer";
+import { previewPointAim } from "./driver/nodeRuntime";
 
 vi.mock("../monaco", () => ({
   monaco: {},
@@ -82,7 +82,7 @@ function makeDriver(runtime?: StudioDriverDeps["runtime"]) {
     previewPort: 5173,
     errorMessage: null,
     latestPreviewMessage: null,
-  } as ReturnType<StudioDriverDeps["webContainerRuntime"]["getSnapshot"]>;
+  } as ReturnType<StudioDriverDeps["nodeRuntime"]["getSnapshot"]>;
 
   const deps = {
     getEditor: () => null,
@@ -114,7 +114,7 @@ function makeDriver(runtime?: StudioDriverDeps["runtime"]) {
       } as StudioDriverDeps["runtime"]),
     planSeed: 29,
     whiteboardAssets: [],
-    webContainerRuntime: {
+    nodeRuntime: {
       getActions: () => ({
         startRuntime: async () => {},
         resetRuntime: () => {},

@@ -27,7 +27,7 @@ import { WhiteboardStoreProvider } from "../contexts/WhiteboardStoreContext";
 import { RuntimePanelStoreProvider } from "../contexts/RuntimePanelStoreContext";
 import { SlidesProvider } from "../contexts/SlidesContext";
 import { WhiteboardProvider } from "../contexts/WhiteboardContext";
-import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
+import { NodeRuntimeProvider } from "../contexts/NodeRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
 import { CollaborationProvider, useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { CollaborationVoiceProvider } from "../contexts/CollaborationVoiceContext";
@@ -340,7 +340,7 @@ export default function Editor({
       pendingRecordingUrl={props.recordingUrl}
       persist={persistWorkspace && !readOnly}
     >
-      <WebContainerRuntimeProvider allowAmbientStart={runtimeAutoStart}>
+      <NodeRuntimeProvider allowAmbientStart={runtimeAutoStart}>
         <SlidesStoreProvider>
           <WhiteboardStoreProvider>
             <RuntimePanelStoreProvider>
@@ -368,7 +368,7 @@ export default function Editor({
             </RuntimePanelStoreProvider>
           </WhiteboardStoreProvider>
         </SlidesStoreProvider>
-      </WebContainerRuntimeProvider>
+      </NodeRuntimeProvider>
     </WorkspaceProvider>
   );
 }

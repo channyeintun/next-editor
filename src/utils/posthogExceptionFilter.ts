@@ -1,6 +1,6 @@
 import type { PostHogConfig } from "posthog-js";
 import { isWebnodeHostname } from "../core/webnode/preview/origin";
-import { webnodePreviewBase } from "../runtime/webcontainer/engine";
+import { webnodePreviewBase } from "../runtime/node/engine";
 
 // The host of every URL in a text, `blob:` ones included.
 const URL_HOSTNAME_PATTERN = /https?:\/\/([^\s/:?#]+)/gi;

@@ -12,7 +12,7 @@ import { CompileError } from "./errors";
 import { planPointerChoreography, type PlacedAction } from "./pointerChoreography";
 import { parseLessonScript, type LessonScript, type ScriptAction } from "./schema";
 
-/** javascript-minimal: a WebContainer lesson whose dock opens expanded. */
+/** javascript-minimal: a Node.js lesson whose dock opens expanded. */
 function javascriptMinimal(): LessonScript {
   return parseLessonScript(
     YAML.parse(readFileSync(resolve(__dirname, "./__fixtures__/javascript-minimal.yaml"), "utf8")),
@@ -224,7 +224,7 @@ describe("planPointerChoreography", () => {
     expect(dockOpenings).toEqual([{ id: "open-dock-run", at: expect.any(Number) }]);
   });
 
-  it("shuts a WebContainer dock before a select without a click", () => {
+  it("shuts a Node.js runtime dock before a select without a click", () => {
     const select: ScriptAction = {
       ...selectMain,
       target: { file: "server.js", text: "createServer", occurrence: 1 },

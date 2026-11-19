@@ -9,7 +9,7 @@ import { dispatchRecordedCursorVisibility } from "../../core/src/utils/recordedC
 import { StudioActionError, abortableSleep, throwIfAborted, tween, waitUntil } from "../async";
 import { describeStudioTarget, resolveStudioTarget, studioTargetAimPoint } from "../targets";
 import type { StudioDriver, StudioDriverDeps } from "./index";
-import { previewAimPoint } from "./webContainer";
+import { previewAimPoint } from "./nodeRuntime";
 
 /**
  * The studio pointer: the one place the recorded mouse lives. It owns where

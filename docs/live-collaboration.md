@@ -87,7 +87,7 @@ resolving concurrent edits.
   Cloudflare Realtime SFU — see `live-collaboration-voice-cloudflare-realtime-sfu.md`; remote
   voice is never recorded.)
 - Using SCR3 segments to merge concurrent editor operations.
-- Running one shared WebContainer process across browsers.
+- Running one shared Node.js runtime process across browsers.
 - Editing binary bytes inside the CRDT; binary files are immutable content-addressed assets.
 - Author-attributed replay, cross-user/shared undo, comments, and annotations in the first release.
 - Making playback and live authoring write to the same workspace simultaneously.
@@ -133,7 +133,7 @@ flowchart LR
 
     Doc --> Adapter[Workspace projection adapter]
     Adapter --> Store[(workspaceStore)]
-    Store --> Container[Local WebContainer mirror]
+    Store --> Container[Local Node.js runtime mirror]
     Store --> Recorder[Room host's editorMachine]
     Recorder --> SCR3[Browser-local SCR3 recording]
     SCR3 -.->|after live ends| Modal[Post-recording upload modal]
@@ -142,7 +142,7 @@ flowchart LR
 
 Each client owns a CRDT document and receives the same durable room updates. The room service
 persists updates and enforces access. Awareness messages use the same connection but are not
-stored as project history. Every client keeps its own UI and WebContainer. Durable project and
+stored as project history. Every client keeps its own UI and Node.js runtime. Durable project and
 teaching content is room-wide; follow selection remains tab-local and filters only ephemeral view
 application.
 
@@ -316,19 +316,19 @@ store commands remain the write path in standalone mode.
 
 Projection should be incremental and batched per CRDT transaction. Rebuilding the complete
 path-based project on every inserted character would create unnecessary store notifications,
-WebContainer writes, and recording events.
+Node.js runtime writes, and recording events.
 
 Teaching-only transactions bypass workspace projection. The Durable Object likewise caches the
 validated teaching fingerprint across workspace-only updates and revalidates the bounded teaching
 tree only when that subtree changes.
 
-Remote changes to inactive files must update the store and WebContainer mirror. They must also be
+Remote changes to inactive files must update the store and Node.js runtime mirror. They must also be
 visible to the room host's recorder; relying only on Monaco's active model would omit those edits
 from the recording.
 
 ### Runtime and participant-following behavior
 
-Every participant runs the project in a separate local WebContainer. For the first release:
+Every participant runs the project in a separate local Node.js runtime. For the first release:
 
 - Any owner, editor, or viewer may follow one exact remote `sessionId`; following grants no write
   permission and is not persisted or sent to the room.
@@ -447,7 +447,7 @@ Status: implemented.
 Status: implemented, including local-origin text undo/redo.
 
 - Bind Monaco models to collaborative text.
-- Project remote edits into `workspaceStore` and the local WebContainer.
+- Project remote edits into `workspaceStore` and the local Node.js runtime.
 - Add participants, cursors, selections, active-file presence, and local-origin undo.
 
 ### Phase 3: project tree and assets
@@ -496,7 +496,7 @@ release gate.
 - Viewers receive document and presence updates but cannot publish durable changes.
 - Remote cursors, selections, participant departure, and active-file presence update without
   persisting stale awareness.
-- Remote changes update the local workspace and WebContainer without store/CRDT feedback loops.
+- Remote changes update the local workspace and Node.js runtime without store/CRDT feedback loops.
 - Only the room host can record local edits, remote edits, and inactive-file changes; the resulting
   browser-local SCR3 file decodes and replays with the existing reader.
 - No SCR3 bytes enter the collaboration provider, and lesson upload is available only after the

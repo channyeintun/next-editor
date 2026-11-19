@@ -323,7 +323,7 @@ browser, as above).
 - `live`: Go/Kotlin/Rust/Zig/Haskell call their Playground proxy, which needs
   no sign-in, while Kite and asm run their in-page compiler/assembler. JavaScript,
   TypeScript, and console-only Python run their pinned commands in the
-  WebContainer and therefore require `live`; JS/TS additionally wait for the
+  Node.js runtime and therefore require `live`; JS/TS additionally wait for the
   declared preview server and acknowledged iframe bridge.
 
 ## What exists (map)

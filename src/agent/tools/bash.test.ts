@@ -7,29 +7,28 @@ import type { ToolContext } from "../types";
 import { getProject } from "./workspaceFs";
 
 const support = vi.hoisted(() => ({
-  isWebContainerRuntimeSupported: vi.fn<() => boolean>(),
-  getOrBootSharedWebContainer: vi.fn<() => Promise<WebNode>>(),
+  isNodeRuntimeSupported: vi.fn<() => boolean>(),
+  getOrBootSharedNodeRuntime: vi.fn<() => Promise<WebNode>>(),
   readWorkspaceProject: vi.fn<() => Promise<WorkspaceProject>>(),
-  runSerializedWebContainerTask: vi.fn<
+  runSerializedNodeRuntimeTask: vi.fn<
     (instance: WebNode, task: () => Promise<unknown>) => Promise<unknown>
   >((_instance: WebNode, task: () => Promise<unknown>) => task()),
   syncWorkspaceProject: vi.fn<() => Promise<void>>(),
   createWorkspaceTree: vi.fn<() => object>(() => ({})),
 }));
 
-vi.mock("../../runtime/webcontainer/sharedContainer", () => ({
-  getOrBootSharedWebContainer: support.getOrBootSharedWebContainer,
-  isWebContainerRuntimeSupported: support.isWebContainerRuntimeSupported,
-  runSerializedWebContainerTask: support.runSerializedWebContainerTask,
+vi.mock("../../runtime/node/sharedNodeRuntime", () => ({
+  getOrBootSharedNodeRuntime: support.getOrBootSharedNodeRuntime,
+  isNodeRuntimeSupported: support.isNodeRuntimeSupported,
+  runSerializedNodeRuntimeTask: support.runSerializedNodeRuntimeTask,
 }));
-vi.mock("../../runtime/webcontainer/files", async (importOriginal) => ({
+vi.mock("../../runtime/node/files", async (importOriginal) => ({
   createWorkspaceTree: support.createWorkspaceTree,
   readWorkspaceProject: support.readWorkspaceProject,
   syncWorkspaceProject: support.syncWorkspaceProject,
   // The fold's content comparison stays real.
-  workspaceFileContentsEqual: (
-    await importOriginal<typeof import("../../runtime/webcontainer/files")>()
-  ).workspaceFileContentsEqual,
+  workspaceFileContentsEqual: (await importOriginal<typeof import("../../runtime/node/files")>())
+    .workspaceFileContentsEqual,
 }));
 
 const { makeBashTool } = await import("./bash");
@@ -124,24 +123,24 @@ describe("bash tool", () => {
   });
 
   it("reports unavailable when the runtime is unsupported", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(false);
+    support.isNodeRuntimeSupported.mockReturnValue(false);
     const result = await run(makeCtx(makeStore([makeFile("index.html", "")])))({ command: "ls" });
     expect(result).toContain("unavailable");
   });
 
   it("does not run a declined command", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    support.isNodeRuntimeSupported.mockReturnValue(true);
     const store = makeStore([makeFile("index.html", "")]);
     const result = await run(makeCtx(store, async () => false))({ command: "rm -rf /" });
     expect(result).toContain("declined");
-    expect(support.getOrBootSharedWebContainer).not.toHaveBeenCalled();
+    expect(support.getOrBootSharedNodeRuntime).not.toHaveBeenCalled();
   });
 
   it("runs an approved command and folds container changes back into the store", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    support.isNodeRuntimeSupported.mockReturnValue(true);
     const store = makeStore([makeFile("index.html", "<html></html>")]);
     const instance = makeFakeInstance(createFakeProcess(["hello from container"], 0));
-    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+    support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
     support.readWorkspaceProject.mockResolvedValue(
       makeProject([makeFile("index.html", "<html></html>"), makeFile("generated.txt", "new file")]),
     );
@@ -154,14 +153,14 @@ describe("bash tool", () => {
   });
 
   it("reconciles deletions and renames from the complete container snapshot", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    support.isNodeRuntimeSupported.mockReturnValue(true);
     const store = makeStore([
       makeFile("index.html", "<html></html>"),
       makeFile("old.txt", "old"),
       makeFile("nested/remove.txt", "remove"),
     ]);
     const instance = makeFakeInstance(createFakeProcess(["renamed"], 0));
-    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+    support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
     support.readWorkspaceProject.mockResolvedValue(
       makeProject([makeFile("index.html", "<html></html>"), makeFile("renamed.txt", "old")]),
     );
@@ -178,13 +177,13 @@ describe("bash tool", () => {
   });
 
   it("reconciles binary files and falls back when the entry file is deleted", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    support.isNodeRuntimeSupported.mockReturnValue(true);
     const store = makeStore([
       makeFile("index.html", "entry"),
       makeFile("fallback.html", "fallback"),
     ]);
     const instance = makeFakeInstance(createFakeProcess(["generated binary"], 0));
-    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+    support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
     support.readWorkspaceProject.mockResolvedValue(
       makeProject([makeFile("fallback.html", "fallback"), makeAssetFile("public/image.png")]),
     );
@@ -203,7 +202,7 @@ describe("bash tool", () => {
   });
 
   it("preserves a concurrent editor edit while folding unrelated command changes", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    support.isNodeRuntimeSupported.mockReturnValue(true);
     const store = makeStore([makeFile("index.html", "before")]);
     const deferredExit: { resolve: ((exitCode: number) => void) | null } = { resolve: null };
     const process = createFakeProcess(["done"], 0);
@@ -213,7 +212,7 @@ describe("bash tool", () => {
       }),
     });
     const instance = makeFakeInstance(process);
-    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+    support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
     support.readWorkspaceProject.mockResolvedValue(
       makeProject([
         makeFile("index.html", "changed by shell"),
@@ -234,7 +233,7 @@ describe("bash tool", () => {
   // A next lesson made from the same starter loads in place under the same id.
   // The command ran on the old one's files, so none of its changes belong here.
   it("folds nothing into a workspace loaded under the same id while it ran", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    support.isNodeRuntimeSupported.mockReturnValue(true);
     const store = makeStore([makeFile("index.html", "lesson A")]);
     const deferredExit: { resolve: ((exitCode: number) => void) | null } = { resolve: null };
     const process = createFakeProcess(["done"], 0);
@@ -244,7 +243,7 @@ describe("bash tool", () => {
       }),
     });
     const instance = makeFakeInstance(process);
-    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+    support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
     support.readWorkspaceProject.mockResolvedValue(
       makeProject([makeFile("index.html", "lesson A"), makeFile("planted.cjs", "from lesson A")]),
     );
@@ -265,13 +264,13 @@ describe("bash tool", () => {
   });
 
   it("preserves an editor edit made during the final runtime scan", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    support.isNodeRuntimeSupported.mockReturnValue(true);
     const store = makeStore([makeFile("index.html", "before")]);
     const instance = makeFakeInstance(createFakeProcess(["done"], 0));
     const deferredRead: {
       resolve: ((project: WorkspaceProject) => void) | null;
     } = { resolve: null };
-    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+    support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
     support.readWorkspaceProject.mockImplementationOnce(
       () =>
         new Promise<WorkspaceProject>((resolve) => {
@@ -295,14 +294,14 @@ describe("bash tool", () => {
   });
 
   it("retains bounded head and tail output with an exact omission count", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    support.isNodeRuntimeSupported.mockReturnValue(true);
     const store = makeStore([makeFile("index.html", "")]);
     const chunks = Array.from(
       { length: 100 },
       (_, index) => `${String(index).padStart(3, "0")}:${"x".repeat(995)}\n`,
     );
     const instance = makeFakeInstance(createFakeProcess(chunks, 0));
-    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+    support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
     support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
 
     const result = await run(makeCtx(store))({ command: "noisy-command" });
@@ -316,7 +315,7 @@ describe("bash tool", () => {
   it("reports timeout independently from bounded noisy output", async () => {
     vi.useFakeTimers();
     try {
-      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      support.isNodeRuntimeSupported.mockReturnValue(true);
       const store = makeStore([makeFile("index.html", "")]);
       let resolveExit: ((exitCode: number) => void) | null = null;
       const process = createFakeProcess(["x".repeat(50_000)], 0);
@@ -328,7 +327,7 @@ describe("bash tool", () => {
       const kill = vi.fn<() => void>(() => resolveExit?.(143));
       Object.defineProperty(process, "kill", { value: kill });
       const instance = makeFakeInstance(process);
-      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
       support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
 
       const command = run(makeCtx(store))({ command: "noisy-and-stuck", timeout: 10 });
@@ -350,16 +349,16 @@ describe("bash tool", () => {
   it("gives up on a process that does not exit after kill and frees the task queue", async () => {
     vi.useFakeTimers();
     try {
-      const { runSerializedWebContainerTask } = await vi.importActual<
-        typeof import("../../runtime/webcontainer/sharedContainer")
-      >("../../runtime/webcontainer/sharedContainer");
-      support.runSerializedWebContainerTask.mockImplementationOnce(runSerializedWebContainerTask);
-      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      const { runSerializedNodeRuntimeTask } = await vi.importActual<
+        typeof import("../../runtime/node/sharedNodeRuntime")
+      >("../../runtime/node/sharedNodeRuntime");
+      support.runSerializedNodeRuntimeTask.mockImplementationOnce(runSerializedNodeRuntimeTask);
+      support.isNodeRuntimeSupported.mockReturnValue(true);
       const store = makeStore([makeFile("index.html", "")]);
       const process = createFakeProcess(["partial output"], 0);
       Object.defineProperty(process, "exit", { value: new Promise<number>(() => {}) });
       const instance = makeFakeInstance(process);
-      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
       support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
 
       const command = startCommand(makeCtx(store), { command: "yes | head", timeout: 10 });
@@ -370,7 +369,7 @@ describe("bash tool", () => {
         "Command timed out after 10ms; the process did not exit after kill and may still be running.\npartial output",
       );
       let didNextTaskRun = false;
-      void runSerializedWebContainerTask(instance, async () => {
+      void runSerializedNodeRuntimeTask(instance, async () => {
         didNextTaskRun = true;
       });
       await vi.advanceTimersByTimeAsync(0);
@@ -383,12 +382,12 @@ describe("bash tool", () => {
   it("gives up on a process that ignores Stop", async () => {
     vi.useFakeTimers();
     try {
-      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      support.isNodeRuntimeSupported.mockReturnValue(true);
       const store = makeStore([makeFile("index.html", "")]);
       const process = createFakeProcess([], 0);
       Object.defineProperty(process, "exit", { value: new Promise<number>(() => {}) });
       const instance = makeFakeInstance(process);
-      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
       support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
       const controller = new AbortController();
 
@@ -414,7 +413,7 @@ describe("bash tool", () => {
   it("stops waiting for output a background process keeps open after exit", async () => {
     vi.useFakeTimers();
     try {
-      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      support.isNodeRuntimeSupported.mockReturnValue(true);
       const store = makeStore([makeFile("index.html", "")]);
       const cancelOutput = vi.fn<() => void>();
       const process = createFakeProcess([], 0);
@@ -427,7 +426,7 @@ describe("bash tool", () => {
         }),
       });
       const instance = makeFakeInstance(process);
-      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
       support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
 
       const command = startCommand(makeCtx(store), { command: "serve &" });
@@ -447,7 +446,7 @@ describe("bash tool", () => {
   it("waits the full kill grace when the timeout is longer than it", async () => {
     vi.useFakeTimers();
     try {
-      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      support.isNodeRuntimeSupported.mockReturnValue(true);
       const store = makeStore([makeFile("index.html", "")]);
       let resolveExit: ((exitCode: number) => void) | null = null;
       const process = createFakeProcess(["slow"], 0);
@@ -460,7 +459,7 @@ describe("bash tool", () => {
         value: vi.fn<() => void>(() => setTimeout(() => resolveExit?.(143), 1_000)),
       });
       const instance = makeFakeInstance(process);
-      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
       support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
 
       const command = run(makeCtx(store))({ command: "slow", timeout: 6_000 });
@@ -475,7 +474,7 @@ describe("bash tool", () => {
   it("waits the full drain grace when a long command exits", async () => {
     vi.useFakeTimers();
     try {
-      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      support.isNodeRuntimeSupported.mockReturnValue(true);
       const store = makeStore([makeFile("index.html", "")]);
       const process = createFakeProcess([], 0);
       Object.defineProperty(process, "exit", {
@@ -492,7 +491,7 @@ describe("bash tool", () => {
         }),
       });
       const instance = makeFakeInstance(process);
-      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
       support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
 
       const command = run(makeCtx(store))({ command: "build" });
@@ -505,10 +504,10 @@ describe("bash tool", () => {
   });
 
   it("surfaces a non-zero exit code", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    support.isNodeRuntimeSupported.mockReturnValue(true);
     const store = makeStore([makeFile("index.html", "")]);
     const instance = makeFakeInstance(createFakeProcess([""], 1));
-    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+    support.getOrBootSharedNodeRuntime.mockResolvedValue(instance);
     support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
 
     const result = await run(makeCtx(store))({ command: "false" });

@@ -296,14 +296,14 @@ describe("lesson-script skill bundle contract (SKILL-01)", () => {
       expected[lessonType] = kind;
     }
     expect(parseRuntimeMatrix(reference)).toEqual(expected);
-    // JS/TS run in the WebContainer; the fork's regression was labelling them `none`.
+    // JS/TS run in the Node.js runtime; the fork's regression was labelling them `none`.
     expect(RUNTIME_KIND_FOR_LESSON.javascript).toBe("webcontainer");
     expect(RUNTIME_KIND_FOR_LESSON.typescript).toBe("webcontainer");
   });
 
   it("documents exactly the authored action types from the schema", () => {
     // Set equality both ways: every documented action is real, and every authored
-    // action — including the WebContainer/preview ones the fork dropped — is documented.
+    // action — including the Node.js runtime/preview ones the fork dropped — is documented.
     expect(parseActionCatalog(reference)).toEqual(authoredActionTypes);
     for (const required of [
       "runtime.start",

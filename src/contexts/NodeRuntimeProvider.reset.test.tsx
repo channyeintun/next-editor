@@ -1,37 +1,31 @@
 import { act, cleanup, render } from "@testing-library/react";
 import type { WebNode, WebNodeProcess } from "../core/webnode/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
+import { NodeRuntimeProvider } from "./NodeRuntimeProvider";
 import { WorkspaceProvider } from "./WorkspaceProvider";
-import {
-  useWebContainerRuntimeActions,
-  useWebContainerRuntimeMetadata,
-} from "../hooks/useWebContainerRuntime";
+import { useNodeRuntimeActions, useNodeRuntimeMetadata } from "../hooks/useNodeRuntime";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
-import { getOrBootSharedWebContainer } from "../runtime/webcontainer/sharedContainer";
+import { getOrBootSharedNodeRuntime } from "../runtime/node/sharedNodeRuntime";
 import { createWorkspaceFile } from "../starters/shared";
 import type { WorkspaceLessonType, WorkspaceProject } from "../types/workspace";
 import type { WorkspaceActions } from "../stores/workspaceActions";
-import type {
-  WebContainerRuntimeActions,
-  WebContainerRuntimeMetadata,
-} from "./WebContainerRuntimeContext";
+import type { NodeRuntimeActions, NodeRuntimeMetadata } from "./NodeRuntimeContext";
 
-vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
+vi.mock("../runtime/node/sharedNodeRuntime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runtime/node/sharedNodeRuntime")>();
   return {
     ...actual,
-    getOrBootSharedWebContainer: vi.fn<() => Promise<WebNode>>(),
-    teardownSharedWebContainer: vi.fn<(instance: WebNode | null) => void>(),
-    holdSharedWebContainer: vi.fn<() => () => void>(() => () => {}),
-    isWebContainerRuntimeSupported: () => true,
+    getOrBootSharedNodeRuntime: vi.fn<() => Promise<WebNode>>(),
+    teardownSharedNodeRuntime: vi.fn<(instance: WebNode | null) => void>(),
+    holdSharedNodeRuntime: vi.fn<() => () => void>(() => () => {}),
+    isNodeRuntimeSupported: () => true,
   };
 });
 
 /** Every command line spawned on any container, in order. */
 const spawned: string[] = [];
 
-function createFakeWebContainer(): WebNode {
+function createFakeNodeRuntime(): WebNode {
   return {
     on: vi.fn<() => () => void>(() => () => {}),
     mount: vi.fn<() => Promise<void>>(async () => {}),
@@ -94,22 +88,22 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * the test does next, which hides the ordering these tests are about.
  */
 async function renderRunningSolidWorkspace() {
-  let runtime: WebContainerRuntimeActions | null = null;
+  let runtime: NodeRuntimeActions | null = null;
   let workspace: WorkspaceActions | null = null;
-  let metadata: WebContainerRuntimeMetadata | null = null;
+  let metadata: NodeRuntimeMetadata | null = null;
 
   function Capture() {
-    runtime = useWebContainerRuntimeActions();
+    runtime = useNodeRuntimeActions();
     workspace = useWorkspaceActions();
-    metadata = useWebContainerRuntimeMetadata();
+    metadata = useNodeRuntimeMetadata();
     return null;
   }
 
   render(
     <WorkspaceProvider>
-      <WebContainerRuntimeProvider>
+      <NodeRuntimeProvider>
         <Capture />
-      </WebContainerRuntimeProvider>
+      </NodeRuntimeProvider>
     </WorkspaceProvider>,
   );
 
@@ -129,13 +123,13 @@ async function renderRunningSolidWorkspace() {
   };
 }
 
-describe("WebContainerRuntimeProvider resets a consumer asks for", () => {
+describe("NodeRuntimeProvider resets a consumer asks for", () => {
   beforeEach(() => {
     spawned.length = 0;
     // A real boot takes seconds; this one is still in flight when the save after
     // the swap resolves.
-    vi.mocked(getOrBootSharedWebContainer).mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve(createFakeWebContainer()), 40)),
+    vi.mocked(getOrBootSharedNodeRuntime).mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(createFakeNodeRuntime()), 40)),
     );
   });
 

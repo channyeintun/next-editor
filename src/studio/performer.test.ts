@@ -359,7 +359,7 @@ describe("performPlan", () => {
     expect(result.status).toBe("completed");
   });
 
-  it("dispatches the authored WebContainer preview sequence through the driver", async () => {
+  it("dispatches the authored Node.js runtime preview sequence through the driver", async () => {
     const { calls, driver } = makePlan();
     const plan = parseStudioPlan({
       schemaVersion: 1,
@@ -468,13 +468,13 @@ describe("performPlan", () => {
   });
 });
 
-const WEB_CONTAINER_WORKSPACE = {
+const NODE_LESSON_WORKSPACE = {
   lessonType: "typescript",
   name: "Preview",
   entryFilePath: "src/main.ts",
   files: { "package.json": "{}", "package-lock.json": "{}", "src/main.ts": "export {};\n" },
 };
-const WEB_CONTAINER_RUNTIME = {
+const NODE_LESSON_RUNTIME = {
   kind: "webcontainer",
   adapterVersion: 1,
   defaultMode: "live",
@@ -494,14 +494,14 @@ function makeRuntimePlan(
     schemaVersion: 1,
     lesson: { slug: "background-start", title: "Background start", locale: "en-US" },
     seed: 7,
-    workspace: WEB_CONTAINER_WORKSPACE,
+    workspace: NODE_LESSON_WORKSPACE,
     narration: {
       audioPath: "/x.m4a",
       mimeType: "audio/mp4",
       expectedDurationMs: 5_000,
       captions: { id: "c", language: "en", cues: [{ start: 0, end: 1_000, text: "hi" }] },
     },
-    runtime: WEB_CONTAINER_RUNTIME,
+    runtime: NODE_LESSON_RUNTIME,
     ...(dependencies ? { dependencies } : {}),
     actions,
   });
@@ -628,7 +628,7 @@ describe("performPlan with a background runtime.start", () => {
     });
 
     expect(result.status).toBe("failed");
-    expect(result.error).toMatch(/WebContainer startup failed|pnpm install exploded/);
+    expect(result.error).toMatch(/Node.js runtime startup failed|pnpm install exploded/);
     expect(calls).not.toContain("runtime-ready");
     expect(result.receipts.map((receipt) => [receipt.actionId, receipt.status])).toEqual([
       ["start", "failed"],

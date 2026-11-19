@@ -1,10 +1,10 @@
 import type { RuntimeStatus } from "../../types/runtime";
 
 /** The recorded status union, which core owns because recordings store it. */
-export type WebContainerRuntimeStatus = RuntimeStatus;
+export type NodeRuntimeStatus = RuntimeStatus;
 
 /** A boot, mount, install or runner start is under way. */
-export function isRuntimeBusy(status: WebContainerRuntimeStatus): boolean {
+export function isRuntimeBusy(status: NodeRuntimeStatus): boolean {
   return (
     status === "booting" ||
     status === "mounting" ||

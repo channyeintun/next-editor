@@ -7,12 +7,12 @@ import {
   readWorkspaceProject,
   syncWorkspaceProject,
   workspaceFileContentsEqual,
-} from "../../runtime/webcontainer/files";
+} from "../../runtime/node/files";
 import {
-  getOrBootSharedWebContainer,
-  isWebContainerRuntimeSupported,
-  runSerializedWebContainerTask,
-} from "../../runtime/webcontainer/sharedContainer";
+  getOrBootSharedNodeRuntime,
+  isNodeRuntimeSupported,
+  runSerializedNodeRuntimeTask,
+} from "../../runtime/node/sharedNodeRuntime";
 import { getProject } from "./workspaceFs";
 import {
   areWorkspaceBoundariesEqual,
@@ -46,14 +46,14 @@ const inputSchema = z.object({
 });
 
 // The bash tool reuses the same shared WebNode singleton the Runtime panel
-// mounts (getOrBootSharedWebContainer), so a command sees the files the user is
-// actually looking at. It does not hold the container (holdSharedWebContainer):
+// mounts (getOrBootSharedNodeRuntime), so a command sees the files the user is
+// actually looking at. It does not hold the container (holdSharedNodeRuntime):
 // the agent panel renders only inside an editor, which holds it while mounted, so
 // repeated bash calls keep reusing it, and a command still running when the
 // editor unmounts goes down with the container. A call made after that boots or
 // joins a container nobody holds, which lives at most until the next editor
 // mounts and unmounts. A container this tool booted goes down at the editor's
-// next runtime reset or start, which never adopt it (see SharedWebContainerUser);
+// next runtime reset or start, which never adopt it (see SharedNodeRuntimeUser);
 // the next call then mounts afresh into the new instance.
 // This module-level state lets repeated bash calls in one agent turn skip
 // re-mounting when nothing changed.
@@ -235,7 +235,7 @@ async function runCommand(
   command: string,
   timeout: number | undefined,
 ): Promise<string> {
-  if (!isWebContainerRuntimeSupported()) {
+  if (!isNodeRuntimeSupported()) {
     return (
       "The bash tool is unavailable: the sandboxed runtime requires a non-mobile browser with " +
       "cross-origin isolation enabled."
@@ -274,13 +274,13 @@ async function runCommand(
       return "No workspace loaded.";
     }
 
-    const instance = await getOrBootSharedWebContainer();
+    const instance = await getOrBootSharedNodeRuntime();
 
     if (aborted) {
       return "Command aborted.";
     }
 
-    return await runSerializedWebContainerTask(instance, async () => {
+    return await runSerializedNodeRuntimeTask(instance, async () => {
       await ensureMounted(instance, project);
 
       if (aborted) {

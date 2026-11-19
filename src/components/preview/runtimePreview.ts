@@ -1,9 +1,9 @@
-import type { WebContainerRuntimeStatus } from "../../runtime/webcontainer/types";
+import type { NodeRuntimeStatus } from "../../runtime/node/types";
 
 // ============================================================================
 // Runtime preview helpers
 //
-// Pure helpers behind `usePreviewController` for the WebContainer ("runtime")
+// Pure helpers behind `usePreviewController` for the Node.js runtime ("runtime")
 // preview: parsing/normalizing the live preview URL and route, deriving the
 // status placeholder copy, and rendering the placeholder document. No React or
 // hook state here — kept separate so the controller hook reads as wiring.
@@ -124,7 +124,7 @@ export function applyRouteToRuntimePreviewLocation(
  * Compares the `src` *attribute* — the exact string a previous run assigned — and
  * NOT the reflected `iframe.src` property. The property getter returns the parsed,
  * re-serialized URL (an origin-only URL gains a trailing "/"), which never equals
- * the raw WebContainer server-ready URL, so a property comparison is permanently
+ * the raw Node.js runtime server-ready URL, so a property comparison is permanently
  * unequal. Since any assignment to `src` (even of the identical value) navigates
  * the frame, comparing against the property made every run of the src-sync effect
  * reload the preview — dropping its scroll/SPA state whenever something re-rendered
@@ -142,7 +142,7 @@ export async function refreshRuntimePreview(
   fallbackUrl: string,
 ): Promise<void> {
   try {
-    const { reloadRuntimeEnginePreview } = await import("../../runtime/webcontainer/engine");
+    const { reloadRuntimeEnginePreview } = await import("../../runtime/node/engine");
     await reloadRuntimeEnginePreview(iframe);
   } catch {
     iframe.removeAttribute("srcdoc");
@@ -164,7 +164,7 @@ function escapePreviewHtml(value: string): string {
 }
 
 export function getRuntimePreviewState(
-  status: WebContainerRuntimeStatus,
+  status: NodeRuntimeStatus,
   errorMessage: string | null,
   isSupported: boolean,
 ): {
@@ -176,7 +176,7 @@ export function getRuntimePreviewState(
     return {
       title: "Runtime preview unavailable",
       description:
-        "The live runtime needs a desktop Chromium or Firefox browser with cross-origin isolation. It isn't available on mobile browsers.",
+        "The live runtime needs a desktop Chromium browser with cross-origin isolation. It isn't available on mobile browsers.",
       placeholderKind: "message",
     };
   }

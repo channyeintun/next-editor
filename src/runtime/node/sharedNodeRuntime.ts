@@ -5,7 +5,7 @@ import type { WebNode } from "../../core/webnode/api";
 import { isMobileBrowser } from "../../utils/isMobileBrowser";
 import { bootRuntimeEngine } from "./engine";
 
-const sharedWebContainerState: {
+const sharedNodeRuntimeState: {
   instance: WebNode | null;
   bootPromise: Promise<WebNode> | null;
   holders: number;
@@ -27,21 +27,21 @@ const sharedWebContainerState: {
  * reads every path back into the workspace, so it must start from a container it
  * booted or joined itself. The agent's bash tool may use any container.
  */
-export type SharedWebContainerUser = "runtime" | "agent";
+export type SharedNodeRuntimeUser = "runtime" | "agent";
 
-const webContainerTaskQueues = new WeakMap<WebNode, Promise<void>>();
+const nodeRuntimeTaskQueues = new WeakMap<WebNode, Promise<void>>();
 
 /**
  * Serialize filesystem transactions across the runtime UI, reverse sync, and
  * agent tools that share one WebNode instance.
  */
-export function runSerializedWebContainerTask<T>(
+export function runSerializedNodeRuntimeTask<T>(
   instance: WebNode,
   task: () => Promise<T>,
 ): Promise<T> {
-  const queue = webContainerTaskQueues.get(instance) ?? Promise.resolve();
+  const queue = nodeRuntimeTaskQueues.get(instance) ?? Promise.resolve();
   const result = queue.then(task, task);
-  webContainerTaskQueues.set(
+  nodeRuntimeTaskQueues.set(
     instance,
     result.then(
       () => undefined,
@@ -57,7 +57,7 @@ export function runSerializedWebContainerTask<T>(
  * excluded because a phone has no memory for it: the boot attempt OOM-reloads
  * the tab. This gates auto-boot, so the runtime never starts on mobile.
  */
-export function isWebContainerRuntimeSupported(): boolean {
+export function isNodeRuntimeSupported(): boolean {
   if (typeof window === "undefined") {
     return false;
   }
@@ -65,7 +65,7 @@ export function isWebContainerRuntimeSupported(): boolean {
   return window.crossOriginIsolated === true && !isMobileBrowser();
 }
 
-function bootSharedWebContainer(): Promise<WebNode> {
+function bootSharedNodeRuntime(): Promise<WebNode> {
   // Fetched alongside the boot, not statically: it carries the ~77 KB recorder
   // bundle as text, which no page that never boots a WebNode (mobile,
   // playback) should fetch. A failure surfaces where it is awaited below; this
@@ -75,7 +75,7 @@ function bootSharedWebContainer(): Promise<WebNode> {
 
   // Only one WebNode boots at a time, so a boot a reset gave up on lands
   // and goes down before this one starts.
-  const boot: Promise<WebNode> = (sharedWebContainerState.retiringBoot ?? Promise.resolve())
+  const boot: Promise<WebNode> = (sharedNodeRuntimeState.retiringBoot ?? Promise.resolve())
     .then(() => bootRuntimeEngine())
     .then(async (instance) => {
       // Install the rrweb recorder into every preview HTML response up front,
@@ -89,19 +89,19 @@ function bootSharedWebContainer(): Promise<WebNode> {
         console.warn("Failed to install runtime preview recorder script:", error);
       }
 
-      if (sharedWebContainerState.bootPromise !== boot) {
+      if (sharedNodeRuntimeState.bootPromise !== boot) {
         // A reset gave up on this boot while it was in flight: whoever joined it
         // was working for the workspace the reset replaced.
         instance.teardown();
         return instance;
       }
 
-      sharedWebContainerState.instance = instance;
+      sharedNodeRuntimeState.instance = instance;
       return instance;
     })
     .catch((error) => {
-      if (sharedWebContainerState.bootPromise === boot) {
-        sharedWebContainerState.bootPromise = null;
+      if (sharedNodeRuntimeState.bootPromise === boot) {
+        sharedNodeRuntimeState.bootPromise = null;
       }
       throw error;
     });
@@ -109,17 +109,17 @@ function bootSharedWebContainer(): Promise<WebNode> {
   return boot;
 }
 
-export async function getOrBootSharedWebContainer(
-  user: SharedWebContainerUser = "agent",
+export async function getOrBootSharedNodeRuntime(
+  user: SharedNodeRuntimeUser = "agent",
 ): Promise<WebNode> {
-  const state = sharedWebContainerState;
+  const state = sharedNodeRuntimeState;
 
   if (user === "runtime") {
     if ((state.instance || state.bootPromise) && !state.runtimeOwned) {
       // Only the agent's bash tool has used this container: it holds that tool's
       // copy of some workspace, maybe another project's, plus whatever its
       // commands wrote or left running.
-      resetSharedWebContainer();
+      resetSharedNodeRuntime();
     }
     state.runtimeOwned = true;
   }
@@ -129,22 +129,22 @@ export async function getOrBootSharedWebContainer(
   }
 
   if (!state.bootPromise) {
-    state.bootPromise = bootSharedWebContainer();
+    state.bootPromise = bootSharedNodeRuntime();
   }
 
   return state.bootPromise;
 }
 
-export function teardownSharedWebContainer(instance: WebNode | null): void {
-  if (!instance || instance !== sharedWebContainerState.instance) {
+export function teardownSharedNodeRuntime(instance: WebNode | null): void {
+  if (!instance || instance !== sharedNodeRuntimeState.instance) {
     return;
   }
 
   instance.teardown();
-  webContainerTaskQueues.delete(instance);
-  sharedWebContainerState.instance = null;
-  sharedWebContainerState.bootPromise = null;
-  sharedWebContainerState.runtimeOwned = false;
+  nodeRuntimeTaskQueues.delete(instance);
+  sharedNodeRuntimeState.instance = null;
+  sharedNodeRuntimeState.bootPromise = null;
+  sharedNodeRuntimeState.runtimeOwned = false;
 }
 
 /**
@@ -154,11 +154,11 @@ export function teardownSharedWebContainer(instance: WebNode | null): void {
  * runtime session claimed, and a boot still in flight, which is torn down when it
  * lands; the next caller boots a container of its own after it.
  */
-export function resetSharedWebContainer(): void {
-  const state = sharedWebContainerState;
+export function resetSharedNodeRuntime(): void {
+  const state = sharedNodeRuntimeState;
 
   if (state.instance) {
-    teardownSharedWebContainer(state.instance);
+    teardownSharedNodeRuntime(state.instance);
     return;
   }
 
@@ -188,10 +188,10 @@ export function resetSharedWebContainer(): void {
  * container down, or tears down a boot still in flight once it lands, unless
  * someone holds the container by then. A reset (a project or lesson-type change)
  * still tears the container down directly, for a clean reinstall (see
- * resetSharedWebContainer).
+ * resetSharedNodeRuntime).
  */
-export function holdSharedWebContainer(): () => void {
-  sharedWebContainerState.holders += 1;
+export function holdSharedNodeRuntime(): () => void {
+  sharedNodeRuntimeState.holders += 1;
   let released = false;
 
   return () => {
@@ -200,22 +200,22 @@ export function holdSharedWebContainer(): () => void {
     }
 
     released = true;
-    sharedWebContainerState.holders -= 1;
+    sharedNodeRuntimeState.holders -= 1;
 
-    if (sharedWebContainerState.holders > 0) {
+    if (sharedNodeRuntimeState.holders > 0) {
       return;
     }
 
-    if (sharedWebContainerState.instance) {
-      teardownSharedWebContainer(sharedWebContainerState.instance);
+    if (sharedNodeRuntimeState.instance) {
+      teardownSharedNodeRuntime(sharedNodeRuntimeState.instance);
       return;
     }
 
-    if (sharedWebContainerState.bootPromise) {
-      void sharedWebContainerState.bootPromise.then(
+    if (sharedNodeRuntimeState.bootPromise) {
+      void sharedNodeRuntimeState.bootPromise.then(
         (instance) => {
-          if (sharedWebContainerState.holders === 0) {
-            teardownSharedWebContainer(instance);
+          if (sharedNodeRuntimeState.holders === 0) {
+            teardownSharedNodeRuntime(instance);
           }
         },
         // A failed boot leaves nothing to tear down; its callers report the error.

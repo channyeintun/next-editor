@@ -101,7 +101,7 @@ such icon yet.
    row, or **မြန်မာ · AthanLab (your API key)**. The lessons pin the English Pocket profile and Studio
    swaps in the Burmese one.
 2. Open `/studio?plan=<script>`, keep the tab in front (Start render is disabled while it is hidden),
-   and press **Start render**. Nothing runs, so no WebContainer boots; the first render fetches the
+   and press **Start render**. Nothing runs, so no Node.js runtime boots; the first render fetches the
    module deck (about 1 MB a deck, a second or two).
 3. When every check passes, watch the replay, then **Create draft…**, publish, and add the lesson to the
    course playlist in order.

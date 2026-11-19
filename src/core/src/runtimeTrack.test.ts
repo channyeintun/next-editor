@@ -19,7 +19,7 @@ import {
 } from "./runtimeTrack";
 import type { Recording } from "./types";
 
-// Mirrors the rolling window in useWebContainerRuntimeSession.
+// Mirrors the rolling window in useNodeRuntimeSession.
 const WINDOW = 50_000;
 // The rolling-window cases diff thousands of 50 KB windows: about 1–1.6 s alone,
 // several times that while other suites share the machine, so they get the

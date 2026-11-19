@@ -9,7 +9,7 @@ import { createWorkspaceFile } from "./shared";
  * one text body, so the whole lesson lives in main.zig — Zig has no way to
  * import a sibling file that the sandbox would accept, so structure comes
  * from structs and functions instead. No package.json, dev server, or
- * WebContainer boot — the workspace stays local until Run.
+ * Node.js runtime boot — the workspace stays local until Run.
  *
  * The program below is verified against Zig 0.16.0: it compiles and is
  * already `zig fmt` clean, so the starter never opens with a Format diff

@@ -10,7 +10,7 @@ import { pinnedRunIdIssues } from "./fixtureRuns";
 
 /**
  * The runtime contract both the script schema and the plan schema check: which
- * runtime kind a lesson type uses, how a WebContainer runtime must be set up,
+ * runtime kind a lesson type uses, how a Node.js runtime must be set up,
  * and which actions each runtime kind can perform. It lives here once so the
  * two schemas cannot drift apart. When each schema had its own copy, they did:
  * only the script's runtime-"none" list had runtime.collapseDock. It also holds
@@ -24,7 +24,7 @@ import { pinnedRunIdIssues } from "./fixtureRuns";
  * The one runtime kind each lesson type may declare. Go, Kotlin, Rust, Zig,
  * and Haskell execute through their selective proxies, Kite on its in-page
  * WebAssembly compiler, asm on its in-page TypeScript assembler and x86-64
- * machine; JavaScript and TypeScript run in the versioned WebContainer
+ * machine; JavaScript and TypeScript run in the versioned Node.js runtime
  * adapter, driving a dev server + preview — the per-lesson action rules are
  * enforced in `runtimeContractIssues` below.
  */
@@ -105,20 +105,21 @@ export function runtimeContractIssues(
     }
   }
   if (runtime.kind === "webcontainer") {
-    // JS/TS drive a dev server + preview. A lockfile is optional: the
-    // WebContainer's built-in pnpm is older than current pnpm and rejects a
-    // lockfile a newer pnpm wrote, so lessons pin exact versions in
-    // package.json instead.
+    // JS/TS drive a dev server + preview. A lockfile is optional: the runtime
+    // installs without one, so lessons pin exact versions in package.json
+    // instead.
     if (
       runtime.lockfilePath !== undefined &&
       !isPinnedFile(workspace.files, runtime.lockfilePath)
     ) {
-      issues.push(`WebContainer lockfile "${runtime.lockfilePath}" is not in the pinned workspace`);
+      issues.push(
+        `Node.js runtime lockfile "${runtime.lockfilePath}" is not in the pinned workspace`,
+      );
     }
     for (const action of actions) {
       if (action.type === "runtime.run") {
         issues.push(
-          `Action "${action.id}" (runtime.run) is a Playground command; a WebContainer lesson runs via runtime.start`,
+          `Action "${action.id}" (runtime.run) is a Playground command; a Node.js lesson runs via runtime.start`,
         );
       }
       if (action.type === "expect.output") {

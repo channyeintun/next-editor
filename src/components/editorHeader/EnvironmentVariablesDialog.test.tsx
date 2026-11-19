@@ -2,15 +2,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { RefObject } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
-  WebContainerRuntimeActionsContext,
-  WebContainerRuntimeMetadataContext,
-  type WebContainerRuntimeActions,
-  type WebContainerRuntimeMetadata,
-} from "../../contexts/WebContainerRuntimeContext";
-import type {
-  EnvironmentVariables,
-  WebContainerRuntimeStatus,
-} from "../../runtime/webcontainer/types";
+  NodeRuntimeActionsContext,
+  NodeRuntimeMetadataContext,
+  type NodeRuntimeActions,
+  type NodeRuntimeMetadata,
+} from "../../contexts/NodeRuntimeContext";
+import type { EnvironmentVariables, NodeRuntimeStatus } from "../../runtime/node/types";
 import EnvironmentVariablesDialog, {
   parseEnvironmentInput,
   stringifyEnvironmentVariables,
@@ -54,7 +51,7 @@ describe("parseEnvironmentInput", () => {
 interface RenderOptions {
   environmentVariables?: EnvironmentVariables;
   runnerEnabled?: boolean;
-  status?: WebContainerRuntimeStatus;
+  status?: NodeRuntimeStatus;
   returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
@@ -70,19 +67,19 @@ function renderDialog({
   };
   const onClose = vi.fn<() => void>();
   const dialog = (variables: EnvironmentVariables) => (
-    <WebContainerRuntimeActionsContext value={actions as unknown as WebContainerRuntimeActions}>
-      <WebContainerRuntimeMetadataContext
+    <NodeRuntimeActionsContext value={actions as unknown as NodeRuntimeActions}>
+      <NodeRuntimeMetadataContext
         value={
           {
             environmentVariables: variables,
             runnerConfig: { enabled: runnerEnabled },
             status,
-          } as unknown as WebContainerRuntimeMetadata
+          } as unknown as NodeRuntimeMetadata
         }
       >
         <EnvironmentVariablesDialog onClose={onClose} returnFocusRef={returnFocusRef} />
-      </WebContainerRuntimeMetadataContext>
-    </WebContainerRuntimeActionsContext>
+      </NodeRuntimeMetadataContext>
+    </NodeRuntimeActionsContext>
   );
   const view = render(dialog(environmentVariables));
   return {

@@ -109,7 +109,7 @@ describe("JavaScript and TypeScript Studio fixtures", () => {
     expect(plan.gates?.timingP95MaxMs).toBe(500);
   });
 
-  it("keeps the timing gate meaningful when WebContainer readiness is delayed (STUDIO-03)", () => {
+  it("keeps the timing gate meaningful when Node.js runtime readiness is delayed (STUDIO-03)", () => {
     const script = loadFixture("typescript-vite-preview.yaml");
     const { plan } = compileLessonScript(scheduledInputFor(script));
     const maxP95 = plan.gates!.timingP95MaxMs!;
@@ -154,7 +154,7 @@ describe("JavaScript and TypeScript Studio fixtures", () => {
     expect(timingGateCheck(computeTimingStats(receipts), maxP95).ok).toBe(false);
   });
 
-  it("accepts a JS/TS WebContainer lesson without a lockfile, but not a missing one", () => {
+  it("accepts a JS/TS Node.js lesson without a lockfile, but not a missing one", () => {
     const fixture = YAML.parse(
       readFileSync(resolve(FIXTURE_ROOT, "typescript-vite-preview.yaml"), "utf8"),
     );

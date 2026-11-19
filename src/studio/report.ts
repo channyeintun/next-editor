@@ -124,7 +124,7 @@ export function timingGateCheck(timing: TimingStats | null, maxP95Ms: number): S
  * `dependencies` are the plan's afterAction dependencies (dependent id →
  * predecessor id). A dependent is due when its predecessor actually
  * acknowledged; deterministic edit chains also carry a modeled planned time,
- * while runtime and preview waits use a placeholder. This keeps a WebContainer
+ * while runtime and preview waits use a placeholder. This keeps a Node.js runtime
  * runtime chain (start → waitForReady → preview.open) from failing a gate by
  * construction when dependency install, readiness or a page load takes an
  * unbounded, unknowable time (STUDIO-03). Falls back to the planned time when

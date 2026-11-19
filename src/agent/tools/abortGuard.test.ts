@@ -19,7 +19,7 @@ describe("coding tool abort guard", () => {
   it("refuses to mutate the workspace once the run is aborted", async () => {
     const controller = new AbortController();
     const store = makeStore([makeFile("a.txt", "original")]);
-    const tools = toolsByName(createCodingTools(makeCtx(store, controller.signal), "webcontainer"));
+    const tools = toolsByName(createCodingTools(makeCtx(store, controller.signal), "node-runtime"));
 
     controller.abort();
 
@@ -39,18 +39,18 @@ describe("coding tool abort guard", () => {
   it("guards every tool in the profile, not just the mutating ones", async () => {
     const controller = new AbortController();
     const store = makeStore([makeFile("a.txt", "original")]);
-    const tools = toolsByName(createCodingTools(makeCtx(store, controller.signal), "webcontainer"));
+    const tools = toolsByName(createCodingTools(makeCtx(store, controller.signal), "node-runtime"));
 
     controller.abort();
 
-    for (const name of codingToolNamesFor("webcontainer")) {
+    for (const name of codingToolNamesFor("node-runtime")) {
       expect(await tools.get(name)?.function.execute({})).toBe(ABORTED_TOOL_OUTPUT);
     }
   });
 
   it("leaves tools working while the run is live", async () => {
     const store = makeStore([makeFile("a.txt", "original")]);
-    const tools = toolsByName(createCodingTools(makeCtx(store), "webcontainer"));
+    const tools = toolsByName(createCodingTools(makeCtx(store), "node-runtime"));
 
     expect(
       await tools.get("write")?.function.execute({ path: "a.txt", content: "updated" }),

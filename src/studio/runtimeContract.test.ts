@@ -5,7 +5,7 @@ import { lessonScriptSchema } from "./script/schema";
 
 /**
  * The runtime contract — which actions each runtime kind allows, and how a
- * WebContainer runtime must be set up — is checked by the script schema and
+ * Node.js runtime must be set up — is checked by the script schema and
  * again by the plan schema, both through runtimeContract.ts. Every case below
  * runs through both schemas, so they cannot give different answers without a
  * test failing. Each case lists every issue the schema reports, in order, so a
@@ -148,7 +148,7 @@ const CASES: ContractCase[] = [
     workspace: JS_WORKSPACE,
     runtime: { ...JS_RUNTIME, lockfilePath: "pnpm-lock.yaml" },
     actions: [start],
-    issues: ['WebContainer lockfile "pnpm-lock.yaml" is not in the pinned workspace'],
+    issues: ['Node.js runtime lockfile "pnpm-lock.yaml" is not in the pinned workspace'],
   },
   {
     // Every object has a `constructor`, so an `in` lookup counted it as pinned.
@@ -156,7 +156,7 @@ const CASES: ContractCase[] = [
     workspace: JS_WORKSPACE,
     runtime: { ...JS_RUNTIME, lockfilePath: "constructor" },
     actions: [start],
-    issues: ['WebContainer lockfile "constructor" is not in the pinned workspace'],
+    issues: ['Node.js runtime lockfile "constructor" is not in the pinned workspace'],
   },
   {
     name: "rejects Playground and console actions in a JavaScript lesson",
@@ -164,12 +164,12 @@ const CASES: ContractCase[] = [
     runtime: JS_RUNTIME,
     actions: [start, run, expectOutput],
     issues: [
-      'Action "run" (runtime.run) is a Playground command; a WebContainer lesson runs via runtime.start',
+      'Action "run" (runtime.run) is a Playground command; a Node.js lesson runs via runtime.start',
       'Action "expect-output" (expect.output) is for console runtimes; a javascript preview lesson asserts with expect.preview',
     ],
   },
   {
-    name: "rejects WebContainer actions in a Playground lesson",
+    name: "rejects Node.js runtime actions in a Playground lesson",
     workspace: GO_WORKSPACE,
     runtime: GO_RUNTIME,
     actions: [run, start, waitForReady, openPreview, click, input, scroll, route, expectPreview],

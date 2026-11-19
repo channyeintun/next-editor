@@ -140,7 +140,7 @@ export function useCollaborativeWorkspaceActions({
       updateLessonType: (lessonType) => run(() => controller.updateLessonType(lessonType)),
       loadProject: () =>
         reportWriteError(new Error("Leave the room before loading another project.")),
-      // WebContainerRuntimeProvider sits above CollaborationProvider and uses
+      // NodeRuntimeProvider sits above CollaborationProvider and uses
       // the base actions, so its reverse sync is switched off by the provider's
       // layout effect rather than refused here.
       reconcileExternalProject: (project) => {

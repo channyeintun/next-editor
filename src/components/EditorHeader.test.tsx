@@ -80,13 +80,13 @@ vi.mock("../hooks/useNextEditorContext", async (importOriginal) => ({
   useNextEditorMetadata: (select?: MetadataSelector) =>
     selectMetadata({ currentRecording: null }, select),
 }));
-vi.mock("../hooks/useWebContainerRuntime", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../hooks/useWebContainerRuntime")>()),
-  useWebContainerRuntimeActions: () => ({
+vi.mock("../hooks/useNodeRuntime", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../hooks/useNodeRuntime")>()),
+  useNodeRuntimeActions: () => ({
     resetRuntime: mocks.resetRuntime,
     updateRunnerConfig: mocks.updateRunnerConfig,
   }),
-  useWebContainerRuntimeMetadata: () => ({
+  useNodeRuntimeMetadata: () => ({
     environmentVariables: {},
     runnerConfig: { enabled: false },
     status: "ready",

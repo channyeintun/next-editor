@@ -512,7 +512,7 @@ export function planActionBusyMs(action: StudioActionTiming): number {
 /**
  * Lesson types are the languages the platform teaches — not the starter
  * templates (react, vue, …), which are just seeded workspace conveniences.
- * javascript/typescript lessons pin arbitrary WebContainer (Node) workspaces;
+ * javascript/typescript lessons pin arbitrary Node.js runtime workspaces;
  * go/kotlin/rust/zig/haskell use their
  * playgrounds; kite and asm need no service at all, compiling and running in
  * the page.
@@ -966,8 +966,10 @@ function playgroundRuntime<Kind extends string, Fixture extends z.ZodType>(
 export const studioRuntimeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("none") }),
   z.object({
+    // The format's historical name for the in-browser Node.js runtime (webnode
+    // today). Every lesson script and emitted plan carries it, so it stays.
     kind: z.literal("webcontainer"),
-    /** Version of the Studio/WebContainer command and readiness contract. */
+    /** Version of the Studio/Node.js runtime command and readiness contract. */
     adapterVersion: z.literal(1),
     defaultMode: z.literal("live"),
     initCommand: z.string(),
@@ -975,8 +977,8 @@ export const studioRuntimeSchema = z.discriminatedUnion("kind", [
     expectedPort: z.number().int().min(1).max(65_535).optional(),
     /**
      * Exact contents are pinned in workspace.files and covered by the plan hash.
-     * Optional: the WebContainer's built-in pnpm rejects a lockfile a newer pnpm
-     * wrote, so lessons may pin exact versions in package.json instead.
+     * Optional: the runtime installs without a lockfile, so lessons may pin
+     * exact versions in package.json instead.
      */
     lockfilePath: z.string().min(1).optional(),
     environment: z.record(z.string().min(1), z.string()).default({}),
@@ -1004,7 +1006,7 @@ export function defaultRuntimeModeOf(runtime: StudioRuntime): StudioRuntimeMode 
 
 /**
  * The runtimes that execute code through a Playground engine rather than the
- * WebContainer: they have a Run button, a console, and a pinned run fixture.
+ * Node.js runtime: they have a Run button, a console, and a pinned run fixture.
  *
  * Derived from that last property rather than listed, so a Playground language
  * added to `studioRuntimeSchema` later joins this union on its own — neither
@@ -1128,7 +1130,7 @@ export const studioPlanSchema = z
      * typing/selection chains carry modeled planned times; runtime and preview
      * waits cannot. In both cases the timing gate measures a dependent's drift
      * from its predecessor's actual acknowledgement. Without this a
-     * WebContainer chain (runtime.start → waitForReady → preview.open) fails the
+     * Node.js runtime chain (runtime.start → waitForReady → preview.open) fails the
      * timing gate by construction, since dependency install/readiness time is
      * unbounded and unknowable at compile time (STUDIO-03).
      */

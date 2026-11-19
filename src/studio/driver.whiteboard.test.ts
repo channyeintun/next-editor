@@ -53,7 +53,7 @@ function makeDriver(whiteboardAssets = ASSETS) {
     runtime: { kind: "rust-playground" } as StudioDriverDeps["runtime"],
     planSeed: PLAN_SEED,
     whiteboardAssets,
-    webContainerRuntime: {} as StudioDriverDeps["webContainerRuntime"],
+    nodeRuntime: {} as StudioDriverDeps["nodeRuntime"],
     preview: {} as StudioDriverDeps["preview"],
     signal: new AbortController().signal,
   } satisfies StudioDriverDeps;

@@ -5,7 +5,7 @@ import AgentPanel from "./agent/AgentPanel";
 import RunnerSettingsDialog from "./terminalPanel/RunnerSettingsDialog";
 import RuntimeDockHeader, { type RuntimeDockTabConfig } from "./terminalPanel/RuntimeDockHeader";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
-import { isRuntimeBusy } from "../runtime/webcontainer/types";
+import { isRuntimeBusy } from "../runtime/node/types";
 import {
   selectConsoleLines,
   selectIsSettingsOpen,
@@ -17,10 +17,10 @@ import HoverRing from "./hoverRing/HoverRing";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
 import {
-  useWebContainerRuntimeActions,
-  useWebContainerRuntimeMetadata,
-  useWebContainerRuntimeOutput,
-} from "../hooks/useWebContainerRuntime";
+  useNodeRuntimeActions,
+  useNodeRuntimeMetadata,
+  useNodeRuntimeOutput,
+} from "../hooks/useNodeRuntime";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import type {
   RuntimeDockTab,
@@ -44,7 +44,7 @@ const RUNTIME_COMMAND_BAR_CLASS =
   "flex min-h-15.5 items-center justify-between border-b border-[#11151d] bg-[#191d25] px-4 py-3";
 const RUNTIME_COMMAND_TEXT_CLASS = "truncate font-mono text-[13px] font-semibold text-slate-300";
 
-function pickWebContainerPrefixColor(prefix: string): string {
+function pickNodeRuntimePrefixColor(prefix: string): string {
   const normalizedPrefix = prefix.toLowerCase();
 
   if (normalizedPrefix.includes("error")) {
@@ -63,7 +63,7 @@ function pickWebContainerPrefixColor(prefix: string): string {
 }
 
 function decorateConsoleLine(line: string): string {
-  return colorizeTaggedLine(line, /^\[[^\]]+\]/, pickWebContainerPrefixColor);
+  return colorizeTaggedLine(line, /^\[[^\]]+\]/, pickNodeRuntimePrefixColor);
 }
 
 interface RuntimeEventState {
@@ -141,11 +141,11 @@ function TerminalPanel() {
     setActiveTerminalSession,
     startTerminalSession,
     updateRunnerConfig,
-  } = useWebContainerRuntimeActions();
+  } = useNodeRuntimeActions();
   const { activeTerminalSessionId, status, errorMessage, previewPort, previewUrl, runnerConfig } =
-    useWebContainerRuntimeMetadata();
+    useNodeRuntimeMetadata();
   const { lastOutput, terminalSessions, latestLifecycleEvent, latestPreviewMessage } =
-    useWebContainerRuntimeOutput();
+    useNodeRuntimeOutput();
   const { currentRecording, isRecording } = useNextEditorMetadata();
   const displayIsSettingsOpen = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.isSettingsOpen ?? false)

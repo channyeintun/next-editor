@@ -22,7 +22,7 @@ interface DecodeWorkspaceTextOptions {
  * The text of a file, or null when its bytes are not text: a NUL byte in the
  * first 8 KiB, or anything that is not valid UTF-8. The one rule every importer
  * (a picked or dropped file, a project zip, and the reverse sync reading a
- * WebContainer's files) applies to a file whose extension does not already
+ * Node.js runtime's files) applies to a file whose extension does not already
  * mark it binary, so none decodes a binary into U+FFFD text. A leading UTF-8
  * BOM is dropped, as the upload decoders before it did, unless the caller
  * keeps it: the reverse sync does, as the container's own text read does.

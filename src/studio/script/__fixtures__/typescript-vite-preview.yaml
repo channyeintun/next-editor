@@ -1,4 +1,4 @@
-# Acceptance fixture for the versioned TypeScript/WebContainer preview adapter.
+# Acceptance fixture for the versioned TypeScript/Node.js runtime preview adapter.
 # Production support still requires two clean real-Chrome renders and a human
 # replay review; compiling this file is necessary but not sufficient evidence.
 schemaVersion: 1

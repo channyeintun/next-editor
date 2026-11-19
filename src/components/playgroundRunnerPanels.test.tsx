@@ -539,7 +539,7 @@ describe("playground runner panels", () => {
       STUDIO_RUN_BUTTON_TARGET_ID,
     );
     // The studio and the tour find the collapse toggle; the tour's Runner step,
-    // which is about the WebContainer dock, does not.
+    // which is about the Node.js runtime dock, does not.
     const collapse = screen.getByRole("button", { name: "Runtime dock" });
     expect(collapse).toHaveAttribute("data-studio-target", STUDIO_DOCK_TOGGLE_TARGET_ID);
     expect(collapse).toHaveAttribute("data-runtime-dock-toggle");

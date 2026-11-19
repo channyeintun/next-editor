@@ -1,26 +1,26 @@
 import { act, cleanup, render } from "@testing-library/react";
 import type { WebNode, WebNodeProcess } from "../core/webnode/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
+import { NodeRuntimeProvider } from "./NodeRuntimeProvider";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import {
-  getOrBootSharedWebContainer,
-  holdSharedWebContainer,
-  teardownSharedWebContainer,
-} from "../runtime/webcontainer/sharedContainer";
-import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
+  getOrBootSharedNodeRuntime,
+  holdSharedNodeRuntime,
+  teardownSharedNodeRuntime,
+} from "../runtime/node/sharedNodeRuntime";
+import { useNodeRuntimeActions } from "../hooks/useNodeRuntime";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
 import { createWorkspaceFile } from "../starters/shared";
 import type { WorkspaceActions } from "../stores/workspaceActions";
 import type { WorkspaceProject } from "../types/workspace";
-import type { WebContainerRuntimeActions } from "./WebContainerRuntimeContext";
+import type { NodeRuntimeActions } from "./NodeRuntimeContext";
 
 // Only the boot is faked: the shared container's lifetime is the real one.
-const bootWebContainer = vi.hoisted(() => vi.fn<() => Promise<WebNode>>());
+const bootNodeRuntime = vi.hoisted(() => vi.fn<() => Promise<WebNode>>());
 
-vi.mock("../core/webnode/api", () => ({ WebNode: { boot: bootWebContainer } }));
+vi.mock("../core/webnode/api", () => ({ WebNode: { boot: bootNodeRuntime } }));
 
-function createStandInWebContainer() {
+function createStandInNodeRuntime() {
   return {
     setPreviewScript: vi.fn<(script: string) => Promise<void>>(async () => {}),
     teardown: vi.fn<() => void>(),
@@ -29,12 +29,12 @@ function createStandInWebContainer() {
   };
 }
 
-type StandInWebContainer = ReturnType<typeof createStandInWebContainer>;
+type StandInNodeRuntime = ReturnType<typeof createStandInNodeRuntime>;
 
 /** Holds the next boot open; the returned function lands it with an instance. */
-function deferNextBoot(): (instance: StandInWebContainer) => void {
+function deferNextBoot(): (instance: StandInNodeRuntime) => void {
   let land: ((instance: WebNode) => void) | null = null;
-  bootWebContainer.mockReturnValueOnce(
+  bootNodeRuntime.mockReturnValueOnce(
     new Promise((resolve) => {
       land = resolve;
     }),
@@ -59,20 +59,20 @@ function nodeProject(id: string, files: Record<string, string>): WorkspaceProjec
 }
 
 async function renderEditor({ runner = false } = {}) {
-  let runtime: WebContainerRuntimeActions | null = null;
+  let runtime: NodeRuntimeActions | null = null;
   let workspace: WorkspaceActions | null = null;
 
   function Capture() {
-    runtime = useWebContainerRuntimeActions();
+    runtime = useNodeRuntimeActions();
     workspace = useWorkspaceActions();
     return null;
   }
 
   const view = render(
     <WorkspaceProvider>
-      <WebContainerRuntimeProvider allowAmbientStart={false}>
+      <NodeRuntimeProvider allowAmbientStart={false}>
         <Capture />
-      </WebContainerRuntimeProvider>
+      </NodeRuntimeProvider>
     </WorkspaceProvider>,
   );
 
@@ -116,15 +116,15 @@ async function renderEditor({ runner = false } = {}) {
  * without holding it or telling the runtime, then mounts the project it reads.
  */
 async function bashMounts(tree: object): Promise<WebNode> {
-  const instance = await getOrBootSharedWebContainer();
+  const instance = await getOrBootSharedNodeRuntime();
   await instance.mount(tree as never);
   return instance;
 }
 
-describe("WebContainerRuntimeProvider shared container lifetime", () => {
+describe("NodeRuntimeProvider shared container lifetime", () => {
   beforeEach(() => {
-    bootWebContainer.mockReset();
-    // isWebContainerRuntimeSupported() gates the runtime on cross-origin isolation.
+    bootNodeRuntime.mockReset();
+    // isNodeRuntimeSupported() gates the runtime on cross-origin isolation.
     vi.stubGlobal("crossOriginIsolated", true);
   });
 
@@ -136,15 +136,15 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
     vi.unstubAllGlobals();
     cleanup();
 
-    const fresh = createStandInWebContainer();
+    const fresh = createStandInNodeRuntime();
     const freshInstance = fresh as unknown as WebNode;
-    bootWebContainer.mockReset();
-    bootWebContainer.mockResolvedValueOnce(freshInstance);
-    const release = holdSharedWebContainer();
-    const shared = await getOrBootSharedWebContainer();
+    bootNodeRuntime.mockReset();
+    bootNodeRuntime.mockResolvedValueOnce(freshInstance);
+    const release = holdSharedNodeRuntime();
+    const shared = await getOrBootSharedNodeRuntime();
     release();
     const releasedLast = fresh.teardown.mock.calls.length === 1;
-    teardownSharedWebContainer(shared);
+    teardownSharedNodeRuntime(shared);
 
     if (shared !== freshInstance) {
       throw new Error("The test left the shared container behind");
@@ -160,7 +160,7 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
     const starting = editor.startRuntime();
     editor.unmount();
 
-    const instance = createStandInWebContainer();
+    const instance = createStandInNodeRuntime();
     await act(async () => {
       landBoot(instance);
       await starting;
@@ -178,13 +178,13 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
 
     const next = await renderEditor();
     const starting = next.startRuntime();
-    const instance = createStandInWebContainer();
+    const instance = createStandInNodeRuntime();
     await act(async () => {
       landBoot(instance);
       await starting;
     });
 
-    expect(bootWebContainer).toHaveBeenCalledOnce();
+    expect(bootNodeRuntime).toHaveBeenCalledOnce();
     expect(instance.mount).toHaveBeenCalledOnce();
     expect(instance.teardown).not.toHaveBeenCalled();
 
@@ -196,8 +196,8 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
   // container. A container only the agent's bash tool booted still holds that
   // command's copy of the old project, files it wrote and anything it left running.
   it("tears down a container the agent booted when the project changes", async () => {
-    const agentContainer = createStandInWebContainer();
-    bootWebContainer.mockResolvedValueOnce(agentContainer as unknown as WebNode);
+    const agentContainer = createStandInNodeRuntime();
+    bootNodeRuntime.mockResolvedValueOnce(agentContainer as unknown as WebNode);
     const editor = await renderEditor();
     editor.loadProject(nodeProject("lesson-a", { ".pnpmfile.cjs": "from lesson A" }));
     await act(async () => {
@@ -207,12 +207,12 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
     editor.loadProject(nodeProject("project-b", {}));
     expect(agentContainer.teardown).toHaveBeenCalledOnce();
 
-    const next = createStandInWebContainer();
-    bootWebContainer.mockResolvedValueOnce(next as unknown as WebNode);
+    const next = createStandInNodeRuntime();
+    bootNodeRuntime.mockResolvedValueOnce(next as unknown as WebNode);
     await act(async () => {
       await editor.startRuntime();
     });
-    expect(bootWebContainer).toHaveBeenCalledTimes(2);
+    expect(bootNodeRuntime).toHaveBeenCalledTimes(2);
     expect(next.mount).toHaveBeenCalledOnce();
     expect(agentContainer.mount).toHaveBeenCalledOnce();
 
@@ -224,15 +224,15 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
   // workspace. So it never adopts a container only the agent has used, whatever
   // that tool mounted there; the same id does not make it the same project.
   it("boots its own container instead of the one the agent booted", async () => {
-    const agentContainer = createStandInWebContainer();
-    bootWebContainer.mockResolvedValueOnce(agentContainer as unknown as WebNode);
+    const agentContainer = createStandInNodeRuntime();
+    bootNodeRuntime.mockResolvedValueOnce(agentContainer as unknown as WebNode);
     const editor = await renderEditor();
     await act(async () => {
       await bashMounts({ "planted.cjs": true });
     });
 
-    const own = createStandInWebContainer();
-    bootWebContainer.mockResolvedValueOnce(own as unknown as WebNode);
+    const own = createStandInNodeRuntime();
+    bootNodeRuntime.mockResolvedValueOnce(own as unknown as WebNode);
     await act(async () => {
       await editor.startRuntime();
     });
@@ -247,8 +247,8 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
   // The agent's bash tool still shares the runtime's container: it reads the files
   // the user is looking at, and its changes fold back into the workspace.
   it("lets the agent join the runtime's container", async () => {
-    const instance = createStandInWebContainer();
-    bootWebContainer.mockResolvedValueOnce(instance as unknown as WebNode);
+    const instance = createStandInNodeRuntime();
+    bootNodeRuntime.mockResolvedValueOnce(instance as unknown as WebNode);
     const editor = await renderEditor();
     await act(async () => {
       await editor.startRuntime();
@@ -257,7 +257,7 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
     await act(async () => {
       expect(await bashMounts({})).toBe(instance);
     });
-    expect(bootWebContainer).toHaveBeenCalledOnce();
+    expect(bootNodeRuntime).toHaveBeenCalledOnce();
     expect(instance.teardown).not.toHaveBeenCalled();
 
     editor.unmount();
@@ -280,11 +280,11 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
     );
 
     editor.loadProject(nodeProject("project-b", {}));
-    const next = createStandInWebContainer();
-    bootWebContainer.mockResolvedValueOnce(next as unknown as WebNode);
+    const next = createStandInNodeRuntime();
+    bootNodeRuntime.mockResolvedValueOnce(next as unknown as WebNode);
     const nextStart = editor.startRuntime();
 
-    const first = createStandInWebContainer();
+    const first = createStandInNodeRuntime();
     await act(async () => {
       landFirstBoot(first);
       await Promise.all([firstStart, agentMount, nextStart]);
@@ -292,7 +292,7 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
 
     expect(agentInstance).toBe(first);
     expect(first.teardown).toHaveBeenCalledOnce();
-    expect(bootWebContainer).toHaveBeenCalledTimes(2);
+    expect(bootNodeRuntime).toHaveBeenCalledTimes(2);
     expect(next.mount).toHaveBeenCalledOnce();
     // The bash tool's copy of lesson A is the only thing the old container got.
     expect(first.mount).toHaveBeenCalledOnce();
@@ -305,7 +305,7 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
   it("stops the editor's runner before it tears the container down", async () => {
     const kill = vi.fn<() => void>();
     const instance = {
-      ...createStandInWebContainer(),
+      ...createStandInNodeRuntime(),
       // A dev server that keeps running.
       spawn: vi.fn<() => Promise<WebNodeProcess>>(
         async () =>
@@ -318,7 +318,7 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
           }) as unknown as WebNodeProcess,
       ),
     };
-    bootWebContainer.mockResolvedValueOnce(instance as unknown as WebNode);
+    bootNodeRuntime.mockResolvedValueOnce(instance as unknown as WebNode);
     const editor = await renderEditor({ runner: true });
     const starting = editor.startRuntime();
     await act(async () => {

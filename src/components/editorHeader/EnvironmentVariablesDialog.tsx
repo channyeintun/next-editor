@@ -1,9 +1,6 @@
 import { useEffect, useId, useState, type RefObject } from "react";
-import { isRuntimeBusy, type EnvironmentVariables } from "../../runtime/webcontainer/types";
-import {
-  useWebContainerRuntimeActions,
-  useWebContainerRuntimeMetadata,
-} from "../../hooks/useWebContainerRuntime";
+import { isRuntimeBusy, type EnvironmentVariables } from "../../runtime/node/types";
+import { useNodeRuntimeActions, useNodeRuntimeMetadata } from "../../hooks/useNodeRuntime";
 import ModalShell from "../ModalShell";
 
 /** The variables as `KEY=value` lines, sorted by key. */
@@ -79,8 +76,8 @@ export default function EnvironmentVariablesDialog({
 }: EnvironmentVariablesDialogProps) {
   const titleId = useId();
   const errorId = useId();
-  const { rerunRunner, updateEnvironmentVariables } = useWebContainerRuntimeActions();
-  const { environmentVariables, runnerConfig, status } = useWebContainerRuntimeMetadata();
+  const { rerunRunner, updateEnvironmentVariables } = useNodeRuntimeActions();
+  const { environmentVariables, runnerConfig, status } = useNodeRuntimeMetadata();
   const [draftValue, setDraftValue] = useState(() =>
     stringifyEnvironmentVariables(environmentVariables),
   );

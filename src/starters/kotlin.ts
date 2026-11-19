@@ -5,7 +5,7 @@ import { createWorkspaceFile } from "./shared";
 /**
  * Pure Kotlin lesson starter: a small multi-file console program that compiles
  * and runs remotely through the Kotlin Playground proxy on an explicit Run
- * action. No package.json, dev server, or WebContainer boot — the workspace
+ * action. No package.json, dev server, or Node.js runtime boot — the workspace
  * stays local until Run.
  */
 export function createStarterKotlinWorkspace(): WorkspaceProject {

@@ -67,7 +67,7 @@ export interface StudioRunDeps {
   runtimePanelStore: RuntimePanelStoreInstance;
   slidesStore: SlidesStoreInstance;
   whiteboardStore: WhiteboardStoreInstance;
-  webContainerRuntime: StudioDriverDeps["webContainerRuntime"];
+  nodeRuntime: StudioDriverDeps["nodeRuntime"];
   preview: StudioDriverDeps["preview"];
   onProgress?: (receipt: ActionReceipt) => void;
   onPhase?: (phase: string) => void;
@@ -208,20 +208,20 @@ export async function runStudioRender(
   // No session check: a live Playground render works signed out, because the
   // proxies serve signed-out callers too.
   if (plan.runtime.kind === "webcontainer" && runtimeMode !== "live") {
-    return failedResult('WebContainer Studio renders require runtime mode "live"');
+    return failedResult('Studio renders of a Node.js lesson require runtime mode "live"');
   }
 
   if (plan.runtime.kind === "webcontainer") {
-    const metadata = deps.webContainerRuntime.getMetadata();
+    const metadata = deps.nodeRuntime.getMetadata();
     if (!metadata.isSupported) {
       return failedResult(
-        "WebContainer Studio renders require a supported, cross-origin-isolated desktop browser",
+        "Studio renders of a Node.js lesson require a supported, cross-origin-isolated desktop browser",
       );
     }
 
     phase("prepare-runtime-contract");
     const runtime = plan.runtime;
-    const actions = deps.webContainerRuntime.getActions();
+    const actions = deps.nodeRuntime.getActions();
     actions.resetRuntime();
     actions.configureRuntime({
       environmentVariables: runtime.environment,
@@ -237,7 +237,7 @@ export async function runStudioRender(
     try {
       await waitUntil(
         () => {
-          const current = deps.webContainerRuntime.getMetadata();
+          const current = deps.nodeRuntime.getMetadata();
           return (
             current.runnerConfig.enabled === true &&
             current.runnerConfig.runOnStartup === false &&
@@ -254,7 +254,7 @@ export async function runStudioRender(
         {
           timeoutMs: 2_000,
           signal,
-          description: "the pinned WebContainer runner contract to apply",
+          description: "the pinned Node.js runtime runner contract to apply",
         },
       );
     } catch (error) {
@@ -447,7 +447,7 @@ export async function runStudioRender(
     runtime: plan.runtime,
     planSeed: plan.seed,
     whiteboardAssets: plan.whiteboardAssets,
-    webContainerRuntime: deps.webContainerRuntime,
+    nodeRuntime: deps.nodeRuntime,
     preview: deps.preview,
     signal,
   });

@@ -1,5 +1,5 @@
 /**
- * Studio verify-lesson — replay a WebContainer (Vite) LessonScript against a
+ * Studio verify-lesson — replay a Node.js (Vite) LessonScript against a
  * real Vite dev server and a real Chrome, the way /studio performs it, before
  * paying for narration (docs/lesson-script-authoring.md "Workflow").
  *
@@ -26,10 +26,10 @@
  *  - Anchors resolve with the driver's resolveAnchorOffset and chunks land with
  *    cadence.chunkPlacements; driver errors keep the driver's wording.
  *  - The preview runs in a cross-origin iframe with the exact script the
- *    WebContainer injects into every HTML response (createRuntimePreviewScript:
+ *    Node.js runtime injects into every HTML response (createRuntimePreviewScript:
  *    console bridge, studio command bridge, rrweb recorder …).
  *  - The studio batches typed edits into the container every 75 ms
- *    (WEBCONTAINER_FILE_SYNC_WINDOW_MS); writing each chunk at least 90 ms
+ *    (NODE_RUNTIME_FILE_SYNC_WINDOW_MS); writing each chunk at least 90 ms
  *    apart lets Vite see every state the studio could have flushed.
  *
  * Fails a lesson on any console.error, uncaught error, unhandled rejection,
@@ -70,7 +70,7 @@ import type { StudioDriver } from "../src/studio/driver/index.ts";
 import {
   PREVIEW_HANDSHAKE_PING_TIMEOUT_MS,
   PREVIEW_HANDSHAKE_RETRY_INTERVAL_MS,
-} from "../src/studio/driver/webContainer.ts";
+} from "../src/studio/driver/nodeRuntime.ts";
 import { invokeAction } from "../src/studio/performer.ts";
 import type { StudioPlanAction } from "../src/studio/plan.ts";
 import {
@@ -118,7 +118,7 @@ bun.plugin({
     }));
   },
 });
-const { createRuntimePreviewScript } = await import("../src/runtime/webcontainer/previewScript.ts");
+const { createRuntimePreviewScript } = await import("../src/runtime/node/previewScript.ts");
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 /** One installed node_modules per distinct dependency set, reused across runs. */
@@ -311,7 +311,7 @@ function materializeWorkspace(files: Record<string, string>, cacheDir: string): 
     writeFileSync(target, content);
   }
   // An APFS clone (copy-on-write) is a real, private node_modules, so Vite's
-  // optimizer cache (node_modules/.vite) starts empty as in a fresh WebContainer.
+  // optimizer cache (node_modules/.vite) starts empty as in a fresh Node.js runtime.
   const source = join(cacheDir, "node_modules");
   const target = join(dir, "node_modules");
   if (spawnSync("cp", ["-cR", source, target]).status !== 0) {
@@ -348,11 +348,11 @@ function viteArgsFromScript(script: string, port: number): string[] {
   return [...args, "--host", "127.0.0.1", "--port", String(port), "--strictPort"];
 }
 
-type WebContainerRuntime = Extract<LessonScript["runtime"], { kind: "webcontainer" }>;
+type NodeRuntime = Extract<LessonScript["runtime"], { kind: "webcontainer" }>;
 
 async function startVite(
   dir: string,
-  runtime: WebContainerRuntime,
+  runtime: NodeRuntime,
   packageJson: PackageJson,
   onLine: (line: string) => void,
 ): Promise<ViteServer> {
@@ -592,7 +592,7 @@ async function verifyLesson(lessonPath: string, options: Options): Promise<Lesso
     failures.push({ actionId: "(runtime)", kind: "runtime", message: runtime.kind });
     return result(slug);
   }
-  const webContainer: WebContainerRuntime = runtime;
+  const nodeRuntime: NodeRuntime = runtime;
   const sceneIndex = new Map(script.scenes.map((scene, index) => [scene.id, index]));
   if (options.onlyScene !== null && !sceneIndex.has(options.onlyScene)) {
     log(`  ✗ --only-scene=${options.onlyScene}: this lesson has no such scene`);
@@ -730,7 +730,7 @@ async function verifyLesson(lessonPath: string, options: Options): Promise<Lesso
   async function ensureServer(): Promise<ViteServer> {
     if (server) return server;
     const startedAt = now();
-    server = await startVite(workdir, webContainer, packageJson, onViteLine);
+    server = await startVite(workdir, nodeRuntime, packageJson, onViteLine);
     log(`    vite ready at ${server.url} in ${Math.round(now() - startedAt)}ms`);
     return server;
   }

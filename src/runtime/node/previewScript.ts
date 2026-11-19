@@ -18,12 +18,12 @@ const RUNTIME_API_CLIENT_PROXY_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_API_CLIENT_
 const RUNTIME_STUDIO_COMMAND_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_STUDIO_COMMAND__";
 
 // Builds the single JS payload injected into every preview page through
-// `WebContainer.setPreviewScript`. The WebContainer adds it to *all* HTML
+// `WebNode.setPreviewScript`. The runtime adds it to *all* HTML
 // responses regardless of which server produced them, so the recorder runs no
 // matter how the preview is rendered — static HTML, a Vite SPA, an Express
 // server, or an SSR/hybrid framework like TanStack Start that assembles its
 // document on the fly. Returns a raw script body (no `<script>` wrapper); the
-// WebContainer supplies the tag. Both halves are guarded by per-window markers,
+// runtime supplies the tag. Both halves are guarded by per-window markers,
 // so re-running on navigation (or inside an htmx fragment swap) is a no-op.
 export function createRuntimePreviewScript(): string {
   const interactionCaptureScript = createIframeInteractionCaptureScript(

@@ -8,7 +8,7 @@ import { createWorkspaceFile } from "./shared";
  * (stable channel, 2024 edition, debug profile). The upstream compiles one
  * crate from one source string, so the whole lesson lives in main.rs — use
  * inline `mod` blocks for structure. No package.json, dev server, or
- * WebContainer boot — the workspace stays local until Run.
+ * Node.js runtime boot — the workspace stays local until Run.
  */
 export function createStarterRustWorkspace(): WorkspaceProject {
   const files = {

@@ -1,18 +1,18 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
-  WebContainerRuntimeActionsContext,
-  WebContainerRuntimeMetadataContext,
-  WebContainerRuntimeOutputContext,
-  type WebContainerRuntimeActions,
-  type WebContainerRuntimeMetadata,
-  type WebContainerRuntimeOutput,
-} from "../contexts/WebContainerRuntimeContext";
-import type { WebContainerRuntimeStatus } from "../runtime/webcontainer/types";
+  NodeRuntimeActionsContext,
+  NodeRuntimeMetadataContext,
+  NodeRuntimeOutputContext,
+  type NodeRuntimeActions,
+  type NodeRuntimeMetadata,
+  type NodeRuntimeOutput,
+} from "../contexts/NodeRuntimeContext";
+import type { NodeRuntimeStatus } from "../runtime/node/types";
 import { RuntimePanelStoreProvider } from "../contexts/RuntimePanelStoreContext";
 import TerminalPanel from "./TerminalPanel";
 
-// The WebContainer dock with its runtime given through the real contexts; the
+// The Node.js runtime dock with its runtime given through the real contexts; the
 // editor session, the xterm surfaces and the agent are stand-ins.
 vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => ({ handleRuntimeEvent: () => {} }),
@@ -42,11 +42,11 @@ const actions = {
   setActiveTerminalSession: () => {},
   startTerminalSession: async () => {},
   updateRunnerConfig: () => {},
-} as unknown as WebContainerRuntimeActions;
+} as unknown as NodeRuntimeActions;
 
 function dock(
-  status: WebContainerRuntimeStatus,
-  terminalSessions: WebContainerRuntimeOutput["terminalSessions"] = [],
+  status: NodeRuntimeStatus,
+  terminalSessions: NodeRuntimeOutput["terminalSessions"] = [],
 ) {
   const metadata = {
     activeTerminalSessionId: terminalSessions[0]?.id ?? null,
@@ -55,8 +55,8 @@ function dock(
     previewPort: null,
     previewUrl: null,
     runnerConfig: { enabled: true, runCommand: "npm run dev", initCommand: "npm install" },
-  } as unknown as WebContainerRuntimeMetadata;
-  const output: WebContainerRuntimeOutput = {
+  } as unknown as NodeRuntimeMetadata;
+  const output: NodeRuntimeOutput = {
     lastOutput: null,
     terminalSessions,
     latestPreviewMessage: null,
@@ -65,13 +65,13 @@ function dock(
 
   return (
     <RuntimePanelStoreProvider>
-      <WebContainerRuntimeActionsContext value={actions}>
-        <WebContainerRuntimeMetadataContext value={metadata}>
-          <WebContainerRuntimeOutputContext value={output}>
+      <NodeRuntimeActionsContext value={actions}>
+        <NodeRuntimeMetadataContext value={metadata}>
+          <NodeRuntimeOutputContext value={output}>
             <TerminalPanel />
-          </WebContainerRuntimeOutputContext>
-        </WebContainerRuntimeMetadataContext>
-      </WebContainerRuntimeActionsContext>
+          </NodeRuntimeOutputContext>
+        </NodeRuntimeMetadataContext>
+      </NodeRuntimeActionsContext>
     </RuntimePanelStoreProvider>
   );
 }

@@ -50,11 +50,11 @@ export function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonT
  * service. `asm` needs no service either, for a different reason: its
  * assembler and its x86-64 machine are first-party TypeScript in
  * `src/core/x86`, so a run never leaves the page. Everything else keeps the
- * WebContainer runtime. Derived from `lessonType` — never persisted as a
+ * Node.js runtime. Derived from `lessonType` — never persisted as a
  * second field (see docs/go-lessons-selective-runtime-plan.md §6).
  */
 export type WorkspaceExecutionKind =
-  | "webcontainer"
+  | "node-runtime"
   | "go-playground"
   | "kotlin-playground"
   | "rust-playground"
@@ -65,7 +65,7 @@ export type WorkspaceExecutionKind =
 
 /**
  * Every browser-runtime lesson type is served by its own dev server inside the
- * WebContainer: the Vite-based SPAs (react, vue, solid, svelte) and html-css
+ * Node.js runtime: the Vite-based SPAs (react, vue, solid, svelte) and html-css
  * run a Vite dev server, while htmx-express, alpine-express, and express-ts run
  * an Express server. The language-level javascript and typescript lessons run
  * their entry script with Node (exit-and-rerun), but keep the full Node
@@ -74,19 +74,19 @@ export type WorkspaceExecutionKind =
  *
  * A `Record` keyed by the union, like the labels above: a new lesson type that
  * has not chosen its backend fails the typecheck instead of falling through to
- * "webcontainer" while lessonRunsInWebContainer says otherwise.
+ * "node-runtime" while lessonRunsInNodeRuntime says otherwise.
  */
 const EXECUTION_KIND_BY_LESSON_TYPE: Record<WorkspaceLessonType, WorkspaceExecutionKind> = {
-  "html-css": "webcontainer",
-  react: "webcontainer",
-  vue: "webcontainer",
-  solid: "webcontainer",
-  svelte: "webcontainer",
-  "htmx-express": "webcontainer",
-  "alpine-express": "webcontainer",
-  "express-ts": "webcontainer",
-  javascript: "webcontainer",
-  typescript: "webcontainer",
+  "html-css": "node-runtime",
+  react: "node-runtime",
+  vue: "node-runtime",
+  solid: "node-runtime",
+  svelte: "node-runtime",
+  "htmx-express": "node-runtime",
+  "alpine-express": "node-runtime",
+  "express-ts": "node-runtime",
+  javascript: "node-runtime",
+  typescript: "node-runtime",
   go: "go-playground",
   kotlin: "kotlin-playground",
   rust: "rust-playground",
@@ -96,7 +96,7 @@ const EXECUTION_KIND_BY_LESSON_TYPE: Record<WorkspaceLessonType, WorkspaceExecut
   // Kite's compiler is WebAssembly, so `vite-plugin-kite` builds inside the
   // container with nothing native installed — which a `kite` lesson does not
   // need, because it compiles in the page and has no server or preview.
-  "kite-web": "webcontainer",
+  "kite-web": "node-runtime",
   asm: "asm-playground",
 };
 
@@ -106,16 +106,16 @@ export function executionKindForLessonType(
   return EXECUTION_KIND_BY_LESSON_TYPE[lessonType];
 }
 
-export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boolean {
-  return executionKindForLessonType(lessonType) === "webcontainer";
+export function lessonRunsInNodeRuntime(lessonType: WorkspaceLessonType): boolean {
+  return executionKindForLessonType(lessonType) === "node-runtime";
 }
 
 // Capability predicates stay separate from the execution kind so a Go lesson
 // can expose Run and console output without exposing Terminal or Preview.
 export function lessonSupportsTerminal(lessonType: WorkspaceLessonType): boolean {
-  return lessonRunsInWebContainer(lessonType);
+  return lessonRunsInNodeRuntime(lessonType);
 }
 
 export function lessonSupportsPreview(lessonType: WorkspaceLessonType): boolean {
-  return lessonRunsInWebContainer(lessonType);
+  return lessonRunsInNodeRuntime(lessonType);
 }

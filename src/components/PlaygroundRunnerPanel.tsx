@@ -46,7 +46,7 @@ import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtim
  * Focused Run console for Playground lessons — deliberately not a Terminal.
  * Code executes on an explicit Run or Format action, remotely through a
  * Playground proxy or in the page, as the language says; there is no shell,
- * preview, or WebContainer surface here. Console output lives in the shared
+ * preview, or Node.js runtime surface here. Console output lives in the shared
  * runtime panel store's consoleLines, so the existing runtime recording
  * snapshot captures it and playback replays it without any live execution.
  * The Format flow, Monaco's formatting provider included, lives in
@@ -60,7 +60,7 @@ import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtim
  * runner never reuses another language's client.
  */
 
-// Same prefix-coloring idiom as the WebContainer dock's console: color the
+// Same prefix-coloring idiom as the Node.js runtime dock's console: color the
 // [tag], dim the rest, leave raw program output undecorated. Only the tags the
 // language's console module emits match, so a program's own bracketed line — a
 // printed list, say — is left alone.
@@ -130,7 +130,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   // The finished Run or Format, for the status region; the busy text replaces it.
   const [outcomeText, setOutcomeText] = useState("");
 
-  // The tab state is shared with the WebContainer dock's store; anything other
+  // The tab state is shared with the Node.js runtime dock's store; anything other
   // than "agent" (including a stale "terminal"/"console" from a previous lesson)
   // renders as the runner tab.
   const displayActiveTab: RuntimeDockTab = rawActiveTab === "agent" ? "agent" : "runner";
@@ -287,7 +287,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       data-cursor-replay-target="runtime-dock"
       {...{ [STUDIO_TARGET_ATTRIBUTE]: dockTargetId }}
     >
-      {/* Unlike the WebContainer dock's, this collapse toggle carries no
+      {/* Unlike the Node.js runtime dock's, this collapse toggle carries no
           data-tour="runner": the tour's Runner step describes the terminal and
           dev-server output, which a Playground lesson does not have. */}
       <RuntimeDockHeader

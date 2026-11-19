@@ -8,8 +8,8 @@ import type { PlaygroundLanguage } from "./playgroundLanguage";
 import { RUST_PLAYGROUND } from "./rustPlayground/runner";
 import { ZIG_PLAYGROUND } from "./zigPlayground/runner";
 
-/** Every execution kind a Playground language runs: all of them but the WebContainer. */
-export type PlaygroundExecutionKind = Exclude<WorkspaceExecutionKind, "webcontainer">;
+/** Every execution kind a Playground language runs: all of them but the Node.js runtime. */
+export type PlaygroundExecutionKind = Exclude<WorkspaceExecutionKind, "node-runtime">;
 
 /**
  * Every Playground language, by the execution kind that runs it, for a caller

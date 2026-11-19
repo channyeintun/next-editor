@@ -16,10 +16,10 @@ import { useSlidesStore } from "../contexts/SlidesStoreContext";
 import { useWhiteboardStore } from "../contexts/WhiteboardStoreContext";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
 import {
-  useWebContainerRuntimeActions,
-  useWebContainerRuntimeMetadata,
-  useWebContainerRuntimeSnapshotGetter,
-} from "../hooks/useWebContainerRuntime";
+  useNodeRuntimeActions,
+  useNodeRuntimeMetadata,
+  useNodeRuntimeSnapshotGetter,
+} from "../hooks/useNodeRuntime";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import { usePreviewAdapterHandle } from "../contexts/PreviewAdapterHandleContext";
 import { markTourSeen } from "../components/tour/productTour";
@@ -257,9 +257,9 @@ export default function StudioController() {
   const { store: runtimePanelStore } = useRuntimePanelStore();
   const { store: slidesStore } = useSlidesStore();
   const { store: whiteboardStore } = useWhiteboardStore();
-  const webContainerRuntimeActions = useWebContainerRuntimeActions();
-  const webContainerRuntimeMetadata = useWebContainerRuntimeMetadata();
-  const getWebContainerRuntimeSnapshot = useWebContainerRuntimeSnapshotGetter();
+  const nodeRuntimeActions = useNodeRuntimeActions();
+  const nodeRuntimeMetadata = useNodeRuntimeMetadata();
+  const getNodeRuntimeSnapshot = useNodeRuntimeSnapshotGetter();
   const previewPanel = usePreviewPanel();
   const previewHandle = usePreviewAdapterHandle();
   const { user, isLoading: authLoading } = useAuth();
@@ -267,13 +267,13 @@ export default function StudioController() {
   const { capabilities: studioCapabilities, isLoading: studioCapabilitiesLoading } =
     useStudioCapabilities(userId);
   const queryClient = useQueryClient();
-  const webContainerRuntimeActionsRef = useRef(webContainerRuntimeActions);
-  const webContainerRuntimeMetadataRef = useRef(webContainerRuntimeMetadata);
+  const nodeRuntimeActionsRef = useRef(nodeRuntimeActions);
+  const nodeRuntimeMetadataRef = useRef(nodeRuntimeMetadata);
 
   useLayoutEffect(() => {
-    webContainerRuntimeActionsRef.current = webContainerRuntimeActions;
-    webContainerRuntimeMetadataRef.current = webContainerRuntimeMetadata;
-  }, [webContainerRuntimeActions, webContainerRuntimeMetadata]);
+    nodeRuntimeActionsRef.current = nodeRuntimeActions;
+    nodeRuntimeMetadataRef.current = nodeRuntimeMetadata;
+  }, [nodeRuntimeActions, nodeRuntimeMetadata]);
 
   const planSlug = searchParams.get("plan") ?? DEFAULT_STUDIO_PLAN_SLUG;
   // Parse both documented values (fixture | live) explicitly; an unrecognized
@@ -606,10 +606,10 @@ export default function StudioController() {
           runtimePanelStore,
           slidesStore,
           whiteboardStore,
-          webContainerRuntime: {
-            getActions: () => webContainerRuntimeActionsRef.current,
-            getMetadata: () => webContainerRuntimeMetadataRef.current,
-            getSnapshot: getWebContainerRuntimeSnapshot,
+          nodeRuntime: {
+            getActions: () => nodeRuntimeActionsRef.current,
+            getMetadata: () => nodeRuntimeMetadataRef.current,
+            getSnapshot: getNodeRuntimeSnapshot,
           },
           preview: {
             open: (mode) => previewPanel.openPreview(mode),

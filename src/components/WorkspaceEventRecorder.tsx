@@ -17,7 +17,7 @@ interface WorkspaceEventRecorderProps {
  * signal a manual workspace change, which pauses playback and detaches the
  * replayed workspace.
  *
- * Project bumps from `reconcileExternalProject` (a WebContainer process or a
+ * Project bumps from `reconcileExternalProject` (a Node.js runtime process or a
  * remote collaborator wrote files) are not local-user actions: they still fire
  * while recording so the workspace track captures them, but during playback they
  * are absorbed — a runtime booting in the background (e.g. `pnpm install`

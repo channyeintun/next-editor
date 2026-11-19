@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { WorkspaceLessonType } from "../types/workspace";
 import {
   isWorkspaceLessonType,
-  lessonRunsInWebContainer,
+  lessonRunsInNodeRuntime,
   WORKSPACE_LESSON_TYPE_LABELS,
   WORKSPACE_LESSON_TYPES,
 } from "../types/lessonTypes";
@@ -41,8 +41,8 @@ describe("starter registry", () => {
     }
   });
 
-  it("gives every WebContainer starter a package.json to install", async () => {
-    for (const lessonType of WORKSPACE_LESSON_TYPES.filter(lessonRunsInWebContainer)) {
+  it("gives every Node.js starter a package.json to install", async () => {
+    for (const lessonType of WORKSPACE_LESSON_TYPES.filter(lessonRunsInNodeRuntime)) {
       const project = await createStarterWorkspaceForLessonType(lessonType);
       expect(project.files, `${lessonType} has no package.json`).toHaveProperty("package.json");
     }

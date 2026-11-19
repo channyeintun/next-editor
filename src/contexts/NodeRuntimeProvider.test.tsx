@@ -2,14 +2,14 @@ import { act, render } from "@testing-library/react";
 import { useContext } from "react";
 import type { WebNode, WebNodeProcess } from "../core/webnode/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
+import { NodeRuntimeProvider } from "./NodeRuntimeProvider";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import {
-  useWebContainerRuntimeActions,
-  useWebContainerRuntimeMetadata,
-  useWebContainerRuntimeOutput,
-  useWebContainerRuntimeSaveWorkspace,
-} from "../hooks/useWebContainerRuntime";
+  useNodeRuntimeActions,
+  useNodeRuntimeMetadata,
+  useNodeRuntimeOutput,
+  useNodeRuntimeSaveWorkspace,
+} from "../hooks/useNodeRuntime";
 import { useWorkspaceActions, useWorkspaceDirtyState } from "../hooks/useWorkspace";
 import { createWorkspaceFile } from "../starters/shared";
 import type { WorkspaceDirtyState } from "../stores/workspaceDirtyState";
@@ -20,22 +20,19 @@ import {
 } from "../types/workspace";
 import { WorkspaceStoreContext } from "./WorkspaceContext";
 import type { WorkspaceActions } from "../stores/workspaceActions";
-import type {
-  WebContainerRuntimeActions,
-  WebContainerRuntimeOutput,
-} from "./WebContainerRuntimeContext";
+import type { NodeRuntimeActions, NodeRuntimeOutput } from "./NodeRuntimeContext";
 
-vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
+vi.mock("../runtime/node/sharedNodeRuntime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runtime/node/sharedNodeRuntime")>();
   return {
     ...actual,
-    getOrBootSharedWebContainer: vi.fn<() => Promise<WebNode>>(),
+    getOrBootSharedNodeRuntime: vi.fn<() => Promise<WebNode>>(),
   };
 });
 
 // A pass-through spy, so a test can count whole-project syncs.
-vi.mock("../runtime/webcontainer/files", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../runtime/webcontainer/files")>();
+vi.mock("../runtime/node/files", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runtime/node/files")>();
   return {
     ...actual,
     syncWorkspaceProject: vi.fn<typeof actual.syncWorkspaceProject>(actual.syncWorkspaceProject),
@@ -158,7 +155,7 @@ function createFakeInstance(fakeFs: ReturnType<typeof createFakeFs>) {
 }
 
 interface Harness {
-  runtime: WebContainerRuntimeActions | null;
+  runtime: NodeRuntimeActions | null;
   workspace: WorkspaceActions | null;
   dirty: WorkspaceDirtyState | null;
 }
@@ -167,7 +164,7 @@ function renderProviders(allowAmbientStart = true) {
   const captured: Harness = { runtime: null, workspace: null, dirty: null };
 
   function Capture() {
-    captured.runtime = useWebContainerRuntimeActions();
+    captured.runtime = useNodeRuntimeActions();
     captured.workspace = useWorkspaceActions();
     captured.dirty = useWorkspaceDirtyState();
     return null;
@@ -175,9 +172,9 @@ function renderProviders(allowAmbientStart = true) {
 
   render(
     <WorkspaceProvider>
-      <WebContainerRuntimeProvider allowAmbientStart={allowAmbientStart}>
+      <NodeRuntimeProvider allowAmbientStart={allowAmbientStart}>
         <Capture />
-      </WebContainerRuntimeProvider>
+      </NodeRuntimeProvider>
     </WorkspaceProvider>,
   );
 
@@ -186,7 +183,7 @@ function renderProviders(allowAmbientStart = true) {
   }
 
   return captured as {
-    runtime: WebContainerRuntimeActions;
+    runtime: NodeRuntimeActions;
     workspace: WorkspaceActions;
     dirty: WorkspaceDirtyState;
   };
@@ -210,8 +207,8 @@ async function startWatchedRuntime() {
       return { close: vi.fn<() => void>() };
     }),
   });
-  const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-  vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+  const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+  vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
 
   const { runtime, workspace } = renderProviders();
   // The fake mount writes nothing, so seed the container with the mounted project.
@@ -229,10 +226,10 @@ async function startWatchedRuntime() {
   return { fakeFs, instance, runtime, workspace, fireWatch };
 }
 
-describe("WebContainerRuntimeProvider reverse sync", () => {
+describe("NodeRuntimeProvider reverse sync", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    // isWebContainerRuntimeSupported() gates the runtime on cross-origin isolation.
+    // isNodeRuntimeSupported() gates the runtime on cross-origin isolation.
     vi.stubGlobal("crossOriginIsolated", true);
   });
 
@@ -245,8 +242,8 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
   it("suppresses ambient startup while preserving explicit runtime.start", async () => {
     const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    const boot = vi.mocked(getOrBootSharedWebContainer);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    const boot = vi.mocked(getOrBootSharedNodeRuntime);
     boot.mockReset();
     boot.mockResolvedValue(instance);
 
@@ -267,8 +264,8 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
       "index.html": "<main>Hello</main>",
     });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
 
     // Simulate the installer writing a lock file the instant the init command's process
     // resolves — before `startRuntime` returns, and long before any terminal session exists.
@@ -313,8 +310,8 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
   it("runs the init command once when several entry points race it", async () => {
     const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
 
     const spawned: string[] = [];
     let releaseInstall: (() => void) | null = null;
@@ -372,8 +369,8 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
       "index.html": "<main>Hello</main>",
     });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
 
     const { runtime, workspace } = renderProviders();
 
@@ -420,8 +417,8 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
       writeFile: vi.fn<() => Promise<void>>(async () => {}),
     });
 
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
 
     const { runtime, workspace } = renderProviders();
 
@@ -456,8 +453,8 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
   it("requeues a stale reverse read and preserves a newer editor edit and saved baseline", async () => {
     const fakeFs = createFakeFs({});
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
     const harness = renderProviders();
     const initialProject = harness.workspace.getProject();
     const entryPath = initialProject.entryFilePath;
@@ -512,8 +509,8 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
         return { close: vi.fn<() => void>() };
       }),
     });
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
 
     const { runtime, workspace } = renderProviders();
     // The fake mount writes nothing, so seed the container with the mounted project.
@@ -639,7 +636,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
   });
 });
 
-describe("WebContainerRuntimeProvider runner control", () => {
+describe("NodeRuntimeProvider runner control", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal("crossOriginIsolated", true);
@@ -680,8 +677,8 @@ describe("WebContainerRuntimeProvider runner control", () => {
         resize: vi.fn<() => void>(),
       } as unknown as WebNodeProcess;
     }) as never);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
     const { runtime } = renderProviders(false);
 
     await act(async () => {
@@ -708,8 +705,8 @@ describe("WebContainerRuntimeProvider runner control", () => {
   it("reruns on variables saved in the same handler", async () => {
     const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
     const { runtime } = renderProviders(false);
     const runnerSpawns = () =>
       (vi.mocked(instance.spawn).mock.calls as unknown as [string, string[], unknown][]).filter(
@@ -759,9 +756,8 @@ describe("WebContainerRuntimeProvider runner control", () => {
     async function renderBoundRuntime() {
       const fakeFs = createFakeFs({ "main.js": "" });
       const { instance } = createFakeInstance(fakeFs);
-      const { getOrBootSharedWebContainer } =
-        await import("../runtime/webcontainer/sharedContainer");
-      vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+      const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+      vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
       const harness = renderProviders(true);
       const spawnCalls = () =>
         vi.mocked(instance.spawn).mock.calls as unknown as [
@@ -895,34 +891,34 @@ describe("WebContainerRuntimeProvider runner control", () => {
         resize: vi.fn<() => void>(),
       } as unknown as WebNodeProcess;
     }) as never);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
 
     const probes: {
-      runtime: WebContainerRuntimeActions | null;
+      runtime: NodeRuntimeActions | null;
       metadataRenders: number;
       lastOutput: string | null;
     } = { runtime: null, metadataRenders: 0, lastOutput: null };
     function Capture() {
-      probes.runtime = useWebContainerRuntimeActions();
+      probes.runtime = useNodeRuntimeActions();
       return null;
     }
     function MetadataConsumer() {
-      useWebContainerRuntimeMetadata();
+      useNodeRuntimeMetadata();
       probes.metadataRenders += 1;
       return null;
     }
     function OutputConsumer() {
-      probes.lastOutput = useWebContainerRuntimeOutput().lastOutput;
+      probes.lastOutput = useNodeRuntimeOutput().lastOutput;
       return null;
     }
     render(
       <WorkspaceProvider>
-        <WebContainerRuntimeProvider allowAmbientStart={false}>
+        <NodeRuntimeProvider allowAmbientStart={false}>
           <Capture />
           <MetadataConsumer />
           <OutputConsumer />
-        </WebContainerRuntimeProvider>
+        </NodeRuntimeProvider>
       </WorkspaceProvider>,
     );
     await act(async () => {
@@ -947,36 +943,36 @@ describe("WebContainerRuntimeProvider runner control", () => {
   it("reports preview errors and port events without re-rendering metadata consumers", async () => {
     const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
     const { instance, listeners } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockResolvedValue(instance);
 
     const probes: {
-      runtime: WebContainerRuntimeActions | null;
+      runtime: NodeRuntimeActions | null;
       metadataRenders: number;
       outputRenders: number;
-      output: WebContainerRuntimeOutput | null;
+      output: NodeRuntimeOutput | null;
     } = { runtime: null, metadataRenders: 0, outputRenders: 0, output: null };
     function Capture() {
-      probes.runtime = useWebContainerRuntimeActions();
+      probes.runtime = useNodeRuntimeActions();
       return null;
     }
     function MetadataConsumer() {
-      useWebContainerRuntimeMetadata();
+      useNodeRuntimeMetadata();
       probes.metadataRenders += 1;
       return null;
     }
     function OutputConsumer() {
-      probes.output = useWebContainerRuntimeOutput();
+      probes.output = useNodeRuntimeOutput();
       probes.outputRenders += 1;
       return null;
     }
     render(
       <WorkspaceProvider>
-        <WebContainerRuntimeProvider allowAmbientStart={false}>
+        <NodeRuntimeProvider allowAmbientStart={false}>
           <Capture />
           <MetadataConsumer />
           <OutputConsumer />
-        </WebContainerRuntimeProvider>
+        </NodeRuntimeProvider>
       </WorkspaceProvider>,
     );
     await act(async () => {
@@ -1008,7 +1004,7 @@ describe("WebContainerRuntimeProvider runner control", () => {
   });
 });
 
-describe("WebContainerRuntimeProvider terminal", () => {
+describe("NodeRuntimeProvider terminal", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal("crossOriginIsolated", true);
@@ -1046,30 +1042,30 @@ describe("WebContainerRuntimeProvider terminal", () => {
         resize: vi.fn<() => void>(),
       } as unknown as WebNodeProcess;
     }) as never);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockReset().mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockReset().mockResolvedValue(instance);
 
     const captured: {
-      runtime: WebContainerRuntimeActions | null;
+      runtime: NodeRuntimeActions | null;
       workspace: WorkspaceActions | null;
       status: string | null;
       errorMessage: string | null;
-      terminalSessions: WebContainerRuntimeOutput["terminalSessions"];
+      terminalSessions: NodeRuntimeOutput["terminalSessions"];
     } = { runtime: null, workspace: null, status: null, errorMessage: null, terminalSessions: [] };
     function Capture() {
-      captured.runtime = useWebContainerRuntimeActions();
+      captured.runtime = useNodeRuntimeActions();
       captured.workspace = useWorkspaceActions();
-      const metadata = useWebContainerRuntimeMetadata();
+      const metadata = useNodeRuntimeMetadata();
       captured.status = metadata.status;
       captured.errorMessage = metadata.errorMessage;
-      captured.terminalSessions = useWebContainerRuntimeOutput().terminalSessions;
+      captured.terminalSessions = useNodeRuntimeOutput().terminalSessions;
       return null;
     }
     render(
       <WorkspaceProvider>
-        <WebContainerRuntimeProvider allowAmbientStart={false}>
+        <NodeRuntimeProvider allowAmbientStart={false}>
           <Capture />
-        </WebContainerRuntimeProvider>
+        </NodeRuntimeProvider>
       </WorkspaceProvider>,
     );
     await act(async () => {
@@ -1118,7 +1114,7 @@ describe("WebContainerRuntimeProvider terminal", () => {
   });
 
   it("does not re-sync the project per keystroke", async () => {
-    const { syncWorkspaceProject } = await import("../runtime/webcontainer/files");
+    const { syncWorkspaceProject } = await import("../runtime/node/files");
     const { captured, fakeFs } = await startRuntimeWithRunnerExit(0);
     await act(async () => {
       await captured.runtime?.startTerminalSession();
@@ -1142,7 +1138,7 @@ describe("WebContainerRuntimeProvider terminal", () => {
   });
 });
 
-describe("WebContainerRuntimeProvider subscriptions", () => {
+describe("NodeRuntimeProvider subscriptions", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -1153,7 +1149,7 @@ describe("WebContainerRuntimeProvider subscriptions", () => {
   it("keeps one workspace subscription and one set of window listeners across renders", () => {
     vi.stubGlobal("crossOriginIsolated", true);
     const addEventListener = vi.spyOn(window, "addEventListener");
-    const captured: { runtime: WebContainerRuntimeActions | null; subscribes: number } = {
+    const captured: { runtime: NodeRuntimeActions | null; subscribes: number } = {
       runtime: null,
       subscribes: 0,
     };
@@ -1167,15 +1163,15 @@ describe("WebContainerRuntimeProvider subscriptions", () => {
           return subscribe(...args);
         }) as typeof store.subscribe;
       }
-      captured.runtime = useWebContainerRuntimeActions();
+      captured.runtime = useNodeRuntimeActions();
       return null;
     }
 
     render(
       <WorkspaceProvider>
-        <WebContainerRuntimeProvider allowAmbientStart={false}>
+        <NodeRuntimeProvider allowAmbientStart={false}>
           <Capture />
-        </WebContainerRuntimeProvider>
+        </NodeRuntimeProvider>
       </WorkspaceProvider>,
     );
     const blurListeners = () =>
@@ -1192,7 +1188,7 @@ describe("WebContainerRuntimeProvider subscriptions", () => {
   });
 });
 
-describe("WebContainerRuntimeProvider saveWorkspace", () => {
+describe("NodeRuntimeProvider saveWorkspace", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal("crossOriginIsolated", true);
@@ -1207,29 +1203,29 @@ describe("WebContainerRuntimeProvider saveWorkspace", () => {
   async function startWithFailingWrites() {
     const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    const boot = vi.mocked(getOrBootSharedWebContainer);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    const boot = vi.mocked(getOrBootSharedNodeRuntime);
     boot.mockReset();
     boot.mockResolvedValue(instance);
 
     const captured: {
-      runtime: WebContainerRuntimeActions | null;
+      runtime: NodeRuntimeActions | null;
       workspace: WorkspaceActions | null;
       save: (() => Promise<void>) | null;
       errorMessage: string | null;
     } = { runtime: null, workspace: null, save: null, errorMessage: null };
     function Capture() {
-      captured.runtime = useWebContainerRuntimeActions();
+      captured.runtime = useNodeRuntimeActions();
       captured.workspace = useWorkspaceActions();
-      captured.save = useWebContainerRuntimeSaveWorkspace();
-      captured.errorMessage = useWebContainerRuntimeMetadata().errorMessage;
+      captured.save = useNodeRuntimeSaveWorkspace();
+      captured.errorMessage = useNodeRuntimeMetadata().errorMessage;
       return null;
     }
     render(
       <WorkspaceProvider>
-        <WebContainerRuntimeProvider allowAmbientStart={false}>
+        <NodeRuntimeProvider allowAmbientStart={false}>
           <Capture />
-        </WebContainerRuntimeProvider>
+        </NodeRuntimeProvider>
       </WorkspaceProvider>,
     );
     await act(async () => {
@@ -1308,29 +1304,29 @@ describe("WebContainerRuntimeProvider saveWorkspace", () => {
 
   /** A runtime whose start failed: status "error" and no container to sync to. */
   async function renderAfterFailedStart() {
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    const boot = vi.mocked(getOrBootSharedWebContainer);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    const boot = vi.mocked(getOrBootSharedNodeRuntime);
     boot.mockReset();
     boot.mockRejectedValue(new Error("boot failed"));
 
     const captured: {
-      runtime: WebContainerRuntimeActions | null;
+      runtime: NodeRuntimeActions | null;
       workspace: WorkspaceActions | null;
       save: (() => Promise<void>) | null;
       status: string | null;
     } = { runtime: null, workspace: null, save: null, status: null };
     function Capture() {
-      captured.runtime = useWebContainerRuntimeActions();
+      captured.runtime = useNodeRuntimeActions();
       captured.workspace = useWorkspaceActions();
-      captured.save = useWebContainerRuntimeSaveWorkspace();
-      captured.status = useWebContainerRuntimeMetadata().status;
+      captured.save = useNodeRuntimeSaveWorkspace();
+      captured.status = useNodeRuntimeMetadata().status;
       return null;
     }
     render(
       <WorkspaceProvider>
-        <WebContainerRuntimeProvider allowAmbientStart={false}>
+        <NodeRuntimeProvider allowAmbientStart={false}>
           <Capture />
-        </WebContainerRuntimeProvider>
+        </NodeRuntimeProvider>
       </WorkspaceProvider>,
     );
     await act(async () => {
@@ -1347,25 +1343,25 @@ describe("WebContainerRuntimeProvider saveWorkspace", () => {
   it("reruns for a replay save only when the code differs from the last run", async () => {
     const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
-    vi.mocked(getOrBootSharedWebContainer).mockReset().mockResolvedValue(instance);
+    const { getOrBootSharedNodeRuntime } = await import("../runtime/node/sharedNodeRuntime");
+    vi.mocked(getOrBootSharedNodeRuntime).mockReset().mockResolvedValue(instance);
 
     const captured: {
-      runtime: WebContainerRuntimeActions | null;
+      runtime: NodeRuntimeActions | null;
       workspace: WorkspaceActions | null;
-      save: ReturnType<typeof useWebContainerRuntimeSaveWorkspace> | null;
+      save: ReturnType<typeof useNodeRuntimeSaveWorkspace> | null;
     } = { runtime: null, workspace: null, save: null };
     function Capture() {
-      captured.runtime = useWebContainerRuntimeActions();
+      captured.runtime = useNodeRuntimeActions();
       captured.workspace = useWorkspaceActions();
-      captured.save = useWebContainerRuntimeSaveWorkspace();
+      captured.save = useNodeRuntimeSaveWorkspace();
       return null;
     }
     render(
       <WorkspaceProvider>
-        <WebContainerRuntimeProvider allowAmbientStart={false}>
+        <NodeRuntimeProvider allowAmbientStart={false}>
           <Capture />
-        </WebContainerRuntimeProvider>
+        </NodeRuntimeProvider>
       </WorkspaceProvider>,
     );
     await act(async () => {

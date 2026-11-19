@@ -6,7 +6,7 @@ import { NextEditorProvider } from "../contexts/NextEditorProvider";
 import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleContext";
 import { RuntimePanelStoreProvider } from "../contexts/RuntimePanelStoreContext";
 import { SlidesStoreProvider } from "../contexts/SlidesStoreContext";
-import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
+import { NodeRuntimeProvider } from "../contexts/NodeRuntimeProvider";
 import { WhiteboardStoreProvider } from "../contexts/WhiteboardStoreContext";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -71,7 +71,7 @@ const take: Recording = {
 function Providers({ children }: PropsWithChildren) {
   return (
     <WorkspaceProvider>
-      <WebContainerRuntimeProvider allowAmbientStart={false}>
+      <NodeRuntimeProvider allowAmbientStart={false}>
         <SlidesStoreProvider>
           <WhiteboardStoreProvider>
             <RuntimePanelStoreProvider>
@@ -81,7 +81,7 @@ function Providers({ children }: PropsWithChildren) {
             </RuntimePanelStoreProvider>
           </WhiteboardStoreProvider>
         </SlidesStoreProvider>
-      </WebContainerRuntimeProvider>
+      </NodeRuntimeProvider>
     </WorkspaceProvider>
   );
 }

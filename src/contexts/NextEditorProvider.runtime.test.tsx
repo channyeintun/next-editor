@@ -7,12 +7,12 @@ import { NextEditorActorContext } from "./NextEditorActorContext";
 import { PreviewAdapterHandleProvider } from "./PreviewAdapterHandleContext";
 import { RuntimePanelStoreProvider } from "./RuntimePanelStoreContext";
 import { SlidesStoreProvider } from "./SlidesStoreContext";
-import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
+import { NodeRuntimeProvider } from "./NodeRuntimeProvider";
 import { WhiteboardStoreProvider } from "./WhiteboardStoreContext";
 import { WorkspaceProvider } from "./WorkspaceProvider";
-import { getOrBootSharedWebContainer } from "../runtime/webcontainer/sharedContainer";
+import { getOrBootSharedNodeRuntime } from "../runtime/node/sharedNodeRuntime";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
-import { useWebContainerRuntimeMetadata } from "../hooks/useWebContainerRuntime";
+import { useNodeRuntimeMetadata } from "../hooks/useNodeRuntime";
 import { createWorkspaceFile } from "../starters/shared";
 import type { NextEditorActions } from "./NextEditorContext";
 import type { EditorActorRef } from "../core/src/useNextEditor";
@@ -25,11 +25,11 @@ import {
 
 // Kept out of NextEditorProvider.test.tsx so this module mock, which puts a fake
 // WebNode behind the runtime, does not reach the tests there.
-vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
+vi.mock("../runtime/node/sharedNodeRuntime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runtime/node/sharedNodeRuntime")>();
   return {
     ...actual,
-    getOrBootSharedWebContainer: vi.fn<() => Promise<WebNode>>(),
+    getOrBootSharedNodeRuntime: vi.fn<() => Promise<WebNode>>(),
   };
 });
 
@@ -48,7 +48,7 @@ function EditorProviders({
 }: PropsWithChildren<SurfaceProps>) {
   return (
     <WorkspaceProvider pendingRecordingUrl={pendingRecordingUrl}>
-      <WebContainerRuntimeProvider allowAmbientStart={allowAmbientStart}>
+      <NodeRuntimeProvider allowAmbientStart={allowAmbientStart}>
         <SlidesStoreProvider>
           <WhiteboardStoreProvider>
             <RuntimePanelStoreProvider>
@@ -58,7 +58,7 @@ function EditorProviders({
             </RuntimePanelStoreProvider>
           </WhiteboardStoreProvider>
         </SlidesStoreProvider>
-      </WebContainerRuntimeProvider>
+      </NodeRuntimeProvider>
     </WorkspaceProvider>
   );
 }
@@ -96,7 +96,7 @@ function createFakeInstance() {
 
 function renderEditor(surface: SurfaceProps) {
   const instance = createFakeInstance();
-  const boot = vi.mocked(getOrBootSharedWebContainer);
+  const boot = vi.mocked(getOrBootSharedNodeRuntime);
   boot.mockReset();
   boot.mockResolvedValue(instance as unknown as WebNode);
 
@@ -109,7 +109,7 @@ function renderEditor(surface: SurfaceProps) {
   function Capture() {
     captured.actions = useNextEditorActions();
     captured.actor = NextEditorActorContext.useActorRef();
-    captured.runtimeStatus = useWebContainerRuntimeMetadata().status;
+    captured.runtimeStatus = useNodeRuntimeMetadata().status;
     return null;
   }
 
@@ -226,7 +226,7 @@ const goLesson = () =>
 
 describe("NextEditorProvider replay and the WebNode runtime", () => {
   beforeEach(() => {
-    // isWebContainerRuntimeSupported() gates the runtime on cross-origin isolation.
+    // isNodeRuntimeSupported() gates the runtime on cross-origin isolation.
     vi.stubGlobal("crossOriginIsolated", true);
     // The playback clock ticks on animation frames. Holding them leaves the
     // tests' TICK events as the only clock, so each replay position is exact.

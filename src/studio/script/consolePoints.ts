@@ -68,7 +68,7 @@ function runConsole(runtime: StudioPlaygroundRuntime, runId: string): RunConsole
 
 /**
  * Every `console.point` and `expect.output` that fits none of the lesson's
- * pinned runs (Playground lessons only — a WebContainer console's output is not
+ * pinned runs (Playground lessons only — a Node.js runtime console's output is not
  * pinned). The script schema reports these when the script is parsed, before
  * any narration is synthesized. With one `result` every run prints the same
  * console, so this is the whole check. With `results`, which run a target

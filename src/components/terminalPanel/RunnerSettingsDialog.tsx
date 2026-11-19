@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { useId } from "react";
-import type { RunnerConfig } from "../../runtime/webcontainer/types";
+import type { RunnerConfig } from "../../runtime/node/types";
 import ModalShell from "../ModalShell";
 import HoverRing from "../hoverRing/HoverRing";
 

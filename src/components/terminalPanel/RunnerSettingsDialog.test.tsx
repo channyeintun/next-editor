@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { RunnerConfig } from "../../runtime/webcontainer/types";
+import type { RunnerConfig } from "../../runtime/node/types";
 import RunnerSettingsDialog from "./RunnerSettingsDialog";
 
 const runnerConfig: RunnerConfig = {

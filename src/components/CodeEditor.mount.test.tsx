@@ -104,8 +104,8 @@ vi.mock("../hooks/useWorkspace", () => ({
   useWorkspaceLessonType: () => "html-css",
   useWorkspaceTreeVersion: () => 0,
 }));
-vi.mock("../hooks/useWebContainerRuntime", () => ({
-  useWebContainerRuntimeSaveWorkspace: () => async () => {},
+vi.mock("../hooks/useNodeRuntime", () => ({
+  useNodeRuntimeSaveWorkspace: () => async () => {},
 }));
 vi.mock("../hooks/useRuntimeDockLayout", () => ({
   useRuntimeDockLayout: () => ({ fillsColumn: false }),

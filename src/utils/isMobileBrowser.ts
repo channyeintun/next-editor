@@ -1,12 +1,12 @@
 /**
  * Best-effort mobile/tablet detection. Heavy in-browser surfaces — the
- * WebContainer runtime and the landing page's embedded live-editor demo iframe —
+ * Node.js runtime and the landing page's embedded live-editor demo iframe —
  * spike memory enough on mobile browsers (iOS Safari, Android Chrome) that the OS
  * reloads or kills the tab. We detect mobile so those surfaces stay disabled
  * rather than crashing the page.
  *
  * Kept dependency-free so it can be imported from the light landing critical path
- * without dragging in the WebContainer support module.
+ * without dragging in the Node.js runtime support module.
  */
 export function isMobileBrowser(): boolean {
   if (typeof navigator === "undefined") {

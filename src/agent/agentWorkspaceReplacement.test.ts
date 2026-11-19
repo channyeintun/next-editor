@@ -23,7 +23,7 @@ type ExecutableTool = {
 };
 
 function writeToolFor(ctx: Parameters<typeof createCodingTools>[0]): ExecutableTool {
-  const tool = (createCodingTools(ctx, "webcontainer") as unknown as ExecutableTool[]).find(
+  const tool = (createCodingTools(ctx, "node-runtime") as unknown as ExecutableTool[]).find(
     (candidate) => candidate.function.name === "write",
   );
   if (!tool) throw new Error("Expected a write tool");

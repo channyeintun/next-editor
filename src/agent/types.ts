@@ -1,5 +1,5 @@
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
-import type { WebContainerRuntimeRecordingSnapshot } from "../contexts/WebContainerRuntimeContext";
+import type { NodeRuntimeRecordingSnapshot } from "../contexts/NodeRuntimeContext";
 import type { LivePreviewInspection } from "../stores/previewAdapterHandle";
 import type { PreviewScreenshotResult } from "../utils/iframeScreenshotBridge";
 
@@ -22,7 +22,7 @@ export interface AgentUsage {
 
 /** What `runtime_diagnostics` reports: the live runtime snapshot's fields plus support. */
 export type AgentRuntimeDiagnostics = Pick<
-  WebContainerRuntimeRecordingSnapshot,
+  NodeRuntimeRecordingSnapshot,
   | "activeCommand"
   | "errorMessage"
   | "lastOutput"

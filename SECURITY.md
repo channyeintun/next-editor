@@ -16,4 +16,4 @@ Security fixes go to the `main` branch, which is what runs at https://nexteditor
 
 ## Scope
 
-Third-party services the app calls (the language playgrounds, OpenRouter, Google, Cloudflare, WebContainer) are out of scope; report issues in them to their owners.
+Third-party services the app calls (the language playgrounds, OpenRouter, Google, Cloudflare, Node.js runtime) are out of scope; report issues in them to their owners.

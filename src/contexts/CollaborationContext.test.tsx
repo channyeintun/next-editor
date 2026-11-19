@@ -114,10 +114,7 @@ import {
 import { SlidesStoreProvider, useSlidesStore } from "./SlidesStoreContext";
 import { WhiteboardStoreProvider } from "./WhiteboardStoreContext";
 import { WhiteboardProvider, useWhiteboardContext } from "./WhiteboardContext";
-import {
-  WebContainerRuntimeActionsContext,
-  type WebContainerRuntimeActions,
-} from "./WebContainerRuntimeContext";
+import { NodeRuntimeActionsContext, type NodeRuntimeActions } from "./NodeRuntimeContext";
 import type { SlidesStoreInstance } from "../stores/slidesStore";
 
 let testSlidesStore: SlidesStoreInstance | null = null;
@@ -441,7 +438,7 @@ describe("CollaborationProvider", () => {
 
   it("switches the runtime reverse sync off while the room owns the workspace", async () => {
     mocks.getRoom.mockImplementation(() => new Promise(() => {}));
-    const setReverseSyncEnabled = vi.fn<WebContainerRuntimeActions["setReverseSyncEnabled"]>();
+    const setReverseSyncEnabled = vi.fn<NodeRuntimeActions["setReverseSyncEnabled"]>();
     let collaboration: ReturnType<typeof useCollaboration> | null = null;
     function Probe() {
       collaboration = useCollaboration();
@@ -450,13 +447,13 @@ describe("CollaborationProvider", () => {
 
     const view = render(
       <MemoryRouter initialEntries={[`/code?room=${roomSession.room.id}`]}>
-        <WebContainerRuntimeActionsContext
-          value={{ setReverseSyncEnabled } as unknown as WebContainerRuntimeActions}
+        <NodeRuntimeActionsContext
+          value={{ setReverseSyncEnabled } as unknown as NodeRuntimeActions}
         >
           <TestProviders>
             <Probe />
           </TestProviders>
-        </WebContainerRuntimeActionsContext>
+        </NodeRuntimeActionsContext>
       </MemoryRouter>,
     );
 
@@ -471,7 +468,7 @@ describe("CollaborationProvider", () => {
   it("leaves the runtime reverse sync on while a room plays back a recording", async () => {
     usesPlaybackModel = true;
     mocks.getRoom.mockImplementation(() => new Promise(() => {}));
-    const setReverseSyncEnabled = vi.fn<WebContainerRuntimeActions["setReverseSyncEnabled"]>();
+    const setReverseSyncEnabled = vi.fn<NodeRuntimeActions["setReverseSyncEnabled"]>();
     let collaboration: ReturnType<typeof useCollaboration> | null = null;
     function Probe() {
       collaboration = useCollaboration();
@@ -480,13 +477,13 @@ describe("CollaborationProvider", () => {
 
     const view = render(
       <MemoryRouter initialEntries={[`/code?room=${roomSession.room.id}`]}>
-        <WebContainerRuntimeActionsContext
-          value={{ setReverseSyncEnabled } as unknown as WebContainerRuntimeActions}
+        <NodeRuntimeActionsContext
+          value={{ setReverseSyncEnabled } as unknown as NodeRuntimeActions}
         >
           <TestProviders>
             <Probe />
           </TestProviders>
-        </WebContainerRuntimeActionsContext>
+        </NodeRuntimeActionsContext>
       </MemoryRouter>,
     );
 

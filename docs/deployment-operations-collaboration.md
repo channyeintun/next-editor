@@ -114,7 +114,7 @@ Acceptance requirements:
 - no durability or ordering regression;
 - ordinary edits never wait on an external storage network hop;
 - no project-wide collaboration projection during ordinary typing;
-- at most one coalesced WebContainer write per path per batching window;
+- at most one coalesced Node.js runtime write per path per batching window;
 - document and awareness payloads remain binary;
 - reconnect and corrupt-frame limits fail closed.
 

@@ -59,13 +59,13 @@ describe("shouldAllowSameOriginPreview", () => {
   const base = {
     hasRecording: true,
     isPlaybackPreviewActive: false,
-    runsInWebContainer: true,
+    runsInNodeRuntime: true,
     hasRuntimePreviewUrl: true,
   };
 
-  it("keeps the flag while the live WebContainer URL is showing", () => {
+  it("keeps the flag while the live Node.js runtime URL is showing", () => {
     // Required, not merely harmless: that document is cross-origin, and without
-    // the flag its service worker cannot register — WebContainer then replaces
+    // the flag its service worker cannot register — Node.js runtime then replaces
     // the app with its "enable storage partitioning" placeholder.
     expect(shouldAllowSameOriginPreview(base)).toBe(true);
   });
@@ -77,7 +77,7 @@ describe("shouldAllowSameOriginPreview", () => {
         ...base,
         hasRecording: false,
         hasRuntimePreviewUrl: false,
-        runsInWebContainer: false,
+        runsInNodeRuntime: false,
       }),
     ).toBe(true);
   });
@@ -87,7 +87,7 @@ describe("shouldAllowSameOriginPreview", () => {
     expect(shouldAllowSameOriginPreview({ ...base, isPlaybackPreviewActive: true })).toBe(false);
     // Runtime not up yet, so the frame shows srcdoc, not the cross-origin URL.
     expect(shouldAllowSameOriginPreview({ ...base, hasRuntimePreviewUrl: false })).toBe(false);
-    // Non-WebContainer lesson: never points at a cross-origin runtime URL.
-    expect(shouldAllowSameOriginPreview({ ...base, runsInWebContainer: false })).toBe(false);
+    // Non-Node.js lesson: never points at a cross-origin runtime URL.
+    expect(shouldAllowSameOriginPreview({ ...base, runsInNodeRuntime: false })).toBe(false);
   });
 });

@@ -33,11 +33,11 @@ vi.mock("../../contexts/PreviewAdapterHandleContext", () => ({
     previewScreenshotCapturer: { current: null },
   }),
 }));
-vi.mock("../../hooks/useWebContainerRuntime", () => ({
-  useWebContainerRuntimeSnapshotGetter: () => () => ({}),
+vi.mock("../../hooks/useNodeRuntime", () => ({
+  useNodeRuntimeSnapshotGetter: () => () => ({}),
 }));
-vi.mock("../../runtime/webcontainer/sharedContainer", () => ({
-  isWebContainerRuntimeSupported: () => true,
+vi.mock("../../runtime/node/sharedNodeRuntime", () => ({
+  isNodeRuntimeSupported: () => true,
 }));
 vi.mock("./useOpenRouterModelCatalog", () => ({
   useOpenRouterModelCatalog: () => ({

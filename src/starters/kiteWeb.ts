@@ -8,13 +8,13 @@ import { createWorkspaceFile, STARTER_VITE_VERSION } from "./shared";
  *
  * This is the `kite` starter's opposite number. That one is a console program
  * compiled in the page by the bundled compiler; this one is a Vite project in
- * the WebContainer, with a dev server and a live preview — the setup someone
+ * the Node.js runtime, with a dev server and a live preview — the setup someone
  * would actually ship.
  *
  * **Nothing native is installed.** `vite-plugin-kite` depends on
  * `@kite-lang/compiler-wasm`, which is the Kite compiler built for
  * WebAssembly, so `npm install` brings the compiler with it. A native binary
- * could not run here at all: the WebContainer executes WebAssembly and
+ * could not run here at all: the Node.js runtime executes WebAssembly and
  * JavaScript and no machine code.
  *
  * There is no JavaScript in `src/`. The DOM work is Kite over `std/dom`, and

@@ -15,7 +15,7 @@ import {
   useWorkspaceLessonType,
   useWorkspaceTreeVersion,
 } from "../hooks/useWorkspace";
-import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
+import { useNodeRuntimeSaveWorkspace } from "../hooks/useNodeRuntime";
 import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useOptionalRoomPresence } from "../contexts/collaboration/RoomPresenceContext";
@@ -86,7 +86,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
   const { applyFileTextEdits, getProject, saveProject, updateFileContent } = useWorkspaceActions();
-  const saveWorkspace = useWebContainerRuntimeSaveWorkspace();
+  const saveWorkspace = useNodeRuntimeSaveWorkspace();
   const { activeFile } = useWorkspaceEditorState();
   const lessonType = useWorkspaceLessonType();
   const treeVersion = useWorkspaceTreeVersion();

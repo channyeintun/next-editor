@@ -4,7 +4,7 @@ import { createWorkspaceFile } from "./shared";
 
 /**
  * JavaScript / Node.js lesson starter: a small multi-file ESM script executed
- * by the WebContainer's Node runtime. The runner's `pnpm dev` resolves to
+ * by the Node.js runtime. The runner's `pnpm dev` resolves to
  * `node main.js`, which prints to the Runner console and exits, then re-runs
  * on save. The full Node.js runtime is available — lessons can
  * `pnpm add` packages or start servers (the Preview panel appears when a
@@ -22,7 +22,7 @@ export function createStarterJavascriptWorkspace(): WorkspaceProject {
           type: "module",
           scripts: {
             // The shared `pnpm dev` runner contract runs the script with the
-            // WebContainer's Node, streams stdout to the Runner tab, and
+            // runtime's Node, streams stdout to the Runner tab, and
             // re-runs on save.
             dev: "node main.js",
             start: "node main.js",

@@ -7,10 +7,10 @@ import type { SlideEvent } from "../../core/src/slides";
 import type { WhiteboardEvent } from "../../core/src/whiteboard";
 import type { PreviewEvent, PreviewPanelMode, PreviewState } from "../../types/slides";
 import type {
-  WebContainerRuntimeActions,
-  WebContainerRuntimeMetadata,
-  WebContainerRuntimeRecordingSnapshot,
-} from "../../contexts/WebContainerRuntimeContext";
+  NodeRuntimeActions,
+  NodeRuntimeMetadata,
+  NodeRuntimeRecordingSnapshot,
+} from "../../contexts/NodeRuntimeContext";
 import type {
   PreviewCommandExecutor,
   PreviewScreenshotCapturer,
@@ -33,7 +33,7 @@ import { consoleCommands } from "./console";
 import { editorCommands } from "./editor";
 import { createStudioPointer, moveCursor } from "./pointer";
 import { stageCommands } from "./stage";
-import { webContainerCommands } from "./webContainer";
+import { nodeRuntimeCommands } from "./nodeRuntime";
 
 export { cursorDispatchTarget } from "./pointer";
 
@@ -65,13 +65,13 @@ export interface StudioDriverDeps {
   runtime: StudioRuntime;
   planSeed: number;
   whiteboardAssets: readonly StudioWhiteboardAsset[];
-  webContainerRuntime: {
+  nodeRuntime: {
     getActions: () => Pick<
-      WebContainerRuntimeActions,
+      NodeRuntimeActions,
       "startRuntime" | "resetRuntime" | "configureRuntime"
     >;
-    getMetadata: () => WebContainerRuntimeMetadata;
-    getSnapshot: () => WebContainerRuntimeRecordingSnapshot;
+    getMetadata: () => NodeRuntimeMetadata;
+    getSnapshot: () => NodeRuntimeRecordingSnapshot;
   };
   preview: {
     open: (mode: PreviewPanelMode) => void;
@@ -163,7 +163,7 @@ export interface StudioDriver {
 
 /**
  * The hub: composes each domain's commands around one shared pointer. Every
- * command lives with its domain (pointer, editor, console, webContainer,
+ * command lives with its domain (pointer, editor, console, nodeRuntime,
  * stage); only the pointer is shared, and only through its own controller.
  */
 export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
@@ -172,7 +172,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     ...editorCommands(deps, pointer),
     moveCursor: (input) => moveCursor(deps, pointer, input),
     ...consoleCommands(deps, pointer),
-    ...webContainerCommands(deps, pointer),
+    ...nodeRuntimeCommands(deps, pointer),
     ...stageCommands(deps, pointer),
   };
 }

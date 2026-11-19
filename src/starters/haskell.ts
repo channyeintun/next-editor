@@ -9,7 +9,7 @@ import { createWorkspaceFile } from "./shared";
  * body, so the whole lesson lives in Main.hs — there is no .cabal file for the
  * sandbox to read and no way to import a second file of your own, so structure
  * comes from types and functions instead. No package.json, dev server, or
- * WebContainer boot — the workspace stays local until Run.
+ * Node.js runtime boot — the workspace stays local until Run.
  *
  * Unlike the Go, Rust and Zig starters, there is no Format button to open
  * against: the playground exposes no formatter endpoint, so the layout below

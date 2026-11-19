@@ -100,10 +100,10 @@ function buildPlaygroundStack(lead: string, specifics: string): string {
 
 // One entry per playground execution kind, like RuntimeDock's RUNNER_PANELS:
 // the `Record` makes adding a playground language a compile error here instead
-// of a lesson that silently inherits the WebContainer stack and gets told its
+// of a lesson that silently inherits the Node.js runtime stack and gets told its
 // own language is off-limits. Each runtime owns its paragraph's text.
 const PLAYGROUND_AGENT_STACKS: Record<
-  Exclude<WorkspaceExecutionKind, "webcontainer">,
+  Exclude<WorkspaceExecutionKind, "node-runtime">,
   PlaygroundAgentStack
 > = {
   "go-playground": GO_AGENT_STACK,
@@ -118,15 +118,15 @@ const PLAYGROUND_AGENT_STACKS: Record<
 function buildSupportedStack(project: WorkspaceProject): string {
   const executionKind = executionKindForLessonType(project.lessonType);
   // An execution kind missing from the table at runtime still falls through to
-  // the WebContainer text below rather than throwing at the user.
+  // the Node.js runtime text below rather than throwing at the user.
   const playgroundStack =
-    executionKind === "webcontainer" ? null : PLAYGROUND_AGENT_STACKS[executionKind];
+    executionKind === "node-runtime" ? null : PLAYGROUND_AGENT_STACKS[executionKind];
   if (playgroundStack) {
     return buildPlaygroundStack(playgroundStack.lead, playgroundStack.specifics);
   }
 
   // The table cannot catch a *lesson type* that runs a non-JS language inside
-  // the WebContainer, so those get their own branch below.
+  // the Node.js runtime, so those get their own branch below.
   if (project.lessonType === "kite-web") {
     return (
       "Supported stack: Kite for the application code, with HTML, CSS and the Vite " +

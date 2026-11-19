@@ -106,7 +106,7 @@ function makeDriver(preview: Partial<StudioDriverDeps["preview"]> = {}) {
     runtime: { kind: "rust-playground", defaultMode: "fixture" } as StudioDriverDeps["runtime"],
     planSeed: 29,
     whiteboardAssets: [],
-    webContainerRuntime: {} as StudioDriverDeps["webContainerRuntime"],
+    nodeRuntime: {} as StudioDriverDeps["nodeRuntime"],
     preview: preview as StudioDriverDeps["preview"],
     signal: new AbortController().signal,
   } satisfies StudioDriverDeps;

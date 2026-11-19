@@ -23,7 +23,7 @@ import {
   applyRuntimeRecordingState,
   readRuntimeRecordingState,
 } from "../stores/runtimeRecordingAdapter";
-import { useWebContainerRuntimeSnapshotGetter } from "../hooks/useWebContainerRuntime";
+import { useNodeRuntimeSnapshotGetter } from "../hooks/useNodeRuntime";
 import { useEndViewerDockOverride } from "../hooks/useRuntimeDockLayout";
 import { useWorkspaceRecordingAdapter } from "../hooks/useWorkspaceRecordingAdapter";
 import { exportRecordingFiles } from "../storage/recordingExport";
@@ -165,7 +165,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   const { store: slidesStore } = useSlidesStore();
   const { store: whiteboardStore } = useWhiteboardStore();
   const { store: runtimePanelStore } = useRuntimePanelStore();
-  const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
+  const getRuntimeRecordingSnapshot = useNodeRuntimeSnapshotGetter();
   const { getWorkspaceSnapshot, applyWorkspaceSnapshot, suppressWorkspaceEventsRef } =
     useWorkspaceRecordingAdapter();
 

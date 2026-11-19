@@ -1,27 +1,23 @@
 import { useContext, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import type { WebNode } from "../core/webnode/api";
 import {
-  WebContainerRuntimeActionsContext,
-  WebContainerRuntimeMetadataContext,
-  WebContainerRuntimeOutputContext,
-  WebContainerRuntimeSnapshotGetterContext,
-  WebContainerRuntimeSaveWorkspaceContext,
+  NodeRuntimeActionsContext,
+  NodeRuntimeMetadataContext,
+  NodeRuntimeOutputContext,
+  NodeRuntimeSnapshotGetterContext,
+  NodeRuntimeSaveWorkspaceContext,
   type SaveWorkspaceOptions,
-  type WebContainerRuntimeActions,
-  type WebContainerRuntimeMetadata,
-  type WebContainerRuntimeOutput,
-} from "./WebContainerRuntimeContext";
-import {
-  isRuntimeBusy,
-  type EnvironmentVariables,
-  type RunnerConfig,
-} from "../runtime/webcontainer/types";
+  type NodeRuntimeActions,
+  type NodeRuntimeMetadata,
+  type NodeRuntimeOutput,
+} from "./NodeRuntimeContext";
+import { isRuntimeBusy, type EnvironmentVariables, type RunnerConfig } from "../runtime/node/types";
 import {
   DEFAULT_RUNNER_CONFIG,
   formatCommandError,
   resolveRuntimeRunCommand,
-} from "../runtime/webcontainer/commands";
-import { getRuntimeErrorMessage } from "../runtime/webcontainer/console";
+} from "../runtime/node/commands";
+import { getRuntimeErrorMessage } from "../runtime/node/console";
 import {
   discardLegacyStoredEnvironmentVariables,
   EMPTY_RUNTIME_ENVIRONMENT,
@@ -30,11 +26,8 @@ import {
   resolveEnvironmentVariables,
   type RuntimeEnvironment,
   type RuntimeWorkspaceScope,
-} from "../runtime/webcontainer/environmentVariables";
-import {
-  holdSharedWebContainer,
-  isWebContainerRuntimeSupported,
-} from "../runtime/webcontainer/sharedContainer";
+} from "../runtime/node/environmentVariables";
+import { holdSharedNodeRuntime, isNodeRuntimeSupported } from "../runtime/node/sharedNodeRuntime";
 import {
   useWorkspaceFileCount,
   useWorkspaceActions,
@@ -45,11 +38,11 @@ import {
 import { WorkspaceStoreContext } from "./WorkspaceContext";
 import { getWorkspaceBoundary } from "../stores/workspaceStore";
 import type { WorkspaceSyncMutation } from "../stores/workspaceActions";
-import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
+import { useNodeRuntimeSession } from "./useNodeRuntimeSession";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
-import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";
+import { useNodeRuntimeWorkspaceSync } from "./useNodeRuntimeWorkspaceSync";
 import { areWorkspaceProjectsEqual, type WorkspaceProject } from "../types/workspace";
-import { lessonRunsInWebContainer } from "../types/lessonTypes";
+import { lessonRunsInNodeRuntime } from "../types/lessonTypes";
 
 /**
  * Awaits `task` and hands a failure to `onError` instead of rejecting.
@@ -67,12 +60,12 @@ async function reportFailure(
   }
 }
 
-interface WebContainerRuntimeProviderProps {
+interface NodeRuntimeProviderProps {
   children: React.ReactNode;
   allowAmbientStart?: boolean;
 }
 
-export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderProps> = ({
+export const NodeRuntimeProvider: React.FC<NodeRuntimeProviderProps> = ({
   children,
   allowAmbientStart = true,
 }) => {
@@ -129,11 +122,11 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     requestReverseSync,
     resetWorkspaceSync,
     setReverseSyncEnabled: setWorkspaceReverseSyncEnabled,
-  } = useWebContainerWorkspaceSync({
+  } = useNodeRuntimeWorkspaceSync({
     getProject,
     getWorkspaceRevision,
     reconcileExternalProject,
-    shouldReverseSync: () => lessonRunsInWebContainer(lessonTypeRef.current),
+    shouldReverseSync: () => lessonRunsInNodeRuntime(lessonTypeRef.current),
     // The session hook below owns the runtime generation. The sync calls these only
     // asynchronously, after that hook has run.
     getRuntimeGeneration: () => getRuntimeGeneration(),
@@ -171,7 +164,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     statusRef,
     terminalSessions,
     writeTerminalInput,
-  } = useWebContainerRuntimeSession({
+  } = useNodeRuntimeSession({
     // Read from the store and the ref when the process spawns: the Save of the
     // variables dialog reruns the runner before this provider renders the new
     // variables, and a replayed load reruns it before the effects below drop
@@ -194,7 +187,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       requestReverseSync(instance, getRuntimeGeneration());
     },
     onServerReady: () => {
-      if (!lessonRunsInWebContainer(lessonTypeRef.current)) {
+      if (!lessonRunsInNodeRuntime(lessonTypeRef.current)) {
         return;
       }
 
@@ -218,7 +211,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     runnerConfigRef.current = runnerConfig;
   });
 
-  const isSupported = isWebContainerRuntimeSupported();
+  const isSupported = isNodeRuntimeSupported();
 
   /** The workspace a process started now runs for; null without a workspace store. */
   const getRuntimeWorkspaceScope = (): RuntimeWorkspaceScope | null =>
@@ -307,8 +300,8 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       setStatus("error");
       setErrorMessage(
         isMobileBrowser()
-          ? "The in-browser runtime isn't supported on mobile browsers. Open this lesson on a desktop Chromium or Firefox browser to run it."
-          : "WebContainers require cross-origin isolation. Reload the app from the configured dev or deployed host.",
+          ? "The in-browser runtime isn't supported on mobile browsers. Open this lesson on a desktop Chromium browser to run it."
+          : "The in-browser runtime requires cross-origin isolation. Reload the app from the configured dev or deployed host.",
       );
       return null;
     }
@@ -387,7 +380,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   /** Restarts the runner, even while one is starting: the Run button and run-on-save. */
   const rerunRunner = async () => {
-    if (!lessonRunsInWebContainer(lessonType)) {
+    if (!lessonRunsInNodeRuntime(lessonType)) {
       resetRuntime();
       return;
     }
@@ -407,7 +400,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   /** Like rerunRunner, but leaves a boot, mount, install or start under way alone. */
   const startRuntime = async () => {
-    if (lessonRunsInWebContainer(lessonType) && isRuntimeBusy(statusRef.current)) {
+    if (lessonRunsInNodeRuntime(lessonType) && isRuntimeBusy(statusRef.current)) {
       return;
     }
 
@@ -433,7 +426,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const withPreparedRuntime = async (
     task: (instance: WebNode, generation: number) => Promise<void>,
   ) => {
-    if (!lessonRunsInWebContainer(lessonType)) {
+    if (!lessonRunsInNodeRuntime(lessonType)) {
       return;
     }
 
@@ -475,10 +468,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     // switch: the project and lesson-type effects reset the runtime, and the
     // auto-start decides whether the new one runs.
     const project = getProject();
-    if (
-      !lessonRunsInWebContainer(project.lessonType) ||
-      project.id !== loadedProjectIdRef.current
-    ) {
+    if (!lessonRunsInNodeRuntime(project.lessonType) || project.id !== loadedProjectIdRef.current) {
       return;
     }
 
@@ -555,7 +545,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   };
 
   /** The studio's runner contract, set before it loads the project the contract is for. */
-  const configureRuntime: WebContainerRuntimeActions["configureRuntime"] = (configuration) => {
+  const configureRuntime: NodeRuntimeActions["configureRuntime"] = (configuration) => {
     runnerConfigRef.current = configuration.runnerConfig;
     setRunnerConfig(configuration.runnerConfig);
     replaceEnvironment({
@@ -579,7 +569,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   const onLessonTypeChange = useEffectEvent(() => {
     hasAutoStartedRef.current = false;
-    if (!lessonRunsInWebContainer(lessonType)) {
+    if (!lessonRunsInNodeRuntime(lessonType)) {
       resetRuntime();
     }
   });
@@ -625,7 +615,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   useEffect(() => {
     if (
-      !lessonRunsInWebContainer(lessonType) ||
+      !lessonRunsInNodeRuntime(lessonType) ||
       !allowAmbientStart ||
       !isSupported ||
       hasAutoStartedRef.current ||
@@ -708,14 +698,14 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   // the agent booted or a boot still in flight once it lands, unless another
   // editor holds the container by then.
   useEffect(() => {
-    const releaseSharedWebContainer = holdSharedWebContainer();
+    const releaseSharedNodeRuntime = holdSharedNodeRuntime();
     return () => {
       onUnmount();
-      releaseSharedWebContainer();
+      releaseSharedNodeRuntime();
     };
   }, []);
 
-  const actionsValue: WebContainerRuntimeActions = {
+  const actionsValue: NodeRuntimeActions = {
     createTerminalSession,
     closeTerminalSession,
     startRuntime,
@@ -733,7 +723,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     setReverseSyncEnabled,
   };
 
-  const metadataValue: WebContainerRuntimeMetadata = {
+  const metadataValue: NodeRuntimeMetadata = {
     status,
     previewUrl,
     previewPort,
@@ -752,7 +742,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   // Kept out of metadataValue so a streamed chunk, a preview console error or a
   // port event does not re-render every metadata consumer (the preview
   // controller among them), only the output's.
-  const outputValue: WebContainerRuntimeOutput = {
+  const outputValue: NodeRuntimeOutput = {
     lastOutput,
     terminalSessions,
     latestPreviewMessage,
@@ -760,16 +750,14 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   };
 
   return (
-    <WebContainerRuntimeSnapshotGetterContext value={getRecordingSnapshot}>
-      <WebContainerRuntimeSaveWorkspaceContext value={saveWorkspace}>
-        <WebContainerRuntimeActionsContext value={actionsValue}>
-          <WebContainerRuntimeMetadataContext value={metadataValue}>
-            <WebContainerRuntimeOutputContext value={outputValue}>
-              {children}
-            </WebContainerRuntimeOutputContext>
-          </WebContainerRuntimeMetadataContext>
-        </WebContainerRuntimeActionsContext>
-      </WebContainerRuntimeSaveWorkspaceContext>
-    </WebContainerRuntimeSnapshotGetterContext>
+    <NodeRuntimeSnapshotGetterContext value={getRecordingSnapshot}>
+      <NodeRuntimeSaveWorkspaceContext value={saveWorkspace}>
+        <NodeRuntimeActionsContext value={actionsValue}>
+          <NodeRuntimeMetadataContext value={metadataValue}>
+            <NodeRuntimeOutputContext value={outputValue}>{children}</NodeRuntimeOutputContext>
+          </NodeRuntimeMetadataContext>
+        </NodeRuntimeActionsContext>
+      </NodeRuntimeSaveWorkspaceContext>
+    </NodeRuntimeSnapshotGetterContext>
   );
 };

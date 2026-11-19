@@ -68,7 +68,7 @@ ZIG_PLAYGROUND_ENABLED = "true"
 # run on runtime.nexteditor.dev and each preview on
 # <session>-<port>.nexteditor.dev, sent here by the wildcard route below. The
 # build names the same host in VITE_WEBNODE_PREVIEW_HOST (.env); how the app
-# boots it is in src/runtime/webcontainer/engine.ts.
+# boots it is in src/runtime/node/engine.ts.
 #
 # Those hosts run lesson code on this site, so what protects the editor from
 # them is listed in src/core/webnode/README.md ("The runtime's hosts"). Moving

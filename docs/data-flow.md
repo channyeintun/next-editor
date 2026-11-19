@@ -18,7 +18,7 @@ flowchart TB
         Actions[NextEditorActionsContext]
         Actor[NextEditorActorContext]
         Workspace[WorkspaceProvider]
-        Runtime[WebContainerRuntimeProvider]
+        Runtime[NodeRuntimeProvider]
         SlidesCtx[SlidesProvider]
     end
 

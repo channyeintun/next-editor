@@ -109,7 +109,7 @@ Workflows, or Calls:
   private Durable Object storage.
 - Pub/Sub would duplicate the Durable Object's connected-client fan-out.
 - Containers belong to the separate remote-runtime feature; each collaboration client continues
-  to run its own local WebContainer.
+  to run its own local Node.js runtime.
 - Workflows are unnecessary for room-local compaction that an Alarm can perform.
 - Voice chat does not pass through this data plane. It uses the direct Cloudflare Realtime SFU
   behind a separate `CollaborationVoiceRoomDurableObject` and room-scoped Worker gateway (see

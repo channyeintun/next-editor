@@ -1,30 +1,27 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WebNode, WebNodeProcess } from "../core/webnode/api";
-import type { WebContainerRuntimeRecordingSnapshot } from "./WebContainerRuntimeContext";
-import type {
-  EnvironmentVariables,
-  WebContainerRuntimeStatus,
-} from "../runtime/webcontainer/types";
+import type { NodeRuntimeRecordingSnapshot } from "./NodeRuntimeContext";
+import type { EnvironmentVariables, NodeRuntimeStatus } from "../runtime/node/types";
 import type { RuntimeLifecycleEvent, RuntimePreviewMessage } from "../types/runtime";
 import type { RuntimeTerminalSessionSnapshot } from "../types/runtime";
 import {
   formatCommandError,
   parseCommand,
   TERMINAL_SHELL_CANDIDATES,
-} from "../runtime/webcontainer/commands";
+} from "../runtime/node/commands";
 import {
   formatPreviewMessage,
   previewUnavailableText,
   getRuntimeErrorMessage,
   sanitizeTerminalChunk,
-} from "../runtime/webcontainer/console";
+} from "../runtime/node/console";
 import {
-  getOrBootSharedWebContainer,
-  resetSharedWebContainer,
-  teardownSharedWebContainer,
-} from "../runtime/webcontainer/sharedContainer";
+  getOrBootSharedNodeRuntime,
+  resetSharedNodeRuntime,
+  teardownSharedNodeRuntime,
+} from "../runtime/node/sharedNodeRuntime";
 
-interface UseWebContainerRuntimeSessionOptions {
+interface UseNodeRuntimeSessionOptions {
   /**
    * The variables for the workspace as it is now, read when a process spawns. A
    * value from the last render would miss variables saved in the same handler
@@ -161,11 +158,11 @@ function useMirroredState<T>(initialValue: T) {
   return [value, ref, set] as const;
 }
 
-export function useWebContainerRuntimeSession({
+export function useNodeRuntimeSession({
   getEnvironmentVariables,
   onTerminalOutput,
   onServerReady,
-}: UseWebContainerRuntimeSessionOptions) {
+}: UseNodeRuntimeSessionOptions) {
   const instanceRef = useRef<WebNode | null>(null);
   const foregroundProcessesRef = useRef<Set<WebNodeProcess>>(new Set());
   const runnerProcessRef = useRef<WebNodeProcess | null>(null);
@@ -181,7 +178,7 @@ export function useWebContainerRuntimeSession({
   const isMountedRef = useRef(true);
   const onTerminalOutputRef = useRef(onTerminalOutput);
   const onServerReadyRef = useRef(onServerReady);
-  const [status, statusRef, setStatus] = useMirroredState<WebContainerRuntimeStatus>("idle");
+  const [status, statusRef, setStatus] = useMirroredState<NodeRuntimeStatus>("idle");
   const [previewUrl, previewUrlRef, setPreviewUrl] = useMirroredState<string | null>(null);
   const [previewPort, previewPortRef, setPreviewPort] = useMirroredState<number | null>(null);
   const [errorMessage, errorMessageRef, setErrorMessage] = useMirroredState<string | null>(null);
@@ -389,7 +386,7 @@ export function useWebContainerRuntimeSession({
    * Stops the session's processes and drops its container. A reset for another
    * project or lesson type tears the shared container down whoever booted it,
    * since the agent's bash tool may have booted or joined it without this session
-   * (see resetSharedWebContainer). An unmount (`unmounting`) tears down only the
+   * (see resetSharedNodeRuntime). An unmount (`unmounting`) tears down only the
    * container this session claimed, and leaves the rest to the editor's hold
    * release, which hands a boot still in flight to the editor replacing this one.
    */
@@ -402,9 +399,9 @@ export function useWebContainerRuntimeSession({
     terminalSessionsRef.current = [];
     removeInstanceListeners();
     if (unmounting) {
-      teardownSharedWebContainer(instanceRef.current);
+      teardownSharedNodeRuntime(instanceRef.current);
     } else {
-      resetSharedWebContainer();
+      resetSharedNodeRuntime();
     }
     instanceRef.current = null;
     // The setters below publish the emptied output; a pending frame adds nothing.
@@ -433,7 +430,7 @@ export function useWebContainerRuntimeSession({
     }
 
     const generation = runtimeGenerationRef.current;
-    const instance = await getOrBootSharedWebContainer("runtime");
+    const instance = await getOrBootSharedNodeRuntime("runtime");
 
     if (!isRuntimeGenerationActive(generation)) {
       return instance;
@@ -894,7 +891,7 @@ export function useWebContainerRuntimeSession({
 
   const hasActiveRunner = () => runnerProcessRef.current !== null;
 
-  const getRecordingSnapshot = (): WebContainerRuntimeRecordingSnapshot => ({
+  const getRecordingSnapshot = (): NodeRuntimeRecordingSnapshot => ({
     status: statusRef.current,
     previewUrl: previewUrlRef.current,
     previewPort: previewPortRef.current,

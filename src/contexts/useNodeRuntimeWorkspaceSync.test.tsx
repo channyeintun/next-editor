@@ -2,12 +2,12 @@ import { act, render } from "@testing-library/react";
 import type { WebNode } from "../core/webnode/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
-  useWebContainerWorkspaceSync,
-  WEBCONTAINER_FILE_SYNC_WINDOW_MS,
-  WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS,
+  useNodeRuntimeWorkspaceSync,
+  NODE_RUNTIME_FILE_SYNC_WINDOW_MS,
+  NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS,
   type WorkspaceSyncOptions,
-} from "./useWebContainerWorkspaceSync";
-import { readWorkspaceProject } from "../runtime/webcontainer/files";
+} from "./useNodeRuntimeWorkspaceSync";
+import { readWorkspaceProject } from "../runtime/node/files";
 import type { WorkspaceProject } from "../types/workspace";
 import {
   flushPerformanceMetrics,
@@ -16,8 +16,8 @@ import {
 
 // The reverse sync's container read, so a test controls what the container holds
 // and when the read settles.
-vi.mock("../runtime/webcontainer/files", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../runtime/webcontainer/files")>();
+vi.mock("../runtime/node/files", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runtime/node/files")>();
   return {
     ...actual,
     readWorkspaceProject: vi.fn<typeof actual.readWorkspaceProject>(),
@@ -66,12 +66,12 @@ function renderWorkspaceSyncHook(overrides: Partial<WorkspaceSyncOptions> = {}) 
   // Captured via an object so control-flow analysis keeps the declared union type
   // at each access (a captured `let` reassigned inside the Harness closure narrows
   // to `never` after the non-null check).
-  const captured: { hook: ReturnType<typeof useWebContainerWorkspaceSync> | null } = {
+  const captured: { hook: ReturnType<typeof useNodeRuntimeWorkspaceSync> | null } = {
     hook: null,
   };
 
   function Harness() {
-    captured.hook = useWebContainerWorkspaceSync(options);
+    captured.hook = useNodeRuntimeWorkspaceSync(options);
     return null;
   }
 
@@ -85,7 +85,7 @@ function renderWorkspaceSyncHook(overrides: Partial<WorkspaceSyncOptions> = {}) 
 }
 
 /** A container mounted with `project`; it has no fs.watch, so only explicit requests reverse sync. */
-async function mountProject(hook: ReturnType<typeof useWebContainerWorkspaceSync>) {
+async function mountProject(hook: ReturnType<typeof useNodeRuntimeWorkspaceSync>) {
   const instance = {
     mount: vi.fn<() => Promise<void>>(async () => {}),
     fs: {},
@@ -102,7 +102,7 @@ async function advanceTimers(ms: number) {
   });
 }
 
-describe("useWebContainerWorkspaceSync", () => {
+describe("useNodeRuntimeWorkspaceSync", () => {
   beforeEach(() => {
     resetPerformanceMetricsForTests();
     // By default the container holds exactly the workspace project.
@@ -141,7 +141,7 @@ describe("useWebContainerWorkspaceSync", () => {
     expect(instance.fs.writeFile).not.toHaveBeenCalled();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(WEBCONTAINER_FILE_SYNC_WINDOW_MS);
+      await vi.advanceTimersByTimeAsync(NODE_RUNTIME_FILE_SYNC_WINDOW_MS);
       await Promise.all([first, latest]);
     });
     expect(instance.fs.writeFile).toHaveBeenCalledTimes(1);
@@ -173,7 +173,7 @@ describe("useWebContainerWorkspaceSync", () => {
     expect(instance.fs.writeFile).toHaveBeenCalledTimes(1);
     expect(instance.fs.writeFile).toHaveBeenCalledWith("index.html", "save now");
 
-    await vi.advanceTimersByTimeAsync(WEBCONTAINER_FILE_SYNC_WINDOW_MS);
+    await vi.advanceTimersByTimeAsync(NODE_RUNTIME_FILE_SYNC_WINDOW_MS);
     expect(instance.fs.writeFile).toHaveBeenCalledTimes(1);
   });
 
@@ -249,14 +249,14 @@ describe("useWebContainerWorkspaceSync", () => {
 
     // A file written by a container process must schedule a reverse sync.
     fireWatch("rename", "server/data.json");
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(readWorkspaceProject).toHaveBeenCalledTimes(1);
     expect(readWorkspaceProject).toHaveBeenCalledWith(instance, project);
 
     // Dependency churn is never editor content.
     fireWatch("change", "node_modules/vite/package.json");
     fireWatch("rename", ".git/HEAD");
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(readWorkspaceProject).toHaveBeenCalledTimes(1);
 
     // A forward sync writing index.html must not echo back as an external change.
@@ -278,19 +278,19 @@ describe("useWebContainerWorkspaceSync", () => {
     expect(flushPerformanceMetrics()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          name: "webcontainer.project_sync",
+          name: "node_runtime.project_sync",
           dimensions: { outcome: "success" },
           count: 1,
         }),
         expect.objectContaining({
-          name: "webcontainer.fs_mutations",
+          name: "node_runtime.fs_mutations",
           dimensions: { outcome: "success" },
           sum: 1,
         }),
       ]),
     );
     fireWatch("change", "index.html");
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(readWorkspaceProject).toHaveBeenCalledTimes(1);
 
     // Resetting tears the watcher down.
@@ -400,9 +400,9 @@ describe("useWebContainerWorkspaceSync", () => {
     const instance = await mountProject(hook);
 
     hook.requestReverseSync(instance, 0);
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS - 1);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS - 1);
     hook.requestReverseSync(instance, 0);
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS - 1);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS - 1);
     expect(readWorkspaceProject).not.toHaveBeenCalled();
 
     await advanceTimers(1);
@@ -429,7 +429,7 @@ describe("useWebContainerWorkspaceSync", () => {
     const instance = await mountProject(hook);
 
     hook.requestReverseSync(instance, 0);
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(readWorkspaceProject).toHaveBeenCalledTimes(1);
 
     // A newer request arrives while the first read is still in flight.
@@ -440,7 +440,7 @@ describe("useWebContainerWorkspaceSync", () => {
     });
     expect(reconcileExternalProject).not.toHaveBeenCalled();
 
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(readWorkspaceProject).toHaveBeenCalledTimes(2);
     expect(reconcileExternalProject).toHaveBeenCalledTimes(1);
     expect(reconcileExternalProject).toHaveBeenCalledWith(latestProject);
@@ -465,11 +465,11 @@ describe("useWebContainerWorkspaceSync", () => {
     const instance = await mountProject(hook);
 
     hook.requestReverseSync(instance, 0);
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(readWorkspaceProject).toHaveBeenCalledTimes(1);
     expect(reconcileExternalProject).not.toHaveBeenCalled();
 
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(readWorkspaceProject).toHaveBeenCalledTimes(2);
     expect(reconcileExternalProject).toHaveBeenCalledTimes(1);
     expect(reconcileExternalProject).toHaveBeenCalledWith(containerProject);
@@ -518,7 +518,7 @@ describe("useWebContainerWorkspaceSync", () => {
     // The editor's store: each edit moves its revision and queues a file sync,
     // and a reconcile replaces its project, whose mutation queues a project sync.
     const store = { project: project as WorkspaceProject, revision: 0 };
-    const captured: { hook: ReturnType<typeof useWebContainerWorkspaceSync> | null } = {
+    const captured: { hook: ReturnType<typeof useNodeRuntimeWorkspaceSync> | null } = {
       hook: null,
     };
     const reconcileExternalProject = vi.fn<WorkspaceSyncOptions["reconcileExternalProject"]>(
@@ -547,10 +547,10 @@ describe("useWebContainerWorkspaceSync", () => {
     // A forward write is in flight when the reverse sync comes due, so its
     // flush waits on the queue.
     edit("<main>first</main>");
-    await advanceTimers(WEBCONTAINER_FILE_SYNC_WINDOW_MS);
+    await advanceTimers(NODE_RUNTIME_FILE_SYNC_WINDOW_MS);
     expect(heldWrite.release).not.toBeNull();
     hook.requestReverseSync(instance, 0);
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
 
     // The learner types while it waits; the queue frees before that edit's
     // own file-sync window ends.
@@ -559,7 +559,7 @@ describe("useWebContainerWorkspaceSync", () => {
       heldWrite.release?.();
       await vi.advanceTimersByTimeAsync(0);
     });
-    await advanceTimers(WEBCONTAINER_FILE_SYNC_WINDOW_MS + WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_FILE_SYNC_WINDOW_MS + NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
 
     for (const [reconciled] of reconcileExternalProject.mock.calls) {
       expect(reconciled.files["index.html"].content).toBe("<main>second</main>");
@@ -577,16 +577,16 @@ describe("useWebContainerWorkspaceSync", () => {
 
     hook.requestReverseSync(instance, 0);
     hook.setReverseSyncEnabled(false);
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(readWorkspaceProject).not.toHaveBeenCalled();
 
     hook.requestReverseSync(instance, 0);
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(readWorkspaceProject).not.toHaveBeenCalled();
 
     hook.setReverseSyncEnabled(true);
     hook.requestReverseSync(instance, 0);
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(readWorkspaceProject).toHaveBeenCalledTimes(1);
   });
 
@@ -599,7 +599,7 @@ describe("useWebContainerWorkspaceSync", () => {
 
     hook.requestReverseSync(instance, 0);
     hook.resetWorkspaceSync();
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(shouldReverseSync).not.toHaveBeenCalled();
 
     const inFlightRead: { resolve: ((project: WorkspaceProject) => void) | null } = {
@@ -615,7 +615,7 @@ describe("useWebContainerWorkspaceSync", () => {
       await hook.ensureProjectMounted({ instance, project });
     });
     hook.requestReverseSync(instance, 0);
-    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+    await advanceTimers(NODE_RUNTIME_REVERSE_SYNC_DEBOUNCE_MS);
     expect(readWorkspaceProject).toHaveBeenCalledTimes(1);
 
     hook.resetWorkspaceSync();

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { isWorkspaceTextFile } from "../types/workspace";
-import { lessonRunsInWebContainer } from "../types/lessonTypes";
+import { lessonRunsInNodeRuntime } from "../types/lessonTypes";
 import { createStarterKiteWebWorkspace } from "./kiteWeb";
 
 /**
- * What is particular to the web starter: that it runs in the WebContainer,
+ * What is particular to the web starter: that it runs in the Node.js runtime,
  * that it brings a compiler with it, and that its logic is Kite rather than
  * JavaScript.
  *
@@ -24,12 +24,12 @@ function textFile(project: ReturnType<typeof createStarterKiteWebWorkspace>, pat
 describe("kite web starter", () => {
   const project = createStarterKiteWebWorkspace();
 
-  it("runs in the WebContainer and previews", () => {
-    expect(lessonRunsInWebContainer(project.lessonType)).toBe(true);
+  it("runs in the Node.js runtime and previews", () => {
+    expect(lessonRunsInNodeRuntime(project.lessonType)).toBe(true);
   });
 
   it("installs a compiler rather than expecting one", () => {
-    // The WebContainer runs no native code, so the toolchain has to arrive
+    // The Node.js runtime runs no native code, so the toolchain has to arrive
     // through npm as WebAssembly. A starter that assumed `kitec` on the PATH
     // would install cleanly and then fail at the first `.kite` import.
     const manifest = JSON.parse(textFile(project, "package.json"));

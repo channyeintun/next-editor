@@ -5,7 +5,7 @@ import { createWorkspaceFile } from "./shared";
 /**
  * Pure Go lesson starter: multiple editable `.go` files that run together
  * through the Go Playground proxy on an explicit Run action. No package.json,
- * dev server, or WebContainer boot — the workspace stays local until Run.
+ * dev server, or Node.js runtime boot — the workspace stays local until Run.
  */
 export function createStarterGoWorkspace(): WorkspaceProject {
   const files = {

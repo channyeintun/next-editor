@@ -1,7 +1,7 @@
 import type { AgentObservers } from "../../agent/types";
 import { usePreviewAdapterHandle } from "../../contexts/PreviewAdapterHandleContext";
-import { useWebContainerRuntimeSnapshotGetter } from "../../hooks/useWebContainerRuntime";
-import { isWebContainerRuntimeSupported } from "../../runtime/webcontainer/sharedContainer";
+import { useNodeRuntimeSnapshotGetter } from "../../hooks/useNodeRuntime";
+import { isNodeRuntimeSupported } from "../../runtime/node/sharedNodeRuntime";
 
 /**
  * The runtime and preview observation hooks a Send hands the agent run. Each
@@ -15,7 +15,7 @@ import { isWebContainerRuntimeSupported } from "../../runtime/webcontainer/share
  */
 export function useAgentObservers(modelLabel: string, supportsImages: boolean): AgentObservers {
   const previewHandle = usePreviewAdapterHandle();
-  const getRuntimeSnapshot = useWebContainerRuntimeSnapshotGetter();
+  const getRuntimeSnapshot = useNodeRuntimeSnapshotGetter();
 
   return {
     getRuntimeDiagnostics: () => {
@@ -23,7 +23,7 @@ export function useAgentObservers(modelLabel: string, supportsImages: boolean): 
       return {
         activeCommand: snapshot.activeCommand,
         errorMessage: snapshot.errorMessage,
-        isSupported: isWebContainerRuntimeSupported(),
+        isSupported: isNodeRuntimeSupported(),
         lastOutput: snapshot.lastOutput,
         latestLifecycleEvent: snapshot.latestLifecycleEvent,
         latestPreviewMessage: snapshot.latestPreviewMessage,

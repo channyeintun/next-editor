@@ -7,7 +7,7 @@ import { createWorkspaceFile, STARTER_FAVICON_SVG, STARTER_VITE_VERSION } from "
  *
  * This mirrors the official `start-basic` example, tracking the current
  * **Vite 8** release line (`@tanstack/react-start@^1.167`, `vite@^8`). Earlier
- * Vite 8 + Nitro v3 builds did not respond inside the WebContainer runtime, but
+ * Vite 8 + Nitro v3 builds did not respond inside the in-browser runtime, but
  * that has since been resolved upstream, so the dependency set moves to latest.
  * It is trimmed to a Home/About route pair and uses plain CSS instead of
  * Tailwind v4 — Tailwind's native oxide/lightningcss bindings are the most
@@ -66,7 +66,7 @@ import { nitro } from "nitro/vite";
 
 export default defineConfig({
   server: {
-    // The live preview is served through the WebContainer host, so accept it.
+    // The live preview is served through the Node.js runtime host, so accept it.
     allowedHosts: true,
   },
   plugins: [

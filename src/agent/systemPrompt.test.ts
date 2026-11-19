@@ -33,11 +33,11 @@ function makeProject(): WorkspaceProject {
  * Keyed by execution kind, so a new playground backend is a typecheck error
  * here instead of a row nobody remembered to add. Every playground language
  * needs its own agent stack entry: without one the lesson falls through to the
- * WebContainer stack and the agent is told the lesson's own language is an
+ * Node.js runtime stack and the agent is told the lesson's own language is an
  * off-limits runtime.
  */
 const PLAYGROUND_STACK_EXPECTATIONS: Record<
-  Exclude<WorkspaceExecutionKind, "webcontainer">,
+  Exclude<WorkspaceExecutionKind, "node-runtime">,
   { entryFilePath: string; expectedStack: string; expectedRunner: string; expectedSpecific: string }
 > = {
   "go-playground": {
@@ -91,13 +91,13 @@ const PLAYGROUND_STACK_EXPECTATIONS: Record<
  */
 const PLAYGROUND_CASES = WORKSPACE_LESSON_TYPES.flatMap((lessonType) => {
   const executionKind = executionKindForLessonType(lessonType);
-  return executionKind === "webcontainer"
+  return executionKind === "node-runtime"
     ? []
     : [{ lessonType, ...PLAYGROUND_STACK_EXPECTATIONS[executionKind] }];
 });
 
 describe("buildSystemPrompt", () => {
-  it("states the WebContainer-supported stack and forbids other runtimes", () => {
+  it("states the Node.js stack and forbids other runtimes", () => {
     const prompt = buildSystemPrompt(makeProject(), { toolNames: ["read"], hasBash: true });
 
     expect(prompt).toContain("HTML, CSS, JavaScript, TypeScript, Node.js");
@@ -109,7 +109,7 @@ describe("buildSystemPrompt", () => {
   });
 
   it.each(PLAYGROUND_CASES)(
-    "describes the $lessonType Playground stack, never the WebContainer one",
+    "describes the $lessonType Playground stack, never the Node.js runtime one",
     ({ lessonType, entryFilePath, expectedStack, expectedRunner, expectedSpecific }) => {
       const prompt = buildSystemPrompt(
         {
@@ -146,11 +146,11 @@ describe("buildSystemPrompt", () => {
     },
   );
 
-  // kite-web runs in the WebContainer, so it never reaches a playground branch.
+  // kite-web runs in the Node.js runtime, so it never reaches a playground branch.
   // It used to fall through to the generic stack paragraph, which calls the
   // supported stack JS/TS "only" and never mentions the .kite sources the
   // lesson is actually written in.
-  it("describes the Kite toolchain for kite-web lessons, keeping the WebContainer framing", () => {
+  it("describes the Kite toolchain for kite-web lessons, keeping the Node.js runtime framing", () => {
     const prompt = buildSystemPrompt(
       {
         id: "test-kite-web",
@@ -174,7 +174,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("vite-plugin-kite");
     expect(prompt).toContain(".kite");
     expect(prompt).toContain("Use pnpm exclusively");
-    // Still a WebContainer lesson: unlike the playground branches above, the
+    // Still a Node.js lesson: unlike the playground branches above, the
     // dev server and preview framing must stay.
     expect(prompt).toContain("in-browser Node.js runtime");
     expect(prompt).not.toContain("JS/TS libraries and frameworks only");
@@ -204,7 +204,7 @@ describe("buildSystemPrompt", () => {
     expect(withoutBash).not.toContain("The bash tool runs in");
   });
 
-  it("strictly constrains bash to safe, bounded WebContainer commands", () => {
+  it("strictly constrains bash to safe, bounded Node.js runtime commands", () => {
     const prompt = buildSystemPrompt(makeProject(), { toolNames: ["bash"], hasBash: true });
 
     expect(prompt).toContain("Run only short, bounded, foreground commands");

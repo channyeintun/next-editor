@@ -3,7 +3,7 @@ import { isWorkspaceTextFile, type WorkspaceLessonType } from "./workspace";
 import {
   executionKindForLessonType,
   isWorkspaceLessonType,
-  lessonRunsInWebContainer,
+  lessonRunsInNodeRuntime,
   WORKSPACE_LESSON_TYPES,
   lessonSupportsPreview,
   lessonSupportsTerminal,
@@ -22,16 +22,16 @@ import { createStarterAsmWorkspace } from "../starters/asm";
 // Record keys make this exhaustive at compile time: adding a lesson type
 // without deciding its execution backend fails the typecheck, not just a test.
 const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKind> = {
-  "html-css": "webcontainer",
-  react: "webcontainer",
-  vue: "webcontainer",
-  solid: "webcontainer",
-  svelte: "webcontainer",
-  "htmx-express": "webcontainer",
-  "alpine-express": "webcontainer",
-  "express-ts": "webcontainer",
-  javascript: "webcontainer",
-  typescript: "webcontainer",
+  "html-css": "node-runtime",
+  react: "node-runtime",
+  vue: "node-runtime",
+  solid: "node-runtime",
+  svelte: "node-runtime",
+  "htmx-express": "node-runtime",
+  "alpine-express": "node-runtime",
+  "express-ts": "node-runtime",
+  javascript: "node-runtime",
+  typescript: "node-runtime",
   go: "go-playground",
   kotlin: "kotlin-playground",
   rust: "rust-playground",
@@ -40,20 +40,20 @@ const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKin
   kite: "kite-playground",
   // The web starter is a Vite project, so it builds and serves in the
   // container like any other — the compiler it installs is WebAssembly.
-  "kite-web": "webcontainer",
+  "kite-web": "node-runtime",
   asm: "asm-playground",
 };
 
 const ALL_LESSON_TYPES = Object.keys(EXPECTED_EXECUTION_KIND) as WorkspaceLessonType[];
 
 // Derived from the record above rather than listed again: "runs its code
-// outside the WebContainer" is exactly what a non-webcontainer execution kind
+// outside the Node.js runtime" is exactly what a non-node-runtime execution kind
 // means, so a new playground type is classified once. Kite and asm belong here
 // like the rest, and are the two that need no service to do it: Kite compiles
 // in the page on a Wasm build of `kitec`, and asm assembles and executes in the
 // page on the first-party machine in src/core/x86.
 const PLAYGROUND_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set(
-  ALL_LESSON_TYPES.filter((lessonType) => EXPECTED_EXECUTION_KIND[lessonType] !== "webcontainer"),
+  ALL_LESSON_TYPES.filter((lessonType) => EXPECTED_EXECUTION_KIND[lessonType] !== "node-runtime"),
 );
 
 describe("execution selection", () => {
@@ -62,17 +62,17 @@ describe("execution selection", () => {
   });
 
   it.each(WORKSPACE_LESSON_TYPES)(
-    "runs %s in the WebContainer exactly when its kind is webcontainer",
+    "runs %s in the Node.js runtime exactly when its kind is node-runtime",
     (lessonType) => {
-      expect(lessonRunsInWebContainer(lessonType)).toBe(
-        EXPECTED_EXECUTION_KIND[lessonType] === "webcontainer",
+      expect(lessonRunsInNodeRuntime(lessonType)).toBe(
+        EXPECTED_EXECUTION_KIND[lessonType] === "node-runtime",
       );
     },
   );
 
-  it("keeps playground lessons out of the WebContainer set without touching existing types", () => {
+  it("keeps playground lessons out of the Node.js runtime set without touching existing types", () => {
     for (const lessonType of ALL_LESSON_TYPES) {
-      expect(lessonRunsInWebContainer(lessonType)).toBe(!PLAYGROUND_LESSON_TYPES.has(lessonType));
+      expect(lessonRunsInNodeRuntime(lessonType)).toBe(!PLAYGROUND_LESSON_TYPES.has(lessonType));
     }
   });
 });
@@ -112,7 +112,7 @@ describe("lesson capabilities", () => {
     },
   );
 
-  it("keeps every WebContainer lesson's capabilities unchanged", () => {
+  it("keeps every Node.js lesson's capabilities unchanged", () => {
     for (const lessonType of ALL_LESSON_TYPES.filter(
       (type) => !PLAYGROUND_LESSON_TYPES.has(type),
     )) {
@@ -264,7 +264,7 @@ describe("kite workspace model", () => {
 
   it("executes in the page rather than through a playground proxy", () => {
     expect(executionKindForLessonType("kite")).toBe("kite-playground");
-    expect(lessonRunsInWebContainer("kite")).toBe(false);
+    expect(lessonRunsInNodeRuntime("kite")).toBe(false);
   });
 });
 

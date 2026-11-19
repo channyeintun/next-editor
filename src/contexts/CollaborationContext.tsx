@@ -77,7 +77,7 @@ import {
   type CollaborationParticipant,
   type RoomPresenceValue,
 } from "./collaboration/RoomPresenceContext";
-import { WebContainerRuntimeActionsContext } from "./WebContainerRuntimeContext";
+import { NodeRuntimeActionsContext } from "./NodeRuntimeContext";
 import type { TextEditEvent } from "../types/textEdit";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useWorkspaceActions, useWorkspaceActiveFilePath } from "../hooks/useWorkspace";
@@ -183,7 +183,7 @@ const collaborationApi: CollaborationRoomApi = {
 export function CollaborationProvider({ children }: { children: ReactNode }) {
   const baseActions = useWorkspaceActions();
   // Null where no runtime is mounted, as in tests of this provider alone.
-  const runtimeActions = useContext(WebContainerRuntimeActionsContext);
+  const runtimeActions = useContext(NodeRuntimeActionsContext);
   const { store: slidesStore } = useSlidesStore();
   const { store: whiteboardStore } = useWhiteboardStore();
   const activeFilePath = useWorkspaceActiveFilePath();

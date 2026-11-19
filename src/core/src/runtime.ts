@@ -55,6 +55,8 @@ export interface RuntimeLifecycleEvent {
 }
 
 export interface RuntimeRecordingSnapshot extends RuntimePanelRecordingState {
+  // "webcontainer" is the recording format's historical name for the
+  // in-browser Node.js runtime; recordings carry it, so it stays.
   mode: "single-file" | "webcontainer";
   status: RuntimeStatus;
   previewUrl?: string | null;

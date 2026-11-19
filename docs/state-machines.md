@@ -30,8 +30,8 @@ This is the field pair most likely to look "shared." It is not — ownership mov
 with the mode:
 
 - **Authoring / idle / runtime:** `workspaceStore` is the sole owner. The
-  WebContainer filesystem is a _mirror_, synced store → container by
-  `useWebContainerWorkspaceSync` (driven by the store's `syncVersion`). Files a
+  Node.js runtime filesystem is a _mirror_, synced store → container by
+  `useNodeRuntimeWorkspaceSync` (driven by the store's `syncVersion`). Files a
   container process writes (a lockfile, generated code) come back through the
   same hook's reverse sync, which reads the container tree and hands it to the
   store's `reconcileExternalProject`; the store stays the owner and the read
@@ -44,7 +44,7 @@ with the mode:
   store stays the owner; the recording accumulates a history.
 - **Playback:** the machine _drives_ the store. `applyWorkspaceSnapshot` calls
   `loadProject(...)`, so the store becomes a _render target_ reflecting the
-  recording at the current timeline position. When the viewer's WebContainer
+  recording at the current timeline position. When the viewer's Node.js runtime
   runtime has been started, each applied snapshot is also saved to it (sync, plus
   a run-on-save rerun of a finished runner) so the live console follows the
   replay; playback never starts a runtime that has not been started.
@@ -71,7 +71,7 @@ Two corollaries that should stay true as the code evolves:
 ```mermaid
 flowchart LR
     User[User / UI edits] -->|write| Store[(workspaceStore)]
-    Store -->|syncVersion| Container[WebContainer FS mirror]
+    Store -->|syncVersion| Container[Node.js runtime FS mirror]
     Store -->|saveProject| Persist[localStorage + IndexedDB]
     Store -->|snapshots + WORKSPACE_EVENT| Machine[editorMachine]
     Machine -->|playback: applyWorkspaceSnapshot / loadProject| Store

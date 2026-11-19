@@ -19,7 +19,7 @@ function renderFrame(allowSameOrigin: boolean, inert?: boolean) {
 
 describe("RuntimePreviewRenderer", () => {
   it("keeps allow-same-origin for locally authored content", () => {
-    // The live runtime points this frame at a cross-origin WebContainer URL via
+    // The live runtime points this frame at a cross-origin Node.js runtime URL via
     // `src`, where the flag only preserves that frame's own origin.
     expect(renderFrame(true)?.getAttribute("sandbox")).toBe(
       "allow-scripts allow-same-origin allow-forms",

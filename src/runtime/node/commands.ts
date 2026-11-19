@@ -11,7 +11,7 @@ export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   runCommand: "pnpm dev",
 };
 
-const WEBCONTAINER_VITE_PLUS_RUN_COMMAND = "npx vite --host 0.0.0.0 --configLoader native";
+const NODE_RUNTIME_VITE_PLUS_RUN_COMMAND = "npx vite --host 0.0.0.0 --configLoader native";
 
 export const TERMINAL_SHELL_CANDIDATES = [
   { command: "jsh", args: [] },
@@ -59,7 +59,7 @@ export function resolveRuntimeRunCommand(
     const devScript = packageJson.scripts?.dev?.trim() ?? "";
 
     if (devScript === "vp dev" || devScript.startsWith("vp dev ")) {
-      return WEBCONTAINER_VITE_PLUS_RUN_COMMAND;
+      return NODE_RUNTIME_VITE_PLUS_RUN_COMMAND;
     }
   } catch {
     return normalizedCommandLine;

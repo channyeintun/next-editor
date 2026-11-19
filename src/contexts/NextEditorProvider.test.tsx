@@ -9,7 +9,7 @@ import {
 } from "./PreviewAdapterHandleContext";
 import { RuntimePanelStoreProvider, useRuntimePanelStore } from "./RuntimePanelStoreContext";
 import { SlidesStoreProvider } from "./SlidesStoreContext";
-import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
+import { NodeRuntimeProvider } from "./NodeRuntimeProvider";
 import { WhiteboardStoreProvider } from "./WhiteboardStoreContext";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -30,7 +30,7 @@ import type { WorkspaceActions } from "../stores/workspaceActions";
 function EditorProviders({ children }: PropsWithChildren) {
   return (
     <WorkspaceProvider>
-      <WebContainerRuntimeProvider allowAmbientStart={false}>
+      <NodeRuntimeProvider allowAmbientStart={false}>
         <SlidesStoreProvider>
           <WhiteboardStoreProvider>
             <RuntimePanelStoreProvider>
@@ -40,7 +40,7 @@ function EditorProviders({ children }: PropsWithChildren) {
             </RuntimePanelStoreProvider>
           </WhiteboardStoreProvider>
         </SlidesStoreProvider>
-      </WebContainerRuntimeProvider>
+      </NodeRuntimeProvider>
     </WorkspaceProvider>
   );
 }

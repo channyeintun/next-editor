@@ -60,7 +60,7 @@ export function loadRrwebRecorderBundle(): RrwebRecorderBundleArtifact {
 }
 
 /** Build-time virtual module: the host carries the recorder IIFE as text and
- * injects it into the offline WebContainer preview realm. */
+ * injects it into the offline Node.js runtime preview realm. */
 export function rrwebRecorderBundlePlugin(): Plugin {
   return {
     name: "next-editor-rrweb-recorder-bundle",

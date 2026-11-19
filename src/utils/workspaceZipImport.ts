@@ -28,7 +28,7 @@ import {
 
 /**
  * Upper bound on the decoded size of an imported archive. Imported projects are
- * mirrored into the WebContainer filesystem and (for text) kept in the
+ * mirrored into the Node.js runtime filesystem and (for text) kept in the
  * localStorage snapshot, so an unbounded zip would blow past the storage budget
  * and stall the runtime. 50 MB matches the per-asset cap used for local uploads.
  */

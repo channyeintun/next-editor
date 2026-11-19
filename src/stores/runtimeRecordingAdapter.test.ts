@@ -28,7 +28,7 @@ function liveRuntime(overrides: Partial<LiveRuntimeRecordingState> = {}) {
 }
 
 describe("readRuntimeRecordingState", () => {
-  it("records the WebContainer mode only when the runtime has a preview URL", () => {
+  it("records the Node.js runtime mode only when the runtime has a preview URL", () => {
     const store = createRuntimePanelStore();
 
     expect(readRuntimeRecordingState(liveRuntime(), store).mode).toBe("single-file");

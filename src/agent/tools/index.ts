@@ -19,7 +19,7 @@ import { makeCapturePreviewTool } from "./capturePreview";
 
 // The third entry scopes each tool to an execution kind: file tools are available
 // everywhere, while shell/runtime/preview observation only exists where the
-// WebContainer runtime does. Every Playground lesson runs its code on an explicit
+// Node.js runtime does. Every Playground lesson runs its code on an explicit
 // Run — remotely for Go, Kotlin, Rust, Zig and Haskell, in-page for Kite and
 // assembly — so each of them gets the same file-tools-only profile.
 const CODING_TOOL_DEFINITIONS = [
@@ -27,12 +27,12 @@ const CODING_TOOL_DEFINITIONS = [
   ["ls", makeLsTool, "all"],
   ["glob", makeGlobTool, "all"],
   ["grep", makeGrepTool, "all"],
-  ["runtime_diagnostics", makeRuntimeDiagnosticsTool, "webcontainer"],
-  ["inspect_preview", makeInspectPreviewTool, "webcontainer"],
-  ["capture_preview", makeCapturePreviewTool, "webcontainer"],
+  ["runtime_diagnostics", makeRuntimeDiagnosticsTool, "node-runtime"],
+  ["inspect_preview", makeInspectPreviewTool, "node-runtime"],
+  ["capture_preview", makeCapturePreviewTool, "node-runtime"],
   ["write", makeWriteTool, "all"],
   ["edit", makeEditTool, "all"],
-  ["bash", makeBashTool, "webcontainer"],
+  ["bash", makeBashTool, "node-runtime"],
 ] as const;
 
 function codingToolDefinitionsFor(executionKind: WorkspaceExecutionKind) {
