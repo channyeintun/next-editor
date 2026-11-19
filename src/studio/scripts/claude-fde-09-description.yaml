@@ -1,0 +1,743 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-09-description
+  title: "Claude FDE 09: Description"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/09-brief.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/09-brief.md: |
+        # Brief: late fee ကို 2 ခါ ကောက်နေတာ
+
+        မူလ request: "billing bug ကို ပြင်ပေးပါ"
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the short request: violet is the request travelling, blue the model, red the confident
+    # wrong fix, orange the real bug the board is about.
+    - {
+        id: w-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "တိုတိုလေး request တစ်ခု",
+        fontSize: 36,
+      }
+    - {
+        id: w-req,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 420,
+        height: 80,
+        rounded: true,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: w-req-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 258,
+        width: 420,
+        height: 35,
+        text: "billing bug ကို ပြင်ပေးပါ",
+        fontSize: 28,
+      }
+    - {
+        id: w-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 720,
+        y: 255,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: w-model,
+        kind: rectangle,
+        x: 810,
+        y: 235,
+        width: 220,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-model-l,
+        kind: text,
+        align: center,
+        x: 810,
+        y: 258,
+        width: 220,
+        height: 35,
+        text: "AI",
+        fontSize: 28,
+      }
+    - {
+        id: w-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 900,
+        y: 325,
+        width: 40,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: w-out,
+        kind: rectangle,
+        x: 590,
+        y: 415,
+        width: 490,
+        height: 80,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-out-l,
+        kind: text,
+        align: center,
+        x: 590,
+        y: 438,
+        width: 490,
+        height: 35,
+        text: "rounding bug ကို ပြင်ပြီးပြီ",
+        fontSize: 28,
+      }
+    - {
+        id: w-real,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 790,
+        height: 38,
+        text: "တကယ့် bug: late fee 2 ခါ ကောက်နေတာ",
+        fontSize: 30,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — what the request left out: four dashed orange rows (not written yet).
+    - {
+        id: m-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "request ထဲမှာ မပါတာ 4 ခု",
+        fontSize: 36,
+      }
+    - {
+        id: m-r1,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 790,
+        height: 70,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 253,
+        width: 790,
+        height: 35,
+        text: "လိုချင်တဲ့ ရလဒ်",
+        fontSize: 28,
+      }
+    - {
+        id: m-r2,
+        kind: rectangle,
+        x: 290,
+        y: 325,
+        width: 790,
+        height: 70,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-l2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 343,
+        width: 790,
+        height: 35,
+        text: "model မမြင်ရတဲ့ အခြေအနေ",
+        fontSize: 28,
+      }
+    - {
+        id: m-r3,
+        kind: rectangle,
+        x: 290,
+        y: 415,
+        width: 790,
+        height: 70,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-l3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 433,
+        width: 790,
+        height: 35,
+        text: "လုပ်ပုံနဲ့ ကန့်သတ်ချက်",
+        fontSize: 28,
+      }
+    - {
+        id: m-r4,
+        kind: rectangle,
+        x: 290,
+        y: 505,
+        width: 790,
+        height: 70,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-l4,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 523,
+        width: 790,
+        height: 35,
+        text: "ပြီးပြီ ဆိုတာ ဘယ်လို သိမလဲ",
+        fontSize: 28,
+      }
+    - {
+        id: m-q4,
+        kind: text,
+        x: 1035,
+        y: 520,
+        width: 40,
+        height: 40,
+        text: "?",
+        fontSize: 32,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဘယ်စာကြောင်းက brief ကို ပိုကောင်းစေမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) you're a world-class engineer",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) INV-20431: 6,000 မဟုတ်၊ 3,000 ဖြစ်ရမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 600,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 930,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "ချီးမွမ်းစကားထက် မှားနေတဲ့ case တစ်ခု",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "case က bug ကိုရော အဖြေ မှန်ကိုပါ ပြ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9309
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: wrong-bug
+    chapter: billing bug ကို ပြင်ပေးပါ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ 4D framework ရဲ့ အလေ့အကျင့် လေးခုနဲ့၊ ပထမ အလေ့အကျင့် Delegation ကို လေ့လာခဲ့ပါတယ်။
+      အလုပ် တစ်ခုစီမှာ ဘယ်အပိုင်းကို AI ကို ပေးမလဲ၊ ဘယ်နေရာမှာ လူ စစ်မလဲ ဆုံးဖြတ်တာပါ။
+      [[mark:w-open]] ဒီတစ်ပတ် Billing team မှာ ဖြစ်ခဲ့တာ တစ်ခုကနေ စကြည့်ရအောင်။ customer တွေဆီကနေ late fee
+      နှစ်ခါ ကောက်ခံရတယ် ဆိုတဲ့ ticket တွေ ဝင်လာပါတယ်။ late fee ဆိုတာ ရက်လွန်ပြီးမှ ငွေပေးတဲ့အခါ ထပ်ကောက်တဲ့
+      ဒဏ်ကြေးပါ။
+      [[mark:w-req]] developer တစ်ယောက်က အလောတကြီးနဲ့ AI ကို Billing ရဲ့ code ကို ပြပြီး၊ billing bug ကို
+      ပြင်ပေးပါလို့ပဲ ရေးလိုက်ပါတယ်။
+      [[mark:w-model]] AI က code ကို ဖတ်ပါတယ်။ ဒါပေမဲ့ ဘယ် bug ကို ပြောနေလဲ ဆိုတာ မသိပါဘူး။ ၉ နှစ် သက်တမ်းရှိတဲ့
+      codebase ထဲမှာ ထူးဆန်းတဲ့ နေရာတွေကလည်း အများကြီး ရှိပါတယ်။
+      [[mark:w-out]] ဒါကြောင့် ငွေပမာဏကို ဒသမနောက် ဖြတ်တဲ့ rounding ပြဿနာ တစ်ခုကို ရွေးပြီး ယုံကြည်စိတ်ချစွာ
+      ပြင်ပေးလိုက်ပါတယ်။ ပြင်ပုံကလည်း သေသေသပ်သပ် ရှိပြီး၊ ရှင်းပြချက်ကလည်း ဖတ်လို့ ကောင်းပါတယ်။ ဒီလို
+      ယုံကြည်စိတ်ချစွာ မှားတာက ဘာမှ မလုပ်ပေးတာထက် ပိုအန္တရာယ်များပါတယ်။ review လုပ်တဲ့သူက ပြင်ပုံ သေသပ်တာကို
+      မြင်ပြီး လက်ခံလိုက်မိနိုင်လို့ပါ။
+      [[mark:w-real]] ပြဿနာက တကယ့် bug ကို မထိခဲ့တာပါ။ late fee နှစ်ခါ ကောက်နေတာ ဆက်ဖြစ်နေပါတယ်။ Billing
+      team lead မောင်မောင် က ဒါကို ပြပြီး၊ AI က ပြင်ရမယ့် bug ကိုတောင် မှန်အောင် မရွေးနိုင်ဘူးလို့ စိုးရိမ်ပါတယ်။
+      စိုးရိမ်တာ သဘာဝကျပါတယ်။ ဒါပေမဲ့ ဒီနေရာမှာ AI က မေးခွန်း တစ်ခုကို ဖြေခဲ့တာပါ။ ပြဿနာက မေးခွန်းထဲမှာ
+      လိုတာတွေ မပါခဲ့တာပါ။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+      - {
+          title: "AI Fluency for Builders (Anthropic and CodePath, public course description)",
+          url: "https://anthropic.skilljar.com/ai-fluency-for-builders",
+        }
+    actions:
+      - {
+          id: draw-w-open,
+          type: whiteboard.apply,
+          at: { mark: w-open },
+          open: true,
+          upsertIds: [w-title],
+        }
+      - {
+          id: draw-w-req,
+          type: whiteboard.apply,
+          at: { mark: w-req },
+          upsertIds: [w-req, w-req-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-w-model,
+          type: whiteboard.apply,
+          at: { mark: w-model },
+          upsertIds: [w-a1, w-model, w-model-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-w-out,
+          type: whiteboard.apply,
+          at: { mark: w-out },
+          upsertIds: [w-a2, w-out, w-out-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-w-real,
+          type: whiteboard.apply,
+          at: { mark: w-real },
+          upsertIds: [w-real],
+          drawMs: 1000,
+        }
+
+  - id: missing
+    chapter: request ထဲမှာ မပါတာ
+    narration: >
+      [[mark:m-open]] model က ကိုယ် ပေးလိုက်တဲ့ context ကိုပဲ မြင်ရပါတယ်။ context ဆိုတာ request တစ်ခုမှာ model
+      မြင်ရတဲ့ စာ အားလုံးပါ။ အဲဒီထဲမှာ မပါတာကို model က ခန့်မှန်းပြီး ဖြည့်ရပါတယ်။ ဒါကို ဖြေရှင်းတဲ့ အလေ့အကျင့်က
+      Description ပါ။ လိုချင်တာကို AI နားလည်အောင် ပြည့်ပြည့်စုံစုံ ပြောပြတာပါ။ ဒီ request ထဲမှာ ဘာတွေ မပါခဲ့လဲ
+      ကြည့်ရအောင်။
+      [[mark:m1]] ပထမ မပါတာက လိုချင်တဲ့ ရလဒ်ပါ။ bug ကို ပြင်ပေးပါ ဆိုတာ လုပ်ရမယ့် အလုပ်ပါ။ ရလဒ်ကတော့ customer
+      တစ်ယောက်ကို late fee တစ်ကြိမ်ပဲ ကောက်ရမယ် ဆိုတာပါ။ ရလဒ်ကို ပြောလိုက်မှ ဘယ် bug ကို ရှာရမလဲ ဆိုတာ model
+      သိနိုင်ပါတယ်။
+      [[mark:m2]] ဒုတိယ မပါတာက model မမြင်ရတဲ့ အခြေအနေပါ။ code ကို မြင်ရပေမဲ့၊ ဘယ်တုန်းက စဖြစ်လဲ၊ ဘယ် job တွေ
+      ဘယ်အချိန် run လဲ၊ customer တွေက ဘာကို တိုင်ကြားနေလဲ ဆိုတာကတော့ team ရဲ့ ခေါင်းထဲမှာပဲ ရှိပါတယ်။ ဝန်ထမ်း
+      အသစ် တစ်ယောက်ကို အလုပ်အပ်တယ်လို့ စဉ်းစားကြည့်ပါ။ ဒီ request ကိုပဲ ဖတ်ရရင် နားလည်ပါ့မလား။
+      [[mark:m3]] တတိယ မပါတာက လုပ်ပုံနဲ့ ကန့်သတ်ချက်ပါ။ အလုပ်တိုင်းမှာ မလိုပေမဲ့ Billing လို system မှာတော့
+      အရေးကြီးပါတယ်။ ဘယ်ကနေ စရမလဲ၊ ဘယ်အပိုင်းကို မထိရဘူးလဲ ဆိုတာ မပြောရင်၊ model က ကောင်းမယ်လို့ ယူဆတဲ့
+      နေရာကို ပြင်ပါလိမ့်မယ်။
+      [[mark:m4]] စတုတ္ထ မပါတာက ပြီးပြီ ဆိုတာ ဘယ်လို သိမလဲ ဆိုတာပါ။ rounding ကို ပြင်ပြီး ရှင်းပြချက် ရေးလိုက်တော့
+      AI ဘက်က ကြည့်ရင် အလုပ် ပြီးသွားပါပြီ။ ပြီးတယ် ဆိုတာ ဘာကို ဆိုလိုလဲ မပြောထားလို့ပါ။ ဒီ အချက်ကို ဘယ်လို ရေးရင်
+      အကောင်းဆုံးလဲ ဆိုတာကိုတော့ ခဏနေမှ မေးခွန်း တစ်ခုနဲ့ ကြည့်ပါမယ်။
+      [[mark:m-sum]] ဒီ လေးခုထဲက တစ်ခုခု မပါတိုင်း model က ခန့်မှန်းရပါတယ်။ ခန့်မှန်းချက် မှန်သွားရင် ကံကောင်းတာပါ။
+      မှားသွားရင်တော့ ဒီနေ့လို ယုံကြည်စိတ်ချရပုံ ပေါက်ပေမဲ့ မှားနေတဲ့ အဖြေ တစ်ခု ရပါတယ်။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+      - {
+          title: "Claude Docs: Prompting best practices (be clear and direct)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - {
+          id: draw-m-open,
+          type: whiteboard.apply,
+          at: { mark: m-open },
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-m1,
+          type: whiteboard.apply,
+          at: { mark: m1 },
+          upsertIds: [m-r1, m-l1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-m2,
+          type: whiteboard.apply,
+          at: { mark: m2 },
+          upsertIds: [m-r2, m-l2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-m3,
+          type: whiteboard.apply,
+          at: { mark: m3 },
+          upsertIds: [m-r3, m-l3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-m4,
+          type: whiteboard.apply,
+          at: { mark: m4 },
+          upsertIds: [m-r4, m-l4, m-q4],
+          drawMs: 1500,
+        }
+
+  - id: brief
+    chapter: brief တစ်စောင် ရေးခြင်း
+    narration: >
+      [[mark:b-open]] ဒါဆို မောင်မောင် ရဲ့ team နဲ့ အတူ ဒီ bug အတွက် brief တစ်စောင် ရေးကြည့်ရအောင်။ brief ဆိုတာ
+      အလုပ် တစ်ခုကို အပ်တဲ့အခါ ပေးတဲ့ ရှင်းလင်းချက် စာတိုလေးပါ။ အပေါ်ဆုံးမှာ မူလ request ကို ထားထားပါတယ်။
+      [[mark:type-goal]] ပထမ ခေါင်းစဉ်က လိုချင်တဲ့ ရလဒ်ပါ။ ပြင်ရမယ့် code ကို မပြောဘဲ၊ customer ဘက်က
+      မြင်ရမယ့် ရလဒ်ကို စာကြောင်း တစ်ကြောင်းနဲ့ ရေးပါတယ်။
+      [[mark:type-context]] ဒုတိယ ခေါင်းစဉ်မှာ model မမြင်ရတဲ့ အခြေအနေကို ရေးပါတယ်။ ငွေမချေရသေးတဲ့ invoice တွေကို
+      ညဘက်မှာ ထပ် run တဲ့ retry job ရှိတာနဲ့၊ ပြီးခဲ့တဲ့လက အဲဒီ job ကို ပြောင်းပြီးကတည်းက bug စဖြစ်တာပါ။ ဒီ
+      နှစ်ကြောင်းက model ကို ရှာရမယ့် နေရာဆီ တန်းပို့ပေးပါတယ်။
+      [[mark:type-limits]] တတိယ ခေါင်းစဉ်က လုပ်ပုံနဲ့ ကန့်သတ်ချက်ပါ။ မပြင်ခင် bug ကို ပြန်ဖြစ်စေတဲ့ test ကို အရင်
+      ရေးခိုင်းပါတယ်။ invoice PDF နဲ့ database schema ကိုတော့ မထိရပါဘူး။ ကန့်သတ်ချက်ကို အကြောင်းပြချက်နဲ့ ပြောရင်
+      model က ပိုကောင်းကောင်း လိုက်နာတတ်ပါတယ်။ ဒီမှာတော့ code အဟောင်းမို့ ဘယ်နေရာ ထိခိုက်မလဲ မသိနိုင်လို့ ဆိုတဲ့ အကြောင်းပြချက်ပါ။
+      အဆင့်တွေကို အစဉ်လိုက် လုပ်စေချင်တဲ့အခါမှာလည်း နံပါတ်တပ်ပြီး ရေးပေးတာက ကူညီပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices (give context and the reason)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+    actions:
+      - { id: close-missing, type: whiteboard.apply, at: { mark: b-open }, open: false }
+      - {
+          id: open-brief,
+          type: workspace.openFile,
+          at: { afterAction: close-missing },
+          path: notebook/09-brief.md,
+        }
+      - id: sel-request
+        type: editor.select
+        at: { mark: b-open, offsetMs: 4500 }
+        target:
+          file: notebook/09-brief.md
+          text: 'မူလ request: "billing bug ကို ပြင်ပေးပါ"'
+      - id: type-goal
+        type: editor.type
+        at: { mark: type-goal }
+        cadence: line-by-line
+        target: { file: notebook/09-brief.md, after: "ပြင်ပေးပါ\"\n" }
+        text: "\n## လိုချင်တဲ့ ရလဒ်\n- ရက်လွန်ပြီး ပေးတဲ့ customer ကို late fee တစ်ကြိမ်ပဲ ကောက်ရမယ်\n"
+      - id: type-context
+        type: editor.type
+        at: { mark: type-context }
+        cadence: line-by-line
+        target: { file: notebook/09-brief.md, after: "late fee တစ်ကြိမ်ပဲ ကောက်ရမယ်\n" }
+        text: "\n## model မမြင်ရတဲ့ အခြေအနေ\n- ငွေမချေရသေးတဲ့ invoice တွေကို retry job က ည 2 နာရီမှာ ထပ် run တယ်\n- ပြီးခဲ့တဲ့လ job ကို ပြောင်းပြီးကတည်းက စဖြစ်\n"
+      - id: type-limits
+        type: editor.type
+        at: { mark: type-limits }
+        cadence: line-by-line
+        target: { file: notebook/09-brief.md, after: "ပြောင်းပြီးကတည်းက စဖြစ်\n" }
+        text: "\n## လုပ်ပုံနဲ့ ကန့်သတ်ချက်\n- မပြင်ခင် bug ကို ပြန်ဖြစ်စေတဲ့ test အရင် ရေး\n- invoice PDF နဲ့ database schema ကို မထိရ (code အဟောင်း၊ ထိခိုက်မှု မသိ)\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ပြီးပြီ ဆိုတာ ဘယ်လို သိမလဲ ဆိုတဲ့ ခေါင်းစဉ်ကို မရေးခင်၊ team ထဲက
+      developer တစ်ယောက်က brief ကို ပိုကောင်းအောင် စာကြောင်း တစ်ကြောင်း ထည့်ချင်တယ်လို့ ပြောပါတယ်။ ဘယ်စာကြောင်းက
+      brief ကို ပိုကောင်းစေမလဲ။
+      [[mark:q-a]] ပထမ စာကြောင်းက you're a world-class engineer ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ စာကြောင်းက မှားနေတဲ့ invoice တစ်ခုကို နံပါတ်နဲ့ အတိအကျ ရေးတာပါ။ အဲဒီ customer ကို အခု
+      ကျပ် ၆၀၀၀ ကောက်နေပြီး၊ မှန်ရင် ကျပ် ၃၀၀၀ ပဲ ဖြစ်ရမယ် ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ စာကြောင်းပါ။ ဘာကြောင့်လဲဆိုတော့ အဲဒီ case က model မသိတဲ့ fact နှစ်ခုကို
+      ပေးလို့ပါ။ ဘယ် bug လဲ ဆိုတာနဲ့ အဖြေ မှန်က ဘယ်လောက်လဲ ဆိုတာပါ။ ပြင်ပြီးတဲ့အခါ ဒီ case နဲ့ စစ်ကြည့်ရုံနဲ့ တကယ်
+      ပြီးမပြီးကိုလည်း သိနိုင်ပါတယ်။ role တစ်ကြောင်းက အသံနဲ့ ပုံစံကို ညှိပေးနိုင်ပေမဲ့၊ model မသိတဲ့ အချက်အလက်ကိုတော့
+      မပေးနိုင်ပါဘူး။
+      [[mark:q-rule]] ဒါကြောင့် ချီးမွမ်းစကား ဒါမှမဟုတ် ကောင်းကောင်း လုပ်ပါ ဆိုတဲ့ စကားလုံးထက်၊ မှားနေတဲ့ case
+      တစ်ခုနဲ့ အဖြေ မှန်ကို ပြတာက ပိုအလုပ်ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices (roles; be clear and direct)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: done-and-revise
+    chapter: ပြီးပြီ ဆိုတာနဲ့ ပြန်ပြင်ချက်
+    narration: >
+      [[mark:d-open]] ဒီ case ကို brief ရဲ့ နောက်ဆုံး ခေါင်းစဉ်အဖြစ် ထည့်ကြည့်ရအောင်။
+      [[mark:type-done]] မှားနေတဲ့ invoice တစ်ခုနဲ့ မှန်ရမယ့် ပမာဏကို ရေးပြီး၊ ရှိပြီးသား test တွေ အားလုံး ဆက် pass
+      ရမယ် ဆိုတာကိုပါ ထည့်ပါတယ်။ ဒီ နှစ်ကြောင်း ရှိရင် AI ရော၊ review လုပ်မယ့် developer ပါ ပြီးမပြီးကို တူတူ
+      ဆုံးဖြတ်နိုင်ပါတယ်။
+      [[mark:rev-open]] brief တစ်စောင်က တစ်ခါ ရေးပြီးရင် ပြီးသွားတာ မဟုတ်ပါဘူး။ ဒီ brief ကို ပေးလိုက်တော့ AI က
+      အစီအစဉ် တစ်ခုနဲ့ ပြန်လာပြီး၊ retry job ကိုပါ ပြင်ရမလားလို့ မေးလာပါတယ်။ အဲဒီ မေးခွန်းက brief ထဲမှာ မပါသေးတဲ့
+      ဆုံးဖြတ်ချက် တစ်ခုကို ပြနေတာပါ။
+      [[mark:type-revise]] ဒါကြောင့် မောင်မောင် ရဲ့ အဖြေကို brief ထဲ ပြန်ထည့်ပါတယ်။ job ကို မပြင်ဘဲ၊
+      fee မကောက်ခင် စစ်တဲ့ နေရာမှာပဲ ပြင်ရမယ် ဆိုတာပါ။
+      [[mark:rev-point]] AI ပြန်ပေးတာကို ဖတ်ပြီး၊ မပါသေးတာကို brief ထဲ ပြန်ဖြည့်တာက Description ရဲ့ အရေးကြီးတဲ့
+      အပိုင်းပါ။ နောက်တစ်ခါ ဒီလို bug မျိုး ရောက်လာရင်လည်း ဒီ brief ကို အစ ပြုလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+      - {
+          title: "AI Fluency: Framework & Foundations (Anthropic course, public description)",
+          url: "https://anthropic.skilljar.com/ai-fluency-framework-foundations",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: d-open }, open: false }
+      - id: type-done
+        type: editor.type
+        at: { mark: type-done }
+        cadence: line-by-line
+        target: { file: notebook/09-brief.md, after: "(code အဟောင်း၊ ထိခိုက်မှု မသိ)\n" }
+        text: "\n## ပြီးပြီ ဆိုတာ ဘယ်လို သိမလဲ\n- INV-20431: 3 ရက် နောက်ကျ၊ late fee 3,000 ကျပ် တစ်ကြိမ်ပဲ (အခု 6,000)\n- ရှိပြီးသား test အားလုံး pass\n"
+      - id: type-revise
+        type: editor.type
+        at: { mark: type-revise }
+        cadence: line-by-line
+        target: { file: notebook/09-brief.md, after: "ရှိပြီးသား test အားလုံး pass\n" }
+        text: "\n## ပြန်ပြင်ချက်\n- retry job ကို ပြင်ရမလား → မပြင်ရ။ fee မကောက်ခင် စစ်တဲ့ နေရာမှာပဲ ပြင်\n"
+      - id: expect-done
+        type: expect.file
+        at: { afterAction: type-revise }
+        path: notebook/09-brief.md
+        contains: "- INV-20431: 3 ရက် နောက်ကျ၊ late fee 3,000 ကျပ် တစ်ကြိမ်ပဲ (အခု 6,000)\n"
+      - id: sel-revise
+        type: editor.select
+        at: { mark: rev-point }
+        target:
+          file: notebook/09-brief.md
+          text: "## ပြန်ပြင်ချက်"
+
+  - id: system-prompt
+    chapter: brief ကနေ system prompt ဆီ
+    narration: >
+      [[mark:p-open]] ဒီ brief က developer တစ်ယောက်ရဲ့ အလုပ် တစ်ခုအတွက်ပါ။ ကိုယ် ဆောက်မယ့် Reply assistant မှာတော့
+      Description က နောက်ထပ် နေရာ တစ်ခုမှာ ရှိနေပါတယ်။ system prompt ထဲမှာပါ။ system prompt ဆိုတာ စကားမပြောခင်
+      model ကို ကြိုပေးထားတဲ့ တာဝန်နဲ့ စည်းကမ်းပါ။
+      [[mark:p-2]] brief တစ်စောင်ကို အလုပ် တစ်ခုအတွက် တစ်ခါ သုံးပေမဲ့၊ system prompt ကိုတော့ ticket ထောင်ချီအတွက်
+      ထပ်ခါထပ်ခါ သုံးပါတယ်။ ဒါကြောင့် ဒီ ခေါင်းစဉ် လေးခုက အဲဒီမှာ ပိုတောင် အရေးကြီးပါတယ်။ ဥပမာအားဖြင့် ပြင်ချိန်ကို
+      ကတိ မပေးရဘူး ဆိုတဲ့ ကန့်သတ်ချက် တစ်ကြောင်း မပါရင်၊ အဲဒီ ကွက်လပ်က draft တစ်စောင်တည်းမှာ မဟုတ်ဘဲ ticket
+      ထောင်ချီမှာ ထပ်ခါထပ်ခါ ပေါ်လာမှာပါ။ ကောင်းတဲ့ draft ရဲ့ ဥပမာ တချို့ကိုလည်း ထည့်ပေးထားရင် ပိုကူညီပါတယ်။
+      [[mark:p-3]] brief လိုပဲ system prompt ကိုလည်း ထွက်လာတဲ့ draft တွေကို ဖတ်ပြီး ပြန်ပြင်ရပါမယ်။ draft တစ်စောင်
+      မှားတိုင်း system prompt ထဲမှာ ဘာ မပါခဲ့လဲ ဆိုတာ အရင် မေးပါ။ ဒီ အလုပ်ကို Reply assistant ဆောက်တဲ့ အပိုင်းမှာ
+      ဆက်လုပ်သွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices (system prompts, roles, examples)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+      - {
+          title: "Claude's constitution (operators and the system prompt)",
+          url: "https://www.anthropic.com/constitution",
+        }
+    actions:
+      - id: sel-title
+        type: editor.select
+        at: { mark: p-open }
+        target:
+          file: notebook/09-brief.md
+          text: "# Brief: late fee ကို 2 ခါ ကောက်နေတာ"
+      - id: sel-context-head
+        type: editor.select
+        at: { mark: p-2, offsetMs: 13000 }
+        target:
+          file: notebook/09-brief.md
+          text: "## လုပ်ပုံနဲ့ ကန့်သတ်ချက်"
+      - id: sel-revise-2
+        type: editor.select
+        at: { mark: p-3 }
+        target:
+          file: notebook/09-brief.md
+          text: "- retry job ကို ပြင်ရမလား → မပြင်ရ။"
+
+  - id: your-turn
+    chapter: ကိုယ့် request ကို ပြန်ရေးခြင်း
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ပြီးခဲ့တဲ့ အပတ်က AI ကို ပေးခဲ့တဲ့ request တစ်ခုကို
+      ပြန်ရှာပါ။ ကိုယ့် project အတွက် ဖြစ်ဖြစ်၊ ကိုယ့် အလုပ်အတွက် ဖြစ်ဖြစ် ရပါတယ်။ ပြီးရင် ဒီ ခေါင်းစဉ် လေးခုအောက်မှာ
+      အဲဒီ request ကို ပြန်ရေးကြည့်ပါ။
+      [[mark:turn-2]] အထူးသဖြင့် ပြီးပြီ ဆိုတာ ဘယ်လို သိမလဲ ဆိုတဲ့ ခေါင်းစဉ်အောက်မှာ ကောင်းကောင်း၊ မြန်မြန် ဆိုတဲ့
+      စကားလုံးမျိုး မရေးဘဲ၊ စစ်လို့ရတဲ့ case တစ်ခု ရေးကြည့်ပါ။ မူလ request နဲ့ ယှဉ်ကြည့်ရင် model ကို ဘယ်လောက်
+      ခန့်မှန်းခိုင်းခဲ့လဲ ဆိုတာ မြင်ရပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices (be clear and direct)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - id: sel-goal
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/09-brief.md
+          text: "## လိုချင်တဲ့ ရလဒ်"
+      - id: sel-done
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/09-brief.md
+          text: "## ပြီးပြီ ဆိုတာ ဘယ်လို သိမလဲ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ model က ကိုယ် ပြောထားတာကိုပဲ မြင်ရပါတယ်။ billing bug ကို ပြင်ပေးပါ ဆိုတဲ့ request ထဲမှာ
+      လိုချင်တဲ့ ရလဒ်၊ model မမြင်ရတဲ့ အခြေအနေ၊ လုပ်ပုံနဲ့ ကန့်သတ်ချက်၊ ပြီးပြီ ဆိုတာ ဘယ်လို သိမလဲ ဆိုတဲ့ လေးခုလုံး
+      မပါခဲ့ပါဘူး။
+      [[mark:recap-2]] Description ဆိုတာ အဲဒီ လေးခုကို ရေးပေးတာ၊ ချီးမွမ်းစကားအစား မှားနေတဲ့ case ကို ပြတာနဲ့၊ AI
+      ပြန်မေးလာတိုင်း brief ကို ပြန်ပြင်တာ ဖြစ်ပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ တတိယ အလေ့အကျင့် Discernment ကို လေ့လာပါမယ်။ test အားလုံး pass တယ်
+      ဆိုတဲ့ code ပြောင်းလဲမှု တစ်ခုနဲ့၊ ဖတ်လို့ အရမ်းကောင်းတဲ့ customer reply တစ်စောင်ကို မယုံခင် ဘယ်လို စစ်ရမလဲ
+      ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+    actions:
+      - id: sel-request-2
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/09-brief.md
+          text: "- INV-20431: 3 ရက် နောက်ကျ၊ late fee 3,000 ကျပ် တစ်ကြိမ်ပဲ (အခု 6,000)"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
