@@ -64,5 +64,9 @@ describe("narrationLexiconFor", () => {
     expect(spokenFormOf("p95", burmese)).toBe("p ninety-five");
     expect(spokenFormOf("p99၊", burmese)).toBe("p ninety-nine၊");
     expect(spokenFormOf("dev", burmese)).toBe("Deaf");
+    // A file said by name keeps its dot on screen and is spelled out for the voice.
+    expect(spokenFormOf("CLAUDE.md", burmese)).toBe("Claude M D");
+    expect(spokenFormOf("SKILL.md။", burmese)).toBe("skill M D။");
+    expect(spokenFormOf("4D", burmese)).toBe("four D");
   });
 });

@@ -113,6 +113,12 @@ const BURMESE_RESPELLINGS: PronunciationLexicon = {
     // p before a Burmese number (Chan, 2026-11-13). Narration writes it as p95.
     p95: "p ninety-five",
     p99: "p ninety-nine",
+    // The two files the Claude FDE course says by name. A dot between Latin
+    // words is read unpredictably, so each is spelled the way developers say it.
+    "CLAUDE.md": "Claude M D",
+    "SKILL.md": "skill M D",
+    // The framework's name is "four D", never a Burmese number before the letter.
+    "4D": "four D",
   },
 };
 
