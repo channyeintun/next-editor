@@ -1,0 +1,696 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-23-context-management
+  title: "Claude FDE 23: Context management"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: reply-assistant/src/kb-audit.ts
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      examples/usage-turn-12.example.json: |
+        {
+          "id": "msg_01Kb7Wd3Tq9Lm2Xv5Rn8Ha4C",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-opus-5-5",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_01Ar5Nv8Qe2Js6Lw3Yt9Pk7D",
+              "name": "read_article",
+              "input": { "article_id": "KB-0213" }
+            }
+          ],
+          "stop_reason": "tool_use",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 412,
+            "cache_creation_input_tokens": 1830,
+            "cache_read_input_tokens": 24650,
+            "output_tokens": 290
+          }
+        }
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      reply-assistant/src/kb-audit.ts: |
+        import Anthropic from "@anthropic-ai/sdk";
+
+        const client = new Anthropic();
+        type AuditRequest = Parameters<typeof client.beta.messages.create>[0];
+
+        // The same instructions on every step of the audit, word for word.
+        const AUDIT_PROMPT = `You audit Naychi Fiber's Knowledge base, one article per step.
+        Read the article, compare it with the current plans and troubleshooting notes,
+        and record a finding: up to date, needs an edit, or retire.`; // shortened: the real prompt is longer
+
+        // One step of the audit's agent loop over all 340 articles.
+        export async function auditStep(tools: AuditRequest["tools"], messages: AuditRequest["messages"]) {
+          const response = await client.beta.messages.create({
+            model: "claude-opus-5-5", // ID as of 2026-11
+            max_tokens: 16000,
+            tools,
+            messages,
+          });
+          console.log(response.usage.cache_read_input_tokens, response.usage.cache_creation_input_tokens);
+          return response;
+        }
+  whiteboardAssets:
+    # Board 1 — a long history in the context window (dashed white), stacked blue parts; green =
+    # what caching saves, red = what clearing removes, orange = the compaction summary.
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "History ရှည်လာတဲ့ agent",
+        fontSize: 36,
+      }
+    - { id: c-win, kind: rectangle, x: 290, y: 225, width: 380, height: 325, strokeStyle: dashed }
+    - {
+        id: c-win-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 560,
+        width: 380,
+        height: 35,
+        text: "context window",
+        fontSize: 28,
+      }
+    - { id: c-b1, kind: rectangle, x: 310, y: 245, width: 340, height: 75, strokeColor: "#1971c2" }
+    - {
+        id: c-l1,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 265,
+        width: 340,
+        height: 35,
+        text: "tools + system",
+        fontSize: 28,
+      }
+    - {
+        id: c-n1,
+        kind: text,
+        x: 700,
+        y: 265,
+        width: 390,
+        height: 35,
+        text: "cache ကနေ ပြန်ဖတ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - { id: c-b2, kind: rectangle, x: 310, y: 340, width: 340, height: 75, strokeColor: "#1971c2" }
+    - {
+        id: c-l2,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 360,
+        width: 340,
+        height: 35,
+        text: "tool result အဟောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: c-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 325,
+        y: 355,
+        width: 310,
+        height: 45,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-n2,
+        kind: text,
+        x: 700,
+        y: 360,
+        width: 390,
+        height: 35,
+        text: "ရှင်းထုတ် (clear)",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - { id: c-b3, kind: rectangle, x: 310, y: 435, width: 340, height: 75, strokeColor: "#f08c00" }
+    - {
+        id: c-l3,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 455,
+        width: 340,
+        height: 35,
+        text: "compaction အကျဉ်း",
+        fontSize: 28,
+      }
+    - {
+        id: c-mem,
+        kind: rectangle,
+        x: 700,
+        y: 435,
+        width: 380,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-mem-l,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 455,
+        width: 380,
+        height: 35,
+        text: "memory: session ကျော်",
+        fontSize: 28,
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "System prompt ထိပ်မှာ အချိန် ထည့်ရင်?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) cache ရတယ်၊ အဲဒီ စာကြောင်းပဲ ပိုကုန်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) request တိုင်း cache လွဲမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 430,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 750,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "မပြောင်းတာ ရှေ့၊ ပြောင်းတာ နောက်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "cache read 0 ဆိုရင် အကြောင်းရင်း ရှာ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9323
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: အဆင့် ရာချီ ကြာတဲ့ agent
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ agent ကို skill နဲ့ MCP server ကနေ ချဲ့ပုံကို request နှစ်ခုနဲ့ ကြည့်ခဲ့ပါတယ်။ ဒီ
+      lesson မှာတော့ အချိန်ကြာကြာ run ရမယ့် agent တစ်ခုကို ကြည့်ပါမယ်။
+      [[mark:sel-kb]] support manager လှလှ က Knowledge base ကို စစ်ချင်ပါတယ်။ ပြဿနာဖြေရှင်းနည်း article ၃၄၀
+      ရှိပြီး၊ သုံးပုံ တစ်ပုံလောက်က ခေတ်နောက်ကျနေတယ်လို့ ယူဆထားပါတယ်။ ဒါကြောင့် article တစ်ခုချင်းကို ဖတ်၊ လက်ရှိ
+      plan တွေ၊ ပြဿနာဖြေရှင်းနည်း မှတ်စုတွေနဲ့ တိုက်ပြီး၊ ပြင်ရမလား၊ ဖယ်ရမလား ဆိုတာ မှတ်ပေးမယ့် agent တစ်ခု
+      လိုချင်တာပါ။
+      [[mark:need-2]] article တစ်ခုအတွက် tool ကို နှစ်ကြိမ်သုံးကြိမ် ခေါ်ရရင် agent loop က အဆင့် ရာနဲ့ချီ ပတ်ပါမယ်။
+      agent loop ဆိုတာ စဉ်းစား၊ tool သုံး၊ ရလဒ်ကြည့်၊ ပြန်စဉ်းစား ဆိုတဲ့ သံသရာပါ။ ပြဿနာက API က request
+      တစ်ခုနဲ့ တစ်ခုကြား ဘာမှ မမှတ်ထားတာမို့၊ အဆင့်တိုင်းမှာ history တစ်ခုလုံးကို ပြန်ပို့ရတာပါ။
+      [[mark:need-3]] ဆိုတော့ အဆင့် များလာလေ request တစ်ခုချင်းရဲ့ input token များလာလေ ဖြစ်ပါတယ်။ ကုန်ကျစရိတ်
+      တက်လာသလို၊ နောက်ဆုံးမှာ context window ပြည့်သွားနိုင်ပါတယ်။ context window ဆိုတာ request တစ်ခုမှာ
+      model မြင်နိုင်တဲ့ စာ အားလုံးအတွက် နေရာပါ။ docs ကလည်း စကားဝိုင်း ရှည်လာလေ response ရဲ့ အရည်အသွေး
+      ကျလာတတ်တယ်လို့ ဆိုပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompt caching",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-caching",
+        }
+      - {
+          title: "Claude Docs: Compaction",
+          url: "https://platform.claude.com/docs/en/build-with-claude/compaction",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: sel-kb }, path: README.md }
+      - id: sel-kb
+        type: editor.select
+        at: { afterAction: open-readme }
+        target:
+          file: README.md
+          text: "- Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340"
+
+  - id: board
+    chapter: History ကို ထိန်းတဲ့ နည်း လေးခု
+    narration: >
+      [[mark:c-open]] history ရှည်လာတဲ့ agent ကို ထိန်းဖို့ နည်း လေးခု ရှိပါတယ်။ တစ်ခုချင်းက history ရဲ့ မတူတဲ့
+      အပိုင်းကို ကိုင်တွယ်ပါတယ်။
+      [[mark:c-start]] request တိုင်းရဲ့ အစပိုင်းမှာ tool definition တွေနဲ့ system prompt ရှိပါတယ်။ audit
+      တစ်လျှောက်လုံး ဒီ အပိုင်းက တစ်လုံးမှ မပြောင်းပါဘူး။ နောက်ဆက်တွဲ message တွေလည်း အဆင့်တိုင်းမှာ အဟောင်းတွေက
+      မပြောင်းဘဲ နောက်ဆုံးမှာ အသစ် တိုးလာတာပဲ ရှိပါတယ်။
+      [[mark:c-cache]] ပထမ နည်းက prompt caching ပါ။ ထပ်ခါထပ်ခါ ပို့ရတဲ့ အစပိုင်းကို မှတ်ထားပြီး ဈေးနဲ့ အချိန်
+      လျှော့တာပါ။ ပြီးခဲ့တဲ့ request နဲ့ အစပိုင်း တူနေရင် အဲဒီ အပိုင်းကို cache ကနေ ပြန်ဖတ်ပြီး၊ ဈေး အများကြီး
+      သက်သာပါတယ်။
+      [[mark:c-old]] ဒုတိယ နည်းက tool result အဟောင်းတွေကို ရှင်းထုတ်တာပါ။ audit မှာ article တစ်ခု ဖတ်ပြီး ဆုံးဖြတ်ချက်
+      မှတ်ပြီးရင်၊ အဲဒီ article ရဲ့ စာသား အပြည့်ကို နောက်အဆင့်တွေမှာ ပြန်ကြည့်စရာ မလိုတော့ပါဘူး။
+      [[mark:c-clear]] ဒါကြောင့် threshold တစ်ခု ကျော်ရင် အဟောင်းဆုံး tool result တွေကို context ထဲကနေ
+      ဖယ်ခိုင်းလို့ ရပါတယ်။ ဒါကို context editing လို့ ခေါ်ပါတယ်။
+      [[mark:c-compact]] တတိယ နည်းက compaction ပါ။ စကားဝိုင်း အဟောင်းကို အကျဉ်းချုပ်ပြီး context ထဲမှာ နေရာ
+      ပြန်ယူတာပါ။ ဖယ်ပစ်တာ မဟုတ်ဘဲ အကျဉ်းချုပ် တစ်ခုနဲ့ အစားထိုးတာမို့ အဓိက အချက်တွေ ကျန်ခဲ့ပါတယ်။ docs က
+      compaction ကို အဓိက နည်းလမ်း အဖြစ် အကြံပြုပြီး၊ context editing ကို ပိုသေးစိတ်တဲ့ ထိန်းချုပ်မှု လိုတဲ့အခါ သုံးဖို့
+      ဆိုပါတယ်။
+      [[mark:c-mem]] စတုတ္ထ နည်းက memory tool ပါ။ ပထမ သုံးခုက လက်ရှိ session ရဲ့ history ကိုပဲ ထိန်းပေးပါတယ်။ memory tool
+      ကတော့ ကိုယ်တို့ သိမ်းပေးတဲ့ file တွေထဲမှာ Claude က မှတ်စု ရေးထားတာမို့ session ကျော်ပြီး ကျန်ပါတယ်။ audit
+      ရပ်သွားလို့ နောက်နေ့ ပြန်စရင်တောင် ဘယ် article အထိ ပြီးပြီ ဆိုတာ ပြန်သိနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompt caching",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-caching",
+        }
+      - {
+          title: "Claude Docs: Context editing",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-editing",
+        }
+      - {
+          title: "Claude Docs: Memory tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool",
+        }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-c-start,
+          type: whiteboard.apply,
+          at: { mark: c-start },
+          upsertIds: [c-win, c-win-l, c-b1, c-l1],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-c-cache,
+          type: whiteboard.apply,
+          at: { mark: c-cache },
+          upsertIds: [c-n1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-old,
+          type: whiteboard.apply,
+          at: { mark: c-old },
+          upsertIds: [c-b2, c-l2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-clear,
+          type: whiteboard.apply,
+          at: { mark: c-clear },
+          upsertIds: [c-strike, c-n2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-compact,
+          type: whiteboard.apply,
+          at: { mark: c-compact },
+          upsertIds: [c-b3, c-l3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-mem,
+          type: whiteboard.apply,
+          at: { mark: c-mem },
+          upsertIds: [c-mem, c-mem-l],
+          drawMs: 1200,
+        }
+
+  - id: caching
+    chapter: Prompt caching
+    narration: >
+      [[mark:k-open]] audit ရဲ့ request တစ်ဆင့်ကို ရေးကြည့်ရအောင်။ loop ကိုယ်တိုင်က lesson ၁၈ က အတိုင်းပါပဲ။ ဒီ
+      function က အဆင့် တစ်ဆင့်ရဲ့ request ကိုပဲ ပို့ပါတယ်။
+      [[mark:sel-prompt]] system prompt ဆိုတာ စကားမပြောခင် model ကို ကြိုပေးထားတဲ့ တာဝန်နဲ့ စည်းကမ်းပါ။ ဒီ audit
+      prompt ကို article ၃၄၀ လုံးအတွက် အဆင့်တိုင်း စာလုံး တစ်လုံးမှ မပြောင်းဘဲ ပို့ပါမယ်။
+      [[mark:type-system]] cache control ဆိုတာ ဒီနေရာအထိ ရှိတဲ့ အစပိုင်းကို cache လုပ်ပါ ဆိုတဲ့ breakpoint ပါ။ request တစ်ခုလုံးအတွက်
+      ပေးထားတဲ့ ပထမ breakpoint က history ရှည်လာတာနဲ့အမျှ နောက်ဆုံး block ဆီ
+      အလိုအလျောက် ရွှေ့သွားတာမို့ message အဟောင်းတွေလည်း cache ထဲ ဝင်ပါတယ်။ ဒုတိယ စာကြောင်းကတော့ system
+      အတွက် သီးသန့် breakpoint တစ်ခုပါ။ tool result ရှင်းလို့ history ရဲ့ cache ပျက်သွားရင်တောင် tools နဲ့ system
+      ရဲ့ cache က ကျန်ပါတယ်။
+      [[mark:k-prefix]] caching ရဲ့ အဓိက စည်းကမ်းက အစပိုင်း တူရမယ် ဆိုတာပါ။ API က request ကို tools၊ system၊
+      messages ဆိုတဲ့ အစဉ်နဲ့ စီပြီး၊ ရှေ့ဆုံးကနေ တစ်လုံးချင်း တိုက်ကြည့်ပါတယ်။ byte တစ်ခု ကွဲသွားတဲ့ နေရာကစပြီး
+      နောက်က အားလုံး cache ကနေ မရတော့ပါဘူး။ tool definition တွေ ပြောင်းရင်တော့ အားလုံး ပျက်ပါတယ်။
+      [[mark:k-limits]] သိထားရမယ့် အချက် နှစ်ခု ရှိပါတယ်။ ပထမ တစ်ခုက cache က ပုံမှန်အားဖြင့် ငါးမိနစ်ပဲ ခံပြီး၊
+      ပြန်ဖတ်တိုင်း အချိန် ပြန်စတာပါ။ audit loop က ဆက်တိုက် run နေတာမို့ အဆင်ပြေပါတယ်။ ဒုတိယ တစ်ခုက prompt တိုလွန်းရင်
+      error မပြဘဲ cache မလုပ်တာပါ။ ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ ဒီ Opus model အတွက် အနည်းဆုံး token ၅၁၂ ပါ။
+      model အလိုက် ကွာတာမို့ prompt caching page မှာ စစ်ပါ။
+    sources:
+      - {
+          title: "Claude Docs: Prompt caching",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-caching",
+        }
+    actions:
+      - { id: close-board, type: whiteboard.apply, at: { mark: k-open }, open: false }
+      - {
+          id: open-audit,
+          type: workspace.openFile,
+          at: { afterAction: close-board },
+          path: reply-assistant/src/kb-audit.ts,
+        }
+      - id: sel-prompt
+        type: editor.select
+        at: { mark: sel-prompt }
+        target:
+          file: reply-assistant/src/kb-audit.ts
+          text: "// The same instructions on every step of the audit, word for word."
+      - id: type-system
+        type: editor.type
+        at: { mark: type-system }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/kb-audit.ts, after: "    max_tokens: 16000,\n" }
+        text: "    cache_control: { type: \"ephemeral\" },\n    system: [{ type: \"text\", text: AUDIT_PROMPT, cache_control: { type: \"ephemeral\" } }],\n"
+      - id: sel-tools
+        type: editor.select
+        at: { mark: k-prefix }
+        target:
+          file: reply-assistant/src/kb-audit.ts
+          text: "    tools,\n    messages,"
+
+  - id: clearing
+    chapter: Tool result အဟောင်းကို ရှင်းခြင်း
+    narration: >
+      [[mark:type-beta]] tool result အဟောင်းတွေ ရှင်းဖို့ context editing ကို သုံးပါမယ်။ ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ
+      beta ဖြစ်လို့ beta client နဲ့ beta နာမည်ကို ထည့်ရပါတယ်။
+      [[mark:type-edit]] context management ထဲမှာ edit တစ်ခု ထည့်ပါတယ်။ clear tool uses ဆိုတဲ့ အမျိုးအစားက tool
+      result အဟောင်းတွေကို ရှင်းပေးတာပါ။ input token သုံးသောင်း ကျော်ရင် စရှင်းမယ်၊ နောက်ဆုံး tool အသုံး သုံးခုကိုတော့
+      ချန်ထားမယ်လို့ ပေးထားပါတယ်။
+      [[mark:sel-least]] clear at least ဆိုတဲ့ စာကြောင်းကို သတိထားပါ။ ရှင်းလိုက်တိုင်း အဲဒီနေရာကစပြီး cache ပျက်ပါတယ်။
+      ဒါကြောင့် အနည်းဆုံး token ငါးထောင်လောက် ရှင်းနိုင်မှ ရှင်းခိုင်းထားတာပါ။ နည်းနည်းလေးစီ ခဏခဏ ရှင်းရင်
+      cache ကို ခဏခဏ ပျက်စေပြီး ပိုကုန်သွားနိုင်ပါတယ်။
+      [[mark:x-server]] ဒီ ရှင်းတာက API server ဘက်မှာပဲ ဖြစ်ပါတယ်။ ကိုယ်တို့ program ထဲက history ကတော့ အပြည့်အစုံ
+      ကျန်ပါတယ်။ ဘာတွေ ရှင်းခဲ့လဲ ဆိုတာကို response ထဲမှာ ပြန်ပြောပါတယ်။
+      [[mark:x-compact]] compaction ကို သုံးချင်ရင်လည်း ရပါတယ်။ ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ နှစ်မျိုး ရှိပြီး၊ နှစ်မျိုးလုံး
+      beta ပါ။ ကိုယ်တို့က တောင်းတဲ့အခါမှ အကျဉ်းချုပ်ပေးတဲ့ compaction on demand ကို docs က ရနိုင်တဲ့ နေရာတိုင်းမှာ
+      အကြံပြုပါတယ်။ token ပမာဏ တစ်ခု ရောက်ရင် အလိုအလျောက် အကျဉ်းချုပ်တဲ့ နည်းလည်း ရှိပါတယ်။
+      [[mark:x-memory]] audit ရဲ့ ဆုံးဖြတ်ချက်တွေကိုတော့ ဘယ်နည်းနဲ့မှ ပျောက်မသွားစေချင်ပါဘူး။ memory tool ကို ထည့်ထားရင်
+      Claude က memories folder ထဲမှာ file တွေ ဖန်တီး၊ ပြင်ဆင်ဖို့ တောင်းဆိုပြီး၊ အဲဒီ file တွေကို ကိုယ်တို့ handler က
+      ကိုယ်တို့ ထိန်းတဲ့ storage မှာ သိမ်းပါတယ်။ folder အပြင်ဘက်က path တွေကို handler က ပိတ်ထားဖို့ မမေ့ပါနဲ့။
+    sources:
+      - {
+          title: "Claude Docs: Context editing",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-editing",
+        }
+      - {
+          title: "Claude Docs: Compaction on demand",
+          url: "https://platform.claude.com/docs/en/build-with-claude/compaction-on-demand",
+        }
+      - {
+          title: "Claude Docs: Memory tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool",
+        }
+    actions:
+      - id: type-beta
+        type: editor.type
+        at: { mark: type-beta }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/kb-audit.ts, after: "    max_tokens: 16000,\n" }
+        text: "    betas: [\"context-management-2025-06-27\"],\n"
+      - id: type-edit
+        type: editor.type
+        at: { mark: type-edit }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/kb-audit.ts, after: "    messages,\n" }
+        text: "    context_management: {\n      edits: [{\n        type: \"clear_tool_uses_20250919\",\n        trigger: { type: \"input_tokens\", value: 30000 },\n        keep: { type: \"tool_uses\", value: 3 },\n        clear_at_least: { type: \"input_tokens\", value: 5000 },\n      }],\n    },\n"
+      - id: expect-edit
+        type: expect.file
+        at: { afterAction: type-edit }
+        path: reply-assistant/src/kb-audit.ts
+        contains: "        type: \"clear_tool_uses_20250919\",\n"
+      - id: sel-least
+        type: editor.select
+        at: { mark: sel-least }
+        target:
+          file: reply-assistant/src/kb-audit.ts
+          text: 'clear_at_least: { type: "input_tokens", value: 5000 },'
+
+  - id: usage
+    chapter: Usage ကို ဖတ်ခြင်း
+    narration: >
+      [[mark:u-open]] caching တကယ် အလုပ်လုပ်လား ဆိုတာကို usage ကနေ စစ်ရပါတယ်။ audit ရဲ့ ဆယ့်နှစ်ကြိမ်မြောက်
+      အဆင့်မှာ ပြန်လာနိုင်တဲ့ response ဥပမာ တစ်ခုကို ကြည့်ရအောင်။
+      [[mark:sel-read]] cache read input tokens က ၂၄၆၅၀ ပါ။ ပြီးခဲ့တဲ့ အဆင့်တွေက အစပိုင်း တစ်ခုလုံးကို cache ကနေ
+      ပြန်ဖတ်လိုက်တာပါ။ ဒီ Opus model မှာ cache ကနေ ဖတ်တဲ့ token တွေကို ပုံမှန် input ဈေးရဲ့
+      နှစ်ဆယ်ပုံ တစ်ပုံပဲ ယူပါတယ်။ ဈေးနှုန်း အတိအကျကို pricing page မှာ ပြန်စစ်ပါ။
+      [[mark:sel-create]] cache creation input tokens က ၁၈၃၀ ပါ။ ဒါက ပြီးခဲ့တဲ့ အဆင့်ကနေ အသစ် တိုးလာတဲ့ အပိုင်းကို
+      cache ထဲ ရေးလိုက်တာပါ။ cache ရေးတာက ပုံမှန်ဈေးထက် နည်းနည်း ပိုများပေမဲ့ တစ်ကြိမ်ပဲ ပေးရပါတယ်။ ပုံမှန် အလုပ်လုပ်နေတဲ့
+      loop မှာ ဒီ ဂဏန်းက နောက်ဆုံး အဆင့်က တိုးလာတာလောက်ပဲ ရှိရပါမယ်။ history တစ်ခုလုံးလောက် ရှိနေရင်တော့ အစပိုင်းကို
+      တစ်ခုခုက ပြန်ရေးနေတာပါ။
+      [[mark:sel-input]] input tokens ကတော့ ၄၁၂ ပဲ ရှိပါတယ်။ ဒါကို စုစုပေါင်း input လို့ ထင်မှားတတ်ပါတယ်။ တကယ်က
+      နောက်ဆုံး breakpoint နောက်က cache မလုပ်ထားတဲ့ အပိုင်းပဲ ဖြစ်ပါတယ်။ စုစုပေါင်း input က ဂဏန်း သုံးခု
+      ပေါင်းထားတာမို့ token ၂၆၈၉၂ ရှိပါတယ်။ ဒါကြောင့် ကုန်ကျစရိတ်ကို တွက်တဲ့အခါ ဂဏန်း သုံးခုလုံးကို ကြည့်ရပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompt caching",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-caching",
+        }
+      - {
+          title: "Claude Docs: Pricing",
+          url: "https://platform.claude.com/docs/en/about-claude/pricing",
+        }
+      - {
+          title: "Claude Docs: Rate limits",
+          url: "https://platform.claude.com/docs/en/api/rate-limits",
+        }
+    actions:
+      - {
+          id: open-usage,
+          type: workspace.openFile,
+          at: { mark: u-open },
+          path: examples/usage-turn-12.example.json,
+        }
+      - id: sel-read
+        type: editor.select
+        at: { mark: sel-read }
+        target:
+          file: examples/usage-turn-12.example.json
+          text: '"cache_read_input_tokens": 24650'
+      - id: sel-create
+        type: editor.select
+        at: { mark: sel-create }
+        target:
+          file: examples/usage-turn-12.example.json
+          text: '"cache_creation_input_tokens": 1830'
+      - id: sel-input
+        type: editor.select
+        at: { mark: sel-input }
+        target:
+          file: examples/usage-turn-12.example.json
+          text: '"input_tokens": 412'
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ developer တစ်ယောက်က agent ကို ဒီနေ့ ရက်စွဲနဲ့ အချိန် သိစေချင်လို့
+      system prompt ရဲ့ ပထမဆုံး စာကြောင်းမှာ request ပို့တဲ့ အချိန်ကို ထည့်လိုက်တယ် ဆိုပါစို့။ caching မှာ ဘာ ဖြစ်မလဲ။
+      [[mark:q-a]] ပထမ အဖြေက caching က ပုံမှန်အတိုင်း အလုပ်လုပ်ပြီး၊ အဲဒီ စာကြောင်း တစ်ကြောင်းစာပဲ ပိုကုန်မယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက request တိုင်းမှာ cache လွဲမယ် ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ အချိန်က request တိုင်းမှာ ပြောင်းပါတယ်။
+      အဲဒါ system prompt ရဲ့ ထိပ်ဆုံးမှာ ရှိနေတော့ အစပိုင်းက ပထမ စာကြောင်းမှာတင် ကွဲသွားပြီး၊ နောက်က system prompt
+      ကျန်တာနဲ့ message အားလုံး cache ကနေ မရတော့ပါဘူး။ usage မှာ cache read က သုညပဲ ပြနေပြီး၊ အဆင့် ရာနဲ့ချီ
+      လုံးလုံး ဈေးအပြည့် ပေးရပါမယ်။ error လည်း မပြတာမို့ usage ကို မကြည့်ရင် မသိနိုင်ပါဘူး။
+      [[mark:q-rule]] ဒါကြောင့် မပြောင်းတဲ့ အရာတွေကို ရှေ့မှာ ထားပြီး၊ အချိန်၊ ID၊ မေးခွန်း အသစ် လို ပြောင်းမယ့် အရာတွေကို
+      နောက်ဆုံး breakpoint ရဲ့ နောက်ကို ပို့ပါ။ cache read က သုည ဖြစ်နေရင် အစပိုင်းကို ဘာက ပြောင်းနေလဲ ရှာစစ်ပါ။
+    sources:
+      - {
+          title: "Claude Docs: Prompt caching",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-caching",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် အလုပ် ရှည်အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် project ထဲက အချိန်ကြာကြာ run ရမယ့် အလုပ်
+      တစ်ခုကို စဉ်းစားပါ။ ဒီ audit prompt ရဲ့ အပေါ်က comment နေရာမှာ အဲဒီ အလုပ်အတွက် ဘယ်အရာတွေက အဆင့်တိုင်း
+      မပြောင်းဘဲ ရှေ့မှာ ထားရမလဲ ဆိုတာ ရေးကြည့်ပါ။
+      [[mark:turn-2]] ပြီးရင် ဘယ်အရာတွေက အဆင့်တိုင်း ပြောင်းလဲ၊ ဘယ် tool result တွေကို နောက်ပိုင်းမှာ ရှင်းပစ်လို့ ရလဲ၊
+      ဘယ် ဆုံးဖြတ်ချက်တွေကိုတော့ session ကျော်ပြီး မှတ်ထားရမလဲ ဆိုတာကိုလည်း တစ်ကြောင်းစီ ထည့်ရေးပါ။
+    sources:
+      - {
+          title: "Claude Docs: Prompt caching",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-caching",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - {
+          id: back-audit,
+          type: workspace.openFile,
+          at: { afterAction: close-quiz },
+          path: reply-assistant/src/kb-audit.ts,
+        }
+      - id: sel-turn
+        type: editor.select
+        at: { mark: turn, offsetMs: 2600 }
+        target:
+          file: reply-assistant/src/kb-audit.ts
+          text: "// The same instructions on every step of the audit, word for word."
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ အဆင့် ရာနဲ့ချီ run ရတဲ့ agent က အဆင့်တိုင်း history တစ်ခုလုံးကို ပြန်ပို့ရတာမို့၊
+      ထိန်းမထားရင် ကုန်ကျစရိတ် တက်ပြီး context window ပြည့်သွားပါမယ်။ မပြောင်းတဲ့ အစပိုင်းကို caching နဲ့
+      ဈေးသက်သာအောင် လုပ်ပါတယ်။
+      [[mark:recap-2]] မလိုတော့တဲ့ tool result တွေကို ရှင်းထုတ်ပြီး၊ စကားဝိုင်း အဟောင်းကို compaction နဲ့ အကျဉ်းချုပ်ပါတယ်။
+      session ကျော်ပြီး ကျန်ရမယ့် အရာကိုတော့ memory tool နဲ့ သိမ်းပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ဒီ audit ကို နာရီပေါင်းများစွာ run ဖို့ နေရာ၊ file တွေနဲ့ shell ကို Anthropic
+      ဘက်က ပေးတဲ့ Managed Agents ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Compaction",
+          url: "https://platform.claude.com/docs/en/build-with-claude/compaction",
+        }
+      - {
+          title: "Claude Docs: Memory tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool",
+        }
+    actions:
+      - id: sel-recap-cache
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: reply-assistant/src/kb-audit.ts
+          text: 'text: AUDIT_PROMPT, cache_control: { type: "ephemeral" }'
+      - id: sel-recap-clear
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: reply-assistant/src/kb-audit.ts
+          text: '        type: "clear_tool_uses_20250919",'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
