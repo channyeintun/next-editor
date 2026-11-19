@@ -1,0 +1,923 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-07-when-properties-collide
+  title: "Claude FDE 07: မထင်မှတ်တဲ့ output ကို ခွဲခြားခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/07-diagnosis.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/07-diagnosis.md: |
+        # မထင်မှတ်တဲ့ draft ကို ခွဲခြားခြင်း
+
+        မေးခွန်း 4 ဆင့်: ကွဲနေလား → fact ကို သိလား → context ထဲ ပါလား → ညွှန်ကြားချက် ရှင်းလား
+
+        | တွေ့ရတာ | သဘာဝ | ပြင်နည်း |
+        |---|---|---|
+        | ticket တူ၊ draft ပုံစံ မတူ (3 ဆင့် / 7 ဆင့်) | next token prediction | format အတိအကျ၊ ဥပမာ 3–5 ခု |
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — four odd drafts from one week: red cards (each one went wrong), the orange line is the point.
+    - {
+        id: d-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ထူးဆန်းတဲ့ draft 4 စောင်",
+        fontSize: 36,
+      }
+    - {
+        id: d-c1,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 380,
+        height: 90,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 268,
+        width: 380,
+        height: 35,
+        text: "ticket တူ၊ ပုံစံ မတူ",
+        fontSize: 28,
+      }
+    - {
+        id: d-c2,
+        kind: rectangle,
+        x: 700,
+        y: 240,
+        width: 380,
+        height: 90,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-l2,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 268,
+        width: 380,
+        height: 35,
+        text: "ရွှေ့ပြောင်းခ ဖန်တီးပြော",
+        fontSize: 28,
+      }
+    - {
+        id: d-c3,
+        kind: rectangle,
+        x: 290,
+        y: 360,
+        width: 380,
+        height: 90,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-l3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 388,
+        width: 380,
+        height: 35,
+        text: "လုပ်ပြီးသားကို ထပ်ခိုင်း",
+        fontSize: 28,
+      }
+    - {
+        id: d-c4,
+        kind: rectangle,
+        x: 700,
+        y: 360,
+        width: 380,
+        height: 90,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-l4,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 388,
+        width: 380,
+        height: 35,
+        text: "မှန်ပေမဲ့ ဖတ်ရခက်",
+        fontSize: 28,
+      }
+    - {
+        id: d-conc,
+        kind: text,
+        x: 290,
+        y: 500,
+        width: 790,
+        height: 38,
+        text: "အကြောင်းရင်း မတူရင် ပြင်နည်းလည်း မတူ",
+        fontSize: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-conc-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 505,
+        width: 560,
+        height: 42,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the four questions as a ladder: orange rungs are questions, blue labels the model's property.
+    - {
+        id: l-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "မေးခွန်း 4 ဆင့်",
+        fontSize: 36,
+      }
+    - { id: l-r1, kind: rectangle, x: 290, y: 235, width: 530, height: 70, strokeColor: "#f08c00" }
+    - {
+        id: l-q1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 253,
+        width: 530,
+        height: 35,
+        text: "ခါတိုင်းနဲ့ ကွဲနေလား?",
+        fontSize: 28,
+      }
+    - {
+        id: l-p1,
+        kind: text,
+        x: 845,
+        y: 253,
+        width: 250,
+        height: 35,
+        text: "next token",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - { id: l-r2, kind: rectangle, x: 290, y: 325, width: 530, height: 70, strokeColor: "#f08c00" }
+    - {
+        id: l-q2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 343,
+        width: 530,
+        height: 35,
+        text: "လိုတဲ့ fact ကို သိလား?",
+        fontSize: 28,
+      }
+    - {
+        id: l-p2,
+        kind: text,
+        x: 845,
+        y: 343,
+        width: 250,
+        height: 35,
+        text: "knowledge",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - { id: l-r3, kind: rectangle, x: 290, y: 415, width: 530, height: 70, strokeColor: "#f08c00" }
+    - {
+        id: l-q3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 433,
+        width: 530,
+        height: 35,
+        text: "context ထဲ ပါလား၊ မြုပ်နေလား?",
+        fontSize: 28,
+      }
+    - {
+        id: l-p3,
+        kind: text,
+        x: 845,
+        y: 433,
+        width: 250,
+        height: 35,
+        text: "working memory",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - { id: l-r4, kind: rectangle, x: 290, y: 505, width: 530, height: 70, strokeColor: "#f08c00" }
+    - {
+        id: l-q4,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 523,
+        width: 530,
+        height: 35,
+        text: "ညွှန်ကြားချက် ရှင်းလား၊ ပြိုင်လား?",
+        fontSize: 28,
+      }
+    - {
+        id: l-p4,
+        kind: text,
+        x: 845,
+        y: 523,
+        width: 250,
+        height: 35,
+        text: "steerability",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    # Board 3 — one collision: a firm instruction (blue, part of the setup) meets a missing fact (red, dashed:
+    # not there); violet arrows meet in the made-up answer; red is the symptom fix, green the cause fix.
+    - {
+        id: k-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "သဘာဝ 2 ခု တိုက်မိတဲ့အခါ",
+        fontSize: 36,
+      }
+    - {
+        id: k-rule,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 360,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-rule-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 258,
+        width: 360,
+        height: 35,
+        text: "အမြဲ တိုက်ရိုက် ဖြေပါ",
+        fontSize: 28,
+      }
+    - {
+        id: k-fact,
+        kind: rectangle,
+        x: 290,
+        y: 355,
+        width: 360,
+        height: 80,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k-fact-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 378,
+        width: 360,
+        height: 35,
+        text: "လျော်ကြေး စည်းမျဉ်း မပါ",
+        fontSize: 28,
+      }
+    - {
+        id: k-a1,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 660,
+        y: 270,
+        width: 90,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-a2,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 660,
+        y: 350,
+        width: 90,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-out,
+        kind: rectangle,
+        x: 760,
+        y: 290,
+        width: 320,
+        height: 90,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k-out-l,
+        kind: text,
+        align: center,
+        x: 760,
+        y: 318,
+        width: 320,
+        height: 35,
+        text: "5,000 ကျပ် လို့ ဖန်တီး",
+        fontSize: 28,
+      }
+    - {
+        id: k-sym,
+        kind: text,
+        x: 290,
+        y: 485,
+        width: 640,
+        height: 35,
+        text: "လက္ခဏာ ပြင်: ငွေပမာဏ မပြောနဲ့",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k-sym-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 290,
+        y: 485,
+        width: 430,
+        height: 35,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k-cause,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 720,
+        height: 35,
+        text: "အကြောင်းရင်း ပြင်: မသိရင် လွှဲ၊ စည်းမျဉ်း ထည့်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: k-cause-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 1030,
+        y: 553,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဘယ် သဘာဝတွေ တိုက်မိလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) knowledge: မြန်မာလို မနိုင်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) steerability + working memory",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 560,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 880,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "ကူးထည့်တဲ့ စာ = customer ရဲ့ အချက်အလက်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "ညွှန်ကြားချက် မဟုတ်ဘူးလို့ ရှင်းရှင်း ပြော",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9307
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: odd-drafts
+    chapter: ထူးဆန်းတဲ့ draft လေးစောင်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ညွှန်ကြားချက်၊ ဥပမာနဲ့ format ကို သုံးပြီး model ရဲ့ အပြုအမူကို ပြောင်းတဲ့
+      steerability အကြောင်း လေ့လာခဲ့ပါတယ်။ ညွှန်ကြားချက်နဲ့ ပြောင်းလို့ ရတာ ရှိသလို၊ ပြောင်းလို့ မရတာလည်း
+      ရှိတယ် ဆိုတာ တွေ့ခဲ့ပါတယ်။
+      [[mark:d-open]] ဒီတစ်ပတ် အစမှာ support manager လှလှ က support agent တွေ personal chat AI နဲ့ ရေးခဲ့တဲ့
+      draft တွေကို စုပြီး ကိုယ့်ဆီ ယူလာပေးခဲ့ပါတယ်။ draft ဆိုတာ customer ဆီ မပို့ခင် ရေးထားတဲ့ အဖြေ မူကြမ်းပါ။
+      အဲဒီထဲက တစ်ပတ်တည်းမှာ ရေးခဲ့တဲ့ ထူးဆန်းတဲ့ draft လေးစောင်ကို အရင် ကြည့်ရအောင်။
+      [[mark:d1]] ပထမ draft က internet နှေးတဲ့ ticket အတွက်ပါ။ ticket အမျိုးအစား တူတူကို support agent
+      နှစ်ယောက်က ရေးခိုင်းတော့၊ တစ်စောင်က အဆင့် သုံးဆင့်နဲ့ တိုတိုလေး ဖြေပြီး၊ နောက်တစ်စောင်က ခေါင်းစဉ်တွေနဲ့
+      အဆင့် ခုနစ်ဆင့် ရေးထားပါတယ်။
+      [[mark:d2]] ဒုတိယ draft က အိမ်ရွှေ့မယ့် customer တစ်ယောက်ကို ရွှေ့ပြောင်းခ ကျပ် ၁၅၀၀၀ ကျမယ်လို့
+      ပြောထားပါတယ်။ နေခြည် ရဲ့ ရွှေ့ပြောင်းခက plan အလိုက် ကွာပြီး Billing ထဲမှာပဲ ရှိတာမို့၊ အဲဒီ ဂဏန်းကို
+      ဘယ်စာရွက်ထဲကမှ ယူထားတာ မဟုတ်ပါဘူး။
+      [[mark:d3]] တတိယ draft က message သုံးဆယ်လောက် ရှည်တဲ့ ticket အတွက်ပါ။ customer က တတိယ message
+      မှာကတည်းက router ကို ပိတ်ပြီး ပြန်ဖွင့်ပြီးပြီလို့ ပြောထားပါတယ်။ ဒါပေမဲ့ draft က router ကို ပြန်ဖွင့်ကြည့်ပါလို့
+      ထပ်ခိုင်းနေပါတယ်။
+      [[mark:d4]] စတုတ္ထ draft ကတော့ အကြောင်းအရာ မှန်ပါတယ်။ ဒါပေမဲ့ စာပိုဒ် ငါးပိုဒ်လောက် ရှည်ပြီး၊ ရုံးစာလို
+      တရားဝင်လွန်းတဲ့ အသံနဲ့ English စကားလုံးတွေ ရောရေးထားတော့ customer တစ်ယောက်အတွက် ဖတ်ရ ခက်ပါတယ်။
+      [[mark:d-point]] ဒီ လေးစောင်ကို ကြည့်ပြီး AI က မှားတာပဲ၊ ညွှန်ကြားချက် ထပ်ထည့်လိုက်ရင် ပြီးမှာပဲလို့
+      ပြောချင်စရာ ကောင်းပါတယ်။ ဒါပေမဲ့ လေးစောင်လုံးက မှားပုံ မတူသလို၊ မှားရတဲ့ အကြောင်းရင်းလည်း မတူပါဘူး။
+      အကြောင်းရင်း မတူရင် ပြင်နည်းလည်း တူလို့ မရပါဘူး။
+    sources:
+      - {
+          title: "AI Capabilities and Limitations (Anthropic course, public description)",
+          url: "https://anthropic.skilljar.com/ai-capabilities-and-limitations",
+        }
+      - {
+          title: "Claude Docs: Reduce hallucinations",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations",
+        }
+    actions:
+      - {
+          id: draw-d-open,
+          type: whiteboard.apply,
+          at: { mark: d-open },
+          open: true,
+          upsertIds: [d-title],
+        }
+      - {
+          id: draw-d1,
+          type: whiteboard.apply,
+          at: { mark: d1 },
+          upsertIds: [d-c1, d-l1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-d2,
+          type: whiteboard.apply,
+          at: { mark: d2 },
+          upsertIds: [d-c2, d-l2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-d3,
+          type: whiteboard.apply,
+          at: { mark: d3 },
+          upsertIds: [d-c3, d-l3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-d4,
+          type: whiteboard.apply,
+          at: { mark: d4 },
+          upsertIds: [d-c4, d-l4],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-d-conc,
+          type: whiteboard.apply,
+          at: { mark: d-point },
+          upsertIds: [d-conc, d-conc-line],
+          drawMs: 1200,
+        }
+
+  - id: ladder
+    chapter: မေးခွန်း လေးဆင့်
+    narration: >
+      [[mark:l-open]] အကြောင်းရင်းကို ရှာဖို့ ဒီ အပိုင်းမှာ လေ့လာခဲ့တဲ့ model ရဲ့ သဘာဝ လေးခုကို မေးခွန်း လေးခုအဖြစ်
+      ပြောင်းပြီး၊ လှေကား တစ်ခုလို အပေါ်ကနေ အောက်ကို တစ်ဆင့်ချင်း မေးကြည့်ရအောင်။
+      [[mark:l1]] ပထမ မေးခွန်းက ခါတိုင်းနဲ့ ကွဲနေတာလား ဆိုတာပါ။ model က next token prediction နဲ့ စာကို
+      ရေးပါတယ်။ token ဆိုတာ model က စာကို ဖြတ်ယူတဲ့ အပိုင်းအစလေးပါ။ ရှေ့က စာကို ကြည့်ပြီး နောက်လာမယ့် token ကို
+      ခန့်မှန်းရွေးရင်း ဆက်ရေးသွားတာမို့၊ မေးခွန်း တူတူကို နှစ်ခါ မေးရင် စကားလုံးနဲ့ ပုံစံ ကွဲတာ ပုံမှန်ပါပဲ။ ပထမ
+      draft က ဒီ အဆင့်မှာ ရပ်ပါတယ်။
+      [[mark:l2]] ဒုတိယ မေးခွန်းက လိုတဲ့ fact ကို model က သိနိုင်လား ဆိုတာပါ။ model ရဲ့ knowledge က training
+      လုပ်ခဲ့တဲ့ စာတွေကနေ လာတာပါ။ training ဆိုတာ model ကို စာတွေနဲ့ သင်ပေးတဲ့ လုပ်ငန်းစဉ်ပါ။ ဒါကြောင့် နေခြည် ရဲ့
+      ဈေးနှုန်းတို့၊ ဒီနေ့ လိုင်းကျနေတဲ့ မြို့နယ်တို့ကို model က မသိပါဘူး။ မသိတဲ့အခါ မသိဘူးလို့ မပြောဘဲ
+      ဖြစ်နိုင်ခြေရှိတဲ့ ဂဏန်း တစ်ခုကို ချောချောမွေ့မွေ့ ရေးပေးတတ်ပါတယ်။ ဒါကို hallucination လို့ ခေါ်ပါတယ်။
+      ရွှေ့ပြောင်းခ draft က ဒီ အဆင့်ပါ။
+      [[mark:l3]] တတိယ မေးခွန်းက fact က context ထဲမှာ ပါရဲ့လား၊ ပါပေမဲ့ မြုပ်နေလား ဆိုတာပါ။ context window
+      ဆိုတာ request တစ်ခုမှာ model မြင်နိုင်တဲ့ စာ အားလုံးအတွက် နေရာပါ။ model ရဲ့ working memory လို့လည်း
+      ပြောလို့ ရပါတယ်။ fact ပါနေရင်တောင် မဆိုင်တဲ့ စာတွေကြားမှာ မြုပ်နေရင် လွတ်သွားတတ်ပါတယ်။ router
+      ပြန်ဖွင့်ပြီးပြီ ဆိုတဲ့ စာကြောင်းက message သုံးဆယ်ကြားမှာ မြုပ်နေခဲ့တာပါ။
+      [[mark:l4]] စတုတ္ထ မေးခွန်းက ညွှန်ကြားချက်က ရှင်းလား၊ တခြား ညွှန်ကြားချက် တစ်ခုနဲ့ ပြိုင်နေလား ဆိုတာပါ။
+      ဒါက steerability ရဲ့ အဆင့်ပါ။ support agent က ယဉ်ယဉ်ကျေးကျေး ရေးပေးပါလို့ပဲ ပြောခဲ့တော့၊ ဘယ်လောက်
+      တိုရမလဲ၊ ဘယ်လို အသံနဲ့ ရေးရမလဲ ဆိုတာကို model ဘက်က ရွေးလိုက်တာပါ။
+      [[mark:l-why]] ညွှန်ကြားချက်ကို နောက်ဆုံး အဆင့်မှာ ထားတာ အကြောင်းရှိပါတယ်။ ညွှန်ကြားချက် ထပ်ထည့်တာက
+      လူတိုင်း အရင်ဆုံး လုပ်ချင်တဲ့ ပြင်နည်းပါ။ ဒါပေမဲ့ ညွှန်ကြားချက်က မရှိတဲ့ fact ကို ဖန်တီးမပေးနိုင်ပါဘူး။ မြုပ်နေတဲ့
+      fact ကိုလည်း ညွှန်ကြားချက် ထပ်ထည့်ရုံနဲ့ ဖော်ပေးနိုင်မယ်လို့ မဆိုနိုင်ပါဘူး။ ဒါကြောင့် အပေါ်က အဆင့်တွေကို အရင် စစ်ပါ။
+    sources:
+      - {
+          title: "Claude Docs: Glossary",
+          url: "https://platform.claude.com/docs/en/about-claude/glossary",
+        }
+      - {
+          title: "Claude Docs: Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+      - {
+          title: "Claude Docs: Prompting best practices",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - {
+          id: draw-l-open,
+          type: whiteboard.apply,
+          at: { mark: l-open },
+          clear: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-l1,
+          type: whiteboard.apply,
+          at: { mark: l1 },
+          upsertIds: [l-r1, l-q1, l-p1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-l2,
+          type: whiteboard.apply,
+          at: { mark: l2 },
+          upsertIds: [l-r2, l-q2, l-p2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-l3,
+          type: whiteboard.apply,
+          at: { mark: l3 },
+          upsertIds: [l-r3, l-q3, l-p3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-l4,
+          type: whiteboard.apply,
+          at: { mark: l4 },
+          upsertIds: [l-r4, l-q4, l-p4],
+          drawMs: 1500,
+        }
+      - { id: point-l4, type: whiteboard.point, at: { mark: l-why }, target: { assetId: l-r4 } }
+
+  - id: collision
+    chapter: သဘာဝ နှစ်ခု တိုက်မိတဲ့အခါ
+    narration: >
+      [[mark:k-open]] တစ်ခါတလေမှာတော့ အဖြေက လှေကားရဲ့ အဆင့် တစ်ဆင့်တည်းမှာ မရပ်ပါဘူး။ သဘာဝ နှစ်ခုက
+      တစ်ပြိုင်တည်း အလုပ်လုပ်ပြီး တစ်ခုနဲ့ တစ်ခု တိုက်မိတတ်ပါတယ်။
+      [[mark:k-rule]] system prompt ထဲမှာ customer ရဲ့ မေးခွန်းကို အမြဲ တိုက်ရိုက် ဖြေပါ ဆိုတဲ့ စာကြောင်း ပါတယ်
+      ဆိုပါစို့။ system prompt ဆိုတာ စကားမပြောခင် model ကို ကြိုပေးထားတဲ့ တာဝန်နဲ့ စည်းကမ်းပါ။ ဒီ စာကြောင်းကို
+      ကောင်းတဲ့ ရည်ရွယ်ချက်နဲ့ ရေးထားတာပါ။ customer ကို ဝေ့ဝိုက်ပြီး မဖြေစေချင်လို့ပါ။
+      [[mark:k-fact]] အဲဒီနောက် လိုင်းကျခဲ့တဲ့ customer တစ်ယောက်က ရက် သုံးရက်စာအတွက် ငွေ ဘယ်လောက် ပြန်ရမလဲလို့
+      မေးပါတယ်။ လျော်ကြေး စည်းမျဉ်းကတော့ context ထဲမှာ မပါပါဘူး။
+      [[mark:k-out]] ညွှန်ကြားချက်က အမြဲ ဖြေရမယ်လို့ ဆိုထားပြီး၊ ဖြေဖို့ လိုတဲ့ fact ကတော့ မရှိပါဘူး။ ဒါကြောင့် model
+      က ကျပ် ၅၀၀၀ ပြန်ရပါမယ်လို့ ယုံကြည်မှု အပြည့်နဲ့ ရေးပေးလိုက်ပါတယ်။ steerability နဲ့ knowledge နှစ်ခု
+      တိုက်မိသွားတာပါ။
+      [[mark:k-sym]] ဒီ draft ကို တွေ့ရင် ပထမဆုံး လုပ်ချင်တာက ငွေပမာဏကို ဘယ်တော့မှ မပြောပါနဲ့ ဆိုတဲ့ စာကြောင်း
+      ထပ်ထည့်တာပါ။ ဒါက ရောဂါလက္ခဏာကို ပြင်တာပါ။ နောက်တစ်ခါ ငွေပမာဏ မပြောတော့ပေမဲ့ ငွေ ပြန်ရမယ့် ရက်ကို
+      ဖန်တီးရေးနိုင်ပါသေးတယ်။ ဘာကြောင့်လဲဆိုတော့ အမြဲ ဖြေပါ ဆိုတဲ့ ညွှန်ကြားချက်နဲ့ fact မရှိတာ နှစ်ခုလုံး
+      ရှိနေတုန်းမို့ပါ။
+      [[mark:k-cause]] အကြောင်းရင်းကို ပြင်မယ်ဆိုရင် တိုက်မိတဲ့ နှစ်ဖက်လုံးကို ပြင်ရပါမယ်။ fact မရှိတဲ့အခါ ဘာလုပ်ရမလဲ
+      ဆိုတာကို ညွှန်ကြားချက်ထဲ ထည့်ပေးပါ။ ဥပမာ မသိတဲ့ ကိစ္စဆိုရင် support agent က စစ်ပြီး ပြန်အကြောင်းကြားပါမယ်လို့
+      ရေးခိုင်းတာပါ။ ပြီးတော့ လျော်ကြေး စည်းမျဉ်းကို context ထဲ ထည့်ပေးနိုင်ရင် ထည့်ပေးပါ။
+    sources:
+      - {
+          title: "Claude Docs: Reduce hallucinations",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations",
+        }
+      - {
+          title: "Claude Docs: Prompting best practices",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - {
+          id: draw-k-open,
+          type: whiteboard.apply,
+          at: { mark: k-open },
+          clear: true,
+          upsertIds: [k-title],
+        }
+      - {
+          id: draw-k-rule,
+          type: whiteboard.apply,
+          at: { mark: k-rule },
+          upsertIds: [k-rule, k-rule-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-k-fact,
+          type: whiteboard.apply,
+          at: { mark: k-fact },
+          upsertIds: [k-fact, k-fact-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-k-out,
+          type: whiteboard.apply,
+          at: { mark: k-out },
+          upsertIds: [k-a1, k-a2, k-out, k-out-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-k-sym,
+          type: whiteboard.apply,
+          at: { mark: k-sym },
+          upsertIds: [k-sym, k-sym-x],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-k-cause,
+          type: whiteboard.apply,
+          at: { mark: k-cause },
+          upsertIds: [k-cause, k-cause-ok],
+          drawMs: 1200,
+        }
+
+  - id: table
+    chapter: ရောဂါရှာ table
+    narration: >
+      [[mark:t-open]] ဒါကို နေခြည် အတွက် ရောဂါရှာ table တစ်ခုအဖြစ် ချရေးကြည့်ရအောင်။ တွေ့ရတာ၊ ဘယ် သဘာဝကြောင့်လဲ၊
+      ဘယ်လို ပြင်မလဲ ဆိုတဲ့ column သုံးခု ရှိပြီး၊ ပထမ draft အတွက် row ကို ရေးထားပြီးပါပြီ။
+      [[mark:sel-row1]] ticket တူတူမှာ ပုံစံ ကွဲတာက next token prediction ကြောင့်မို့၊ ပြင်နည်းက ပုံစံကို အတိအကျ
+      သတ်မှတ်ပေးပြီး ဥပမာ သုံးခုကနေ ငါးခုအထိ ပေးတာပါ။ စကားလုံး တချို့ ကွဲနေတာကိုတော့ ပုံမှန်လို့ပဲ လက်ခံရပါမယ်။
+      [[mark:type-r2]] ရွှေ့ပြောင်းခ draft ရဲ့ အကြောင်းရင်းက knowledge ပါ။ ဒါကြောင့် ပြင်နည်းက ညွှန်ကြားချက်
+      မဟုတ်ဘဲ၊ ဈေးနှုန်း စာရင်းကို context ထဲ ထည့်ပေးတာနဲ့ မသိရင် မသိဘူးလို့ ပြောခွင့် ပေးတာ ဖြစ်ပါတယ်။
+      [[mark:type-r3]] router draft ရဲ့ အကြောင်းရင်းက working memory ပါ။ message တွေကို ဖြတ်စရာ
+      မလိုပါဘူး။ customer လုပ်ပြီးသား အဆင့်တွေကို ထုတ်ပြီး ရှင်းရှင်း ထပ်ပြောပေးလိုက်ရင် မြုပ်နေတဲ့ fact က
+      ရှေ့ကို ရောက်လာပါတယ်။
+      [[mark:type-r4]] ရှည်လွန်းတဲ့ draft ကတော့ steerability ပါ။ ဒီ တစ်ခုမှာတော့ ညွှန်ကြားချက်ကို ပြင်တာက မှန်တဲ့
+      ပြင်နည်းပါ။ ယဉ်ကျေးပါ ဆိုတဲ့ စကားလုံး တစ်လုံးအစား၊ ဘယ်လောက် တိုရမလဲ၊ ဘယ်လို အသံနဲ့ ရေးရမလဲ၊ ဘာကြောင့်လဲ
+      ဆိုတာကို ရှင်းရှင်း ပြောပေးရပါမယ်။
+      [[mark:type-rule]] အောက်ဆုံးမှာ သဘာဝ နှစ်ခု တိုက်မိတဲ့အခါအတွက် စည်းကမ်း တစ်ကြောင်း ထည့်ပါမယ်။ အကြောင်းရင်း
+      တစ်ခုချင်းစီကို ပြင်ရမယ်၊ ရောဂါလက္ခဏာကို ဖုံးထားရုံ စာကြောင်းကို မထည့်ရဘူး ဆိုတာပါ။
+    sources:
+      - {
+          title: "Claude Docs: Increase output consistency",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/increase-consistency",
+        }
+      - {
+          title: "Claude Docs: Reduce hallucinations",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations",
+        }
+      - {
+          title: "Claude Docs: Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+    actions:
+      - { id: close-k, type: whiteboard.apply, at: { mark: t-open }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-k },
+          path: notebook/07-diagnosis.md,
+        }
+      - id: sel-row1
+        type: editor.select
+        at: { mark: sel-row1 }
+        target:
+          file: notebook/07-diagnosis.md
+          text: "| ticket တူ၊ draft ပုံစံ မတူ (3 ဆင့် / 7 ဆင့်) | next token prediction | format အတိအကျ၊ ဥပမာ 3–5 ခု |"
+      - id: type-r2
+        type: editor.type
+        at: { mark: type-r2 }
+        cadence: line-by-line
+        target: { file: notebook/07-diagnosis.md, after: "ဥပမာ 3–5 ခု |\n" }
+        text: "| ရွှေ့ပြောင်းခ 15,000 ကျပ် ဖန်တီးပြော | knowledge | ဈေးနှုန်း ထည့်၊ မသိရင် မသိဘူး ပြောခွင့် |\n"
+      - id: type-r3
+        type: editor.type
+        at: { mark: type-r3 }
+        cadence: line-by-line
+        target: { file: notebook/07-diagnosis.md, after: "မသိဘူး ပြောခွင့် |\n" }
+        text: "| ပြန်ဖွင့်ပြီးသား router ကို ထပ်ခိုင်း | working memory | စာ မဖြတ်ဘဲ လုပ်ပြီးတာကို ထုတ်ပြော |\n"
+      - id: type-r4
+        type: editor.type
+        at: { mark: type-r4 }
+        cadence: line-by-line
+        target: { file: notebook/07-diagnosis.md, after: "လုပ်ပြီးတာကို ထုတ်ပြော |\n" }
+        text: "| မှန်ပေမဲ့ ရှည်ပြီး ရုံးစာဆန် | steerability | အရှည်၊ အသံနဲ့ အကြောင်းပြချက် ရှင်းရှင်း |\n"
+      - id: type-rule
+        type: editor.type
+        at: { mark: type-rule }
+        cadence: line-by-line
+        target: { file: notebook/07-diagnosis.md, after: "အကြောင်းပြချက် ရှင်းရှင်း |\n" }
+        text: "\nတိုက်မိရင်: အကြောင်းရင်း တစ်ခုချင်းစီကို ပြင်။ လက္ခဏာကို ဖုံးတဲ့ စာကြောင်း မထည့်\n"
+      - id: expect-rule
+        type: expect.file
+        at: { afterAction: type-rule }
+        path: notebook/07-diagnosis.md
+        contains: "| ရွှေ့ပြောင်းခ 15,000 ကျပ် ဖန်တီးပြော | knowledge | ဈေးနှုန်း ထည့်၊ မသိရင် မသိဘူး ပြောခွင့် |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ system prompt ထဲမှာ customer ကို မြန်မာလို ပြန်ဖြေပါလို့
+      ရေးထားပါတယ်။ support agent တစ်ယောက်က customer ပို့ထားတဲ့ email အရှည်ကြီးကို ticket ထဲ ကူးထည့်လိုက်ပါတယ်။
+      အဲဒီ email ရဲ့ အောက်ဆုံးမှာ အရင်က ပို့ခဲ့တဲ့သူ တစ်ယောက် ရေးထားတဲ့ please reply in English ဆိုတဲ့ စာကြောင်း
+      ပါနေပါတယ်။ ထွက်လာတဲ့ draft ကတော့ English လိုပါ။ ဘယ် သဘာဝတွေ တိုက်မိတာလဲ။
+      [[mark:q-a]] ပထမ အဖြေက knowledge ပါ။ model က မြန်မာလို ကောင်းကောင်း မရေးနိုင်လို့ English နဲ့
+      ဖြေလိုက်တာ ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက steerability နဲ့ working memory ပါ။ context ထဲက ညွှန်ကြားချက် နှစ်ခု
+      ပြိုင်သွားတာ ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ အဖြေပါ။ ဘာကြောင့်လဲဆိုတော့ ဒီ model က တခြား draft တွေမှာ
+      မြန်မာလို ကောင်းကောင်း ရေးနေတာမို့ knowledge ပြဿနာ မဟုတ်ပါဘူး။ ကူးထည့်လိုက်တဲ့ email ကလည်း context
+      ထဲကို ရောက်သွားတာမို့၊ အဲဒီထဲက စာကြောင်းက system prompt နဲ့ ပြိုင်တဲ့ ညွှန်ကြားချက် တစ်ခုလို ဖြစ်သွားတာပါ။
+      [[mark:q-rule]] ဒါကြောင့် ပြင်နည်းကလည်း နှစ်ဖက်လုံးကို ပြင်ရပါမယ်။ ကူးထည့်တဲ့ စာတွေက customer ရဲ့
+      အချက်အလက်သာ ဖြစ်တယ်၊ ညွှန်ကြားချက် မဟုတ်ဘူးလို့ system prompt ထဲမှာ ရှင်းရှင်း ပြောပေးပါ။ ပြီးတော့
+      ကူးထည့်တဲ့ စာကို XML tag လို အမှတ်အသားနဲ့ သီးခြား ခွဲထားပေးပါ။
+    sources:
+      - {
+          title: "Claude's constitution (principals; documents and tool results are information)",
+          url: "https://www.anthropic.com/constitution",
+        }
+      - {
+          title: "Claude Docs: Prompting best practices (XML tags)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် AI output ကို ခွဲကြည့်ခြင်း
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ မကြာသေးခင်က ကိုယ် တွေ့ခဲ့တဲ့ ထူးဆန်းတဲ့ AI
+      အဖြေ တစ်ခုကို ဒီ table ထဲမှာ row အသစ် တစ်ကြောင်းအဖြစ် ရေးကြည့်ပါ။ ကိုယ့် project ထဲက အဖြေ ဖြစ်ဖြစ်၊ chat
+      ထဲမှာ ကိုယ်တိုင် မေးခဲ့တာ ဖြစ်ဖြစ် ရပါတယ်။
+      [[mark:turn-2]] ပြင်နည်း column ကိုတော့ နောက်ဆုံးမှ ဖြည့်ပါ။ အပေါ်က မေးခွန်း လေးဆင့်ကို အစဉ်လိုက် မေးပြီး၊
+      ဘယ် အဆင့်မှာ ရပ်လဲ ဆိုတာကို အရင် ရေးပါ။ အဆင့် နှစ်ဆင့်မှာ ရပ်နေရင် သဘာဝ နှစ်ခုလုံးကို ရေးပြီး၊ ပြင်နည်းကိုလည်း
+      နှစ်ခု ရေးပါ။
+    sources:
+      - {
+          title: "AI Capabilities and Limitations (Anthropic course, public description)",
+          url: "https://anthropic.skilljar.com/ai-capabilities-and-limitations",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/07-diagnosis.md
+          text: "| တွေ့ရတာ | သဘာဝ | ပြင်နည်း |"
+      - id: sel-ladder
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/07-diagnosis.md
+          text: "မေးခွန်း 4 ဆင့်: ကွဲနေလား → fact ကို သိလား → context ထဲ ပါလား → ညွှန်ကြားချက် ရှင်းလား"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ မထင်မှတ်တဲ့ draft တွေက AI မှားတယ် ဆိုတဲ့ ပြဿနာ တစ်ခုတည်း မဟုတ်ပါဘူး။
+      ကွဲနေလား ဆိုတာကနေ ညွှန်ကြားချက် ရှင်းလား ဆိုတာအထိ မေးခွန်း လေးဆင့်နဲ့ အကြောင်းရင်းကို အရင်
+      ရှာပါ။ ပြီးမှ အဲဒီ အကြောင်းရင်းအတွက် ပြင်နည်းကို ရွေးပါ။
+      [[mark:recap-2]] သဘာဝ နှစ်ခု တိုက်မိနေရင် နှစ်ခုလုံးကို ပြင်ပါ။ ရောဂါလက္ခဏာကို ဖုံးထားတဲ့ စာကြောင်းက ဒီနေ့
+      draft ကို ကောင်းသွားစေပေမဲ့၊ နောက်နေ့မှာ နောက်ထပ် ပုံစံ တစ်မျိုးနဲ့ ပြန်ပေါ်လာတတ်ပါတယ်။
+      [[mark:next]] ဒီ lesson နဲ့ model ရဲ့ သဘာဝကို လေ့လာတဲ့ အပိုင်း ပြီးပါပြီ။ နောက် lesson မှာတော့ လူ့ဘက်ကနေ
+      ကြည့်ပါမယ်။ AI နဲ့ အလုပ်လုပ်တဲ့သူတွေ မွေးထားရမယ့် အလေ့အကျင့် လေးခုဖြစ်တဲ့ 4D framework နဲ့၊ အဲဒီထဲက ပထမဆုံး
+      Delegation၊ ဘယ်အလုပ်ကို AI ကို ပေးမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "AI Capabilities and Limitations (Anthropic course, public description)",
+          url: "https://anthropic.skilljar.com/ai-capabilities-and-limitations",
+        }
+    actions:
+      - id: sel-ladder-2
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/07-diagnosis.md
+          text: "ကွဲနေလား → fact ကို သိလား"
+      - id: sel-rule
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/07-diagnosis.md
+          text: "တိုက်မိရင်: အကြောင်းရင်း တစ်ခုချင်းစီကို ပြင်။"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
