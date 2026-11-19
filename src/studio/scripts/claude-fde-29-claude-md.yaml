@@ -1,0 +1,806 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-29-claude-md
+  title: "Claude FDE 29: CLAUDE.md"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: billing-service/CLAUDE.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      billing-service/CLAUDE.md: |+
+        # Naychi Fiber billing service
+
+        Monthly invoices, payments and reports for Naychi Fiber customers.
+
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: memory-screen
+      contentType: html
+      name: Memory command
+      content: |
+        <style>
+          .shot { position: relative; width: 100vw; height: 100vh; background: #0b0d12; }
+          .shot img { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; object-fit: contain; }
+        </style>
+        <div class="shot"><img src="data:image/webp;base64,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" alt="Claude Code: the memory view with auto memory, the project CLAUDE.md and the user CLAUDE.md"></div>
+  whiteboardAssets:
+    # Board 1 — where CLAUDE.md files live, from the whole company down to one person: blue files,
+    # orange the team's project file this lesson writes; the white line is how they combine.
+    - {
+        id: l-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "CLAUDE.md ဘယ်မှာ ရှိနိုင်လဲ",
+        fontSize: 36,
+      }
+    - { id: l-b1, kind: rectangle, x: 290, y: 225, width: 360, height: 64, strokeColor: "#1971c2" }
+    - {
+        id: l-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 240,
+        width: 360,
+        height: 35,
+        text: "Managed policy",
+        fontSize: 28,
+      }
+    - {
+        id: l-d1,
+        kind: text,
+        x: 680,
+        y: 240,
+        width: 410,
+        height: 35,
+        text: "ကုမ္ပဏီ တစ်ခုလုံး",
+        fontSize: 28,
+      }
+    - { id: l-b2, kind: rectangle, x: 290, y: 305, width: 360, height: 64, strokeColor: "#1971c2" }
+    - {
+        id: l-l2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 320,
+        width: 360,
+        height: 35,
+        text: "~/.claude/CLAUDE.md",
+        fontSize: 28,
+      }
+    - {
+        id: l-d2,
+        kind: text,
+        x: 680,
+        y: 320,
+        width: 410,
+        height: 35,
+        text: "ကိုယ်တစ်ယောက်၊ project တိုင်း",
+        fontSize: 28,
+      }
+    - {
+        id: l-b3,
+        kind: rectangle,
+        x: 290,
+        y: 385,
+        width: 360,
+        height: 64,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: l-l3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 400,
+        width: 360,
+        height: 35,
+        text: "./CLAUDE.md",
+        fontSize: 28,
+      }
+    - {
+        id: l-d3,
+        kind: text,
+        x: 680,
+        y: 400,
+        width: 410,
+        height: 35,
+        text: "team တစ်ခုလုံး၊ git ထဲ",
+        fontSize: 28,
+      }
+    - { id: l-b4, kind: rectangle, x: 290, y: 465, width: 360, height: 64, strokeColor: "#1971c2" }
+    - {
+        id: l-l4,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 480,
+        width: 360,
+        height: 35,
+        text: "./CLAUDE.local.md",
+        fontSize: 28,
+      }
+    - {
+        id: l-d4,
+        kind: text,
+        x: 680,
+        y: 480,
+        width: 410,
+        height: 35,
+        text: "ကိုယ်တစ်ယောက်၊ ဒီ project",
+        fontSize: 28,
+      }
+    - {
+        id: l-join,
+        kind: text,
+        x: 290,
+        y: 570,
+        width: 780,
+        height: 35,
+        text: "အကုန် ပေါင်းဖတ်၊ အနီးဆုံး file ကို နောက်ဆုံးမှ ဖတ်",
+        fontSize: 28,
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 820,
+        height: 45,
+        text: "ဘယ်ဟာက CLAUDE.md ထဲ ဝင်သင့်လဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) database table တိုင်းရဲ့ ဖော်ပြချက် အပြည့်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) npm test နဲ့ စစ်၊ migrations ကို လက်နဲ့ မပြင်ရ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 650,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 1000,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "Claude မခန့်မှန်းနိုင်တာကိုပဲ ရေး",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "စာကြောင်းတိုင်း context နေရာ ယူ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — what goes in (green) and what stays out (red).
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "ရေးမယ် / မရေးဘူး",
+        fontSize: 36,
+      }
+    - {
+        id: b-lrect,
+        kind: rectangle,
+        x: 290,
+        y: 225,
+        width: 390,
+        height: 290,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-lh,
+        kind: text,
+        x: 310,
+        y: 240,
+        width: 350,
+        height: 35,
+        text: "ရေးမယ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-l1,
+        kind: text,
+        x: 310,
+        y: 300,
+        width: 350,
+        height: 35,
+        text: "command အတိအကျ",
+        fontSize: 28,
+      }
+    - {
+        id: b-l2,
+        kind: text,
+        x: 310,
+        y: 350,
+        width: 350,
+        height: 35,
+        text: "code မပြောတဲ့ စည်းကမ်း",
+        fontSize: 28,
+      }
+    - {
+        id: b-l3,
+        kind: text,
+        x: 310,
+        y: 400,
+        width: 350,
+        height: 35,
+        text: "မထိရမယ့် နေရာ",
+        fontSize: 28,
+      }
+    - {
+        id: b-l4,
+        kind: text,
+        x: 310,
+        y: 450,
+        width: 350,
+        height: 35,
+        text: "နှစ်ခါ ပြင်ပေးရတာ",
+        fontSize: 28,
+      }
+    - {
+        id: b-rrect,
+        kind: rectangle,
+        x: 710,
+        y: 225,
+        width: 380,
+        height: 290,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-rh,
+        kind: text,
+        x: 730,
+        y: 240,
+        width: 340,
+        height: 35,
+        text: "မရေးဘူး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-r1,
+        kind: text,
+        x: 730,
+        y: 300,
+        width: 340,
+        height: 35,
+        text: "code ဖတ်ရင် သိနိုင်တာ",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2,
+        kind: text,
+        x: 730,
+        y: 350,
+        width: 340,
+        height: 35,
+        text: "doc အရှည်ကြီး",
+        fontSize: 28,
+      }
+    - {
+        id: b-r3,
+        kind: text,
+        x: 730,
+        y: 400,
+        width: 340,
+        height: 35,
+        text: "ဒီ task အတွက်ပဲ စည်းကမ်း",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9329
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Session တိုင်း ထပ်မေးတာ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ Claude Code session တစ်ခုရဲ့ context window ထဲမှာ ဘာတွေ ပြည့်လာလဲ၊ compact၊ clear နဲ့
+      resume ကို ဘယ်အချိန် သုံးမလဲ ဆိုတာ လေ့လာခဲ့ပါတယ်။ chat ထဲမှာပဲ ပြောထားတဲ့ စည်းကမ်းက compaction ပြီးရင်
+      အကျဉ်းချုပ်ပဲ ကျန်တတ်တယ် ဆိုတာလည်း တွေ့ခဲ့ပါတယ်။
+      [[mark:sel-billing]] အပတ် ၆ ရဲ့ နောက်ဆုံးပိုင်းမှာ Billing team က session အသစ် စတိုင်း တူညီတဲ့ ပြဿနာ နှစ်ခုကို
+      တွေ့နေရပါတယ်။ ပထမ တစ်ခုက Claude က test တွေကို ဘယ်လို run ရမလဲ ဆိုတာ session တိုင်း ပြန်ရှာတာ ဒါမှမဟုတ်
+      ပြန်မေးတာပါ။
+      [[mark:story-2]] ဒုတိယ တစ်ခုက ပိုအန္တရာယ် များပါတယ်။ ရက်စွဲ တွက်တဲ့ code မှာ Claude က team ရဲ့ ရန်ကုန် အချိန်
+      helper ကို မသုံးဘဲ၊ ရိုးရိုး date function ကို တစ်ခါ သုံးသွားပါတယ်။ late fee bug ကို ဖြစ်စေခဲ့တဲ့ time zone ပြဿနာ
+      မျိုးကို ပြန်ဖွင့်ပေးလိုက်တာပါ။
+      [[mark:story-3]] ဘာကြောင့် ဒီလို ဖြစ်လဲ ဆိုတော့ session အသစ် တိုင်းက context အလွတ်နဲ့ စလို့ပါ။ မနေ့က session ထဲမှာ
+      ပြောခဲ့တာတွေကို ဒီနေ့ session က မသိပါဘူး။ session တစ်ခုကနေ နောက်တစ်ခုဆီ သယ်သွားတာက ကိုယ်တို့ ရေးထားတဲ့
+      CLAUDE.md file နဲ့ Claude ကိုယ်တိုင် မှတ်ထားတဲ့ auto memory ပဲ ရှိပါတယ်။ Billing team lead မောင်မောင် က team တစ်ခုလုံး မျှသုံးလို့ရတဲ့ CLAUDE.md ကို ကိုယ်နဲ့ အတူ ရေးဖို့
+      သဘောတူပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: How Claude Code works (sessions)",
+          url: "https://code.claude.com/docs/en/how-claude-code-works",
+        }
+      - {
+          title: "Claude Code Docs: Memory (CLAUDE.md)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: sel-billing }, path: README.md }
+      - id: sel-billing
+        type: editor.select
+        at: { afterAction: open-readme }
+        target:
+          file: README.md
+          text: "- Billing team နဲ့ Claude Code"
+      - id: sel-codebase
+        type: editor.select
+        at: { mark: story-2 }
+        target:
+          file: README.md
+          text: "- Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)"
+
+  - id: locations
+    chapter: CLAUDE.md ဆိုတာ
+    narration: >
+      [[mark:l-open]] CLAUDE.md ဆိုတာ project အကြောင်း Claude Code အမြဲ သိထားရမယ့် အချက်တွေကို markdown နဲ့ ရေးထားတဲ့
+      file ပါ။ Claude Code က session တိုင်း အစမှာ ဒီ file ကို ဖတ်ပြီး context ထဲ ထည့်ပါတယ်။ ဒါကြောင့် context window
+      ထဲက နေရာ တစ်ခုကို အမြဲ ယူထားပါတယ်။
+      [[mark:l-1]] CLAUDE.md က နေရာ လေးမျိုးမှာ ရှိနိုင်ပါတယ်။ အကျယ်ဆုံးက managed policy ပါ။ IT ဘက်က ကုမ္ပဏီ
+      တစ်ခုလုံးအတွက် ချထားတဲ့ file ဖြစ်ပါတယ်။
+      [[mark:l-2]] ဒုတိယက user အဆင့်ပါ။ ကိုယ့် home folder ထဲမှာ ထားပြီး၊ ကိုယ်တစ်ယောက်တည်းအတွက် project အားလုံးမှာ သက်ရောက်ပါတယ်။
+      [[mark:l-3]] တတိယက project အဆင့်ပါ။ repository ရဲ့ root မှာ ထားပြီး git ထဲ commit လုပ်တာမို့ team တစ်ခုလုံး
+      မျှသုံးပါတယ်။ ဒီ lesson မှာ ရေးမယ့် file က ဒီ အမျိုးအစားပါ။
+      [[mark:l-4]] စတုတ္ထက local အဆင့်ပါ။ ကိုယ့်အတွက်ပဲ ဖြစ်တဲ့ CLAUDE local file ဖြစ်ပြီး၊ git ထဲ မရောက်အောင်
+      gitignore ထဲ ထည့်ထားရပါတယ်။
+      [[mark:l-join]] Claude Code က တွေ့သမျှ file တွေကို ပေါင်းဖတ်ပါတယ်။ အကျယ်ဆုံးကနေ စပြီး၊ အလုပ်လုပ်နေတဲ့ folder နဲ့
+      အနီးဆုံး file ကို နောက်ဆုံးမှ ဖတ်ပါတယ်။ ဆိုလိုတာက file တစ်ခုက တခြား file ကို အစားမထိုးဘဲ၊ အကုန်လုံး context
+      ထဲ ဝင်တာပါ။ repository ထဲက folder ခွဲတွေမှာ ထားတဲ့ CLAUDE.md တွေကတော့ Claude က အဲဒီ folder ထဲမှာ အလုပ်လုပ်တဲ့
+      အချိန်ကျမှ load ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Memory (CLAUDE.md locations)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+    actions:
+      - {
+          id: draw-l-open,
+          type: whiteboard.apply,
+          at: { mark: l-open },
+          open: true,
+          clear: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-l-1,
+          type: whiteboard.apply,
+          at: { mark: l-1 },
+          upsertIds: [l-b1, l-l1, l-d1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-l-2,
+          type: whiteboard.apply,
+          at: { mark: l-2 },
+          upsertIds: [l-b2, l-l2, l-d2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-l-3,
+          type: whiteboard.apply,
+          at: { mark: l-3 },
+          upsertIds: [l-b3, l-l3, l-d3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-l-4,
+          type: whiteboard.apply,
+          at: { mark: l-4 },
+          upsertIds: [l-b4, l-l4, l-d4],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-l-join,
+          type: whiteboard.apply,
+          at: { mark: l-join },
+          upsertIds: [l-join],
+          drawMs: 1200,
+        }
+
+  - id: memory-view
+    chapter: Memory command
+    narration: >
+      [[mark:m-open]] ဒီ session မှာ ဘယ် CLAUDE.md တွေ ရှိလဲ ဆိုတာကို memory command နဲ့ ကြည့်လို့ ရပါတယ်။ ဒီ screen
+      မှာ Billing project ထဲက memory command ကို ဒီလို မြင်ရပါတယ်။
+      [[mark:m-auto]] ပထမ အတန်းက auto memory ကို ဖွင့်ထားလား ပိတ်ထားလား ပြပါတယ်။ auto memory ဆိုတာ CLAUDE.md နဲ့
+      မတူပါဘူး။ ကိုယ်က ရေးတာ မဟုတ်ဘဲ၊ Claude ကိုယ်တိုင် ဒီ စက်ပေါ်မှာ ရေးထားတဲ့ မှတ်စုတွေပါ။ session အသစ်တိုင်းမှာ
+      အဲဒီ မှတ်စုရဲ့ အစပိုင်းကို load လုပ်ပါတယ်။
+      [[mark:m-project]] နောက် အတန်းက project ရဲ့ CLAUDE.md ပါ။ git ထဲကို commit လုပ်ထားတဲ့ file ဖြစ်ကြောင်း ပြထားပါတယ်။
+      [[mark:m-user]] အဲဒီအောက်က အတန်းကတော့ ကိုယ့် home folder ထဲက user အဆင့် CLAUDE.md ပါ။ တစ်ခုခုကို ရွေးလိုက်ရင်
+      အဲဒီ CLAUDE.md ကို ကိုယ်တိုင် ပြင်လို့ ရပါတယ်။
+      [[mark:m-folder]] နောက်ဆုံး အတန်းက auto memory ကို သိမ်းထားတဲ့ folder ကို ဖွင့်ကြည့်ဖို့ပါ။ Claude က ဘာတွေ မှတ်ထားလဲ
+      ကိုယ်တိုင် ဖတ်ကြည့်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Memory (memory command, auto memory)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+    actions:
+      - {
+          id: close-locations,
+          type: whiteboard.apply,
+          at: { mark: m-open, offsetMs: -1400 },
+          open: false,
+        }
+      - {
+          id: show-memory,
+          type: slide.show,
+          at: { mark: m-open, offsetMs: -700 },
+          slideId: memory-screen,
+        }
+      - {
+          id: point-m-title,
+          type: slide.point,
+          at: { mark: m-open, offsetMs: 2500 },
+          target: { x: 0.086, y: 0.429 },
+        }
+      - {
+          id: point-m-auto,
+          type: slide.point,
+          at: { mark: m-auto },
+          target: { x: 0.128, y: 0.500 },
+        }
+      - {
+          id: point-m-project,
+          type: slide.point,
+          at: { mark: m-project },
+          target: { x: 0.133, y: 0.571 },
+        }
+      - {
+          id: point-m-user,
+          type: slide.point,
+          at: { mark: m-user },
+          target: { x: 0.133, y: 0.606 },
+        }
+      - {
+          id: point-m-folder,
+          type: slide.point,
+          at: { mark: m-folder },
+          target: { x: 0.133, y: 0.641 },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] ဘာရေးမလဲ မစခင် မေးခွန်း တစ်ခု မေးပါရစေ။ Billing developer နှစ်ယောက်က CLAUDE.md ထဲ ထည့်ဖို့
+      စာကြောင်း တစ်ခုစီ ယူလာပါတယ်။ ဘယ်ဟာက ဝင်သင့်လဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက Billing database ထဲက table တိုင်းနဲ့ column တိုင်းရဲ့ ဖော်ပြချက် အပြည့်အစုံပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုက test ကို npm test နဲ့ run ပါ၊ migrations folder ထဲက file တွေကို လက်နဲ့ မပြင်ရ ဆိုတဲ့
+      စာကြောင်း နှစ်ကြောင်းပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ table တွေရဲ့ ပုံစံကို Claude က schema file နဲ့
+      code ကို ဖတ်ပြီး ကိုယ်တိုင် ရှာနိုင်လို့ပါ။ ဒါကို CLAUDE.md ထဲ ကူးထည့်ရင် session တိုင်း context နေရာ အများကြီး
+      ယူမယ့်အပြင်၊ schema ပြောင်းတဲ့နေ့မှာ မှားနေတဲ့ စာ ဖြစ်သွားပါမယ်။ ဒုတိယ စာကြောင်းတွေကတော့ code ထဲမှာ ဘယ်နေရာမှ
+      ရေးမထားတဲ့ team ရဲ့ ဆုံးဖြတ်ချက်တွေပါ။
+      [[mark:q-rule]] ဒါကြောင့် CLAUDE.md ထဲမှာ Claude ကိုယ်တိုင် မခန့်မှန်းနိုင်တာကိုပဲ ရေးပါ။ စာကြောင်း တိုင်းက
+      session တိုင်းမှာ context နေရာ ယူတာကိုလည်း သတိရပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Memory (what to include)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+    actions:
+      - { id: close-memory, type: slide.close, at: { mark: quiz, offsetMs: -900 } }
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: belongs
+    chapter: ဘာရေးပြီး ဘာမရေးမလဲ
+    narration: >
+      [[mark:b-open]] ဒီ စည်းကမ်းကို ရေးမယ်၊ မရေးဘူး ဆိုပြီး နှစ်ဖက် ခွဲကြည့်ရအောင်။
+      [[mark:b-in]] ရေးရမယ့် ဘက်မှာ test နဲ့ lint run တဲ့ command အတိအကျ၊ code မှာ မပေါ်တဲ့ team ရဲ့ စည်းကမ်း၊ ကြည့်ရင်
+      မလိုဘူး ထင်ရပေမဲ့ မထိရမယ့် နေရာတွေ ပါပါတယ်။ Claude ကို နှစ်ခါ ပြင်ပေးရတဲ့ ကိစ္စမျိုးဆိုရင်လည်း ဒီဘက်ကို ရောက်သင့်ပါပြီ။
+      [[mark:b-out]] မရေးရမယ့် ဘက်မှာ code ဖတ်ရင် သိနိုင်တာ၊ doc အရှည်ကြီးတွေနဲ့ ဒီ task တစ်ခုတည်းအတွက် စည်းကမ်းတွေ
+      ပါပါတယ်။ အဆင့်ဆင့် လုပ်ရမယ့် လုပ်ထုံးလုပ်နည်း ရှည်ရှည်ဆိုရင် skill အဖြစ် သီးခြား ရေးတာ ပိုသင့်တော်ပါတယ်။
+      [[mark:b-len]] အရှည်ကိုလည်း သတိထားရပါတယ်။ docs က CLAUDE.md တစ်ခုကို စာကြောင်း ၂၀၀ အောက်မှာ ထားဖို့
+      အကြံပေးပါတယ်။ ရှည်လေ context နေရာ ပိုယူလေ ဖြစ်ပြီး၊ ညွှန်ကြားချက်တွေကို လိုက်နာတာလည်း ပိုအားနည်းလာတတ်လို့ပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Memory (what to include, length)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+    actions:
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-b-in,
+          type: whiteboard.apply,
+          at: { mark: b-in },
+          upsertIds: [b-lrect, b-lh, b-l1, b-l2, b-l3, b-l4],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-b-out,
+          type: whiteboard.apply,
+          at: { mark: b-out },
+          upsertIds: [b-rrect, b-rh, b-r1, b-r2, b-r3],
+          drawMs: 2100,
+        }
+
+  - id: commands
+    chapter: Billing ရဲ့ CLAUDE.md
+    narration: >
+      [[mark:f-open]] ဒါဆို Billing repository အတွက် CLAUDE.md ကို ရေးကြည့်ရအောင်။ init command က codebase ကို ဖတ်ပြီး
+      CLAUDE.md အစ တစ်ခုကို ထုတ်ပေးနိုင်ပါတယ်။ ဒါပေမဲ့ ထွက်လာတဲ့ စာကို ဒီ စည်းကမ်းနဲ့ ပြန်ဖြတ်ရပါမယ်။ ဒီမှာတော့
+      ခေါင်းစဉ်နဲ့ ဖော်ပြချက် တစ်ကြောင်း ရှိပြီးသားပါ။
+      [[mark:type-commands]] ပထမ အပိုင်းက command တွေပါ။ test နဲ့ lint ကို ဘယ် command နဲ့ run ရမလဲ ရေးထားတော့၊
+      Claude က session တိုင်း ပြန်ရှာစရာ မလိုတော့ပါဘူး။ ပြီးခဲ့တဲ့ lesson တွေမှာ ပြောခဲ့တဲ့ check ကို run ဖို့ command
+      ဖြစ်တာမို့ ဒီ file ထဲမှာ အရေးအကြီးဆုံး စာကြောင်းလို့ ပြောလို့ ရပါတယ်။
+      [[mark:type-conventions]] ဒုတိယ အပိုင်းက code ကို ကြည့်ရုံနဲ့ မသိနိုင်တဲ့ team ရဲ့ စည်းကမ်းတွေပါ။ ငွေပမာဏကို
+      ကျပ် အပြည့်နဲ့ပဲ သိမ်းပြီး၊ line item တစ်ခုစီရဲ့ အဆုံးမှာ တစ်ခါပဲ round လုပ်ပါတယ်။
+      [[mark:sel-dates]] ရက်စွဲ စာကြောင်းကတော့ ဒီ lesson ကို စခဲ့တဲ့ ပြဿနာအတွက်ပါ။ due date တွေအတွက် team ရဲ့ ရန်ကုန်
+      အချိန် helper ကိုပဲ သုံးရမယ်လို့ ရေးထားပါတယ်။ ဘာကို သုံးရမလဲနဲ့ ဘာကို မသုံးရဘူးလဲ နှစ်ခုလုံး ပါတာက Claude
+      အတွက် ပိုရှင်းပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Memory (what to include)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+      - {
+          title: "Claude Code Docs: Commands (init)",
+          url: "https://code.claude.com/docs/en/commands",
+        }
+      - {
+          title: "Claude Code Docs: Best practices",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - { id: close-belongs, type: whiteboard.apply, at: { mark: f-open }, open: false }
+      - {
+          id: open-claude-md,
+          type: workspace.openFile,
+          at: { afterAction: close-belongs },
+          path: billing-service/CLAUDE.md,
+        }
+      - id: type-commands
+        type: editor.type
+        at: { mark: type-commands }
+        cadence: line-by-line
+        target:
+          { file: billing-service/CLAUDE.md, after: "reports for Naychi Fiber customers.\n\n" }
+        text: "# Commands\n- Test: `npm test`\n- Lint: `npm run lint` (run it before every commit)\n\n"
+      - id: type-conventions
+        type: editor.type
+        at: { mark: type-conventions }
+        cadence: line-by-line
+        target: { file: billing-service/CLAUDE.md, after: "(run it before every commit)\n\n" }
+        text: "# Conventions\n- Amounts are whole kyat (integers). Round once, at the end of each line item.\n- Dates: use `src/lib/time.ts` (Asia/Yangon). Never `new Date()` for due dates.\n\n"
+      - id: sel-dates
+        type: editor.select
+        at: { mark: sel-dates }
+        target:
+          file: billing-service/CLAUDE.md
+          text: "- Dates: use `src/lib/time.ts` (Asia/Yangon). Never `new Date()` for due dates."
+
+  - id: gotchas
+    narration: >
+      [[mark:type-gotchas]] တတိယ အပိုင်းက ထောင်ချောက်တွေပါ။ legacy folder က သုံးမနေတော့သလို ထင်ရပေမဲ့၊ ည ၂ နာရီမှာ run
+      တဲ့ retry job က အခုထိ သုံးနေပါတယ်။ code ကို ဖတ်ရုံနဲ့ မြင်ရခက်တဲ့ အချက်မို့ ရေးထားရပါတယ်။ migrations folder
+      ကိုလည်း platform team ကပဲ apply လုပ်တာမို့ လက်နဲ့ မပြင်ရဘူးလို့ ရေးထားပါတယ်။
+      [[mark:expect-point]] ဒါပဲ ရှိပါတယ်။ စာကြောင်း ဆယ်ကြောင်းလောက်ပဲ ရှိပေမဲ့၊ session တိုင်း ထပ်မေးနေရတဲ့ အရာတွေနဲ့
+      ပြဿနာ ဖြစ်ခဲ့ဖူးတဲ့ အရာတွေကို ဖုံးထားပါတယ်။ database table တွေရဲ့ ဖော်ပြချက်၊ folder ဖွဲ့စည်းပုံ၊ code ထဲမှာ
+      ရှိပြီးသား architecture တွေကို ထည့်မရေးထားပါဘူး။
+      [[mark:sel-migrations]] တစ်ခု သတိထားရမှာက migrations ကို မပြင်ရ ဆိုတဲ့ စာကြောင်းက Claude အတွက် context ပဲ ဖြစ်တာပါ။
+      model က အများအားဖြင့် လိုက်နာပေမဲ့ အမြဲတမ်း လိုက်နာမယ်လို့ အာမခံချက် မရှိပါဘူး။ တစ်ခါမှ မဖြစ်စေရမယ့် အရာ
+      ဆိုရင်တော့ နောက်ပိုင်း lesson မှာ လေ့လာမယ့် hook နဲ့ ထပ်ပိတ်ရပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Memory (CLAUDE.md is context, not enforced configuration)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+    actions:
+      - id: type-gotchas
+        type: editor.type
+        at: { mark: type-gotchas }
+        cadence: line-by-line
+        target: { file: billing-service/CLAUDE.md, after: "Never `new Date()` for due dates.\n\n" }
+        text: "# Gotchas\n- `src/legacy/` looks unused, but the 2 a.m. retry job still imports it. Don't delete it.\n- Never edit files under `migrations/` by hand. The platform team applies migrations.\n"
+      - id: expect-gotchas
+        type: expect.file
+        at: { afterAction: type-gotchas }
+        path: billing-service/CLAUDE.md
+        contains: "- Never edit files under `migrations/` by hand. The platform team applies migrations.\n"
+      - id: sel-title
+        type: editor.select
+        at: { mark: expect-point }
+        target:
+          file: billing-service/CLAUDE.md
+          text: "# Naychi Fiber billing service"
+      - id: sel-migrations
+        type: editor.select
+        at: { mark: sel-migrations }
+        target:
+          file: billing-service/CLAUDE.md
+          text: "- Never edit files under `migrations/` by hand."
+
+  - id: your-turn
+    chapter: ကိုယ့် repository အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် repository အတွက် CLAUDE.md ရဲ့ ပထမ စာကြောင်း
+      ငါးကြောင်းကို ဒီ ခေါင်းစဉ် သုံးခုနဲ့ ရေးကြည့်ပါ။ test နဲ့ lint command၊ code မှာ မပေါ်တဲ့ စည်းကမ်း တစ်ခု၊ ထောင်ချောက်
+      တစ်ခု ဆိုရင် လုံလောက်ပါတယ်။
+      [[mark:turn-2]] စာကြောင်း တစ်ကြောင်းစီအတွက် မေးခွန်း တစ်ခု မေးကြည့်ပါ။ Claude က code ကို ဖတ်ရင် ဒါကို ကိုယ်တိုင်
+      တွေ့နိုင်မလား ဆိုတာပါ။ တွေ့နိုင်တယ်ဆိုရင် အဲဒီ စာကြောင်းကို ဖျက်လိုက်ပါ။
+    sources:
+      - { title: "Claude Code Docs: Memory", url: "https://code.claude.com/docs/en/memory" }
+    actions:
+      - id: sel-sections
+        type: editor.select
+        at: { mark: turn, offsetMs: 2000 }
+        target:
+          file: billing-service/CLAUDE.md
+          text: "# Commands"
+      - id: sel-conventions
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: billing-service/CLAUDE.md
+          text: "# Conventions"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ session အသစ်တိုင်း context အလွတ်နဲ့ စတာမို့ Claude က test ဘယ်လို run ရမလဲ ပြန်ရှာတာ၊
+      team ရဲ့ ရက်စွဲ helper ကို မသုံးမိတာတွေ ဖြစ်ခဲ့ပါတယ်။ CLAUDE.md က session တိုင်း အစမှာ ဖတ်တဲ့ file ဖြစ်လို့
+      အဲဒီလို အချက်တွေ ရေးဖို့ နေရာပါ။
+      [[mark:recap-2]] Claude ကိုယ်တိုင် မခန့်မှန်းနိုင်တာကိုပဲ တိုတိုနဲ့ တိတိကျကျ ရေးပါ။ team မျှသုံးမယ့် စည်းကမ်းကို
+      project ရဲ့ CLAUDE.md မှာ ထားပြီး git ထဲ commit လုပ်ပါ။
+      [[mark:next]] နောက် lesson မှာတော့ test တွေ အကုန် run တဲ့အခါ output အများကြီးက main session ကို မပြည့်စေဖို့၊
+      အလုပ် တစ်ပိုင်းကို သီးသန့် context နဲ့ လုပ်ပေးတဲ့ subagent ကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Claude Code Docs: Memory", url: "https://code.claude.com/docs/en/memory" }
+    actions:
+      - id: sel-test
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: billing-service/CLAUDE.md
+          text: "- Test: `npm test`"
+      - id: sel-gotchas
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: billing-service/CLAUDE.md
+          text: "# Gotchas"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
