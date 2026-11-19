@@ -62,7 +62,16 @@ type Engine = "webnode" | "webcontainer";
 const ENGINES: Engine[] = ["webnode", "webcontainer"];
 
 /** What a target's run command leads to. */
-type Shows = { port: number; title: string; text?: string; result?: RegExp } | { output: string };
+type Shows =
+  | {
+      port: number;
+      title: string;
+      text?: string;
+      result?: RegExp;
+      /** The page has no text until the lesson writes it. */
+      emptyAtStart?: boolean;
+    }
+  | { output: string };
 
 interface Target {
   name: string;
@@ -200,7 +209,7 @@ async function lessonSetups(): Promise<{ setups: Setup[]; scripts: Map<string, L
 }
 
 async function lessonTarget(slug: string, setup: string, script: LessonScript): Promise<Target> {
-  const { titleOf } = await import("./lessons");
+  const { titleOf, EMPTY_AT_START } = await import("./lessons");
   const files = script.lesson.workspace.files;
   const atEnd = filesAtEnd(slug, script);
   const manifest = files["package.json"] ? JSON.parse(files["package.json"]) : {};
@@ -222,6 +231,7 @@ async function lessonTarget(slug: string, setup: string, script: LessonScript): 
       ? {
           port: script.runtime?.expectedPort ?? 5173,
           title: titleOf(titled ?? ""),
+          emptyAtStart: EMPTY_AT_START.has(slug),
           ...(manifest.devDependencies?.vitest || manifest.dependencies?.vitest
             ? { result: TEST_RESULT }
             : {}),
@@ -518,19 +528,29 @@ async function measure(target: Target, engine: Engine, run: number): Promise<Run
         }
       }
       const frame = previewFrame(page);
-      const ready = (view: { title: string; text: string; overlay: string | null } | null) =>
+      type View = { title: string; text: string; overlay: string | null } | null;
+      /** The page as the lesson starts it: its title, and text unless it starts without any. */
+      const atStart = (view: View) =>
         view !== null &&
         view.title === shows.title &&
         view.overlay === null &&
-        (shows.text ? view.text.includes(shows.text) : view.text.length > 0) &&
+        (shows.text
+          ? view.text.includes(shows.text)
+          : view.text.length > 0 || !!shows.emptyAtStart) &&
         (shows.result ? shows.result.test(view.text) : true);
-      const describe = (view: { title: string; text: string; overlay: string | null } | null) =>
+      /** The page at the lesson's end: the lesson may have given it another title. */
+      const atEnd = (view: View) =>
+        view !== null &&
+        view.overlay === null &&
+        view.text.length > 0 &&
+        (shows.result ? shows.result.test(view.text) : true);
+      const describe = (view: View) =>
         view === null
           ? "no document"
           : view.overlay !== null
             ? `error overlay: ${view.overlay.slice(0, 500)}`
             : `title ${JSON.stringify(view.title)}, text ${JSON.stringify(view.text.slice(0, 300))}`;
-      const waitReady = async (what: string, timeoutMs: number) => {
+      const waitReady = async (what: string, timeoutMs: number, ready = atStart) => {
         const deadline = Date.now() + timeoutMs;
         let view = await frame.read(url);
         while (!ready(view) && Date.now() < deadline) {
@@ -540,7 +560,7 @@ async function measure(target: Target, engine: Engine, run: number): Promise<Run
         if (!ready(view)) {
           const state = await runnerState();
           throw fail(
-            `${what}: the preview did not show ${JSON.stringify(shows.title)} within ${timeoutMs / 1000} s: ` +
+            `${what}: the preview did not show the lesson's page within ${timeoutMs / 1000} s: ` +
               `${describe(view)}; the server printed: ${tail(state.output, 6)}`,
           );
         }
@@ -567,10 +587,10 @@ async function measure(target: Target, engine: Engine, run: number): Promise<Run
         }
         // The dev server takes the change up (a testing lesson runs its tests again).
         await sleep(4000);
-        const last = await waitReady("with the lesson's final files", 30000);
+        const last = await waitReady("with the lesson's final files", 30000, atEnd);
         await sleep(1500);
         result.final = ((await frame.read(url)) ?? last).text.slice(0, 300);
-        await waitReady("with the lesson's final files, after settling", 1000);
+        await waitReady("with the lesson's final files, after settling", 1000, atEnd);
         await stillRunning("with the lesson's final files");
       }
     }

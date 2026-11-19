@@ -24,7 +24,10 @@ const DEFAULT_LESSONS = [
   "css-course-43-tailwind",
 ];
 /** Lessons whose page has no text when the lesson starts: the lesson writes it. */
-const EMPTY_AT_START = new Set(["next-editor-intro-mm"]);
+export const EMPTY_AT_START = new Set([
+  "next-editor-intro-mm",
+  "react-crash-course-01-components-jsx",
+]);
 
 /** `files` (path to contents) as the tree `mount` takes. */
 export function tree(files: Record<string, string>) {
