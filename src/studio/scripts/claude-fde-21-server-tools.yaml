@@ -1,0 +1,669 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-21-server-tools
+  title: "Claude FDE 21: Built-in tool များ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: reply-assistant/src/research.ts
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      examples/firmware-response.example.json: |
+        {
+          "id": "msg_01Fw3kR8vT2nYq6cLm4xBd9P",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-opus-5-5",
+          "content": [
+            {
+              "type": "server_tool_use",
+              "id": "srvtoolu_01Kc7wN2pV5mTq8xRb3Lh6Df",
+              "name": "web_search",
+              "input": { "query": "firmware 4.2 release notes PPPoE reconnect fix" }
+            },
+            {
+              "type": "web_search_tool_result",
+              "tool_use_id": "srvtoolu_01Kc7wN2pV5mTq8xRb3Lh6Df",
+              "content": [
+                {
+                  "type": "web_search_result",
+                  "url": "https://docs.fibrevendor.example/firmware/4-2",
+                  "title": "Firmware 4.2 release notes",
+                  "encrypted_content": "EqgfCioIARgBIiQ0NzE5ZTk0Ny1iNzQ2LTQ1...",
+                  "page_age": "October 28, 2026"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "Yes. Firmware 4.2 fixes the PPPoE reconnect loop after a power cut.",
+              "citations": [
+                {
+                  "type": "web_search_result_location",
+                  "url": "https://docs.fibrevendor.example/firmware/4-2",
+                  "title": "Firmware 4.2 release notes",
+                  "encrypted_index": "Eo8BCioIAhgBIiQ5ZmQ1...",
+                  "cited_text": "Fixed: the router no longer loops on PPPoE reconnect after a power cut."
+                }
+              ]
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 5840,
+            "output_tokens": 210,
+            "server_tool_use": { "web_search_requests": 1 }
+          }
+        }
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      reply-assistant/src/research.ts: |
+        import Anthropic from "@anthropic-ai/sdk";
+
+        const client = new Anthropic();
+
+        // Network Tools: read the router vendor's public firmware notes (placeholder domain).
+        export async function firmwareNotes(question: string) {
+          return client.messages.create({
+            model: "claude-opus-5-5", // ID as of 2026-11
+            max_tokens: 16000,
+            messages: [{ role: "user", content: question }],
+            tools: [
+            ],
+          });
+        }
+
+        // Network Tools: one month of outage log lines that our code exported from the NMS.
+        export async function outageAnalysis(logCsv: string) {
+          return client.messages.create({
+            model: "claude-opus-5-5", // ID as of 2026-11
+            max_tokens: 16000,
+            messages: [{ role: "user", content: `Which townships had the most outages, and when?\n${logCsv}` }],
+            tools: [
+            ],
+          });
+        }
+  whiteboardAssets:
+    # Board 1 — who runs the tool: two dashed boundaries (white), the tools on each side (blue).
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 600,
+        height: 45,
+        text: "Tool ကို ဘယ်သူ run လဲ",
+        fontSize: 36,
+      }
+    - { id: s-left, kind: rectangle, x: 280, y: 225, width: 370, height: 330, strokeStyle: dashed }
+    - {
+        id: s-left-l,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 330,
+        height: 35,
+        text: "ကိုယ်တို့ program",
+        fontSize: 28,
+      }
+    - { id: s-l1, kind: rectangle, x: 300, y: 320, width: 330, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: s-l1-l,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 338,
+        width: 330,
+        height: 35,
+        text: "check_outage",
+        fontSize: 28,
+      }
+    - {
+        id: s-l-nms,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 420,
+        width: 330,
+        height: 35,
+        text: "NMS၊ Billing ကို ခေါ်",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - { id: s-right, kind: rectangle, x: 690, y: 225, width: 400, height: 330, strokeStyle: dashed }
+    - {
+        id: s-right-l,
+        kind: text,
+        x: 710,
+        y: 240,
+        width: 360,
+        height: 35,
+        text: "Anthropic",
+        fontSize: 28,
+      }
+    - { id: s-r1, kind: rectangle, x: 710, y: 300, width: 360, height: 65, strokeColor: "#1971c2" }
+    - {
+        id: s-r1-l,
+        kind: text,
+        align: center,
+        x: 710,
+        y: 315,
+        width: 360,
+        height: 35,
+        text: "web_search",
+        fontSize: 28,
+      }
+    - { id: s-r2, kind: rectangle, x: 710, y: 385, width: 360, height: 65, strokeColor: "#1971c2" }
+    - {
+        id: s-r2-l,
+        kind: text,
+        align: center,
+        x: 710,
+        y: 400,
+        width: 360,
+        height: 35,
+        text: "web_fetch",
+        fontSize: 28,
+      }
+    - { id: s-r3, kind: rectangle, x: 710, y: 470, width: 360, height: 65, strokeColor: "#1971c2" }
+    - {
+        id: s-r3-l,
+        kind: text,
+        align: center,
+        x: 710,
+        y: 485,
+        width: 360,
+        height: 35,
+        text: "code_execution",
+        fontSize: 28,
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Sandbox က NMS ကို ခေါ်နိုင်မလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) ရတယ်၊ NMS API ကို code နဲ့ ခေါ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) မရဘူး၊ ကိုယ်တို့ code ကနေပဲ ရောက်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 520,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 840,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "public web → built-in tool",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "နေခြည် network ထဲက data → ကိုယ်ပိုင် tool",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9321
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Network Tools ရဲ့ တောင်းဆိုချက်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ thinking နဲ့ effort ကို သုံးပြီး၊ ခက်ခဲတဲ့ billing dispute ကို model က ဘယ်လောက် နက်နက်
+      တွေးရမလဲ ချိန်ခဲ့ပါတယ်။
+      [[mark:sel-teams]] Reply assistant ရဲ့ prototype ကို မြင်ပြီးတော့ နေခြည် ရဲ့ Network Tools team ကလည်း
+      တောင်းဆိုချက် နှစ်ခု ယူလာပါတယ်။ ပထမ တစ်ခုက router ထုတ်တဲ့ ကုမ္ပဏီရဲ့ public website ပေါ်က firmware
+      မှတ်စုတွေကို ဖတ်ပြီး၊ သိထားတဲ့ bug တစ်ခု firmware အသစ်မှာ ပြင်ပြီးပြီလား ဖြေပေးနိုင်ဖို့ပါ။
+      [[mark:need-2]] ဒုတိယ တစ်ခုက NMS ကနေ ထုတ်ထားတဲ့ တစ်လစာ လိုင်းကျမှု log ကို ခွဲခြမ်းစိတ်ဖြာပြီး၊ ဘယ်မြို့နယ်မှာ
+      ဘယ်အချိန်တွေမှာ အများဆုံး ကျလဲ ဆိုတာ ရှာပေးဖို့ပါ။ ဒီ အလုပ်တွေအတွက် ကိုယ်တို့ဘက်က search engine
+      ချိတ်တာ၊ code run လို့ရတဲ့ နေရာ ဆောက်တာ စတာတွေကို ကိုယ်တိုင် လုပ်ရမလား။ မလိုပါဘူး။ Anthropic က ဒီလို
+      tool တွေကို built-in အဖြစ် ပေးထားပါတယ်။ ဒါပေမဲ့ ဘယ် tool က ဘယ်ဘက်မှာ run လဲ ဆိုတာ မသိဘဲ သုံးရင်၊
+      လုပ်လို့ မရတဲ့ အလုပ်ကို ခိုင်းမိနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Server tools",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/server-tools",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: sel-teams }, path: README.md }
+      - id: sel-teams
+        type: editor.select
+        at: { afterAction: open-readme }
+        target:
+          file: README.md
+          text: "- developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools"
+      - id: sel-nms
+        type: editor.select
+        at: { mark: need-2 }
+        target:
+          file: README.md
+          text: "- NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ"
+
+  - id: sides
+    chapter: Tool ကို ဘယ်သူ run လဲ
+    narration: >
+      [[mark:s-open]] tool တွေကို run တဲ့ နေရာ နှစ်ဘက် ခွဲကြည့်ရအောင်။
+      [[mark:s-left]] ပထမ ဘက်က ကိုယ်တို့ program ပါ။ ပြီးခဲ့တဲ့ lesson တွေက check outage လို tool မျိုးကို client tool
+      လို့ ခေါ်ပါတယ်။ model က tool use နဲ့ တောင်းရင် ကိုယ်တို့ code က run ပြီး၊ tool result ကို ကိုယ်တို့ ပြန်ပို့ရပါတယ်။
+      [[mark:s-nms]] ဒီဘက်မှာ run တာမို့ NMS တို့၊ Billing တို့လို နေခြည် ရဲ့ network ထဲက system တွေကို ခေါ်နိုင်ပါတယ်။
+      ဘာကို ခေါ်ခွင့် ရှိလဲ ဆိုတာကိုလည်း ကိုယ်တို့ code က ဆုံးဖြတ်ပါတယ်။
+      [[mark:s-right]] ဒုတိယ ဘက်က Anthropic ပါ။ ဒီဘက်မှာ run တဲ့ tool တွေကို server tool လို့ ခေါ်ပါတယ်။ request
+      ထဲမှာ ကြေညာပေးလိုက်ရုံနဲ့ API ကိုယ်တိုင်က tool ကို run ပြီး၊ ရလဒ်ကို response တစ်ခုတည်းထဲမှာ ထည့်ပြန်ပေးပါတယ်။
+      ကိုယ်တို့ဘက်က tool result ပို့စရာ မလိုပါဘူး။
+      [[mark:s-search]] web search က web ပေါ်မှာ ရှာပြီး၊ ဘယ် page ကနေ ယူလဲ ဆိုတဲ့ citation နဲ့ အဖြေ ပြန်ပေးပါတယ်။
+      [[mark:s-fetch]] web fetch က page တစ်ခုကို အပြည့်အစုံ ဖတ်ပါတယ်။ ဒါပေမဲ့ စကားဝိုင်းထဲမှာ ပေါ်ပြီးသား URL
+      တွေကိုပဲ ဖတ်ခွင့် ရှိပါတယ်။ model ကိုယ်တိုင် တီထွင်လိုက်တဲ့ URL ကို မဖတ်ပါဘူး။
+      [[mark:s-code]] code execution ကတော့ Anthropic ဘက်က sandbox container တစ်ခုထဲမှာ model ရေးတဲ့ code ကို run
+      ပေးပါတယ်။ Python နဲ့ bash ကို run နိုင်ပြီး file တွေနဲ့ အလုပ်လုပ်နိုင်ပါတယ်။ တစ်လစာ log ကို ရေတွက်တာ၊ စီတာ၊
+      ယှဉ်တာမျိုးကို model က စာနဲ့ ခန့်မှန်းနေမယ့်အစား code နဲ့ တကယ် တွက်စေတာပါ။
+      [[mark:s-both]] ဒီ နှစ်ဘက်ကို request တစ်ခုတည်းမှာ ရောသုံးလို့လည်း ရပါတယ်။ model က server tool နဲ့ client tool
+      ကို တစ်ပြိုင်တည်း တောင်းရင်၊ API က tool use နဲ့ အရင် ပြန်လာပြီး ကိုယ်တို့ ရလဒ် ပြန်ပို့မှ server tool ကို ဆက် run ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Server tools",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/server-tools",
+        }
+      - {
+          title: "Claude Docs: Web fetch tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool",
+        }
+      - {
+          title: "Claude Docs: Code execution tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/code-execution-tool",
+        }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-left,
+          type: whiteboard.apply,
+          at: { mark: s-left },
+          upsertIds: [s-left, s-left-l, s-l1, s-l1-l],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-s-nms,
+          type: whiteboard.apply,
+          at: { mark: s-nms },
+          upsertIds: [s-l-nms],
+          drawMs: 700,
+        }
+      - {
+          id: draw-s-right,
+          type: whiteboard.apply,
+          at: { mark: s-right },
+          upsertIds: [s-right, s-right-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-s-search,
+          type: whiteboard.apply,
+          at: { mark: s-search },
+          upsertIds: [s-r1, s-r1-l],
+          drawMs: 800,
+        }
+      - {
+          id: draw-s-fetch,
+          type: whiteboard.apply,
+          at: { mark: s-fetch },
+          upsertIds: [s-r2, s-r2-l],
+          drawMs: 800,
+        }
+      - {
+          id: draw-s-code,
+          type: whiteboard.apply,
+          at: { mark: s-code },
+          upsertIds: [s-r3, s-r3-l],
+          drawMs: 800,
+        }
+
+  - id: declare
+    chapter: Request မှာ ကြေညာခြင်း
+    narration: >
+      [[mark:c-open]] ဒီ tool တွေကို Network Tools ရဲ့ request နှစ်ခုမှာ ကြေညာကြည့်ရအောင်။ ပထမ request က
+      firmware မှတ်စုတွေအတွက်ပါ။
+      [[mark:type-search]] server tool တစ်ခုကို name နဲ့ type နဲ့ ကြေညာပါတယ်။ type ထဲက ရက်စွဲက tool ရဲ့ version ပါ။
+      ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ ဒါက web search ရဲ့ နောက်ဆုံး version ပါ။ max uses က တစ်ကြိမ်မှာ ရှာခွင့်ရှိတဲ့
+      အရေအတွက်ကို ကန့်သတ်ပြီး၊ allowed domains က router ကုမ္ပဏီရဲ့ docs website တစ်ခုတည်းကပဲ ရလဒ် ယူဖို့
+      ကန့်သတ်ထားတာပါ။ ဒီမှာ domain က နမူနာ နာမည်ပါ။
+      [[mark:type-fetch]] ဒုတိယ tool က web fetch ပါ။ search ရလဒ်ထဲက page ကို အပြည့်အစုံ ဆက်ဖတ်ဖို့ပါ။ ဒီ version တွေမှာ
+      ရလဒ်ကို context ထဲ မရောက်ခင် model က code ရေးပြီး စစ်ထုတ်တဲ့ dynamic filtering ပါပါတယ်။ အဲဒီ code ကို API
+      က code execution နဲ့ အလိုအလျောက် run ပေးတာမို့ ဒီ request မှာ code execution ကို ထပ်ကြေညာစရာ မလိုပါဘူး။
+      [[mark:type-code]] ဒုတိယ request ကတော့ log ကို ခွဲခြမ်းစိတ်ဖြာဖို့ပါ။ ဒီမှာ code execution တစ်ခုတည်း ကြေညာပါတယ်။
+      log စာသားကို ကိုယ်တို့ code က NMS ကနေ ထုတ်ပြီး message ထဲ ထည့်ပေးထားပါတယ်။ model က အဲဒီ စာသားကို
+      sandbox ထဲမှာ file အဖြစ် ရေးပြီး၊ Python နဲ့ မြို့နယ်အလိုက်၊ နာရီအလိုက် ရေတွက်တတ်ပါတယ်။
+      [[mark:limits]] container မှာ memory
+      ငါး gigabyte လောက်ပဲ ရှိပြီး၊ ဒီ version က code တစ်ခါ run တာကို စက္ကန့် ၉၀ အထိပဲ ခွင့်ပြုတယ်လို့ model ကို
+      ပြောထားပါတယ်။ ဒါကြောင့် နှစ်ချီ log တွေ အကုန် ထည့်မယ့်အစား တစ်လစာလောက်ကို ခွဲပို့တာ ပိုသင့်တော်ပါတယ်။
+      [[mark:sel-log]] log က ဘယ်ကလာလဲ ဆိုတာ သတိထားကြည့်ပါ။ sandbox ထဲမှာ code run လို့ရရဲ့သားနဲ့ ဘာကြောင့်
+      ကိုယ်တို့ code က ထုတ်ပေးနေရလဲ ဆိုတာကို lesson အဆုံးက မေးခွန်းမှာ ပြန်ကြည့်ပါမယ်။
+      [[mark:prices]] ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ web search က ရှာတဲ့ အကြိမ် တစ်ထောင်ကို ဒေါ်လာ ၁၀ နဲ့ token ဈေး ထပ်ပေါင်းရပြီး၊ web
+      fetch ကတော့ token ဈေးပဲ ပေးရပါတယ်။ code execution ကို web tool အသစ်တွေနဲ့ တွဲသုံးရင် အခမဲ့ ဖြစ်ပြီး၊ သီးသန့်
+      သုံးရင်တော့ အဖွဲ့အစည်း တစ်ခုကို တစ်လ အခမဲ့ နာရီ ပေးထားပြီးမှ container နာရီ အလိုက် ဈေးတောင်းပါတယ်။
+      ဈေးနှုန်းအမှန်ကို pricing page မှာ စစ်ပါ။
+    sources:
+      - {
+          title: "Claude Docs: Web search tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool",
+        }
+      - {
+          title: "Claude Docs: Web fetch tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool",
+        }
+      - {
+          title: "Claude Docs: Pricing",
+          url: "https://platform.claude.com/docs/en/about-claude/pricing",
+        }
+    actions:
+      - { id: close-sides, type: whiteboard.apply, at: { mark: c-open }, open: false }
+      - {
+          id: open-research,
+          type: workspace.openFile,
+          at: { afterAction: close-sides },
+          path: reply-assistant/src/research.ts,
+        }
+      - id: type-search
+        type: editor.type
+        at: { mark: type-search }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/research.ts, after: "    tools: [\n" }
+        text: "      {\n        type: \"web_search_20260318\",\n        name: \"web_search\",\n        max_uses: 5,\n        allowed_domains: [\"docs.fibrevendor.example\"],\n      },\n"
+      - id: type-fetch
+        type: editor.type
+        at: { mark: type-fetch }
+        cadence: line-by-line
+        target:
+          {
+            file: reply-assistant/src/research.ts,
+            after: "        allowed_domains: [\"docs.fibrevendor.example\"],\n      },\n",
+          }
+        text: "      { type: \"web_fetch_20260318\", name: \"web_fetch\", max_uses: 3 },\n"
+      - id: type-code
+        type: editor.type
+        at: { mark: type-code }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/research.ts, after: "${logCsv}` }],\n    tools: [\n" }
+        text: "      { type: \"code_execution_20260521\", name: \"code_execution\" },\n"
+      - id: expect-code
+        type: expect.file
+        at: { afterAction: type-code }
+        path: reply-assistant/src/research.ts
+        contains: "      { type: \"code_execution_20260521\", name: \"code_execution\" },\n"
+      - id: sel-log
+        type: editor.select
+        at: { mark: sel-log }
+        target:
+          file: reply-assistant/src/research.ts
+          text: "// Network Tools: one month of outage log lines that our code exported from the NMS."
+
+  - id: result
+    chapter: Response တစ်ခုတည်းထဲက ရလဒ်
+    narration: >
+      [[mark:r-open]] firmware request အတွက် ပြန်လာနိုင်တဲ့ response ဥပမာ တစ်ခုကို ကြည့်ရအောင်။ ရှင်းအောင် search ကို တိုက်ရိုက် ခေါ်တဲ့ ပုံစံနဲ့ ပြထားတာပါ။ dynamic filtering နဲ့ run ရင်တော့ code execution ရဲ့ ရလဒ် block တွေလည်း ထပ်ပါလာပါတယ်။
+      [[mark:sel-srv]] ပထမ block က server tool use ပါ။ model က ဘာ ရှာမလဲ ဆိုတဲ့ query ကို ရေးထားပါတယ်။ client tool
+      ရဲ့ tool use နဲ့ ပုံစံ ဆင်ပေမဲ့၊ ဒါကို ကိုယ်တို့ run စရာ မလိုပါဘူး။
+      [[mark:sel-sres]] ဒုတိယ block က search ရလဒ်ပါ။ API က ရှာပြီးသား ရလဒ်ကို ဒီ response ထဲမှာပဲ ထည့်ပေးထားပါတယ်။
+      encrypted content ကတော့ စကားဝိုင်း ဆက်တဲ့အခါ မပြင်ဘဲ မူရင်းအတိုင်း ပြန်ပို့ရမယ့် အပိုင်းပါ။
+      [[mark:sel-cite]] နောက်ဆုံး text block မှာ citation ပါပါတယ်။ အဖြေကို ဘယ် page ရဲ့ ဘယ် စာကြောင်းကနေ ယူလဲ
+      ပြထားတာမို့ network engineer က မူရင်း မှတ်စုကို ဖွင့်ပြီး ကိုယ်တိုင် စစ်နိုင်ပါတယ်။ firmware ကို router
+      ထောင်ပေါင်းများစွာမှာ မတင်ခင် ဒီလို စစ်တာ မဖြစ်မနေ လိုပါတယ်။
+      [[mark:sel-usage]] usage ထဲမှာ ရှာခဲ့တဲ့ အကြိမ်ရေကို သီးခြား ရေတွက်ထားပါတယ်။ search ကြာတဲ့ အလှည့်တွေမှာ stop
+      reason က pause turn နဲ့ ပြန်လာတတ်ပါတယ်။ အဲဒီအခါ ရလာတဲ့ assistant message ကို မပြင်ဘဲ ပြန်ပို့ပေးရင် ဆက်ရှာပါတယ်။
+      [[mark:r-error]] သတိထားရမယ့် အချက် တစ်ခု ရှိပါသေးတယ်။ search မအောင်မြင်ရင်လည်း API က HTTP error မပြန်ဘဲ၊
+      response ကို အောင်မြင်တဲ့ အတိုင်း ပြန်ပေးပါတယ်။ error ကိုတော့ search ရလဒ် block ရဲ့ content ထဲမှာ ထည့်ပေးတာပါ။
+      အောင်မြင်ရင် content က ရလဒ် စာရင်း ဖြစ်ပြီး၊ မအောင်မြင်ရင် error object တစ်ခုတည်း ဖြစ်တာမို့၊ program က
+      ရလဒ်ကို မဖတ်ခင် ဘယ် ပုံစံလဲ အရင် စစ်ရပါမယ်။ မအောင်မြင်တဲ့ search အတွက်တော့ ငွေမတောင်းပါဘူး။
+    sources:
+      - {
+          title: "Claude Docs: Web search tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool",
+        }
+    actions:
+      - {
+          id: open-ex,
+          type: workspace.openFile,
+          at: { mark: r-open },
+          path: examples/firmware-response.example.json,
+        }
+      - id: sel-srv
+        type: editor.select
+        at: { mark: sel-srv }
+        target:
+          file: examples/firmware-response.example.json
+          text: '"type": "server_tool_use",'
+      - id: sel-sres
+        type: editor.select
+        at: { mark: sel-sres }
+        target:
+          file: examples/firmware-response.example.json
+          text: '"type": "web_search_tool_result",'
+      - id: sel-cite
+        type: editor.select
+        at: { mark: sel-cite }
+        target:
+          file: examples/firmware-response.example.json
+          text: '"cited_text": "Fixed: the router no longer loops on PPPoE reconnect after a power cut."'
+      - id: sel-usage
+        type: editor.select
+        at: { mark: sel-usage }
+        target:
+          file: examples/firmware-response.example.json
+          text: '"server_tool_use": { "web_search_requests": 1 }'
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ Network Tools team က log ကို ကိုယ်တို့ code ကနေ ထုတ်ပေးနေရတာ
+      မလိုပါဘူး၊ code execution ထဲကနေ NMS ကို တိုက်ရိုက် ခေါ်ခိုင်းလိုက်ရင် ပိုမြန်မယ်လို့ အကြံပေးတယ် ဆိုပါစို့။
+      [[mark:q-a]] ပထမ အဖြေက ရပါတယ်၊ sandbox ထဲမှာ code run လို့ရတာမို့ NMS ရဲ့ API ကို code နဲ့ ခေါ်လို့ ရတယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက မရပါဘူး၊ NMS ရဲ့ data က ကိုယ်တို့ code ကနေပဲ ရောက်လာနိုင်တယ် ဆိုတာပါ။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ code execution ရဲ့ container က Anthropic
+      ဘက်မှာ run ပြီး internet ကို လုံးဝ ချိတ်လို့ မရလို့ပါ။ ပြင်ပ package တွေကိုတောင် install လုပ်လို့ မရဘဲ၊ ကြိုထည့်ထားတဲ့
+      library တွေကိုပဲ သုံးရပါတယ်။ နေခြည် ရဲ့ network ထဲမှာပဲ ရှိတဲ့ NMS ကိုတော့ ပိုလို့တောင် မရောက်နိုင်ပါဘူး။
+      ဒါကြောင့် log ကို ကိုယ်တို့ code က ထုတ်ပြီး message ထဲ ထည့်ပေးရတာ၊ ဒါမှမဟုတ် check outage လို ကိုယ်ပိုင်
+      tool တစ်ခုကနေ ပေးရတာပါ။
+      [[mark:q-rule]] ဒါကြောင့် public web ပေါ်က အချက်အလက်အတွက် built-in tool ကို သုံးပြီး၊ နေခြည် ရဲ့ network ထဲက
+      data အတွက်တော့ ကိုယ်တို့ program က run တဲ့ tool ကို သုံးပါ။
+    sources:
+      - {
+          title: "Claude Docs: Code execution tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/code-execution-tool",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် အလုပ်အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် project ထဲက AI နဲ့ လုပ်ချင်တဲ့ အလုပ်
+      တစ်ခုအတွက် လိုမယ့် tool တွေကို ဒီ tool စာရင်းရဲ့ အပေါ်မှာ comment နဲ့ ရေးကြည့်ပါ။ tool တစ်ခုစီရဲ့ ဘေးမှာ
+      Anthropic ဘက်က run မလား၊ ကိုယ့် program ဘက်က run မလား ဆိုတာ ရေးပါ။
+      [[mark:turn-2]] ဆုံးဖြတ်ဖို့ မေးခွန်း တစ်ခုပဲ မေးပါ။ ဒီ tool လိုတဲ့ data က internet ပေါ်မှာ ဘယ်သူမဆို
+      ဖတ်လို့ရလား၊ ကိုယ့် ကုမ္ပဏီ ထဲမှာပဲ ရှိလား ဆိုတာပါ။ ကုမ္ပဏီ ထဲမှာပဲ ရှိရင် ကိုယ့် program ဘက်ကို ရွှေ့ရေးပါ။
+    sources:
+      - {
+          title: "Claude Docs: Server tools",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/server-tools",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - {
+          id: back-research,
+          type: workspace.openFile,
+          at: { afterAction: close-quiz },
+          path: reply-assistant/src/research.ts,
+        }
+      - id: sel-tools
+        type: editor.select
+        at: { mark: turn, offsetMs: 2600 }
+        target:
+          file: reply-assistant/src/research.ts
+          text: '        type: "web_search_20260318",'
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ tool တစ်ခုကို ကိုယ်တို့ program က run လား၊ Anthropic က run လား ဆိုတာ
+      အရင် ခွဲရပါမယ်။ web search၊ web fetch နဲ့ code execution က Anthropic ဘက်မှာ run ပြီး၊ ရလဒ်ကို response တစ်ခုတည်းထဲမှာ
+      ပြန်ပေးပါတယ်။ ကြေညာရုံပဲ လိုတာမို့ အလုပ်သက်သာပေမဲ့၊ နေခြည် ရဲ့ network ထဲကို မရောက်နိုင်ပါဘူး။
+      [[mark:recap-2]] အတွင်းက system တွေအတွက်တော့ ကိုယ်ပိုင် tool လိုပါသေးတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ အလုပ်လုပ်ပုံ အဆင့်တွေကို skill အဖြစ် ထုပ်ပေးတာနဲ့၊ တခြားသူ ဆောက်ထားပြီးသား
+      tool တွေကို MCP server ကနေ ချိတ်သုံးတာ ဆိုတဲ့ API ပေါ်က Skills နဲ့ MCP ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Server tools",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/server-tools",
+        }
+    actions:
+      - id: sel-recap-code
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: reply-assistant/src/research.ts
+          text: '      { type: "code_execution_20260521", name: "code_execution" },'
+      - id: sel-recap-log
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: reply-assistant/src/research.ts
+          text: "// Network Tools: one month of outage log lines that our code exported from the NMS."
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
