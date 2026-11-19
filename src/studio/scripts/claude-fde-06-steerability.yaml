@@ -1,0 +1,622 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-06-steerability
+  title: "Claude FDE 06: Steerability"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: reply-assistant/prompts/system.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      examples/06-draft.md: |
+        # Example: support manager ပြန်ပြင်ချင်တဲ့ မူကြမ်း (ticket: သာကေတ၊ internet မရ)
+
+        Dear valued customer, thank you for contacting Naychi Fiber support.
+
+        ကျွန်ုပ်တို့၏ network team သည် သာကေတ မြို့နယ်ရှိ ပြဿနာကို အပြင်းအထန် ဖြေရှင်းလျက် ရှိပါသည်။
+        ဒီည 10 နာရီ မတိုင်ခင် internet ပြန်ရပါမယ်လို့ အာမခံပါတယ်။
+
+        ယခုကဲ့သို့ အဆင်မပြေမှုများအတွက် ထပ်မံ၍ တောင်းပန်အပ်ပါသည်။ နောက်ထပ် သိရှိလိုသည်များ ရှိပါက
+        ကျွန်ုပ်တို့၏ hotline၊ Facebook page သို့မဟုတ် customer app မှတစ်ဆင့် အချိန်မရွေး ဆက်သွယ်နိုင်ပါသည်။
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      reply-assistant/prompts/system.md: |
+        # Reply assistant · system prompt (v1, 2026-11)
+
+        <instructions>
+        </instructions>
+
+        <examples>
+        <example>
+        မင်္ဂလာပါ။ သာကေတ မြို့နယ်မှာ လိုင်းကျနေလို့ internet မရတာပါ။ technician တွေ ပြင်နေပါတယ်။
+        router ကို ပိတ်ဖွင့်စရာ မလိုပါဘူး။ လိုင်း ပြန်ကောင်းတာနဲ့ ဒီ ticket ကနေ အကြောင်းကြားပေးပါမယ်။
+        </example>
+        <example>
+        မင်္ဂလာပါ။ ဒီလ bill ကို နှစ်ခါ ပေးမိတာ သိရပါပြီ။ Billing team က စစ်ပြီး ပြန်ဖြေပေးပါမယ်။
+        ငွေလွှဲ ပြေစာ ရှိရင် ဒီ ticket မှာ ပို့ထားပေးပါ။
+        </example>
+        <example>
+        မင်္ဂလာပါ။ ညဘက် internet နှေးတာကို စစ်ကြည့်ပါမယ်။ router ကို cable နဲ့ ချိတ်ပြီး ခဏ စမ်းကြည့်ပေးပါ။
+        ဘယ်အချိန်မှာ အနှေးဆုံးလဲ ပြောပြပေးရင် ပိုမြန်မြန် ရှာနိုင်ပါတယ်။
+        </example>
+        </examples>
+  whiteboardAssets:
+    # Board 1 — the quiz, asked before any steering rule: white question and
+    # options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "30 မိနစ် ကတိကို ဘယ်လို ရပ်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 780,
+        height: 35,
+        text: "က) NEVER PROMISE A TIME လို့ စာလုံးကြီးနဲ့ တား",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 780,
+        height: 35,
+        text: "ခ) ဘာကြောင့်လဲ ရှင်းပြ၊ အစား ဘာရေးရမလဲ ပြော",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 620,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 940,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-rule,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 780,
+        height: 35,
+        text: "အကြောင်းပြချက် + လုပ်ရမယ့်အရာ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — three levers (blue tools), what they change (green), and the two
+    # things outside their reach (red).
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 780,
+        height: 45,
+        text: "model ကို ဘယ်လို ဦးတည်မလဲ",
+        fontSize: 36,
+      }
+    - {
+        id: s-b1,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-l1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 263,
+        width: 250,
+        height: 35,
+        text: "ညွှန်ကြားချက်",
+        fontSize: 28,
+      }
+    - {
+        id: s-b2,
+        kind: rectangle,
+        x: 550,
+        y: 240,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-l2,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 263,
+        width: 250,
+        height: 35,
+        text: "ဥပမာ",
+        fontSize: 28,
+      }
+    - {
+        id: s-b3,
+        kind: rectangle,
+        x: 830,
+        y: 240,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-l3,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 263,
+        width: 250,
+        height: 35,
+        text: "format",
+        fontSize: 28,
+      }
+    - {
+        id: s-yes,
+        kind: text,
+        x: 290,
+        y: 355,
+        width: 790,
+        height: 35,
+        text: "ပြောင်းနိုင်: လေသံ၊ အရှည်၊ အဆင့်၊ မသေချာရင် ဘာလုပ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-no-h,
+        kind: text,
+        x: 290,
+        y: 445,
+        width: 790,
+        height: 35,
+        text: "prompt နဲ့ မရ:",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-no-1,
+        kind: text,
+        x: 330,
+        y: 500,
+        width: 750,
+        height: 35,
+        text: "မသိတဲ့ fact ကို သိလာအောင်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-no-2,
+        kind: text,
+        x: 330,
+        y: 555,
+        width: 750,
+        height: 35,
+        text: "ရလဒ် မှန်မယ်လို့ အာမခံ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9306
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hla-wants
+    chapter: လှလှ လိုချင်တဲ့ reply
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ context window ဆိုတာ request တစ်ခုမှာ model မြင်ရတဲ့ အရာ အားလုံးဖြစ်ပြီး၊ ticket တစ်ခုကို
+      context အသစ် တစ်ခုနဲ့ လိုတာကိုပဲ ထည့်ပေးရမယ် ဆိုတာ တွေ့ခဲ့ပါတယ်။ ဒီနေ့တော့ အဲဒီ context ရဲ့ ထိပ်ဆုံးက
+      ညွှန်ကြားချက် အပိုင်းကို ရေးပါမယ်။
+      [[mark:ex-open]] support manager လှလှ က သူ စုပေးထားတဲ့ မူကြမ်းတွေထဲက ပြင်စေချင်တဲ့ တစ်စောင်ကို ပြပါတယ်။ လိုင်းကျနေတဲ့ သာကေတက
+      customer အတွက် ရေးထားတဲ့ ဥပမာပါ။
+      [[mark:sel-open]] အစကတည်းက English နဲ့ စပြီး၊ ဆက်လာတဲ့ မြန်မာစာကလည်း ရုံးစာ ဖတ်ရသလို ဖြစ်နေပါတယ်။
+      [[mark:sel-promise]] ပိုဆိုးတာက ဒီည ဆယ်နာရီ မတိုင်ခင် internet ပြန်ရမယ်လို့ အာမခံထားတာပါ။ ပြင်ချိန်ကို field
+      technician တွေနဲ့ NMS ပေါ်က အခြေအနေက ဆုံးဖြတ်တာမို့၊ ဒီ ကတိကို ဘယ်သူမှ မပေးနိုင်ပါဘူး။ ကတိ မတည်ရင်
+      customer က ဒုတိယ အကြိမ် တိုင်ကြားလာတတ်ပါတယ်။
+      [[mark:hla-ask]] ဒါကြောင့် လှလှ လိုချင်တာ လေးခု ရှိပါတယ်။ reply တွေ တိုရမယ်၊ ယဉ်ကျေးရမယ်၊ မြန်မာလို ရေးရမယ်၊
+      ပြင်ပြီးမယ့် အချိန်ကို ဘယ်တော့မှ ကတိ မပေးရဘူး ဆိုတာပါ။ customer အများစုက reply ကို ဖုန်းနဲ့ ဖတ်တာမို့ တိုရပါမယ်။ ရုံးစာ
+      လေသံထက် လူချင်း ပြောသလို ယဉ်ကျေးတဲ့ လေသံက customer ကို ပိုနားလည်လွယ်စေပါတယ်။ model ရဲ့ အပြုအမူကို ဒီလို ပြောင်းဖို့ ကိုယ့်လက်ထဲမှာ
+      ဘာတွေ ရှိလဲ၊ ဘာတွေ မရှိလဲ ဆိုတာကို ဒီနေ့ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - { id: open-ex, type: workspace.openFile, at: { mark: ex-open }, path: examples/06-draft.md }
+      - id: sel-open
+        type: editor.select
+        at: { mark: sel-open }
+        target:
+          file: examples/06-draft.md
+          text: "Dear valued customer, thank you for contacting Naychi Fiber support."
+      - id: sel-promise
+        type: editor.select
+        at: { mark: sel-promise }
+        target:
+          file: examples/06-draft.md
+          text: "ဒီည 10 နာရီ မတိုင်ခင် internet ပြန်ရပါမယ်လို့ အာမခံပါတယ်။"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ကတိ ပေးတဲ့ ပြဿနာက တခြား မူကြမ်းတွေမှာလည်း ရှိပါတယ်။ ဥပမာ technician
+      မိနစ် သုံးဆယ်အတွင်း ရောက်လာပါမယ်လို့ ခဏခဏ ရေးနေပါတယ်။ ဒါကို ရပ်ဖို့ ညွှန်ကြားချက် နှစ်မျိုး ရေးလို့ ရပါတယ်။
+      [[mark:q-a]] ပထမ တစ်မျိုးက အချိန် ဘယ်တော့မှ ကတိ မပေးရဘူး ဆိုတာကို English စာလုံးကြီးတွေနဲ့ ပြင်းပြင်း တားတာပါ။
+      [[mark:q-b]] ဒုတိယ တစ်မျိုးက ဘာကြောင့် ကတိ မပေးရလဲ ဆိုတာကို ရှင်းပြပြီး၊ အဲဒီအစား ဘာ ရေးရမလဲ ဆိုတာကို
+      ပြောပြတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်မျိုးပါ။ ဘာကြောင့်လဲဆိုတော့ Anthropic ရဲ့ docs အရ Claude က
+      အကြောင်းပြချက်ကနေ နားလည်ပြီး တခြား အခြေအနေတွေကိုပါ ချဲ့တွေးနိုင်လို့ပါ။ ပြင်ချိန်ကို technician တွေ
+      ဆုံးဖြတ်တာမို့ ကတိ မပေးရဘူး ဆိုတာ သိရင်၊ မိနစ် သုံးဆယ်ကိုသာမက ဒီည ပြီးမယ်၊ မနက်ဖြန် ပြီးမယ် ဆိုတာမျိုး
+      အားလုံးကို ရှောင်တတ်ပါတယ်။
+      [[mark:q-docs]] docs ထဲမှာလည်း ဒီလို ဥပမာ တစ်ခု ပါပါတယ်။ စာလုံးကြီးနဲ့ တားမယ့်အစား၊ အဖြေကို
+      အသံထွက် ဖတ်ပေးတဲ့ စက်က ဖတ်မှာမို့ အစက် သုံးစက်ကို မသုံးပါနဲ့ လို့ အကြောင်းပြချက်နဲ့ ပြောတာ ပိုကောင်းတယ်လို့
+      ဆိုထားပါတယ်။
+      [[mark:q-rule]] စာလုံးကြီးနဲ့ တားတာကတော့ အကြောင်းပြချက် မပါဘဲ ပြင်းထန်ရုံပါပဲ။ ဘာ မလုပ်ရဘူး ဆိုတာထက်
+      ဘာ လုပ်ရမလဲ ဆိုတာ ပြောတာက ပိုထိရောက်ပါတယ်။ ဥပမာ ပြင်နေကြောင်းနဲ့ ပြန်ကောင်းရင် အကြောင်းကြားမယ် ဆိုတာ
+      ရေးပါ လို့ ပြောတာပါ။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - { id: point-q-b, type: whiteboard.point, at: { mark: q-docs }, target: { assetId: q-b } }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-rule],
+          drawMs: 1200,
+        }
+
+  - id: levers
+    chapter: ညွှန်ကြားချက်၊ ဥပမာ၊ format
+    narration: >
+      [[mark:s-open]] ညွှန်ကြားချက်နဲ့ ဥပမာ ပေးပြီး model ရဲ့ အပြုအမူကို ပြောင်းနိုင်စွမ်းကို steerability လို့ ခေါ်ပါတယ်။
+      ကိုယ့်လက်ထဲမှာ အဓိက လက်နက် သုံးခု ရှိပါတယ်။
+      [[mark:s-1]] ပထမ တစ်ခုက ရှင်းပြီး တိုက်ရိုက်ကျတဲ့ ညွှန်ကြားချက်ပါ။ docs က Claude ကို အရမ်း တော်ပေမဲ့ အလုပ်
+      အသစ်ဝင်တဲ့ ဝန်ထမ်း တစ်ယောက်လို သဘောထားဖို့ ပြောပါတယ်။ နေခြည် ရဲ့ ထုံးစံတွေကို ဘာမှ မသိသေးပါဘူး။ ဒါကြောင့်
+      စမ်းသပ်နည်း တစ်ခုက ဒီ ညွှန်ကြားချက်ကို context မသိတဲ့ လုပ်ဖော်ကိုင်ဖက် တစ်ယောက် ဖတ်ရင် နားလည်မလား
+      ဆိုတာပါ။ [[mark:s-1b]] အစီအစဉ် အရေးကြီးရင် အဆင့်တွေကို နံပါတ်တပ်ပြီး ရေးပါ။ စကားမပြောခင် model ကို
+      ကြိုပေးထားတဲ့ တာဝန်နဲ့ စည်းကမ်းကို system prompt လို့ ခေါ်ပြီး၊ system prompt ထဲမှာ role တစ်ကြောင်း ထည့်တာကလည်း
+      လေသံနဲ့ အပြုအမူကို ဦးတည်ပေးပါတယ်။
+      [[mark:s-2]] ဒုတိယ တစ်ခုက ဥပမာပါ။ docs အရ format၊ လေသံနဲ့ ဖွဲ့စည်းပုံကို ဦးတည်ဖို့ အယုံကြည်ရဆုံး နည်းတွေထဲက တစ်ခုပါ။
+      ဥပမာ သုံးခုကနေ ငါးခုလောက် ပေးပြီး၊ တကယ့် ticket တွေနဲ့ ဆင်တူအောင်၊ အမျိုးအစား မတူအောင် ရွေးရပါမယ်။ example
+      ဆိုတဲ့ tag တွေနဲ့ ခွဲထားရင် model က ဥပမာကို ညွှန်ကြားချက်နဲ့ ရောမိတာ နည်းသွားပါတယ်။
+      [[mark:s-3]] တတိယ တစ်ခုက format ပါ။ markdown မသုံးနဲ့ ဆိုတာထက် ချောမွေ့တဲ့ စာပိုဒ်တွေနဲ့ ရေးပါ လို့ လုပ်ရမယ့်
+      အရာကို ပြောတာ ပိုကောင်းပါတယ်။ prompt ကိုယ်တိုင်ရဲ့ ရေးပုံကလည်း အဖြေရဲ့ ရေးပုံကို ဆွဲဆောင်တတ်ပါတယ်။ prompt ထဲမှာ
+      markdown တွေ များနေရင် အဖြေမှာလည်း markdown များလာတတ်ပါတယ်။
+      [[mark:s-default]] ပြီးတော့ model တစ်ခုချင်းစီရဲ့ ပုံမှန် အပြုအမူလည်း
+      မတူပါဘူး။ docs အရ Opus ရဲ့ model တချို့က ပုံမှန်အားဖြင့် ပိုရှည်ရှည် ရေးတတ်တာမို့၊ တိုတို လိုချင်ရင် တိုက်ရိုက်
+      တောင်းရပါမယ်။ လှလှ ရဲ့ တိုတို ဆိုတဲ့ ဆန္ဒကို ညွှန်ကြားချက်ထဲမှာ ရေးရတာ ဒါကြောင့်ပါ။
+      [[mark:s-yes]] ဒီ သုံးခုနဲ့ reply ကို ဘယ်လို ရေးမလဲ ဆိုတာ အများကြီး ပြောင်းလို့ ရပါတယ်။ မသေချာတဲ့အခါ ဘာလုပ်ရမလဲ
+      ဆိုတာတောင် ညွှန်ကြားလို့ ရပါတယ်။ လှလှ လိုချင်တဲ့ လေးခုလုံးက ဒီထဲမှာ ပါပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-1,
+          type: whiteboard.apply,
+          at: { mark: s-1 },
+          upsertIds: [s-b1, s-l1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-2,
+          type: whiteboard.apply,
+          at: { mark: s-2 },
+          upsertIds: [s-b2, s-l2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-3,
+          type: whiteboard.apply,
+          at: { mark: s-3 },
+          upsertIds: [s-b3, s-l3],
+          drawMs: 1200,
+        }
+      - {
+          id: point-format,
+          type: whiteboard.point,
+          at: { mark: s-default },
+          target: { assetId: s-b3 },
+        }
+      - {
+          id: draw-s-yes,
+          type: whiteboard.apply,
+          at: { mark: s-yes },
+          upsertIds: [s-yes],
+          drawMs: 1200,
+        }
+
+  - id: outside-reach
+    narration: >
+      [[mark:s-no]] ဒါပေမဲ့ ညွှန်ကြားချက် ဘယ်လောက်ပဲ ကောင်းကောင်း၊ ညွှန်ကြားချက်နဲ့ မရနိုင်တဲ့ အရာ နှစ်ခု ရှိပါတယ်။
+      [[mark:s-no-1]] ပထမ တစ်ခုက model မသိတဲ့ fact ကို သိလာအောင် လုပ်လို့ မရတာပါ။ သာကေတမှာ လိုင်းကျနေလား ဆိုတာကို
+      ညွှန်ကြားချက်က ဖန်တီးပေးလို့ မရပါဘူး။ NMS ကနေ context ထဲကို ယူလာပေးမှပဲ ရပါမယ်။ context window ကိုလည်း
+      ညွှန်ကြားချက်နဲ့ ချဲ့လို့ မရပါဘူး။
+      [[mark:s-no-2]] ဒုတိယ တစ်ခုက ရလဒ်ကို အာမခံလို့ မရတာပါ။ model က token တစ်ခုချင်း ရေးတာမို့ ညွှန်ကြားချက် ကောင်းရင်
+      ပိုတူ ပိုမှန်လာတတ်ပေမဲ့၊ အမြဲ မှန်မယ်လို့ မဆိုနိုင်ပါဘူး။ ဒါကြောင့် support agent က ဖတ်ပြီးမှ ပို့တဲ့ အဆင့်ကို
+      ဆက်ထားရပါမယ်။ Anthropic ရဲ့ အဓိက တန်ဖိုးတွေကိုလည်း နေခြည် ရေးတဲ့ ညွှန်ကြားချက်နဲ့ ဖယ်ထုတ်လို့ မရပါဘူး။
+      [[mark:s-not-fix]] ဒါကြောင့် ပြဿနာ တိုင်းကို prompt ပြင်ပြီး ဖြေရှင်းဖို့ မကြိုးစားပါနဲ့။ docs ကလည်း ဒီအချက်ကို
+      သတိပေးထားပါတယ်။ ဥပမာ အဖြေ နှေးတာ၊ ဈေးကြီးတာ ဆိုရင် prompt ပြင်တာထက် model တခြား တစ်ခု ရွေးတာက ပိုလွယ်တဲ့
+      ဖြေရှင်းနည်း ဖြစ်တတ်ပါတယ်။
+    sources:
+      - { title: "Anthropic: Claude's constitution", url: "https://www.anthropic.com/constitution" }
+      - {
+          title: "Claude Docs: Prompt engineering overview",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview",
+        }
+    actions:
+      - {
+          id: draw-s-no,
+          type: whiteboard.apply,
+          at: { mark: s-no },
+          upsertIds: [s-no-h],
+          drawMs: 600,
+        }
+      - {
+          id: draw-s-no-1,
+          type: whiteboard.apply,
+          at: { mark: s-no-1 },
+          upsertIds: [s-no-1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-s-no-2,
+          type: whiteboard.apply,
+          at: { mark: s-no-2 },
+          upsertIds: [s-no-2],
+          drawMs: 900,
+        }
+
+  - id: system-prompt
+    chapter: ပထမဆုံး system prompt
+    narration: >
+      [[mark:p-open]] ဒါဆို Reply assistant ရဲ့ ပထမဆုံး system prompt ကို ရေးကြည့်ရအောင်။ ဥပမာ သုံးခုကို အောက်မှာ ကြိုထည့်ထားပြီး၊
+      ညွှန်ကြားချက်တွေကို instructions tag ထဲမှာ ရေးပါမယ်။ tag တွေက prompt ရဲ့ အပိုင်းတွေကို ခွဲပေးတာမို့၊
+      model က ညွှန်ကြားချက်နဲ့ ဥပမာကို ရောမိတာ နည်းသွားပါတယ်။
+      [[mark:type-role]] ပထမ နှစ်ကြောင်းက role ပါ။ ဘယ်သူ့အတွက် ဘာရေးပေးရမလဲ ဆိုတာနဲ့၊ support agent က စစ်ပြီးမှ
+      ပို့မယ် ဆိုတာကို ပြောထားပါတယ်။ လူက စစ်မယ် ဆိုတဲ့ ဒီ အချက်က နောက်ဆုံး စာကြောင်းမှာ support agent စစ်ဖို့
+      ချန်ခဲ့တဲ့ အမှတ်အသားနဲ့ ချိတ်နေပါတယ်။
+      [[mark:type-style]] နောက် နှစ်ကြောင်းက လှလှ ရဲ့ တိုတို၊ ယဉ်ယဉ်ကျေးကျေး၊ မြန်မာလို ဆိုတဲ့ ဆန္ဒပါ။ customer အများစု
+      ဖုန်းနဲ့ ဖတ်တယ် ဆိုတဲ့ အကြောင်းပြချက်ကိုပါ ထည့်ထားပြီး၊ ပုံစံကို အဆင့်လိုက် ရေးပြထားပါတယ်။
+      [[mark:type-promise]] ဒီ နှစ်ကြောင်းက မေးခွန်းမှာ တွေ့ခဲ့တဲ့ ကတိ ပြဿနာပါ။ ဘာကြောင့် ကတိ မပေးရလဲ ဆိုတဲ့
+      အကြောင်းပြချက်ရော၊ အဲဒီအစား ဘာ ရေးရမလဲ ဆိုတာရော ပါပါတယ်။
+      [[mark:type-unsure]] နောက်ဆုံး စာကြောင်းက မသေချာတဲ့အခါ ဘာလုပ်ရမလဲ ဆိုတာပါ။ ticket ထဲမှာ မပါတဲ့ အချက်ကို
+      ခန့်မှန်းမရေးဘဲ၊ support agent စစ်ဖို့ အမှတ်အသား ထားခဲ့ခိုင်းတာပါ။ ပြီးခဲ့တဲ့ lesson တွေက ကွက်လပ် ဖြည့်ရေးတဲ့
+      ပြဿနာကို ဒီ တစ်ကြောင်းက လျှော့ပေးပါတယ်။
+      [[mark:sel-examples]] ဥပမာ သုံးခုက လိုင်းကျတာ၊ bill ကို နှစ်ခါ ပေးမိတာ၊ ညဘက် နှေးတာ ဆိုပြီး အမျိုးအစား မတူအောင်
+      ရွေးထားပါတယ်။ သုံးခုလုံးမှာ ပြင်ချိန် ကတိ မပါသလို၊ စာပိုဒ် တိုတိုနဲ့ပဲ ရေးထားပါတယ်။ ညွှန်ကြားချက်က ပြောတာနဲ့
+      ဥပမာက ပြတာ တူနေဖို့ အရေးကြီးပါတယ်။ ဥပမာထဲမှာ ကတိ ပါနေရင် အဲဒီ ကတိကို model က လိုက်ရေးသွားနိုင်ပါတယ်။ ဥပမာက model ကို ဦးတည်တဲ့
+      အယုံကြည်ရဆုံး နည်းတွေထဲက တစ်ခု ဖြစ်လို့ပါ။
+      [[mark:sel-version]] ခေါင်းစဉ်မှာ ဗားရှင်း တစ်ခု ပါတာကိုလည်း သတိထားပါ။ ဒါက ပထမဆုံး ဗားရှင်းပဲ ရှိပါသေးတယ်။ တကယ့်
+      ticket တွေနဲ့ စမ်းပြီး support agent တွေ ဘယ်နေရာ ပြင်ရလဲ ကြည့်ရင်း ဆက်ပြင်သွားရမှာပါ။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+      - {
+          title: "Claude Docs: Reduce hallucinations",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations",
+        }
+    actions:
+      - { id: close-board, type: whiteboard.apply, at: { mark: p-open }, open: false }
+      - {
+          id: open-prompt,
+          type: workspace.openFile,
+          at: { afterAction: close-board },
+          path: reply-assistant/prompts/system.md,
+        }
+      - id: type-role
+        type: editor.type
+        at: { mark: type-role }
+        cadence: line-by-line
+        target: { file: reply-assistant/prompts/system.md, after: "<instructions>\n" }
+        text: "ဒီ assistant က နေခြည် Fiber ရဲ့ support agent တွေအတွက် customer reply မူကြမ်း ရေးပေးပါတယ်။\nsupport agent က ဖတ်ပြီး လိုရင် ပြင်ပြီးမှ ပို့ပါမယ်။\n"
+      - id: type-style
+        type: editor.type
+        at: { mark: type-style }
+        cadence: line-by-line
+        target: { file: reply-assistant/prompts/system.md, after: "ပြင်ပြီးမှ ပို့ပါမယ်။\n" }
+        text: "နေ့စဉ် ပြောတဲ့ မြန်မာစကားနဲ့ ယဉ်ယဉ်ကျေးကျေး ရေးပါ။ customer အများစုက ဖုန်းနဲ့ ဖတ်လို့ပါ။\nစာပိုဒ် 3 ပိုဒ်အတွင်း ရေးပါ။ ပုံစံ: နှုတ်ဆက်၊ အခြေအနေ၊ customer လုပ်ရမယ့် အဆင့်၊ နိဂုံး။\n"
+      - id: type-promise
+        type: editor.type
+        at: { mark: type-promise }
+        cadence: line-by-line
+        target: { file: reply-assistant/prompts/system.md, after: "လုပ်ရမယ့် အဆင့်၊ နိဂုံး။\n" }
+        text: "ပြင်ပြီးမယ့် အချိန်ကို ကတိ မပေးပါနဲ့။ ပြင်ချိန်ကို technician တွေ ဆုံးဖြတ်ပြီး ကတိ မတည်ရင်\ncustomer ပိုစိတ်ဆိုးလို့ပါ။ အဲဒီအစား ပြင်နေကြောင်းနဲ့ ပြန်ကောင်းရင် အကြောင်းကြားမယ် ဆိုတာ ရေးပါ။\n"
+      - id: type-unsure
+        type: editor.type
+        at: { mark: type-unsure }
+        cadence: line-by-line
+        target: { file: reply-assistant/prompts/system.md, after: "အကြောင်းကြားမယ် ဆိုတာ ရေးပါ။\n" }
+        text: "ticket ထဲမှာ မပါတဲ့ အချက်ကို ခန့်မှန်းမရေးဘဲ [support agent စစ်ရန်] လို့ ရေးထားပါ။\n"
+      - id: expect-promise
+        type: expect.file
+        at: { afterAction: type-unsure }
+        path: reply-assistant/prompts/system.md
+        contains: "ပြင်ပြီးမယ့် အချိန်ကို ကတိ မပေးပါနဲ့။"
+      - id: sel-examples
+        type: editor.select
+        at: { mark: sel-examples }
+        target:
+          file: reply-assistant/prompts/system.md
+          text: "<examples>"
+      - id: sel-version
+        type: editor.select
+        at: { mark: sel-version }
+        target:
+          file: reply-assistant/prompts/system.md
+          text: "(v1, 2026-11)"
+
+  - id: your-turn
+    chapter: ကိုယ့် project အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် project ထဲက prompt တစ်ခုခုကနေ ညွှန်ကြားချက်
+      တစ်ကြောင်းကို ရွေးပါ။ မလုပ်ရဘူး ဆိုပြီး တားထားတဲ့ စာကြောင်း ဖြစ်ရင် ပိုကောင်းပါတယ်။
+      [[mark:turn-2]] အဲဒီ စာကြောင်းကို ဒီ ကတိ စာကြောင်း နှစ်ကြောင်းလို ပြန်ရေးကြည့်ပါ။ ဘာကြောင့်လဲ ဆိုတဲ့ အကြောင်းပြချက်
+      တစ်ခု၊ အဲဒီအစား ဘာ လုပ်ရမလဲ ဆိုတဲ့ လိုချင်တဲ့ အပြုအမူ တစ်ခု ပါရပါမယ်။ prompt မရှိသေးရင် ကိုယ့် team ထဲက
+      လူတစ်ယောက်ကို ပေးတဲ့ ညွှန်ကြားချက် တစ်ခုနဲ့ စမ်းကြည့်လည်း ရပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - id: sel-instructions
+        type: editor.select
+        at: { mark: turn }
+        target:
+          file: reply-assistant/prompts/system.md
+          text: "<instructions>"
+      - id: sel-promise-lines
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: reply-assistant/prompts/system.md
+          text: "ပြင်ပြီးမယ့် အချိန်ကို ကတိ မပေးပါနဲ့။ ပြင်ချိန်ကို technician တွေ ဆုံးဖြတ်ပြီး ကတိ မတည်ရင်\ncustomer ပိုစိတ်ဆိုးလို့ပါ။ အဲဒီအစား ပြင်နေကြောင်းနဲ့ ပြန်ကောင်းရင် အကြောင်းကြားမယ် ဆိုတာ ရေးပါ။"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ model ရဲ့ အပြုအမူကို အကြောင်းပြချက် ပါတဲ့ ရှင်းရှင်းလင်းလင်း ညွှန်ကြားချက်၊
+      ဥပမာနဲ့ format တို့နဲ့ ဦးတည်လို့ ရပါတယ်။ reply ရဲ့ လေသံ၊ အရှည်နဲ့ ပုံစံကို ပြောင်းနိုင်ပေမဲ့၊
+      မသိတဲ့ fact ကို သိလာအောင်တော့ မလုပ်နိုင်သလို၊ ရလဒ်ကိုလည်း အာမခံလို့ မရပါဘူး။
+      [[mark:recap-2]] ဒီ lesson နဲ့ဆိုရင် token တစ်ခုချင်း ရေးတာကနေ steerability အထိ model ရဲ့ သဘာဝ လေးခုကို
+      ကြည့်ခဲ့ပြီးပါပြီ။
+      [[mark:next]] နောက် lesson မှာတော့ ထူးဆန်းတဲ့ မူကြမ်း တစ်စောင် တွေ့တဲ့အခါ အဲဒါကို ဒီ သဘာဝ လေးခုထဲက
+      ဘယ်ဟာက ဖြစ်စေတာလဲလို့ မေးပြီး၊ အကြောင်းရင်းနဲ့ ကိုက်တဲ့ ပြင်နည်းကို ရွေးတဲ့ နည်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - id: sel-role
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: reply-assistant/prompts/system.md
+          text: "ဒီ assistant က နေခြည် Fiber ရဲ့ support agent တွေအတွက် customer reply မူကြမ်း ရေးပေးပါတယ်။"
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: reply-assistant/prompts/system.md
+          text: "# Reply assistant · system prompt (v1, 2026-11)"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
