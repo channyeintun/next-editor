@@ -46,6 +46,7 @@ interface SwExtendableMessageEvent extends SwExtendableEvent {
 
 interface SwClients {
   get(id: string): Promise<SwClient | undefined>;
+  matchAll(options: { type: "window" }): Promise<readonly SwClient[]>;
   claim(): Promise<void>;
 }
 
@@ -556,40 +557,64 @@ export function installPreviewServiceWorker(
     });
   }
 
+  /**
+   * Asks `windows` for a control port (their injected client asks the editor
+   * for one and attaches it); the live link once one has, else null.
+   */
+  async function askForPort(windows: readonly SwClient[]): Promise<ControlLink | null> {
+    if (windows.length === 0) {
+      return null;
+    }
+    const ask: NeedPortMessage = { type: "webnode:need-port" };
+    const attached = waitForAttach();
+    for (const client of windows) {
+      client.postMessage(ask);
+    }
+    await attached;
+    return liveLink();
+  }
+
+  /**
+   * The windows to ask for a port on behalf of `event`. A subresource asks its
+   * own window. A navigation has none yet, so it asks every window this worker
+   * controls: they are the preview's own documents, and the one a reload
+   * replaces is still there until the new one arrives.
+   */
+  async function windowsFor(event: SwFetchEvent): Promise<readonly SwClient[]> {
+    if (event.request.mode === "navigate") {
+      return scope.clients.matchAll({ type: "window" });
+    }
+    const client = event.clientId ? await scope.clients.get(event.clientId) : undefined;
+    return client ? [client] : [];
+  }
+
   async function handle(event: SwFetchEvent): Promise<Response> {
     const { request } = event;
     // The editor may have restarted its runtime since the last page load: the
     // old one no longer answers, and the page must reconnect to the new one.
-    let current = await liveLink(request.mode === "navigate");
-    if (!current) {
-      if (request.mode === "navigate") {
-        return new Response(PREVIEW_CONNECT_HTML, {
-          status: 200,
-          headers: [
-            ["Content-Type", "text/html; charset=utf-8"],
-            ["Cache-Control", "no-store"],
-            // As the host's own copy: only the editor may frame the connect page.
-            ["Content-Security-Policy", `frame-ancestors ${servedEditorOrigin()}`],
-            ...ISOLATION_HEADERS,
-          ],
-        });
-      }
-      const client = event.clientId ? await scope.clients.get(event.clientId) : undefined;
-      if (client) {
-        const ask: NeedPortMessage = { type: "webnode:need-port" };
-        const attached = waitForAttach();
-        client.postMessage(ask);
-        await attached;
-        current = await liveLink();
-      }
-      if (!current) {
-        return textResponse(
-          503,
-          "Service Unavailable: the preview is not connected to the runtime.",
-        );
-      }
+    // The browser also stops an idle worker, and its port lived only in
+    // memory, so a preview's own windows are asked for a fresh one first. A
+    // reload (Vite's full-reload after an index.html edit) then goes straight
+    // to the page instead of through the connect page, which would show
+    // between the two documents and load the preview twice.
+    const current =
+      (await liveLink(request.mode === "navigate")) ?? (await askForPort(await windowsFor(event)));
+    if (current) {
+      return current.fetch(request);
     }
-    return current.fetch(request);
+    if (request.mode === "navigate") {
+      return new Response(PREVIEW_CONNECT_HTML, {
+        status: 200,
+        headers: [
+          ["Content-Type", "text/html; charset=utf-8"],
+          ["Cache-Control", "no-store"],
+          // As the host's own copy: only the editor may frame the connect page.
+          ["Content-Security-Policy", `frame-ancestors ${servedEditorOrigin()}`],
+          ...ISOLATION_HEADERS,
+        ],
+      });
+    }
+    return textResponse(503, "Service Unavailable: the preview is not connected to the runtime.");
   }
 
   scope.addEventListener("install", (event) => {
@@ -627,16 +652,10 @@ export function installPreviewServiceWorker(
       const source = event.source;
       event.waitUntil(
         (async () => {
-          let current = await liveLink();
-          if (!current && isClient(source)) {
-            // The worker was stopped and restarted (its port lives only in
-            // memory): ask the page for a fresh port, as a request would.
-            const ask: NeedPortMessage = { type: "webnode:need-port" };
-            const attached = waitForAttach();
-            source.postMessage(ask);
-            await attached;
-            current = await liveLink();
-          }
+          // The worker was stopped and restarted (its port lives only in
+          // memory): ask the page for a fresh port, as a request would.
+          const current =
+            (await liveLink()) ?? (isClient(source) ? await askForPort([source]) : null);
           if (current) {
             current.openSocket(data.url, data.protocols, await socketCookie(data.url), port);
             return;

@@ -49,6 +49,7 @@ function createWorker(
     location: { origin: ORIGIN, host: new URL(ORIGIN).host, hostname: new URL(ORIGIN).hostname },
     clients: {
       get: async (id: string) => clients.get(id),
+      matchAll: async () => [...clients.values()],
       claim: vi.fn<() => Promise<void>>(async () => {}),
     },
     skipWaiting: vi.fn<() => Promise<void>>(async () => {}),
@@ -198,6 +199,28 @@ describe("preview service worker", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(PREVIEW_CONNECT_HTML);
     expect(response.headers.get("cross-origin-embedder-policy")).toBe("require-corp");
+  });
+
+  it("serves a reload from a restarted worker without the connect page", async () => {
+    const worker = createWorker({ idleMs: 10_000, pingTimeoutMs: 50, attachTimeoutMs: 2_000 });
+    serveText(
+      worker,
+      "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 5\r\n\r\n<p>hi",
+    );
+    // The document being reloaded: its injected client attaches a fresh port.
+    worker.addClient("page", () => void worker.attach());
+    const response = (await worker.fetch(new Request(`${ORIGIN}/`), { navigate: true }))!;
+    expect(worker.clientPosts).toEqual([{ type: "webnode:need-port" }]);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<p>hi");
+  });
+
+  it("serves the connect page for a navigation when no window attaches in time", async () => {
+    const worker = createWorker();
+    worker.addClient("page");
+    const response = (await worker.fetch(new Request(`${ORIGIN}/`), { navigate: true }))!;
+    expect(worker.clientPosts).toEqual([{ type: "webnode:need-port" }]);
+    expect(await response.text()).toBe(PREVIEW_CONNECT_HTML);
   });
 
   it("answers 503 for a subresource when no window attaches in time", async () => {
