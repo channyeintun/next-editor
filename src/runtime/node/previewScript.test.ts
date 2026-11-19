@@ -21,6 +21,16 @@ describe("createRuntimePreviewScript", () => {
     expect(script).toContain("Preview target data-testid=");
   });
 
+  it("starts with the script that keeps the page's picture across a reload", () => {
+    const script = createRuntimePreviewScript();
+
+    // Ahead of the recorder: it decides what a new document shows first.
+    expect(script.indexOf("__NEXT_EDITOR_RUNTIME_RELOAD_HOLD__")).toBeGreaterThan(-1);
+    expect(script.indexOf("__NEXT_EDITOR_RUNTIME_RELOAD_HOLD__")).toBeLessThan(
+      script.indexOf("window.rrwebRecord.record"),
+    );
+  });
+
   it("emits no closing </script> so it survives being wrapped in a <script> tag", () => {
     // setPreviewScript supplies the surrounding <script> tag; a literal </script>
     // inside the bundle/wiring would close it early and break every preview.

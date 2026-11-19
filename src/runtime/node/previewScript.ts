@@ -8,6 +8,7 @@ import { createIframeConsoleBridgeScript } from "../../utils/iframeConsoleBridge
 import { createApiClientProxyScript } from "../../utils/apiClientBridge";
 import { createIframeInteractionCaptureScript } from "../../utils/iframeInteractionCapture";
 import { createStudioPreviewCommandBridgeScript } from "../../utils/iframeStudioCommandBridge";
+import { createIframeReloadHoldScript } from "../../utils/iframeReloadHold";
 
 const RUNTIME_SNAPSHOT_SCRIPT_MARKER = "__NEXT_EDITOR_RUNTIME_SNAPSHOT__";
 const RUNTIME_SCREENSHOT_BRIDGE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_SCREENSHOT_BRIDGE__";
@@ -16,6 +17,7 @@ const RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_INTERACT
 const RUNTIME_RRWEB_RECORD_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_RRWEB_RECORD__";
 const RUNTIME_API_CLIENT_PROXY_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_API_CLIENT_PROXY__";
 const RUNTIME_STUDIO_COMMAND_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_STUDIO_COMMAND__";
+const RUNTIME_RELOAD_HOLD_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_RELOAD_HOLD__";
 
 // Builds the single JS payload injected into every preview page through
 // `WebNode.setPreviewScript`. The runtime adds it to *all* HTML
@@ -56,5 +58,9 @@ export function createRuntimePreviewScript(): string {
     RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE,
   )};${consoleBridgeScript}${interactionCaptureScript}const minIntervalMs=100;let snapshotVersion=0;let lastSnapshotAt=-Infinity;let pendingRequestId=null;let snapshotTimer=0;const postSnapshot=(requestId)=>{try{const startedAt=performance.now();const root=document.documentElement;if(!root)return;const clone=root.cloneNode(true);if(!(clone instanceof Element))return;clone.querySelectorAll("script").forEach((script)=>script.remove());const html=clone.outerHTML;const durationMs=Math.max(0,performance.now()-startedAt);const byteLength=new TextEncoder().encode(html).byteLength;snapshotVersion+=1;lastSnapshotAt=performance.now();window.parent.postMessage({type:responseType,payload:{html,requestId,snapshotVersion,durationMs,byteLength}},"*");}catch{}};const scheduleSnapshot=(requestId)=>{pendingRequestId=requestId;if(snapshotTimer)return;const delay=Math.max(0,minIntervalMs-(performance.now()-lastSnapshotAt));snapshotTimer=window.setTimeout(()=>{snapshotTimer=0;const nextRequestId=pendingRequestId;pendingRequestId=null;postSnapshot(nextRequestId);},delay);};window.addEventListener("message",(event)=>{if(event.source!==window.parent)return;const data=event.data;if(!data||data.type!==requestType)return;const payload=data.payload;const requestId=payload&&typeof payload.requestId==="string"?payload.requestId.slice(0,128):null;scheduleSnapshot(requestId);});})();`;
 
-  return `${rrwebRecordScript}\n${apiClientProxyScript}\n${screenshotBridgeScript}\n${studioCommandBridgeScript}\n${snapshotScript}`;
+  // First: it decides what the new document shows before anything else runs,
+  // and nothing below may keep it from running.
+  const reloadHoldScript = createIframeReloadHoldScript(RUNTIME_RELOAD_HOLD_SETUP_MARKER);
+
+  return `${reloadHoldScript}\n${rrwebRecordScript}\n${apiClientProxyScript}\n${screenshotBridgeScript}\n${studioCommandBridgeScript}\n${snapshotScript}`;
 }
