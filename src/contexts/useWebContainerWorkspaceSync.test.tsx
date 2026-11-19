@@ -1,5 +1,5 @@
 import { act, render } from "@testing-library/react";
-import type { WebContainer } from "@webcontainer/api";
+import type { WebNode } from "../core/webnode/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   useWebContainerWorkspaceSync,
@@ -89,7 +89,7 @@ async function mountProject(hook: ReturnType<typeof useWebContainerWorkspaceSync
   const instance = {
     mount: vi.fn<() => Promise<void>>(async () => {}),
     fs: {},
-  } as unknown as WebContainer;
+  } as unknown as WebNode;
   await act(async () => {
     await hook.ensureProjectMounted({ instance, project });
   });
@@ -125,7 +125,7 @@ describe("useWebContainerWorkspaceSync", () => {
         watch: vi.fn<() => { close: () => void }>(() => ({ close: vi.fn<() => void>() })),
         writeFile: vi.fn<() => Promise<void>>(async () => {}),
       },
-    } as unknown as WebContainer;
+    } as unknown as WebNode;
     await act(async () => {
       await hook.ensureProjectMounted({ instance, project });
     });
@@ -157,7 +157,7 @@ describe("useWebContainerWorkspaceSync", () => {
         watch: vi.fn<() => { close: () => void }>(() => ({ close: vi.fn<() => void>() })),
         writeFile: vi.fn<() => Promise<void>>(async () => {}),
       },
-    } as unknown as WebContainer;
+    } as unknown as WebNode;
     await act(async () => {
       await hook.ensureProjectMounted({ instance, project });
     });
@@ -187,14 +187,14 @@ describe("useWebContainerWorkspaceSync", () => {
             deferredMount.resolve = resolve;
           }),
       ),
-    } as unknown as WebContainer;
+    } as unknown as WebNode;
 
     const mountPromise = hook.ensureProjectMounted({
       instance,
       project,
     });
 
-    // The shared WebContainer mutex starts the mount on its next microtask.
+    // The shared WebNode mutex starts the mount on its next microtask.
     // Let that queued callback capture its resolver before reset wins the
     // in-flight operation; otherwise the test attempts to resolve `null` and
     // waits forever on a mount that it never released.
@@ -233,7 +233,7 @@ describe("useWebContainerWorkspaceSync", () => {
         rm: vi.fn<() => Promise<void>>(async () => {}),
         writeFile: vi.fn<() => Promise<void>>(async () => {}),
       },
-    } as unknown as WebContainer;
+    } as unknown as WebNode;
 
     await act(async () => {
       await hook.ensureProjectMounted({ instance, project });
@@ -304,7 +304,7 @@ describe("useWebContainerWorkspaceSync", () => {
     const instance = {
       mount: vi.fn<() => Promise<void>>(async () => {}),
       fs: {},
-    } as unknown as WebContainer;
+    } as unknown as WebNode;
 
     await act(async () => {
       await hook.ensureProjectMounted({ instance, project });
@@ -329,7 +329,7 @@ describe("useWebContainerWorkspaceSync", () => {
             }),
         ),
       },
-    } as unknown as WebContainer;
+    } as unknown as WebNode;
     const hook = renderWorkspaceSyncHook();
 
     await act(async () => {
@@ -367,7 +367,7 @@ describe("useWebContainerWorkspaceSync", () => {
     const instance = {
       mount: vi.fn<() => Promise<void>>(async () => {}),
       fs: {},
-    } as unknown as WebContainer;
+    } as unknown as WebNode;
     const hook = renderWorkspaceSyncHook();
 
     await act(async () => {
@@ -501,7 +501,7 @@ describe("useWebContainerWorkspaceSync", () => {
           },
         ),
       },
-    } as unknown as WebContainer;
+    } as unknown as WebNode;
     vi.mocked(readWorkspaceProject).mockImplementation(async () => ({
       ...project,
       files: {

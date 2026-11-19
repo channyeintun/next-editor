@@ -37,6 +37,10 @@ generated from the recorded runs, not typed.
 
 ## 1. webnode and WebContainer, first visit
 
+WebContainer was removed from the app later the same day, so this section is
+the last comparison and cannot be measured again: the script measures webnode
+alone now. The bar for a later change is section 2.
+
 Code: commit `a20900e6` (before the two memory changes of the same day, see
 section 5). WebContainer is `@webcontainer/api` 1.6.4. For each target the two
 engines ran in turn, three runs each, so both saw the same network. Each cell
@@ -259,18 +263,15 @@ and is loaded only when a large module has no entry yet; `process.js` and
 ## Measuring again
 
 ```bash
-# Section 1: both engines, every target, three runs each (about two hours).
+# Section 2: every target, three runs each (about half an hour).
 bun scripts/webnode-scenarios/measure.ts
 
-# Section 2: webnode alone (about half an hour).
-ENGINES=webnode bun scripts/webnode-scenarios/measure.ts
-
 # Section 3: every lesson that installs something, once.
-RUNS=1 ENGINES=webnode bun scripts/webnode-scenarios/measure.ts lessons
+RUNS=1 bun scripts/webnode-scenarios/measure.ts lessons
 
 # Section 4: a first visit that lasts, then three later ones, in one profile.
-ENGINES=webnode RUNS=1 HOLD=110 PROFILE=node_modules/.cache/webnode-measure/profile bun scripts/webnode-scenarios/measure.ts css-course-01-basics
-ENGINES=webnode RUNS=3 PROFILE=node_modules/.cache/webnode-measure/profile bun scripts/webnode-scenarios/measure.ts css-course-01-basics
+RUNS=1 HOLD=110 PROFILE=node_modules/.cache/webnode-measure/profile bun scripts/webnode-scenarios/measure.ts css-course-01-basics
+RUNS=3 PROFILE=node_modules/.cache/webnode-measure/profile bun scripts/webnode-scenarios/measure.ts css-course-01-basics
 
 # Section 7: the real editor on production.
 bun scripts/webnode-scenarios/editor-check.ts https://nexteditor.dev

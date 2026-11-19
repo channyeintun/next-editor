@@ -1,5 +1,5 @@
 import { act, render } from "@testing-library/react";
-import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
+import type { WebNode, WebNodeProcess } from "../core/webnode/api";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { EnvironmentVariables } from "../runtime/webcontainer/types";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
@@ -9,18 +9,18 @@ vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
   return {
     ...actual,
-    getOrBootSharedWebContainer: vi.fn<() => Promise<WebContainer>>(),
+    getOrBootSharedWebContainer: vi.fn<() => Promise<WebNode>>(),
   };
 });
 
-function createFakeProcess(): WebContainerProcess {
+function createFakeProcess(): WebNodeProcess {
   return {
     output: new ReadableStream(),
     input: new WritableStream(),
     exit: new Promise(() => {}),
     kill: vi.fn<() => void>(),
     resize: vi.fn<() => void>(),
-  } as unknown as WebContainerProcess;
+  } as unknown as WebNodeProcess;
 }
 
 function createFakeInstance() {
@@ -33,9 +33,9 @@ function createFakeInstance() {
         return () => listeners.delete(event);
       },
     ),
-    spawn: vi.fn<() => Promise<WebContainerProcess>>(async () => createFakeProcess()),
+    spawn: vi.fn<() => Promise<WebNodeProcess>>(async () => createFakeProcess()),
     setPreviewScript: vi.fn<() => Promise<void>>(async () => {}),
-  } as unknown as WebContainer;
+  } as unknown as WebNode;
 
   return { instance, listeners };
 }
@@ -84,7 +84,7 @@ function createControlledRunner() {
     }),
     kill: vi.fn<() => void>(),
     resize: vi.fn<() => void>(),
-  } as unknown as WebContainerProcess;
+  } as unknown as WebNodeProcess;
 
   return {
     process,

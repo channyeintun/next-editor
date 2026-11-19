@@ -7,7 +7,7 @@ export function makeCapturePreviewTool(ctx: ToolContext) {
   return tool({
     name: "capture_preview",
     description:
-      "Capture the current visible WebContainer preview viewport as a PNG for visual inspection. " +
+      "Capture the current visible runtime preview viewport as a PNG for visual inspection. " +
       "This is read-only and does not use screen-sharing permission.",
     inputSchema: z.object({}),
     execute: async (): Promise<string | ToolOutputContent[]> => {

@@ -119,11 +119,6 @@ try {
     const errors: string[] = [];
     const scripts: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message.slice(0, 200)));
-    page.on("console", (message) => {
-      if (message.type() === "warning" && message.text().includes("webnode did not start")) {
-        errors.push(message.text().slice(0, 200));
-      }
-    });
     page.on("request", (request) => {
       if (/\/__webnode__\/(kernel|process)\.js/.test(request.url())) {
         scripts.push(request.url().replace(/^https?:\/\/[^/]+/, ""));
@@ -159,7 +154,7 @@ try {
       scripts.length > 0 && scripts.every((url) => url.includes(`v=${served.id}`)),
       `scripts asked for: ${[...new Set(scripts)].join(", ") || "none"}`,
     );
-    check("no page error, and webnode did not fall back", errors.length === 0, errors.join(" || "));
+    check("no page error", errors.length === 0, errors.join(" || "));
     if (visit === 1 && shown) {
       await sleep(KEPT_AFTER_MS);
       firstUse = await keptRecords(page);

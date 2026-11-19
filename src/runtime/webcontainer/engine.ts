@@ -1,14 +1,9 @@
-// Which engine runs the in-browser Node runtime, and how it boots: webnode, the
-// engine in src/core/webnode (the default), or StackBlitz's WebContainer. Both
-// present the `@webcontainer/api` surface, so everything past this module is the
-// same code for either.
-import type { WebContainer } from "@webcontainer/api";
-import { readStoredPreference, writeStoredPreference } from "../../stores/preferenceStorage";
+// How the in-browser Node runtime boots: webnode, the engine in
+// src/core/webnode, and nothing else. Its kernel and processes run on hosts of
+// their own, so this module also says where those hosts are, and where the
+// runtime cannot start at all.
+import type { WebNode } from "../../core/webnode/api";
 
-export type RuntimeEngine = "webcontainer" | "webnode";
-
-const ENGINE_PREFERENCE_KEY = "next-editor:runtime-engine";
-const ENGINE_QUERY_PARAMETER = "runtime";
 const RUNTIME_WORKDIR_NAME = "next-editor-runtime";
 
 interface PreviewBase {
@@ -60,18 +55,6 @@ export function webnodePreviewBaseFor(
   return url.host === configured.toLowerCase() ? { protocol: "https:", host: url.host } : null;
 }
 
-/** What this page load runs: decided once, so every caller agrees with the runtime that booted. */
-let pageEngine: RuntimeEngine | null = null;
-
-/** Whether this browser is of the family webnode is verified in: Chromium. */
-function isVerifiedBrowser(): boolean {
-  const brands = (navigator as Navigator & { userAgentData?: { brands?: { brand: string }[] } })
-    .userAgentData?.brands;
-  return brands
-    ? brands.some((entry) => entry.brand === "Chromium")
-    : /\bChrome\/\d+/.test(navigator.userAgent);
-}
-
 /**
  * Whether a page of another origin frames this one (a lesson embedded on
  * another site). webnode's hosts let only the editor's own origin frame them,
@@ -85,77 +68,38 @@ function isFramedByAnotherOrigin(): boolean {
   return !ancestors || Array.from(ancestors).some((origin) => origin !== window.location.origin);
 }
 
-function chooseRuntimeEngine(): RuntimeEngine {
-  const requested = new URLSearchParams(window.location.search).get(ENGINE_QUERY_PARAMETER);
-  const canRunWebnode = webnodePreviewBase() !== null;
-  if (requested === "webcontainer") {
-    writeStoredPreference(ENGINE_PREFERENCE_KEY, "webcontainer");
-    return "webcontainer";
-  }
-  if (requested === "webnode") {
-    writeStoredPreference(ENGINE_PREFERENCE_KEY, null);
-    return canRunWebnode ? "webnode" : "webcontainer";
-  }
-  if (readStoredPreference(ENGINE_PREFERENCE_KEY) === "webcontainer") {
-    return "webcontainer";
-  }
-  return canRunWebnode && isVerifiedBrowser() && !isFramedByAnotherOrigin()
-    ? "webnode"
-    : "webcontainer";
-}
-
 /**
- * The engine this page load runs: webnode, where it can serve previews and in
- * the browsers it is verified in; WebContainer anywhere else. A visitor leaves
- * webnode with `?runtime=webcontainer` in the address, which is remembered,
- * and comes back with `?runtime=webnode`, which also tries webnode in a
- * browser it is not the default for.
+ * Why the runtime cannot start on this page, in words for the visitor, or
+ * null when it can: a deployment that names no runtime hosts, or a lesson
+ * embedded on another site.
  */
-export function selectedRuntimeEngine(): RuntimeEngine {
-  if (typeof window === "undefined") {
-    return "webcontainer";
+export function runtimeUnavailableReason(): string | null {
+  if (typeof window === "undefined" || webnodePreviewBase() === null) {
+    return "Code cannot run here: this site has no runtime hosts set up.";
   }
-  pageEngine ??= chooseRuntimeEngine();
-  return pageEngine;
+  if (isFramedByAnotherOrigin()) {
+    return `Code cannot run inside another site's page. Open this lesson on ${window.location.host} to run it.`;
+  }
+  return null;
 }
 
-/** Boots the selected engine with the options the app uses for both. */
-export async function bootRuntimeEngine(): Promise<WebContainer> {
-  if (selectedRuntimeEngine() === "webnode") {
-    try {
-      const { WebNode } = await import("../../core/webnode/api");
-      const instance = await WebNode.boot({
-        previewBase: webnodePreviewBase()!,
-        workdirName: RUNTIME_WORKDIR_NAME,
-        coep: "require-corp",
-        forwardPreviewErrors: true,
-      });
-      // The app uses the part of the WebContainer API that webnode implements.
-      return instance as unknown as WebContainer;
-    } catch (error) {
-      // webnode is switched off for this deployment, or this editor is older
-      // than the scripts its hosts serve: run the lesson on WebContainer for
-      // the rest of this page load. The next load tries webnode again.
-      console.warn("webnode did not start; using WebContainer instead:", error);
-      pageEngine = "webcontainer";
-    }
+/** Boots the runtime with the options the app uses. Rejects where it cannot start. */
+export async function bootRuntimeEngine(): Promise<WebNode> {
+  const unavailable = runtimeUnavailableReason();
+  if (unavailable !== null) {
+    throw new Error(unavailable);
   }
-
-  const { WebContainer } = await import("@webcontainer/api");
-  return WebContainer.boot({
+  const { WebNode } = await import("../../core/webnode/api");
+  return WebNode.boot({
+    previewBase: webnodePreviewBase()!,
+    workdirName: RUNTIME_WORKDIR_NAME,
     coep: "require-corp",
     forwardPreviewErrors: true,
-    workdirName: RUNTIME_WORKDIR_NAME,
   });
 }
 
-/** Reloads the preview in `iframe` the way the selected engine does it. */
+/** Reloads the preview in `iframe`. */
 export async function reloadRuntimeEnginePreview(iframe: HTMLIFrameElement): Promise<void> {
-  if (selectedRuntimeEngine() === "webnode") {
-    const { reloadPreview } = await import("../../core/webnode/api");
-    await reloadPreview(iframe);
-    return;
-  }
-  const { reloadPreview } = await import("@webcontainer/api");
-  reloadPreview(iframe);
+  const { reloadPreview } = await import("../../core/webnode/api");
+  await reloadPreview(iframe);
 }

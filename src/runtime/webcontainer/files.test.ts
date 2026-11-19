@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { WebContainer } from "@webcontainer/api";
+import type { WebNode } from "../../core/webnode/api";
 import { isWorkspaceAssetDescriptor, type WorkspaceProject } from "../../types/workspace";
 import {
   getWorkspaceAssetBytes,
@@ -127,7 +127,7 @@ describe("syncWorkspaceProject", () => {
     );
     const instance = {
       fs: { mkdir, writeFile, rm: vi.fn<(path: string) => Promise<void>>() },
-    } as unknown as WebContainer;
+    } as unknown as WebNode;
     const previous = nodeProject("root");
     const next = nodeProject("root");
     next.files["src/components/Button.tsx"] = {
@@ -165,7 +165,7 @@ describe("readWorkspaceProject", () => {
     const readFile = vi.fn<(path: string) => Promise<Uint8Array>>(async (path) =>
       new TextEncoder().encode(`${path} contents`),
     );
-    const instance = { fs: { readdir, readFile } } as unknown as WebContainer;
+    const instance = { fs: { readdir, readFile } } as unknown as WebNode;
 
     const project = await readWorkspaceProject(instance, nodeProject("root"));
     // A later reverse sync reads the same entries but warns about them only once.
@@ -207,7 +207,7 @@ describe("readWorkspaceProject", () => {
             ? new TextDecoder("utf-8", { ignoreBOM: true }).decode(contents[path])
             : contents[path],
       );
-      const instance = { fs: { readdir, readFile } } as unknown as WebContainer;
+      const instance = { fs: { readdir, readFile } } as unknown as WebNode;
 
       const { files } = await readWorkspaceProject(instance, nodeProject("root"));
 

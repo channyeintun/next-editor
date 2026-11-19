@@ -29,7 +29,7 @@ Cross-Origin-Opener-Policy:   same-origin
 ```
 
 (see `infra/worker/index.ts`, `vite.config.ts` `crossOriginHeaders`). This is
-required for `SharedArrayBuffer` / the WebContainer runtime. Under
+required for `SharedArrayBuffer` / the in-browser runtime. Under
 `require-corp`, **any subresource** — the `.ne` stream, the `.ogg`/`.weba`
 audio, the camera `.webm`, the thumbnail — must either be same-origin, or
 carry `Cross-Origin-Resource-Policy: cross-origin` **and** be requested with
@@ -202,7 +202,7 @@ reaches the detail route by whichever of these got there first:
   navigation never leaves the first lesson's title on another page.
 
 This is **data-only SSR**: `#root` ships empty, because the lesson page _is_ the
-editor (Monaco, WebContainers, the whole provider stack) and none of that renders
+editor (Monaco, the in-browser runtime, the whole provider stack) and none of that renders
 on a Worker. The browser still mounts the app exactly as before — it just does so
 with the lesson already in hand. An unknown slug gets a `noindex` 404 shell with
 the miss dehydrated too, so the client can render "Lesson not found" without

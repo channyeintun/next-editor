@@ -63,21 +63,20 @@ RUST_PLAYGROUND_ENABLED = "true"
 # caches deterministic outcomes and holds a lower per-caller ceiling. Zig editing
 # and recorded playback work regardless of this flag.
 ZIG_PLAYGROUND_ENABLED = "true"
-# webnode (src/core/webnode), the in-browser Node runtime that can stand in for
-# WebContainer. Its hosts are subdomains of this name: the kernel and processes
+# webnode (src/core/webnode), the in-browser Node runtime every Node.js lesson
+# runs on. Its hosts are subdomains of this name: the kernel and processes
 # run on runtime.nexteditor.dev and each preview on
 # <session>-<port>.nexteditor.dev, sent here by the wildcard route below. The
-# build names the same host in VITE_WEBNODE_PREVIEW_HOST (.env). It is the
-# default runtime in Chromium browsers; ?runtime=webcontainer in the address
-# takes a visitor back to WebContainer (src/runtime/webcontainer/engine.ts).
+# build names the same host in VITE_WEBNODE_PREVIEW_HOST (.env); how the app
+# boots it is in src/runtime/webcontainer/engine.ts.
 #
 # Those hosts run lesson code on this site, so what protects the editor from
 # them is listed in src/core/webnode/README.md ("The runtime's hosts"). Moving
 # them to a registrable domain of their own later is this variable, the route
 # and the build variable, nothing else.
 #
-# Switching it off: comment this variable out and deploy. Every visitor then
-# falls back to WebContainer.
+# There is no other runtime: without this variable (and the build's), Node.js
+# lessons cannot run.
 WEBNODE_PREVIEW_HOST = "nexteditor.dev"
 # Required for authentication — auth fails at runtime without these. Set them with:
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
@@ -131,7 +130,7 @@ not_found_handling = "single-page-application"
 # Without this, an exact static-file match (JS chunks, seed /lessons/*.json,
 # images) is served directly by the edge and never reaches the Worker below —
 # which means it would ship without the COEP/COOP headers the app requires on
-# every response for WebContainers/SharedArrayBuffer (see worker/index.ts).
+# every response for the in-browser runtime's SharedArrayBuffer (see worker/index.ts).
 # Routing every request through the Worker first costs a bit of Worker CPU on
 # static files, but correctness here isn't optional.
 run_worker_first = true

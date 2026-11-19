@@ -26,14 +26,14 @@ import and export.
 There are 18 lesson types, chosen from the **Starter Template** menu (the gear in the editor
 header). Each runs in one of three places:
 
-| Runs on                                                            | Lesson types                                                                                                                                                                 |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| WebContainer — Node.js in the browser, with preview and a terminal | HTML / CSS, React (TanStack Start), Vue, Solid, Svelte, HTMX + Express, Alpine AJAX + Express, Express + TypeScript, JavaScript / Node.js, TypeScript, and Kite + Vite (web) |
-| The Worker's playground proxies, with no sign-in needed            | Go (play.golang.org), Kotlin (api.kotlinlang.org), Rust (play.rust-lang.org), Zig (zig-play.dev), and Haskell (play.haskell.org)                                             |
-| The page itself, with no service                                   | Kite, on a Wasm build of `kitec`; x86-64 Assembly, on a first-party NASM-syntax assembler and x86-64 Linux machine in `src/core/x86`                                         |
+| Runs on                                                       | Lesson types                                                                                                                                                                 |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| webnode — Node.js in the browser, with preview and a terminal | HTML / CSS, React (TanStack Start), Vue, Solid, Svelte, HTMX + Express, Alpine AJAX + Express, Express + TypeScript, JavaScript / Node.js, TypeScript, and Kite + Vite (web) |
+| The Worker's playground proxies, with no sign-in needed       | Go (play.golang.org), Kotlin (api.kotlinlang.org), Rust (play.rust-lang.org), Zig (zig-play.dev), and Haskell (play.haskell.org)                                             |
+| The page itself, with no service                              | Kite, on a Wasm build of `kitec`; x86-64 Assembly, on a first-party NASM-syntax assembler and x86-64 Linux machine in `src/core/x86`                                         |
 
 - The runtime dock under the editor holds the runner, the preview's console, terminal tabs
-  (xterm.js over the WebContainer shell), and the coding agent. Playground and in-page lessons get
+  (xterm.js over the runtime's shell), and the coding agent. Playground and in-page lessons get
   a runner console with Run, plus Format for Go, Rust, Zig, and Kite.
 - The preview panel shows the running app. Its **API** mode is a built-in HTTP client that sends
   requests from inside the preview frame (same origin, so no CORS), with a response viewer and a
@@ -103,7 +103,7 @@ header). Each runs in one of three places:
 
 - An **Agent** tab in the runtime dock, built on `@openrouter/agent` with your own OpenRouter key
   (kept in memory unless you choose to store it). It reads, searches, writes, and edits workspace
-  files. In WebContainer lessons it can also inspect the preview and run shell commands, each
+  files. In Node.js lessons it can also inspect the preview and run shell commands, each
   command only after you confirm it.
 - The Worker's `/api/openrouter/responses` route only forwards requests so the SDK's headers pass
   CORS. It holds no key.
@@ -146,17 +146,19 @@ header). Each runs in one of three places:
 
 ## Browser Support
 
-- WebContainer lessons need cross-origin isolation (the dev server and the Worker send COOP and
-  COEP headers on every response) and a desktop browser: use desktop Chromium or Firefox. On
-  mobile the runtime does not start, but recorded previews still replay.
+- Node.js lessons run on webnode, this project's own in-browser Node.js runtime
+  (`src/core/webnode`). It needs cross-origin isolation (the dev server and the Worker send COOP
+  and COEP headers on every response) and a desktop browser: use a desktop Chromium browser
+  (Chrome, Edge, Brave); Firefox and Safari are not verified. On mobile the runtime does not
+  start, but recorded previews still replay.
 - Playground and in-page lessons (Go, Kotlin, Rust, Zig, Haskell, Kite, and assembly) do not use
-  the WebContainer.
+  it.
 
 ## Tech Stack
 
 - App: React 19 with the React Compiler, React Router 8, TanStack Query, Tailwind CSS 4
 - Editor and state: Monaco Editor, XState 5, `@xstate/store-react`
-- Runtimes: `@webcontainer/api`, xterm.js, a Wasm build of `kitec`, a first-party x86-64
+- Runtimes: webnode (`src/core/webnode`), xterm.js, a Wasm build of `kitec`, a first-party x86-64
   assembler and emulator
 - Recording: rrweb for the preview; a Rust diff-match-patch codec compiled to WASM; MessagePack
   and fflate in the SCR3 container; MediaRecorder, with WebCodecs for Ogg/Opus
@@ -205,7 +207,7 @@ header). Each runs in one of three places:
 ### Prerequisites
 
 - [Bun](https://bun.sh/)
-- Desktop Chromium or Firefox for WebContainer lessons
+- A desktop Chromium browser for Node.js lessons
 
 ### Setup
 
@@ -233,7 +235,7 @@ bun run dev:worker  # the Worker on http://localhost:8787
 bun run dev:all     # both
 ```
 
-- `bun run dev` alone covers the editor, recording and playback, WebContainer, Kite, and assembly
+- `bun run dev` alone covers the editor, recording and playback, Node.js, Kite, and assembly
   lessons, and the coding agent; the Vite dev server serves `/api/proxy` and `/api/openrouter`
   itself.
 - Sign-in, uploads and media, Studio capabilities and narration, slide-image import, and the

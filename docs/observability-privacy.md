@@ -26,7 +26,7 @@ and exception capture is filtered separately because DOM replay selectors do not
 - All inputs are masked globally. This does not replace the blocked root because rendered text is
   not an input.
 - Replay console capture is pinned off (`enable_recording_console_log: false` in
-  `POSTHOG_REPLAY_PRIVACY_OPTIONS`). The WebContainer runtime mirrors runner output to the
+  `POSTHOG_REPLAY_PRIVACY_OPTIONS`). The in-browser runtime mirrors runner output to the
   browser console, and a DOM block selector does not cover console events; left unset, PostHog
   would follow the project's remote "capture console logs" setting.
 - Replay network capture is pinned off the same way (`recordBody: false` and `recordHeaders: false`
@@ -34,7 +34,7 @@ and exception capture is filtered separately because DOM replay selectors do not
   setting can turn request/response body capture on, and PostHog's default scrubber misses
   camel-case fields such as the `apiKey` that Studio sends once to connect an AthanLab key. The
   key field itself is a password input with the `ph-no-capture` class.
-- WebContainer preview exceptions are dropped. Other application exceptions retain only an error
+- Exceptions from a preview (any of the runtime's hosts) are dropped. Other application exceptions retain only an error
   type plus URL-without-query stack locations; messages, source context, breadcrumbs, commands,
   and request/response payloads are removed.
 - New analytics events must use enumerated/coarse values. Do not pass free-form labels, paths,

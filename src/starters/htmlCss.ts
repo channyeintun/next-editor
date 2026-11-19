@@ -37,7 +37,7 @@ export function createStarterHtmlCssWorkspace(): WorkspaceProject {
   <body>
     <main class="page">
       <h1>About</h1>
-      <p>This page is served by Vite inside the WebContainer, so links between pages work.</p>
+      <p>This page is served by Vite, running in your browser, so links between pages work.</p>
       <p><a href="/">&larr; Back home</a></p>
     </main>
   </body>

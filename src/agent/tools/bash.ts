@@ -1,6 +1,6 @@
 import { tool } from "@openrouter/agent";
 import * as z from "zod";
-import type { WebContainer } from "@webcontainer/api";
+import type { WebNode } from "../../core/webnode/api";
 import type { ToolContext } from "../types";
 import {
   createWorkspaceTree,
@@ -27,7 +27,7 @@ const MAX_OUTPUT_LENGTH = 20_000;
 const OUTPUT_HEAD_LENGTH = Math.floor(MAX_OUTPUT_LENGTH / 2);
 const OUTPUT_TAIL_LENGTH = MAX_OUTPUT_LENGTH - OUTPUT_HEAD_LENGTH;
 // How long to wait for exit once a kill was requested, and then for the output
-// stream to close. WebContainer's kill does not always end a pipeline or a
+// stream to close. WebNode's kill does not always end a pipeline or a
 // background child, and its output includes descendants'. Waiting without a
 // bound held the container's task queue, so every later bash call and editor
 // sync on it queued behind a command that would never settle.
@@ -45,7 +45,7 @@ const inputSchema = z.object({
     .describe("Timeout in milliseconds; defaults to 60000 (maximum 300000)"),
 });
 
-// The bash tool reuses the same shared WebContainer singleton the Runtime panel
+// The bash tool reuses the same shared WebNode singleton the Runtime panel
 // mounts (getOrBootSharedWebContainer), so a command sees the files the user is
 // actually looking at. It does not hold the container (holdSharedWebContainer):
 // the agent panel renders only inside an editor, which holds it while mounted, so
@@ -57,10 +57,10 @@ const inputSchema = z.object({
 // the next call then mounts afresh into the new instance.
 // This module-level state lets repeated bash calls in one agent turn skip
 // re-mounting when nothing changed.
-let mountedInstance: WebContainer | null = null;
+let mountedInstance: WebNode | null = null;
 let syncedProject: WorkspaceProject | null = null;
 
-async function ensureMounted(instance: WebContainer, project: WorkspaceProject): Promise<void> {
+async function ensureMounted(instance: WebNode, project: WorkspaceProject): Promise<void> {
   if (mountedInstance !== instance) {
     await instance.mount(await createWorkspaceTree(project));
     mountedInstance = instance;
@@ -121,7 +121,7 @@ function delay(ms: number): { promise: Promise<void>; cancel: () => void } {
 
 async function foldContainerChangesIntoStore(
   ctx: ToolContext,
-  instance: WebContainer,
+  instance: WebNode,
   commandBaseProject: WorkspaceProject,
   commandWorkspace: WorkspaceBoundary,
 ): Promise<void> {
@@ -391,7 +391,7 @@ export function makeBashTool(ctx: ToolContext) {
   return tool({
     name: "bash",
     description:
-      "Run a shell command inside a sandboxed in-browser runtime (WebContainer) rooted at the " +
+      "Run a shell command inside a sandboxed in-browser Node.js runtime rooted at the " +
       "workspace. Requires user confirmation before running and is unavailable on unsupported " +
       "browsers (e.g. mobile, or without cross-origin isolation).",
     inputSchema,

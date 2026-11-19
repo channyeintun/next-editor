@@ -282,11 +282,11 @@ const clientItems: DiagramItem[] = [
       "the recorder/player machine owns the timeline; app-level stores hold the workspace, slides, whiteboard, and settings.",
   },
   {
-    title: "WebContainer + xterm",
+    title: "webnode + xterm",
     lines: ["Node.js in the browser: 11 lesson", "types, preview + terminal tabs"],
-    noteTitle: "WebContainer + xterm.js",
+    noteTitle: "webnode + xterm.js",
     detail:
-      "Node.js in the browser for 11 lesson types (Vite apps, Express, JavaScript/TypeScript, Kite web), with a preview and terminal tabs.",
+      "webnode, this project's own Node.js runtime in the browser, for 11 lesson types (Vite apps, Express, JavaScript/TypeScript, Kite web), with a preview and terminal tabs.",
   },
   {
     title: "in-page runners",
@@ -351,7 +351,7 @@ const clientItems: DiagramItem[] = [
     lines: ["@openrouter/agent, user's own key;", "chat recorded into the lesson"],
     noteTitle: "Coding agent",
     detail:
-      "@openrouter/agent with the user's own key; file tools everywhere, plus preview inspection and confirmed shell commands in WebContainer lessons. The chat is recorded.",
+      "@openrouter/agent with the user's own key; file tools everywhere, plus preview inspection and confirmed shell commands in Node.js lessons. The chat is recorded.",
   },
   {
     title: "Studio performer",
@@ -466,9 +466,10 @@ const storageItems: DiagramItem[] = [
 // Services the browser reaches directly, without the Worker in between.
 const browserServiceItems: DiagramItem[] = [
   {
-    title: "StackBlitz",
-    lines: ["WebContainer runtime iframe,", "stackblitz.com/headless"],
-    detail: "the WebContainer runtime boots in a hidden iframe from stackblitz.com.",
+    title: "npm registry",
+    lines: ["packages a lesson installs,", "fetched by the runtime"],
+    detail:
+      "the in-browser Node.js runtime installs a lesson's packages straight from registry.npmjs.org.",
   },
   {
     title: "Google Slides",
@@ -772,7 +773,7 @@ export default function ArchitecturePage() {
               </title>
               <desc>
                 The browser runs the single-page app — editor, runtimes, recorder, player, Studio,
-                and collaboration clients — and loads the WebContainer runtime from StackBlitz,
+                and collaboration clients — and installs lessons' packages from the npm registry,
                 published decks from Google Slides, model weights from Hugging Face, and sends
                 analytics to PostHog. It reaches one Cloudflare Worker over HTTPS and WebSockets.
                 The Worker serves the static build with edge rendering, authenticates users, and

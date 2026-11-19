@@ -29,7 +29,7 @@ describe("describeRunnerOutput", () => {
 
   it("says what the runtime is doing while there is neither output nor error", () => {
     expect(describeRunnerOutput({ output: null, errorMessage: null, status: "installing" })).toBe(
-      "Installing dependencies inside the WebContainer...",
+      "Installing dependencies...",
     );
     expect(describeRunnerOutput({ output: "", errorMessage: "", status: "starting" })).toBe(
       "Starting the workspace dev server...",

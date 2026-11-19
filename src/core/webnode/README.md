@@ -1,7 +1,7 @@
 # webnode
 
-A Node.js-compatible runtime that runs in the browser: the engine that can
-stand in for `@webcontainer/api`. It runs real, unmodified npm packages (the
+A Node.js-compatible runtime that runs in the browser: the engine every
+Node.js lesson of this app runs on. It runs real, unmodified npm packages (the
 Vite dev server, Vitest, the TypeScript compiler, Express) inside Web Workers,
 on an in-memory filesystem, with an npm installer, a shell, and previews served
 through a service worker.
@@ -18,7 +18,8 @@ lessons and starters. Its three goals, in this order:
 2. **It is fast.**
 3. **It uses little memory.**
 
-The bar for 2 and 3 is WebContainer on the same lesson (`?runtime=webcontainer`).
+The bar for 2 and 3 is the recorded baseline: what the same lesson measured
+before a change ([MEASUREMENTS.md](MEASUREMENTS.md)).
 
 **Supported: what the lessons and starters run.** Each one runs its install
 command, then its run command, and shows a preview or a program's output.
@@ -51,16 +52,19 @@ those numbers worse. A fix that would be large (a new subsystem, more than
 about a day) goes to the owner first.
 
 **The numbers** come from `bun scripts/webnode-scenarios/measure.ts`: one
-lesson per setup and every starter, on webnode and on WebContainer, in
-headless Chrome (`--list` prints the setups and the lessons it measures).
+lesson per setup and every starter, in headless Chrome (`--list` prints the
+setups and the lessons it measures).
 What they were on 2026-11-19, to compare a later run with, is in
 [MEASUREMENTS.md](MEASUREMENTS.md).
 
-**WebContainer stays as the fallback.** `?runtime=webcontainer` opts a browser
-out (and is remembered), WebContainer is the default outside Chromium and for
-a lesson embedded on another site, and a webnode that fails to start falls
-back to it for that page load. If the upkeep grows, making WebContainer the
-default again is the cheap exit.
+**There is no other runtime.** StackBlitz's WebContainer, which webnode
+replaced and which stayed as the fallback for a while, was removed on
+2026-11-19: no package, no fallback, no switch in the address. So a webnode
+that does not start is a lesson that does not run. Two places where it cannot
+start are known and say so to the visitor: a lesson embedded on another site
+(the runtime's hosts let only the editor's own origin frame them) and a
+deployment that names no runtime hosts. It is verified in Chromium browsers
+only; Firefox and Safari run the same code, unverified.
 
 ## How it is built
 
@@ -193,7 +197,7 @@ directory; the files marked _hub_ only wire.
 | `buildId.ts`                       | the id of the build a script belongs to                                                                                                                                                                                                                                                                                                                                                           |
 | `protocol.ts`                      | every message that crosses a thread                                                                                                                                                                                                                                                                                                                                                               |
 | `byteChannel.ts`                   | a connection between two threads (a socket's bytes, the preview gateway's) and its flow control                                                                                                                                                                                                                                                                                                   |
-| `api.ts`                           | the page-facing API (WebContainer-compatible)                                                                                                                                                                                                                                                                                                                                                     |
+| `api.ts`                           | the page-facing API (shaped like WebContainer's)                                                                                                                                                                                                                                                                                                                                                  |
 | `preparedStorage.ts`               | the page's store of large modules' prepared forms, kept between visits (IndexedDB on the editor's origin)                                                                                                                                                                                                                                                                                         |
 | `sharedfs/`                        | the filesystem: a Rust module on one shared memory (its README)                                                                                                                                                                                                                                                                                                                                   |
 | `kernel/vfs/`                      | the filesystem in TypeScript: the reference and the fallback                                                                                                                                                                                                                                                                                                                                      |
@@ -326,11 +330,8 @@ deployment.
 
 `infra/wrangler.toml` names the host the runtime lives under
 (`WEBNODE_PREVIEW_HOST`) and routes its subdomains to the Worker; the build
-names the same host in `VITE_WEBNODE_PREVIEW_HOST`. webnode is the app's
-default runtime in Chromium browsers; `?runtime=webcontainer` in the address
-takes a visitor back to WebContainer and is remembered, `?runtime=webnode`
-undoes that. When webnode does not start, the app runs the lesson on
-WebContainer for that page load. After a deploy:
+names the same host in `VITE_WEBNODE_PREVIEW_HOST`. webnode is the app's only
+Node.js runtime, so both must be set for a lesson to run. After a deploy:
 
 ```bash
 WEBNODE_HARNESS_TARGET=https://nexteditor.dev WEBNODE_HARNESS_PREVIEW_HOST=nexteditor.dev bun scripts/webnode-harness.ts cases

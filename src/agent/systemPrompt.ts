@@ -131,7 +131,7 @@ function buildSupportedStack(project: WorkspaceProject): string {
     return (
       "Supported stack: Kite for the application code, with HTML, CSS and the Vite " +
       "toolchain around it. This lesson is a Vite project running in the in-browser " +
-      "WebContainer: the `.kite` modules under src/ are compiled by vite-plugin-kite " +
+      "Node.js runtime: the `.kite` modules under src/ are compiled by vite-plugin-kite " +
       "(the kitec compiler shipped as a WASM package), imported straight from the HTML " +
       "entry points, and served by the Vite dev server with a live preview. Write new " +
       "logic and UI in Kite modules rather than porting them to JavaScript or " +
@@ -142,7 +142,7 @@ function buildSupportedStack(project: WorkspaceProject): string {
 
   return (
     "Supported stack: HTML, CSS, JavaScript, TypeScript, Node.js, and JS/TS libraries " +
-    "and frameworks only. The workspace runs in an in-browser WebContainer, which only " +
+    "and frameworks only. The workspace runs in an in-browser Node.js runtime, which only " +
     "executes web and Node.js technologies — so do not introduce other languages or " +
     "runtimes (Python, Ruby, Go, Rust, PHP, Java, native binaries, system packages, etc.), " +
     "and do not suggest tooling that depends on them. Keep every solution within the web/" +
@@ -161,14 +161,14 @@ function buildToolList(toolNames: string[]): string {
 
 function buildBashNote(): string {
   return [
-    "Bash/WebContainer safety rules (strict):",
-    "- The bash tool runs in a resource-constrained, sandboxed in-browser WebContainer, not a normal host shell. It has no host access, supports only Node.js/web tooling, and may be unavailable on mobile or without cross-origin isolation.",
+    "Bash safety rules (strict):",
+    "- The bash tool runs in a resource-constrained, sandboxed in-browser Node.js runtime, not a normal host shell. It has no host access, supports only Node.js/web tooling, and may be unavailable on mobile or without cross-origin isolation.",
     "- Run only short, bounded, foreground commands that are expected to exit promptly. Never start background processes or use &, nohup, disown, job control, or similar techniques.",
     "- Never start persistent or watch-mode processes, including dev servers, preview servers, file watchers, or interactive programs. The editor already owns the workspace dev server.",
     "- Never run broad or resource-heavy commands such as npm run build, pnpm build, full-project builds, repo-wide typechecks, or full test suites. Prefer file tools and narrow inspection; run a targeted check only when it is clearly necessary and guaranteed to terminate.",
     "- Use pnpm exclusively for package operations and scripts. Never use npm, npx, yarn, bun, or another package manager, and do not install packages unless the user explicitly asks.",
-    "- Do not pipe, redirect, or wrap a dev-server/watch command to capture its output; the pipeline can remain open indefinitely. When WebContainer runtime, preview, or dev-server errors are present in the conversation, diagnose those errors directly instead of launching another server or build.",
-    "- WebContainer process cancellation is best-effort: Stop, kill, or a timeout may not promptly settle a blocked process through the browser API. Never rely on cancellation to make a potentially hanging command safe. If a useful check might stay alive, do not run it; explain the limitation and continue with file-based reasoning.",
+    "- Do not pipe, redirect, or wrap a dev-server/watch command to capture its output; the pipeline can remain open indefinitely. When runtime, preview, or dev-server errors are present in the conversation, diagnose those errors directly instead of launching another server or build.",
+    "- Process cancellation is best-effort: Stop, kill, or a timeout may not promptly settle a blocked process through the browser API. Never rely on cancellation to make a potentially hanging command safe. If a useful check might stay alive, do not run it; explain the limitation and continue with file-based reasoning.",
   ].join("\n");
 }
 

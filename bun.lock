@@ -19,7 +19,6 @@
         "@tanstack/react-virtual": "^3.14.26",
         "@tybys/wasm-util": "0.10.5",
         "@upstash/qstash": "^2.12.2",
-        "@webcontainer/api": "^1.6.4",
         "@xstate/react": "^6.1.0",
         "@xstate/store-react": "^2.1.0",
         "@xterm/addon-fit": "^0.11.0",
@@ -865,8 +864,6 @@
     "@voidzero-dev/vite-plus-win32-arm64-msvc": ["@voidzero-dev/vite-plus-win32-arm64-msvc@1.7.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-CO3txOUEnzlncFFRUIKxqBxoEH1F34sOuGhpfBhZLpwLe/Bvuypcrcky2mlpT5g98H+hw/hQHMZukyIArYm7Cg=="],
 
     "@voidzero-dev/vite-plus-win32-x64-msvc": ["@voidzero-dev/vite-plus-win32-x64-msvc@1.7.0", "", { "os": "win32", "cpu": "x64" }, "sha512-eA/Lg7eQTLwTiNhGBav9Lik6qiTSv8IPAETIziGgjNjEiTviCcFHNFlUyDOIFTY7uIWraGgMl8THY3zPnikoRg=="],
-
-    "@webcontainer/api": ["@webcontainer/api@1.6.4", "", {}, "sha512-r9sHCXg1FcC1AMgppGwAc0vYWaQhqvg282cnsuPbJEzYnWifAdCVvg+8ngJUEHyHcomhJJp+/zuytite4ITHLw=="],
 
     "@xstate/fsm": ["@xstate/fsm@1.6.5", "", {}, "sha512-b5o1I6aLNeYlU/3CPlj/Z91ybk1gUsKT+5NAJI+2W4UjvS5KLG28K9v5UvNoFVjHV8PajVZ00RH3vnjyQO7ZAw=="],
 

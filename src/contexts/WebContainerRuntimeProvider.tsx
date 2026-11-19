@@ -1,5 +1,5 @@
 import { useContext, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-import type { WebContainer } from "@webcontainer/api";
+import type { WebNode } from "../core/webnode/api";
 import {
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
@@ -93,7 +93,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   // for; it makes every entry point join the one boot/mount/install.
   const prepareRuntimePromiseRef = useRef<{
     generation: number;
-    promise: Promise<WebContainer | null>;
+    promise: Promise<WebNode | null>;
   } | null>(null);
   const hasAutoStartedRef = useRef(false);
   // Bumped by a reset a consumer asks for, so the auto-start effect looks again.
@@ -267,7 +267,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     setAutoStartRequest((request) => request + 1);
   };
 
-  const prepareRuntime = (): Promise<WebContainer | null> => {
+  const prepareRuntime = (): Promise<WebNode | null> => {
     const generation = getRuntimeGeneration();
     const inFlight = prepareRuntimePromiseRef.current;
     if (inFlight && inFlight.generation === generation) {
@@ -287,7 +287,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
    * The instance when the runtime is up and nothing is preparing it; null means go
    * through prepareRuntime.
    */
-  const getReadyInstance = (generation: number): WebContainer | null => {
+  const getReadyInstance = (generation: number): WebNode | null => {
     const instance = instanceRef.current;
     if (
       !instance ||
@@ -431,7 +431,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
    * command resets hasRunInitCommandRef, so the next call prepares and installs again.
    */
   const withPreparedRuntime = async (
-    task: (instance: WebContainer, generation: number) => Promise<void>,
+    task: (instance: WebNode, generation: number) => Promise<void>,
   ) => {
     if (!lessonRunsInWebContainer(lessonType)) {
       return;
@@ -590,7 +590,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   const onProjectChange = useEffectEvent(() => {
     // A different project was loaded — an imported `.ne` recording, a starter
-    // switch, or a `?url=` lesson. The WebContainer is a shared singleton, so it
+    // switch, or a `?url=` lesson. The WebNode is a shared singleton, so it
     // still holds the *previous* project's node_modules, and `hasRunInitCommandRef`
     // is still set from that install. Without a reset, `prepareRuntime` skips
     // `pnpm install` and `pnpm dev` then fails with "command not found" for the

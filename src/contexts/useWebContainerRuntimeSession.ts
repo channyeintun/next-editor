@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
+import type { WebNode, WebNodeProcess } from "../core/webnode/api";
 import type { WebContainerRuntimeRecordingSnapshot } from "./WebContainerRuntimeContext";
 import type {
   EnvironmentVariables,
@@ -43,7 +43,7 @@ const OUTPUT_FLUSH_FALLBACK_MS = 100;
 
 interface TerminalSessionHandle extends RuntimeTerminalSessionSnapshot {
   inputWriter: WritableStreamDefaultWriter<string> | null;
-  process: WebContainerProcess | null;
+  process: WebNodeProcess | null;
   /** Resolves to null when the session was closed or reset while its shell spawned. */
   startPromise: Promise<TerminalSessionHandle | null> | null;
 }
@@ -96,7 +96,7 @@ function safelyReleaseWriter(writer: WritableStreamDefaultWriter<string> | null)
   }
 }
 
-function safelyKillProcess(process: WebContainerProcess | null): void {
+function safelyKillProcess(process: WebNodeProcess | null): void {
   if (!process) {
     return;
   }
@@ -104,12 +104,12 @@ function safelyKillProcess(process: WebContainerProcess | null): void {
   try {
     process.kill();
   } catch {
-    // Killing an already-exited WebContainer process is harmless.
+    // Killing an already-exited WebNode process is harmless.
   }
 }
 
 function safelyResizeProcess(
-  process: WebContainerProcess | null,
+  process: WebNodeProcess | null,
   size: { cols: number; rows: number },
 ): void {
   if (!process) {
@@ -166,9 +166,9 @@ export function useWebContainerRuntimeSession({
   onTerminalOutput,
   onServerReady,
 }: UseWebContainerRuntimeSessionOptions) {
-  const instanceRef = useRef<WebContainer | null>(null);
-  const foregroundProcessesRef = useRef<Set<WebContainerProcess>>(new Set());
-  const runnerProcessRef = useRef<WebContainerProcess | null>(null);
+  const instanceRef = useRef<WebNode | null>(null);
+  const foregroundProcessesRef = useRef<Set<WebNodeProcess>>(new Set());
+  const runnerProcessRef = useRef<WebNodeProcess | null>(null);
   const runnerStartIdRef = useRef(0);
   const terminalSessionsRef = useRef<TerminalSessionHandle[]>([]);
   const terminalSessionCounterRef = useRef(0);
@@ -375,7 +375,7 @@ export function useWebContainerRuntimeSession({
 
   /**
    * Empties the runner console without touching the running process, the
-   * WebContainer, or the terminal sessions — the Clear button, not a reset.
+   * WebNode, or the terminal sessions — the Clear button, not a reset.
    * The error message goes with it: it is rendered into the same console box
    * (see TerminalPanel's rawContent), so leaving it behind would clear the
    * output and keep a stale failure on screen.
@@ -477,7 +477,7 @@ export function useWebContainerRuntimeSession({
 
       const message = getRuntimeErrorMessage(error);
 
-      console.error("[runtime] WebContainer error", error);
+      console.error("[runtime] WebNode error", error);
 
       setErrorMessage(message);
       setStatus("error");
@@ -515,7 +515,7 @@ export function useWebContainerRuntimeSession({
     return instance;
   };
 
-  const runForegroundCommand = async (instance: WebContainer, commandLine: string) => {
+  const runForegroundCommand = async (instance: WebNode, commandLine: string) => {
     const parsedCommand = parseCommand(commandLine);
     if (!parsedCommand) {
       return 0;
@@ -525,7 +525,7 @@ export function useWebContainerRuntimeSession({
     appendOutput(`$ ${commandLine}\n`);
 
     const generation = runtimeGenerationRef.current;
-    let process: WebContainerProcess | null = null;
+    let process: WebNodeProcess | null = null;
 
     const runToExit = async () => {
       const spawned = await instance.spawn(
@@ -551,7 +551,7 @@ export function useWebContainerRuntimeSession({
             },
           }),
           // The process lifecycle owns shutdown (via process.kill()). Allowing
-          // pipeTo to cancel the source during teardown races WebContainer's
+          // pipeTo to cancel the source during teardown races WebNode's
           // own reader cleanup, which can try to cancel an already-released
           // reader.
           { preventCancel: true },
@@ -616,17 +616,14 @@ export function useWebContainerRuntimeSession({
   };
 
   /** Starts the runner; true once its process has spawned and is the current runner. */
-  const startRunnerProcess = async (
-    instance: WebContainer,
-    commandLine: string,
-  ): Promise<boolean> => {
+  const startRunnerProcess = async (instance: WebNode, commandLine: string): Promise<boolean> => {
     const startId = ++runnerStartIdRef.current;
     const generation = runtimeGenerationRef.current;
     // Neither a later start nor a reset has superseded this start.
     const isCurrentStart = () =>
       startId === runnerStartIdRef.current && isRuntimeGenerationActive(generation);
     // The runner is still `runner`, and this start is still current.
-    const isCurrentRunner = (runner: WebContainerProcess) =>
+    const isCurrentRunner = (runner: WebNodeProcess) =>
       runnerProcessRef.current === runner && isCurrentStart();
     const parsedCommand = parseCommand(commandLine);
 
@@ -649,7 +646,7 @@ export function useWebContainerRuntimeSession({
     appendOutput(`$ ${commandLine}\n`);
 
     const spawnOptions = getSpawnOptions(getEnvironmentVariables());
-    let process: WebContainerProcess;
+    let process: WebNodeProcess;
 
     try {
       process = await instance.spawn(parsedCommand.command, parsedCommand.args, spawnOptions);
@@ -723,7 +720,7 @@ export function useWebContainerRuntimeSession({
   };
 
   const ensureTerminalProcess = async (
-    instance: WebContainer,
+    instance: WebNode,
     sessionId: string,
   ): Promise<TerminalSessionHandle | null> => {
     const session = findTerminalSession(sessionId);
@@ -744,7 +741,7 @@ export function useWebContainerRuntimeSession({
     // The shell `process` exited or failed: release the session's input, drop
     // the process and say why, unless the session has since been closed, runs
     // another shell or belongs to a reset runtime.
-    const endTerminalProcess = (process: WebContainerProcess, message: string) => {
+    const endTerminalProcess = (process: WebNodeProcess, message: string) => {
       const currentSession = findTerminalSession(sessionId);
 
       if (
@@ -766,7 +763,7 @@ export function useWebContainerRuntimeSession({
       let lastError: unknown = null;
 
       for (const candidate of TERMINAL_SHELL_CANDIDATES) {
-        let process: WebContainerProcess;
+        let process: WebNodeProcess;
 
         try {
           process = await instance.spawn(candidate.command, [...candidate.args], {
@@ -804,7 +801,7 @@ export function useWebContainerRuntimeSession({
               },
             }),
             // Closing a terminal kills its process. Do not also have
-            // pipeTo cancel the WebContainer stream during that teardown.
+            // pipeTo cancel the WebNode stream during that teardown.
             { preventCancel: true },
           )
           .catch((error) => {
@@ -838,7 +835,7 @@ export function useWebContainerRuntimeSession({
     return startPromise;
   };
 
-  const ensureTerminalSession = async (instance: WebContainer) => {
+  const ensureTerminalSession = async (instance: WebNode) => {
     let session = findTerminalSession(activeTerminalSessionIdRef.current);
 
     if (!session) {
@@ -851,7 +848,7 @@ export function useWebContainerRuntimeSession({
     return ensureTerminalProcess(instance, session.id);
   };
 
-  const createTerminalSession = async (instance: WebContainer) => {
+  const createTerminalSession = async (instance: WebNode) => {
     const session = createTerminalSessionHandle();
     terminalSessionsRef.current = [...terminalSessionsRef.current, session];
     syncTerminalSessions();
@@ -882,7 +879,7 @@ export function useWebContainerRuntimeSession({
     setActiveTerminalSession(fallbackSession?.id ?? null);
   };
 
-  const writeTerminalInput = async (instance: WebContainer, input: string) => {
+  const writeTerminalInput = async (instance: WebNode, input: string) => {
     const session = await ensureTerminalSession(instance);
     await session?.inputWriter?.write(input);
   };

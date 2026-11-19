@@ -1,7 +1,24 @@
 import type { PostHogConfig } from "posthog-js";
+import { isWebnodeHostname } from "../core/webnode/preview/origin";
+import { webnodePreviewBase } from "../runtime/webcontainer/engine";
 
-const WEBCONTAINER_PREVIEW_ORIGIN_PATTERN =
-  /(?:https?:\/\/|blob:https?:\/\/)[^\s/]*(?:webcontainer-api\.io|webcontainer\.io)(?=[:/\s]|$)/i;
+// The host of every URL in a text, `blob:` ones included.
+const URL_HOSTNAME_PATTERN = /https?:\/\/([^\s/:?#]+)/gi;
+
+/** Whether `text` names a URL on one of the runtime's hosts: a preview, or the kernel's. */
+function namesRuntimeHost(text: string): boolean {
+  const base = webnodePreviewBase();
+  if (!base) {
+    return false;
+  }
+  const baseHostname = base.host.replace(/:\d+$/, "");
+  for (const [, hostname] of text.matchAll(URL_HOSTNAME_PATTERN)) {
+    if (isWebnodeHostname(hostname, baseHostname)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /** Blocks the complete editor subtree; the narrower selectors cover legacy embeds. */
 export const POSTHOG_SENSITIVE_ROOT_CLASS = "ph-no-capture";
@@ -11,7 +28,7 @@ export const POSTHOG_SENSITIVE_SURFACE_SELECTOR = `.${POSTHOG_SENSITIVE_ROOT_CLA
  * The session-replay half of docs/observability-privacy.md, spread into `posthog.init`.
  * Workspace source, filenames, previews, runtime/agent/API output, slides, recordings and
  * drawings must not land in third-party replays: the editor root is blocked and inputs are
- * masked. Console capture is pinned off because the WebContainer runtime mirrors runner
+ * masked. Console capture is pinned off because the runtime mirrors runner
  * output to the console, and left undefined PostHog follows the project's remote setting.
  * Network body and header capture are pinned off for the same reason: unless the client
  * says `false`, a dashboard setting can turn them on, and PostHog's default payload
@@ -45,9 +62,9 @@ const SENSITIVE_EXCEPTION_PROPERTY_PATTERN =
   /(?:breadcrumb|console|command|message|error|stack|fingerprint|token|secret|authorization|cookie|credential|password|headers?|request[_-]?(?:body|data)|response[_-]?(?:body|data)|source[_-]?(?:code|line))/i;
 const URL_PROPERTY_PATTERN = /(?:url|uri|href|referrer|pathname)$/i;
 
-function containsWebContainerPreviewOrigin(value: unknown, seen = new Set<object>()): boolean {
+function containsRuntimeHost(value: unknown, seen = new Set<object>()): boolean {
   if (typeof value === "string") {
-    return WEBCONTAINER_PREVIEW_ORIGIN_PATTERN.test(value);
+    return namesRuntimeHost(value);
   }
 
   if (!value || typeof value !== "object" || seen.has(value)) {
@@ -57,14 +74,14 @@ function containsWebContainerPreviewOrigin(value: unknown, seen = new Set<object
   seen.add(value);
 
   if (Array.isArray(value)) {
-    return value.some((entry) => containsWebContainerPreviewOrigin(entry, seen));
+    return value.some((entry) => containsRuntimeHost(entry, seen));
   }
 
-  return Object.values(value).some((entry) => containsWebContainerPreviewOrigin(entry, seen));
+  return Object.values(value).some((entry) => containsRuntimeHost(entry, seen));
 }
 
 /**
- * WebContainer forwards errors from users' preview iframes so the editor can
+ * The runtime forwards errors from users' preview iframes so the editor can
  * display them. Those errors belong to the user's project, not this app, and
  * must not become PostHog Error Tracking issues for Next Editor.
  */
@@ -73,7 +90,7 @@ export function shouldSendPostHogEvent(event: PostHogEvent | null | undefined): 
     return true;
   }
 
-  return !containsWebContainerPreviewOrigin(event.properties?.$exception_list);
+  return !containsRuntimeHost(event.properties?.$exception_list);
 }
 
 function sanitizeTelemetryUrl(value: unknown): string | undefined {

@@ -1,7 +1,7 @@
-// Moves workspace files into and out of a WebContainer: the tree a project
+// Moves workspace files into and out of a WebNode: the tree a project
 // mounts as, the writes and removals that bring the container up to a newer
 // project, and the read that turns the container's files back into a project.
-import type { FileSystemTree, WebContainer } from "@webcontainer/api";
+import type { FileSystemTree, WebNode } from "../../core/webnode/api";
 import {
   isLegacyWorkspaceBinaryFile,
   isWorkspaceAssetFile,
@@ -165,7 +165,7 @@ export function shouldIgnoreRuntimeImportPath(path: string): boolean {
 }
 
 async function readRuntimeDirectory(
-  instance: WebContainer,
+  instance: WebNode,
   runtimePath: string,
   workspacePath: string,
   files: Record<string, WorkspaceFile>,
@@ -215,7 +215,7 @@ async function readRuntimeAssetFile(path: string, bytes: Uint8Array): Promise<Wo
 }
 
 export async function readWorkspaceProject(
-  instance: WebContainer,
+  instance: WebNode,
   currentProject: WorkspaceProject,
 ): Promise<WorkspaceProject> {
   const files: Record<string, WorkspaceFile> = {};
@@ -309,7 +309,7 @@ export async function createWorkspaceTree(project: WorkspaceProject): Promise<Fi
 }
 
 async function ensureDirectory(
-  instance: WebContainer,
+  instance: WebNode,
   directoryPath: string,
   onWrite?: (path: string) => void,
 ): Promise<void> {
@@ -339,7 +339,7 @@ function getFileDirectory(path: string): string {
 }
 
 export async function syncWorkspaceProject(
-  instance: WebContainer,
+  instance: WebNode,
   previousProject: WorkspaceProject | null,
   nextProject: WorkspaceProject,
   // Reports every container path this sync mutates (created folders, removed

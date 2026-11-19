@@ -56,7 +56,7 @@ export function getRuntimeErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return "Unknown WebContainer runtime error";
+  return "Unknown runtime error";
 }
 
 function stringifyPreviewMessageArg(value: unknown): string {

@@ -70,7 +70,7 @@ export function describeSquares(values: number[]): string[] {
       "README.md",
       `# TypeScript Lesson
 
-1. The runner executes \`tsx main.ts\` inside the in-browser WebContainer
+1. The runner executes \`tsx main.ts\` inside the in-browser Node.js runtime
    and streams its output to the **Runner** tab. Saving a file runs it again.
 2. The full Node.js runtime is available: install packages from the
    **Terminal** tab with \`pnpm add <package>\`, or change the \`dev\` script in

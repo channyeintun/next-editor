@@ -186,7 +186,7 @@ describe("runAgentLoop", () => {
     const toolNames = (calls[0].tools ?? []).map((t) => t.function?.name ?? t.name);
     expect(toolNames).toEqual(["read", "ls", "glob", "grep", "write", "edit"]);
     expect(calls[0].instructions).toContain("Go Playground");
-    expect(calls[0].instructions).not.toContain("Bash/WebContainer safety rules");
+    expect(calls[0].instructions).not.toContain("Bash safety rules");
   });
 
   it("bypasses Myers for append-only snapshots and uses it when a provider revises text", async () => {

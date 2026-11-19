@@ -1,5 +1,5 @@
 import { act, cleanup, render } from "@testing-library/react";
-import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
+import type { WebNode, WebNodeProcess } from "../core/webnode/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "./WorkspaceProvider";
@@ -21,8 +21,8 @@ vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
   return {
     ...actual,
-    getOrBootSharedWebContainer: vi.fn<() => Promise<WebContainer>>(),
-    teardownSharedWebContainer: vi.fn<(instance: WebContainer | null) => void>(),
+    getOrBootSharedWebContainer: vi.fn<() => Promise<WebNode>>(),
+    teardownSharedWebContainer: vi.fn<(instance: WebNode | null) => void>(),
     holdSharedWebContainer: vi.fn<() => () => void>(() => () => {}),
     isWebContainerRuntimeSupported: () => true,
   };
@@ -31,11 +31,11 @@ vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
 /** Every command line spawned on any container, in order. */
 const spawned: string[] = [];
 
-function createFakeWebContainer(): WebContainer {
+function createFakeWebContainer(): WebNode {
   return {
     on: vi.fn<() => () => void>(() => () => {}),
     mount: vi.fn<() => Promise<void>>(async () => {}),
-    spawn: vi.fn<(command: string, args: string[]) => Promise<WebContainerProcess>>(
+    spawn: vi.fn<(command: string, args: string[]) => Promise<WebNodeProcess>>(
       async (command, args) => {
         // Commands run as `sh -lc "<command line>"`.
         const commandLine = command === "sh" ? args[args.length - 1] : [command, ...args].join(" ");
@@ -53,7 +53,7 @@ function createFakeWebContainer(): WebContainer {
           exit: isDevServer ? new Promise<number>(() => {}) : Promise.resolve(0),
           kill: vi.fn<() => void>(),
           resize: vi.fn<() => void>(),
-        } as unknown as WebContainerProcess;
+        } as unknown as WebNodeProcess;
       },
     ),
     fs: {
@@ -65,7 +65,7 @@ function createFakeWebContainer(): WebContainer {
       writeFile: vi.fn<() => Promise<void>>(async () => {}),
       rm: vi.fn<() => Promise<void>>(async () => {}),
     },
-  } as unknown as WebContainer;
+  } as unknown as WebNode;
 }
 
 function starterProject(id: string, lessonType: WorkspaceLessonType): WorkspaceProject {

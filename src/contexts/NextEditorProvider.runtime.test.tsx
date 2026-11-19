@@ -1,6 +1,6 @@
 import { act, render, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
-import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
+import type { WebNode, WebNodeProcess } from "../core/webnode/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { NextEditorProvider } from "./NextEditorProvider";
 import { NextEditorActorContext } from "./NextEditorActorContext";
@@ -24,12 +24,12 @@ import {
 } from "../types/workspace";
 
 // Kept out of NextEditorProvider.test.tsx so this module mock, which puts a fake
-// WebContainer behind the runtime, does not reach the tests there.
+// WebNode behind the runtime, does not reach the tests there.
 vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
   return {
     ...actual,
-    getOrBootSharedWebContainer: vi.fn<() => Promise<WebContainer>>(),
+    getOrBootSharedWebContainer: vi.fn<() => Promise<WebNode>>(),
   };
 });
 
@@ -69,7 +69,7 @@ function createFakeInstance() {
     on: vi.fn<() => () => void>(() => () => {}),
     mount: vi.fn<() => Promise<void>>(async () => {}),
     setPreviewScript: vi.fn<() => Promise<void>>(async () => {}),
-    spawn: vi.fn<(command: string, args: string[]) => Promise<WebContainerProcess>>(
+    spawn: vi.fn<(command: string, args: string[]) => Promise<WebNodeProcess>>(
       async () =>
         ({
           output: new ReadableStream({
@@ -81,7 +81,7 @@ function createFakeInstance() {
           exit: Promise.resolve(0),
           kill: vi.fn<() => void>(),
           resize: vi.fn<() => void>(),
-        }) as unknown as WebContainerProcess,
+        }) as unknown as WebNodeProcess,
     ),
     fs: {
       readdir: vi.fn<() => Promise<[]>>(async () => []),
@@ -98,7 +98,7 @@ function renderEditor(surface: SurfaceProps) {
   const instance = createFakeInstance();
   const boot = vi.mocked(getOrBootSharedWebContainer);
   boot.mockReset();
-  boot.mockResolvedValue(instance as unknown as WebContainer);
+  boot.mockResolvedValue(instance as unknown as WebNode);
 
   const captured: {
     actions: NextEditorActions | null;
@@ -224,7 +224,7 @@ const goLesson = () =>
     workspaceSnapshot({ projectId: "go-workspace", lessonType: "go", source: "package main" }),
   ]);
 
-describe("NextEditorProvider replay and the WebContainer runtime", () => {
+describe("NextEditorProvider replay and the WebNode runtime", () => {
   beforeEach(() => {
     // isWebContainerRuntimeSupported() gates the runtime on cross-origin isolation.
     vi.stubGlobal("crossOriginIsolated", true);
@@ -263,7 +263,7 @@ describe("NextEditorProvider replay and the WebContainer runtime", () => {
   it.each([
     { surface: "a fresh /learn visit", allowAmbientStart: true, pendingRecordingUrl: "/lesson.ne" },
     { surface: "a surface that never auto-starts", allowAmbientStart: false },
-  ])("does not boot a WebContainer to load a Go lesson on $surface", async (surface) => {
+  ])("does not boot a WebNode to load a Go lesson on $surface", async (surface) => {
     const editor = renderEditor(surface);
     await settle();
     editor.boot.mockClear();

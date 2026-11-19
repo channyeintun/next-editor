@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
+import type { WebNode, WebNodeProcess } from "../../core/webnode/api";
 import { createWorkspaceStore, type StoredWorkspaceSnapshot } from "../../stores/workspaceStore";
 import type { WorkspaceFile, WorkspaceProject } from "../../types/workspace";
 import { collectWorkspaceFolders } from "../../types/workspacePaths";
@@ -8,11 +8,11 @@ import { getProject } from "./workspaceFs";
 
 const support = vi.hoisted(() => ({
   isWebContainerRuntimeSupported: vi.fn<() => boolean>(),
-  getOrBootSharedWebContainer: vi.fn<() => Promise<WebContainer>>(),
+  getOrBootSharedWebContainer: vi.fn<() => Promise<WebNode>>(),
   readWorkspaceProject: vi.fn<() => Promise<WorkspaceProject>>(),
   runSerializedWebContainerTask: vi.fn<
-    (instance: WebContainer, task: () => Promise<unknown>) => Promise<unknown>
-  >((_instance: WebContainer, task: () => Promise<unknown>) => task()),
+    (instance: WebNode, task: () => Promise<unknown>) => Promise<unknown>
+  >((_instance: WebNode, task: () => Promise<unknown>) => task()),
   syncWorkspaceProject: vi.fn<() => Promise<void>>(),
   createWorkspaceTree: vi.fn<() => object>(() => ({})),
 }));
@@ -84,7 +84,7 @@ function makeCtx(
   return { workspace: store, signal: new AbortController().signal, requestConfirmation };
 }
 
-function createFakeProcess(outputChunks: string[], exitCode: number): WebContainerProcess {
+function createFakeProcess(outputChunks: string[], exitCode: number): WebNodeProcess {
   const output = new ReadableStream<string>({
     start(controller) {
       for (const chunk of outputChunks) controller.enqueue(chunk);
@@ -97,14 +97,14 @@ function createFakeProcess(outputChunks: string[], exitCode: number): WebContain
     kill: vi.fn<() => void>(),
     input: new WritableStream(),
     resize: vi.fn<() => void>(),
-  } as unknown as WebContainerProcess;
+  } as unknown as WebNodeProcess;
 }
 
-function makeFakeInstance(process: WebContainerProcess): WebContainer {
+function makeFakeInstance(process: WebNodeProcess): WebNode {
   return {
-    spawn: vi.fn<() => Promise<WebContainerProcess>>().mockResolvedValue(process),
+    spawn: vi.fn<() => Promise<WebNodeProcess>>().mockResolvedValue(process),
     mount: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-  } as unknown as WebContainer;
+  } as unknown as WebNode;
 }
 
 const run = (ctx: ToolContext) => makeBashTool(ctx).function.execute;

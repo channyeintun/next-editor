@@ -22,7 +22,7 @@ export function describeRunnerOutput({ output, errorMessage, status }: RunnerOut
   } else if (errorMessage) {
     content = `Runtime error\n${errorMessage}`;
   } else if (status === "installing") {
-    content = "Installing dependencies inside the WebContainer...";
+    content = "Installing dependencies...";
   } else if (status === "starting") {
     content = "Starting the workspace dev server...";
   } else {

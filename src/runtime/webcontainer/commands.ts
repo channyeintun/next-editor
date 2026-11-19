@@ -33,7 +33,7 @@ export function parseCommand(commandLine: string): { command: string; args: stri
 }
 
 export function formatCommandError(commandLine: string): string {
-  return `"${commandLine}" failed inside the WebContainer runtime`;
+  return `"${commandLine}" failed inside the runtime`;
 }
 
 export function resolveRuntimeRunCommand(

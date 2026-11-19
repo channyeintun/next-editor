@@ -9,7 +9,7 @@ import {
 } from "./documentHtml";
 import { rewriteHtmlAsset } from "./rewriteHtmlAsset";
 
-// Data-only SSR. The lesson *page* is the editor — Monaco, WebContainers, the
+// Data-only SSR. The lesson *page* is the editor — Monaco, the in-browser runtime, the
 // whole provider stack — and none of that renders on a Worker, so #root is
 // deliberately left empty for the browser to mount into. What the edge can do
 // is resolve the row: the document ships with real per-lesson metadata for

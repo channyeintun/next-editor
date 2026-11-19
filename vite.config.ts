@@ -315,10 +315,6 @@ export default ({ mode }: { mode: string }) => {
                 test: (id) => MONACO_MODULE.test(id) && !isMonacoOnDemandModule(id),
               },
               {
-                name: "webcontainer",
-                test: /[\\/]node_modules[\\/]@webcontainer[\\/]/,
-              },
-              {
                 name: "terminal",
                 test: /[\\/]node_modules[\\/]@xterm[\\/]/,
               },

@@ -1,6 +1,6 @@
 import { act, render } from "@testing-library/react";
 import { useContext } from "react";
-import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
+import type { WebNode, WebNodeProcess } from "../core/webnode/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "./WorkspaceProvider";
@@ -29,7 +29,7 @@ vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
   return {
     ...actual,
-    getOrBootSharedWebContainer: vi.fn<() => Promise<WebContainer>>(),
+    getOrBootSharedWebContainer: vi.fn<() => Promise<WebNode>>(),
   };
 });
 
@@ -57,7 +57,7 @@ function dirEntry(name: string, kind: "file" | "directory"): DirEntry {
 }
 
 /**
- * A minimal in-memory filesystem for the fake `WebContainer` — enough to satisfy
+ * A minimal in-memory filesystem for the fake `WebNode` — enough to satisfy
  * `readWorkspaceProject`'s `fs.readdir(..., { withFileTypes: true })` / `fs.readFile` walk.
  * `files` maps a runtime-relative path (no leading `.`/`/`) to its text contents; `addFile`
  * lets a test simulate a file appearing mid-test (e.g. right after an install command exits).
@@ -121,7 +121,7 @@ function createFakeFs(initialFiles: Record<string, string>) {
           }
         },
       ),
-    } as unknown as WebContainer["fs"],
+    } as unknown as WebNode["fs"],
     addFile: (path: string, content: string) => {
       files.set(path, content);
     },
@@ -140,7 +140,7 @@ function createFakeInstance(fakeFs: ReturnType<typeof createFakeFs>) {
       },
     ),
     mount: vi.fn<() => Promise<void>>(async () => {}),
-    spawn: vi.fn<() => Promise<WebContainerProcess>>(async () => ({
+    spawn: vi.fn<() => Promise<WebNodeProcess>>(async () => ({
       output: new ReadableStream({
         start(controller) {
           controller.close();
@@ -152,7 +152,7 @@ function createFakeInstance(fakeFs: ReturnType<typeof createFakeFs>) {
       resize: vi.fn<() => void>(),
     })),
     fs: fakeFs.fs,
-  } as unknown as WebContainer;
+  } as unknown as WebNode;
 
   return { instance, listeners };
 }
@@ -285,7 +285,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
         exit: Promise.resolve(0),
         kill: vi.fn<() => void>(),
         resize: vi.fn<() => void>(),
-      } as unknown as WebContainerProcess;
+      } as unknown as WebNodeProcess;
     });
 
     const { runtime, workspace } = renderProviders();
@@ -339,7 +339,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
           exit,
           kill: vi.fn<() => void>(),
           resize: vi.fn<() => void>(),
-        } as unknown as WebContainerProcess;
+        } as unknown as WebNodeProcess;
       }) as never);
     });
 
@@ -678,7 +678,7 @@ describe("WebContainerRuntimeProvider runner control", () => {
         exit,
         kill,
         resize: vi.fn<() => void>(),
-      } as unknown as WebContainerProcess;
+      } as unknown as WebNodeProcess;
     }) as never);
     const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
@@ -893,7 +893,7 @@ describe("WebContainerRuntimeProvider runner control", () => {
         exit: isRunner ? new Promise<number>(() => {}) : Promise.resolve(0),
         kill: vi.fn<() => void>(),
         resize: vi.fn<() => void>(),
-      } as unknown as WebContainerProcess;
+      } as unknown as WebNodeProcess;
     }) as never);
     const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
@@ -1044,7 +1044,7 @@ describe("WebContainerRuntimeProvider terminal", () => {
           : Promise.resolve(line.includes("pnpm dev") ? runnerExitCode : 0),
         kill: vi.fn<() => void>(),
         resize: vi.fn<() => void>(),
-      } as unknown as WebContainerProcess;
+      } as unknown as WebNodeProcess;
     }) as never);
     const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockReset().mockResolvedValue(instance);
@@ -1441,7 +1441,7 @@ describe("WebContainerRuntimeProvider saveWorkspace", () => {
   // provider re-renders. The save must leave the switch to the project and
   // lesson-type effects rather than run the new project on the old settings.
   it.each([
-    { switchTo: "a non-WebContainer lesson", project: lessonProject("go-workspace", "go") },
+    { switchTo: "a non-WebNode lesson", project: lessonProject("go-workspace", "go") },
     { switchTo: "another project", project: lessonProject("other-project", "javascript") },
   ])("does not boot for a save in the same task as a switch to $switchTo", async ({ project }) => {
     const { captured, boot } = await renderAfterFailedStart();

@@ -1,17 +1,18 @@
-// How the lessons and starters run on webnode and on WebContainer: whether
-// they pass, how long the install and the first preview take, and how much
-// memory the tab uses. One lesson per dependency setup and every starter, each
-// on both engines, in headless Chrome, one browser at a time. This is the
-// measurement the scope rule asks for (src/core/webnode/README.md, "Scope").
+// How the lessons and starters run on webnode: whether they pass, how long
+// the install and the first preview take, and how much memory the tab uses.
+// One lesson per dependency setup and every starter, in headless Chrome, one
+// browser at a time. This is the measurement the scope rule asks for
+// (src/core/webnode/README.md, "Scope"); what to compare its numbers with is
+// in src/core/webnode/MEASUREMENTS.md.
 //
-//   bun scripts/webnode-scenarios/measure.ts              every target, RUNS times per engine
+//   bun scripts/webnode-scenarios/measure.ts              every target, RUNS times
 //   bun scripts/webnode-scenarios/measure.ts <target>...  only these: a lesson's slug, starter:<name>
 //   bun scripts/webnode-scenarios/measure.ts lessons      every lesson that installs something
 //   bun scripts/webnode-scenarios/measure.ts --list       the setups, their lessons, the targets
 //   bun scripts/webnode-scenarios/measure.ts --table      the table of the runs recorded so far
 //
-// RUNS=<n> (3) runs per engine; the table shows the median. ENGINES=webnode
-// measures one engine. RESUME=1 keeps the runs already recorded and does only
+// RUNS=<n> (3) runs per target; the table shows the median. RESUME=1 keeps
+// the runs already recorded and does only
 // the missing ones. HOLD=<seconds> leaves the first preview open that long
 // before going on, and MEASURE_DEBUG=1 prints every memory sample: together
 // they show whether memory grows while a lesson sits open. PROFILE=<dir>
@@ -35,8 +36,8 @@
 // four times a second (so memory is measured on a Mac only). `peak` is the
 // highest sum, `end` the last one.
 //
-// The webnode scripts are built minified, as a deployment ships them. Both
-// engines install from the npm registry, so the times move with the network.
+// The webnode scripts are built minified, as a deployment ships them. The
+// install comes from the npm registry, so the times move with the network.
 import {
   appendFileSync,
   existsSync,
@@ -45,7 +46,6 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { createServer } from "node:http";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -59,11 +59,6 @@ process.env.WEBNODE_HARNESS_MINIFY ??= "1";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const OUT_DIR = resolve(ROOT, process.env.WEBNODE_HARNESS_OUT);
 const RUNS_FILE = resolve(ROOT, process.env.MEASURE_RUNS || `${OUT_DIR}/runs.jsonl`);
-const PORT = Number(process.env.WEBNODE_HARNESS_PORT ?? 5199);
-const WEBCONTAINER_PAGE_SCRIPT = "webcontainer-harness.js";
-
-type Engine = "webnode" | "webcontainer";
-const ENGINES: Engine[] = ["webnode", "webcontainer"];
 
 /** What a target's run command leads to. */
 type Shows =
@@ -93,7 +88,6 @@ interface Target {
 interface Run {
   target: string;
   setup: string;
-  engine: Engine;
   run: number;
   pass: boolean;
   /** The first step that failed, and how. */
@@ -383,39 +377,6 @@ async function sampleMemory(
 
 // ---------------------------------------------------------------- one run
 
-/** Serves the WebContainer harness page on the harness port. */
-async function serveWebContainerPage(): Promise<{ stop(): void; url: string }> {
-  const { ISOLATION_HEADERS, harnessHtml } = await import("../webnode-harness");
-  const script = readFileSync(resolve(OUT_DIR, WEBCONTAINER_PAGE_SCRIPT), "utf8");
-  const server = createServer((request, response) => {
-    const path = new URL(request.url ?? "/", "http://internal").pathname;
-    if (path === "/") {
-      response.writeHead(200, { ...ISOLATION_HEADERS, "Content-Type": "text/html; charset=utf-8" });
-      response.end(harnessHtml(`/${WEBCONTAINER_PAGE_SCRIPT}`));
-    } else if (path === `/${WEBCONTAINER_PAGE_SCRIPT}`) {
-      response.writeHead(200, {
-        ...ISOLATION_HEADERS,
-        "Content-Type": "text/javascript; charset=utf-8",
-      });
-      response.end(script);
-    } else {
-      response.writeHead(404, ISOLATION_HEADERS);
-      response.end("not found");
-    }
-  });
-  await new Promise<void>((ready, failed) => {
-    server.once("error", failed);
-    server.listen(PORT, "127.0.0.1", ready);
-  });
-  return {
-    stop: () => {
-      server.closeAllConnections();
-      server.close();
-    },
-    url: `http://localhost:${PORT}/`,
-  };
-}
-
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** The end of what a command printed, on one line. */
@@ -428,14 +389,13 @@ function tail(output: string, lines = 12): string {
     .slice(-900);
 }
 
-async function measure(target: Target, engine: Engine, run: number): Promise<Run> {
+async function measure(target: Target, run: number): Promise<Run> {
   const { chromium } = await import("playwright-core");
   const { serve, previewFrame } = await import("../webnode-harness");
   const { tree } = await import("./lessons");
   const result: Run = {
     target: target.name,
     setup: target.setup,
-    engine,
     run,
     pass: false,
     error: null,
@@ -448,7 +408,7 @@ async function measure(target: Target, engine: Engine, run: number): Promise<Run
     final: null,
     consoleErrors: [],
   };
-  const server = engine === "webnode" ? await serve() : await serveWebContainerPage();
+  const server = await serve();
   // A profile kept between runs: a later run is a later visit of the same browser.
   const profile = process.env.PROFILE ? resolve(ROOT, process.env.PROFILE) : null;
   const visit = profile
@@ -636,7 +596,7 @@ function median(values: (number | null)[]): number | null {
 
 const seconds = (ms: number | null) => (ms === null ? "–" : (ms / 1000).toFixed(1));
 
-/** The table of `runs`: one row per target, each cell `webnode / WebContainer`. */
+/** The table of `runs`: one row per target, the median of its runs that passed. */
 function table(runs: Run[]): string {
   const rows = [
     "| setup | target | pass | install s | preview s | peak MB | end MB |",
@@ -644,30 +604,24 @@ function table(runs: Run[]): string {
   ];
   const failures: string[] = [];
   for (const name of new Set(runs.map((run) => run.target))) {
-    const cell = (pick: (engineRuns: Run[]) => string) =>
-      ENGINES.map((engine) => {
-        const engineRuns = runs.filter((run) => run.target === name && run.engine === engine);
-        return engineRuns.length ? pick(engineRuns) : "–";
-      }).join(" / ");
-    const passed = (engineRuns: Run[]) => engineRuns.filter((run) => run.pass);
+    const ofTarget = runs.filter((run) => run.target === name);
+    const passed = ofTarget.filter((run) => run.pass);
     rows.push(
-      `| ${runs.find((run) => run.target === name)!.setup} | ${name} | ${[
-        cell((engineRuns) => `${passed(engineRuns).length}/${engineRuns.length}`),
-        cell((engineRuns) => seconds(median(passed(engineRuns).map((run) => run.installMs)))),
-        cell((engineRuns) => seconds(median(passed(engineRuns).map((run) => run.previewMs)))),
-        cell((engineRuns) => String(median(passed(engineRuns).map((run) => run.peakMb)) ?? "–")),
-        cell((engineRuns) => String(median(passed(engineRuns).map((run) => run.endMb)) ?? "–")),
+      `| ${ofTarget[0].setup} | ${name} | ${[
+        `${passed.length}/${ofTarget.length}`,
+        seconds(median(passed.map((run) => run.installMs))),
+        seconds(median(passed.map((run) => run.previewMs))),
+        String(median(passed.map((run) => run.peakMb)) ?? "–"),
+        String(median(passed.map((run) => run.endMb)) ?? "–"),
       ].join(" | ")} |`,
     );
-    for (const engine of ENGINES) {
-      const failed = runs.find((run) => run.target === name && run.engine === engine && !run.pass);
-      if (failed) {
-        failures.push(`- ${name} on ${engine}: ${failed.error}`);
-      }
+    const failed = ofTarget.find((run) => !run.pass);
+    if (failed) {
+      failures.push(`- ${name}: ${failed.error}`);
     }
   }
   return (
-    `Each cell: webnode / WebContainer, the median of the runs that passed.\n\n${rows.join("\n")}` +
+    `The median of the runs that passed.\n\n${rows.join("\n")}` +
     (failures.length ? `\n\nFirst failure of each:\n${failures.join("\n")}` : "")
   );
 }
@@ -675,26 +629,15 @@ function table(runs: Run[]): string {
 // ---------------------------------------------------------------- main
 
 async function buildPages(): Promise<void> {
-  const { build } = await import("rolldown");
   const { buildAll } = await import("../webnode-harness");
   await buildAll();
-  await build({
-    input: fileURLToPath(new URL("./measure-webcontainer-page.ts", import.meta.url)),
-    platform: "browser",
-    logLevel: "warn",
-    output: {
-      file: resolve(OUT_DIR, WEBCONTAINER_PAGE_SCRIPT),
-      format: "iife",
-      codeSplitting: false,
-    },
-  });
 }
 
 /** One run in a process of its own: Playwright under Bun starts one browser per process. */
-async function runInChild(target: string, engine: Engine, run: number): Promise<Run> {
+async function runInChild(target: string, run: number): Promise<Run> {
   const child = spawn(
     process.execPath,
-    [fileURLToPath(import.meta.url), "--one", target, engine, String(run)],
+    [fileURLToPath(import.meta.url), "--one", target, String(run)],
     { cwd: ROOT, stdio: ["ignore", "pipe", "inherit"] },
   );
   const timer = setTimeout(() => child.kill("SIGTERM"), 15 * 60 * 1000);
@@ -712,7 +655,6 @@ async function runInChild(target: string, engine: Engine, run: number): Promise<
   return {
     target,
     setup,
-    engine,
     run,
     pass: false,
     error: `the run ended without a result (exit ${child.exitCode}): ${output.slice(-400)}`,
@@ -730,8 +672,8 @@ async function runInChild(target: string, engine: Engine, run: number): Promise<
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args[0] === "--one") {
-    const [, name, engine, run] = args;
-    const result = await measure(await targetNamed(name), engine as Engine, Number(run));
+    const [, name, run] = args;
+    const result = await measure(await targetNamed(name), Number(run));
     console.log(`RESULT ${JSON.stringify(result)}`);
     process.exit(0);
   }
@@ -769,7 +711,6 @@ async function main(): Promise<void> {
           : [name],
       )
     : targets.map((target) => target.name);
-  const engines = (process.env.ENGINES?.split(",") as Engine[] | undefined) ?? ENGINES;
   const runs = Number(process.env.RUNS ?? 3);
   mkdirSync(dirname(RUNS_FILE), { recursive: true });
   const done = process.env.RESUME === "1" ? recordedRuns() : [];
@@ -779,18 +720,16 @@ async function main(): Promise<void> {
   await buildPages();
   for (const name of names) {
     for (let run = 1; run <= runs; run += 1) {
-      for (const engine of engines) {
-        if (done.some((one) => one.target === name && one.engine === engine && one.run === run)) {
-          continue;
-        }
-        const result = await runInChild(name, engine, run);
-        appendFileSync(RUNS_FILE, `${JSON.stringify(result)}\n`);
-        console.log(
-          `${result.pass ? "ok  " : "FAIL"} ${name} ${engine} #${run}: install ${seconds(result.installMs)} s, ` +
-            `preview ${seconds(result.previewMs)} s, peak ${result.peakMb} MB, end ${result.endMb} MB` +
-            (result.error ? `\n     ${result.error}` : ""),
-        );
+      if (done.some((one) => one.target === name && one.run === run)) {
+        continue;
       }
+      const result = await runInChild(name, run);
+      appendFileSync(RUNS_FILE, `${JSON.stringify(result)}\n`);
+      console.log(
+        `${result.pass ? "ok  " : "FAIL"} ${name} #${run}: install ${seconds(result.installMs)} s, ` +
+          `preview ${seconds(result.previewMs)} s, peak ${result.peakMb} MB, end ${result.endMb} MB` +
+          (result.error ? `\n     ${result.error}` : ""),
+      );
     }
   }
   console.log(`\n${table(recordedRuns().filter((run) => names.includes(run.target)))}`);

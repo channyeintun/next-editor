@@ -6,7 +6,7 @@ export function makeRuntimeDiagnosticsTool(ctx: ToolContext) {
   return tool({
     name: "runtime_diagnostics",
     description:
-      "Read the existing WebContainer runtime status, recent dev-server output, runtime error, " +
+      "Read the existing runtime status, recent dev-server output, runtime error, " +
       "and latest in-preview browser error. This is read-only and does not start a command.",
     inputSchema: z.object({}),
     execute: (): string => {

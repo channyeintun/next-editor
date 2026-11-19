@@ -106,7 +106,7 @@ describe("lesson detail SSR", () => {
   });
 
   it("leaves the root empty for the browser to mount into", () => {
-    // The editor is Monaco + WebContainers: SSR here is data and metadata only.
+    // The editor is Monaco + the in-browser runtime: SSR here is data and metadata only.
     expect(injectLessonDocument(INDEX_HTML, CONTEXT)).toContain('<div id="root"></div>');
   });
 

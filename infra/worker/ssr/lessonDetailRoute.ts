@@ -19,7 +19,7 @@ function lookUpLesson(env: Env, slug: string): Promise<LessonLookup> {
 
 /**
  * GET /learn/:slug — data-only SSR for lesson detail. The page itself stays
- * client-rendered (the editor is Monaco + WebContainers), but resolving the
+ * client-rendered (the editor is Monaco + the in-browser runtime), but resolving the
  * row here gives crawlers real per-lesson metadata instead of the generic
  * shell every lesson URL used to serve, and dehydrates that same row into the
  * React Query cache so the browser skips the /api/lessons/:slug round trip it

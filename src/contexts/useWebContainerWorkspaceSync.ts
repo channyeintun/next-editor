@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
-import type { IFSWatcher, WebContainer } from "@webcontainer/api";
+import type { FileSystemWatcher, WebNode } from "../core/webnode/api";
 import {
   createWorkspaceTree,
   getWorkspaceRuntimeFileContents,
@@ -31,23 +31,23 @@ export const WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS = 150;
 const watchFilenameDecoder = new TextDecoder();
 
 interface EnsureProjectMountedOptions {
-  instance: WebContainer;
+  instance: WebNode;
   project: WorkspaceProject;
   onMountStart?: () => void;
 }
 
 interface QueueProjectSyncOptions {
-  instance: WebContainer;
+  instance: WebNode;
   project: WorkspaceProject;
 }
 
 interface QueueFileSyncOptions {
-  instance: WebContainer;
+  instance: WebNode;
   file: WorkspaceFile;
 }
 
 interface FlushWorkspaceSyncOptions {
-  instance: WebContainer;
+  instance: WebNode;
 }
 
 interface FileSyncWaiter {
@@ -56,7 +56,7 @@ interface FileSyncWaiter {
 }
 
 interface SerializedRuntimeTaskOptions<T> {
-  instance: WebContainer;
+  instance: WebNode;
   task: () => Promise<T>;
 }
 
@@ -100,7 +100,7 @@ async function withSyncOutcome<T>(
   }
 }
 
-function closeWatcher(watcher: IFSWatcher | null): void {
+function closeWatcher(watcher: FileSystemWatcher | null): void {
   try {
     watcher?.close();
   } catch {
@@ -114,9 +114,9 @@ function closeWatcher(watcher: IFSWatcher | null): void {
  * reverse-sync heuristic (see isFsWatchActive).
  */
 function watchWorkdir(
-  instance: WebContainer,
+  instance: WebNode,
   onChange: (filename: string | Uint8Array) => void,
-): IFSWatcher | null {
+): FileSystemWatcher | null {
   try {
     return instance.fs.watch(".", { recursive: true }, (_event, filename) => onChange(filename));
   } catch {
@@ -156,7 +156,7 @@ function settleFileSyncWaiters(result: Promise<void>, waiters: FileSyncWaiter[])
  * requestReverseSync).
  */
 export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
-  const mountedInstanceRef = useRef<WebContainer | null>(null);
+  const mountedInstanceRef = useRef<WebNode | null>(null);
   const lastSyncedProjectRef = useRef<WorkspaceProject | null>(null);
   const queuedProjectRef = useRef<WorkspaceProject | null>(null);
   const queuedFilesRef = useRef<Map<string, WorkspaceFile>>(new Map());
@@ -164,7 +164,7 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
   const fileSyncWaitersRef = useRef<FileSyncWaiter[]>([]);
   const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
   const syncGenerationRef = useRef(0);
-  const fsWatcherRef = useRef<IFSWatcher | null>(null);
+  const fsWatcherRef = useRef<FileSystemWatcher | null>(null);
   const forwardSyncWritesRef = useRef<Map<string, number>>(new Map());
   const reverseSyncTimeoutRef = useRef<number | null>(null);
   const reverseSyncRequestRef = useRef(0);
@@ -218,7 +218,7 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
     closeWatcher(watcher);
   };
 
-  const startFsWatch = (instance: WebContainer) => {
+  const startFsWatch = (instance: WebNode) => {
     stopFsWatch();
 
     const generation = syncGenerationRef.current;
@@ -251,7 +251,7 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
   const isProjectMounted = () => mountedInstanceRef.current !== null;
 
   /** A project is mounted, and on `instance`. */
-  const isMountedOn = (instance: WebContainer) => mountedInstanceRef.current === instance;
+  const isMountedOn = (instance: WebNode) => mountedInstanceRef.current === instance;
 
   const clearFileSyncTimer = () => {
     if (fileSyncTimerRef.current !== null) {
@@ -465,7 +465,7 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
    * container holds; without this they would write the container's own files
    * back into it, over anything a process wrote there since the read.
    */
-  const recordContainerProject = (instance: WebContainer, project: WorkspaceProject) => {
+  const recordContainerProject = (instance: WebNode, project: WorkspaceProject) => {
     if (mountedInstanceRef.current === instance) {
       lastSyncedProjectRef.current = cloneProjectForSync(project);
     }
@@ -476,7 +476,7 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
    * a newer request, a reset or turning reverse sync off makes an older one
    * return unapplied.
    */
-  const requestReverseSync = (instance: WebContainer, generation: number) => {
+  const requestReverseSync = (instance: WebNode, generation: number) => {
     if (typeof window === "undefined" || !reverseSyncEnabledRef.current) {
       return;
     }

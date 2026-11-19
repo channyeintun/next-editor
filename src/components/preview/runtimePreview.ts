@@ -208,7 +208,7 @@ export function getRuntimePreviewState(
   if (status === "mounting" || status === "booting") {
     return {
       title: "Preparing runtime preview",
-      description: "The workspace is mounting into the WebContainer before the preview starts.",
+      description: "The workspace is mounting into the runtime before the preview starts.",
       placeholderKind: "spinner",
     };
   }

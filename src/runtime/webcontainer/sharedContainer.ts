@@ -1,13 +1,13 @@
-// The one WebContainer that every editor's runtime and the agent's bash tool
+// The one WebNode that every editor's runtime and the agent's bash tool
 // share: whether it can boot here, its boot and lifetime, and the queue that
 // serializes work on it.
-import type { WebContainer } from "@webcontainer/api";
+import type { WebNode } from "../../core/webnode/api";
 import { isMobileBrowser } from "../../utils/isMobileBrowser";
-import { bootRuntimeEngine, selectedRuntimeEngine } from "./engine";
+import { bootRuntimeEngine } from "./engine";
 
 const sharedWebContainerState: {
-  instance: WebContainer | null;
-  bootPromise: Promise<WebContainer> | null;
+  instance: WebNode | null;
+  bootPromise: Promise<WebNode> | null;
   holders: number;
   /** An editor's runtime booted or joined the container (or the boot in flight). */
   runtimeOwned: boolean;
@@ -29,35 +29,14 @@ const sharedWebContainerState: {
  */
 export type SharedWebContainerUser = "runtime" | "agent";
 
-const webContainerTaskQueues = new WeakMap<WebContainer, Promise<void>>();
-
-// WebContainer.boot fetches its runtime from this CDN. The connection is warmed
-// here, when a boot starts, rather than by a static hint in index.html, which
-// opened it on every page: the landing, the /learn gallery, mobile and
-// playground-language lessons never boot a WebContainer.
-const WEBCONTAINER_CDN_ORIGIN = "https://w-corp-staticblitz.com";
-
-function preconnectWebContainerCdn(): void {
-  if (
-    typeof document === "undefined" ||
-    document.head.querySelector(`link[rel="preconnect"][href="${WEBCONTAINER_CDN_ORIGIN}"]`)
-  ) {
-    return;
-  }
-
-  const link = document.createElement("link");
-  link.rel = "preconnect";
-  link.href = WEBCONTAINER_CDN_ORIGIN;
-  link.crossOrigin = "";
-  document.head.append(link);
-}
+const webContainerTaskQueues = new WeakMap<WebNode, Promise<void>>();
 
 /**
  * Serialize filesystem transactions across the runtime UI, reverse sync, and
- * agent tools that share one WebContainer instance.
+ * agent tools that share one WebNode instance.
  */
 export function runSerializedWebContainerTask<T>(
-  instance: WebContainer,
+  instance: WebNode,
   task: () => Promise<T>,
 ): Promise<T> {
   const queue = webContainerTaskQueues.get(instance) ?? Promise.resolve();
@@ -73,10 +52,10 @@ export function runSerializedWebContainerTask<T>(
 }
 
 /**
- * Whether the in-browser WebContainer runtime can boot here. It requires both
- * cross-origin isolation (for SharedArrayBuffer) and a non-mobile browser. Mobile
- * is excluded because WebContainers are unsupported there and the boot attempt
- * OOM-reloads the tab. This gates auto-boot, so the runtime never starts on mobile.
+ * Whether the in-browser runtime can boot here. It requires both cross-origin
+ * isolation (for SharedArrayBuffer) and a non-mobile browser. Mobile is
+ * excluded because a phone has no memory for it: the boot attempt OOM-reloads
+ * the tab. This gates auto-boot, so the runtime never starts on mobile.
  */
 export function isWebContainerRuntimeSupported(): boolean {
   if (typeof window === "undefined") {
@@ -86,20 +65,17 @@ export function isWebContainerRuntimeSupported(): boolean {
   return window.crossOriginIsolated === true && !isMobileBrowser();
 }
 
-function bootSharedWebContainer(): Promise<WebContainer> {
-  if (selectedRuntimeEngine() === "webcontainer") {
-    preconnectWebContainerCdn();
-  }
+function bootSharedWebContainer(): Promise<WebNode> {
   // Fetched alongside the boot, not statically: it carries the ~77 KB recorder
-  // bundle as text, which no page that never boots a WebContainer (mobile,
+  // bundle as text, which no page that never boots a WebNode (mobile,
   // playback) should fetch. A failure surfaces where it is awaited below; this
   // handler only keeps it from going unhandled when the boot fails first.
   const previewScriptModule = import("./previewScript");
   previewScriptModule.catch(() => {});
 
-  // Only one WebContainer boots at a time, so a boot a reset gave up on lands
+  // Only one WebNode boots at a time, so a boot a reset gave up on lands
   // and goes down before this one starts.
-  const boot: Promise<WebContainer> = (sharedWebContainerState.retiringBoot ?? Promise.resolve())
+  const boot: Promise<WebNode> = (sharedWebContainerState.retiringBoot ?? Promise.resolve())
     .then(() => bootRuntimeEngine())
     .then(async (instance) => {
       // Install the rrweb recorder into every preview HTML response up front,
@@ -135,7 +111,7 @@ function bootSharedWebContainer(): Promise<WebContainer> {
 
 export async function getOrBootSharedWebContainer(
   user: SharedWebContainerUser = "agent",
-): Promise<WebContainer> {
+): Promise<WebNode> {
   const state = sharedWebContainerState;
 
   if (user === "runtime") {
@@ -159,7 +135,7 @@ export async function getOrBootSharedWebContainer(
   return state.bootPromise;
 }
 
-export function teardownSharedWebContainer(instance: WebContainer | null): void {
+export function teardownSharedWebContainer(instance: WebNode | null): void {
   if (!instance || instance !== sharedWebContainerState.instance) {
     return;
   }
@@ -206,7 +182,7 @@ export function resetSharedWebContainer(): void {
 }
 
 /**
- * Holds the shared WebContainer until the returned release is called. An editor
+ * Holds the shared WebNode until the returned release is called. An editor
  * holds it while mounted; the agent's bash tool lives inside one and reuses the
  * container between commands without holding it. The last release tears the
  * container down, or tears down a boot still in flight once it lands, unless

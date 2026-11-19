@@ -73,7 +73,7 @@ describe("shouldSendPostHogEvent", () => {
     expect(shouldSendPostHogEvent(null)).toBe(true);
   });
 
-  it("drops exceptions raised by a WebContainer preview", () => {
+  it("drops exceptions raised by a preview on one of the runtime's hosts", () => {
     expect(
       shouldSendPostHogEvent({
         event: "$exception",
@@ -84,8 +84,7 @@ describe("shouldSendPostHogEvent", () => {
               stacktrace: {
                 frames: [
                   {
-                    filename:
-                      "https://5173-project.local-credentialless.webcontainer-api.io/src/App.tsx",
+                    filename: "http://k3j2h1x9ab-5173.localhost:3000/src/App.tsx",
                   },
                 ],
               },
@@ -96,14 +95,14 @@ describe("shouldSendPostHogEvent", () => {
     ).toBe(false);
   });
 
-  it("drops exceptions from blob scripts created by a WebContainer preview", () => {
+  it("drops exceptions from blob scripts created by a preview", () => {
     expect(
       shouldSendPostHogEvent({
         event: "$exception",
         properties: {
           $exception_list: [
             {
-              stack: "at run (blob:https://project.webcontainer.io/asset-id:1:1)",
+              stack: "at run (blob:http://k3j2h1x9ab-5173.localhost:3000/asset-id:1:1)",
             },
           ],
         },
@@ -190,9 +189,7 @@ describe("shouldSendPostHogEvent", () => {
       sanitizePostHogEvent({
         event: "$exception",
         properties: {
-          $exception_list: [
-            { value: "secret", stack: "https://project.webcontainer-api.io/src/App.tsx" },
-          ],
+          $exception_list: [{ value: "secret", stack: "http://runtime.localhost:3000/process.js" }],
         },
       }),
     ).toBeNull();
@@ -239,7 +236,7 @@ describe("shouldSendPostHogEvent", () => {
       shouldSendPostHogEvent({
         event: "preview_opened",
         properties: {
-          preview_url: "https://project.webcontainer-api.io/",
+          preview_url: "http://k3j2h1x9ab-5173.localhost:3000/",
         },
       }),
     ).toBe(true);

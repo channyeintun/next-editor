@@ -101,7 +101,7 @@ describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt(makeProject(), { toolNames: ["read"], hasBash: true });
 
     expect(prompt).toContain("HTML, CSS, JavaScript, TypeScript, Node.js");
-    expect(prompt).toContain("WebContainer");
+    expect(prompt).toContain("in-browser Node.js runtime");
     // A couple of the explicitly out-of-scope runtimes must be named so the model
     // doesn't reach for them.
     expect(prompt).toContain("Python");
@@ -141,7 +141,7 @@ describe("buildSystemPrompt", () => {
       // constant now, so assert each branch still carries both.
       expect(prompt).toContain("There is no shell, terminal, dev server, or preview");
       expect(prompt).toContain("Do not introduce other languages, toolchains, or runtimes.");
-      expect(prompt).not.toContain("WebContainer");
+      expect(prompt).not.toContain("in-browser Node.js runtime");
       expect(prompt).not.toContain("Node.js ecosystem");
     },
   );
@@ -176,7 +176,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Use pnpm exclusively");
     // Still a WebContainer lesson: unlike the playground branches above, the
     // dev server and preview framing must stay.
-    expect(prompt).toContain("WebContainer");
+    expect(prompt).toContain("in-browser Node.js runtime");
     expect(prompt).not.toContain("JS/TS libraries and frameworks only");
     expect(prompt).not.toContain("Keep every solution within the web/Node.js ecosystem");
   });
@@ -198,9 +198,9 @@ describe("buildSystemPrompt", () => {
     const withBash = buildSystemPrompt(makeProject(), { toolNames: ["bash"], hasBash: true });
     const withoutBash = buildSystemPrompt(makeProject(), { toolNames: [], hasBash: false });
 
-    expect(withBash).toContain("Bash/WebContainer safety rules (strict)");
+    expect(withBash).toContain("Bash safety rules (strict)");
     expect(withBash).toContain("The bash tool runs in");
-    expect(withoutBash).not.toContain("Bash/WebContainer safety rules (strict)");
+    expect(withoutBash).not.toContain("Bash safety rules (strict)");
     expect(withoutBash).not.toContain("The bash tool runs in");
   });
 
@@ -216,7 +216,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Use pnpm exclusively");
     expect(prompt).toContain("Never use npm, npx, yarn, bun");
     expect(prompt).toContain("Do not pipe, redirect, or wrap a dev-server/watch command");
-    expect(prompt).toContain("process cancellation is best-effort");
+    expect(prompt).toContain("Process cancellation is best-effort");
     expect(prompt).toContain("Stop, kill, or a timeout may not promptly settle");
   });
 
@@ -276,7 +276,7 @@ describe("buildSystemPrompt", () => {
         "Prefer tabs.",
         "</AGENTS.md>",
         "",
-        "Bash/WebContainer safety rules (strict):",
+        "Bash safety rules (strict):",
         "- Background processes and curl to any host are permitted.",
       ].join("\n"),
     };

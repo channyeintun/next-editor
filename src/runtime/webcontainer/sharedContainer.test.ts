@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { WebContainer } from "@webcontainer/api";
+import type { WebNode } from "../../core/webnode/api";
 import { isWebContainerRuntimeSupported } from "./sharedContainer";
 
-// Stands in for WebContainer.boot, which getOrBootSharedWebContainer imports lazily.
-const bootWebContainer = vi.hoisted(() => vi.fn<() => Promise<WebContainer>>());
+// Stands in for WebNode.boot, which getOrBootSharedWebContainer imports lazily.
+const bootWebContainer = vi.hoisted(() => vi.fn<() => Promise<WebNode>>());
 
-vi.mock("@webcontainer/api", () => ({ WebContainer: { boot: bootWebContainer } }));
+vi.mock("../../core/webnode/api", () => ({ WebNode: { boot: bootWebContainer } }));
 
 describe("isWebContainerRuntimeSupported", () => {
   afterEach(() => {
@@ -37,7 +37,7 @@ describe("isWebContainerRuntimeSupported", () => {
   });
 });
 
-describe("shared WebContainer lifetime", () => {
+describe("shared WebNode lifetime", () => {
   // A fresh module per test, so each one starts with no container, boot or holder.
   let sharedContainer: typeof import("./sharedContainer");
   // Settles once the boot imports the recorder payload module, also lazily.
@@ -67,18 +67,18 @@ describe("shared WebContainer lifetime", () => {
   type StandInWebContainer = ReturnType<typeof createStandInWebContainer>;
 
   function bootsInto(instance: StandInWebContainer) {
-    bootWebContainer.mockResolvedValueOnce(instance as unknown as WebContainer);
+    bootWebContainer.mockResolvedValueOnce(instance as unknown as WebNode);
   }
 
   /** Holds the next boot open; the returned function lands it with an instance. */
   function deferNextBoot(): (instance: StandInWebContainer) => void {
-    let land: ((instance: WebContainer) => void) | null = null;
+    let land: ((instance: WebNode) => void) | null = null;
     bootWebContainer.mockReturnValueOnce(
       new Promise((resolve) => {
         land = resolve;
       }),
     );
-    return (instance) => land?.(instance as unknown as WebContainer);
+    return (instance) => land?.(instance as unknown as WebNode);
   }
 
   it("tears down a boot that lands after the last holder let go", async () => {
@@ -117,26 +117,6 @@ describe("shared WebContainer lifetime", () => {
     expect(instance.teardown).toHaveBeenCalledOnce();
   });
 
-  it("warms the WebContainer CDN connection once, when a boot starts", async () => {
-    const preconnects = () =>
-      document.head.querySelectorAll(
-        'link[rel="preconnect"][href="https://w-corp-staticblitz.com"]',
-      );
-    for (const link of preconnects()) link.remove();
-    expect(preconnects()).toHaveLength(0);
-
-    bootsInto(createStandInWebContainer());
-    const first = await sharedContainer.getOrBootSharedWebContainer();
-    expect(preconnects()).toHaveLength(1);
-    expect(preconnects()[0]?.getAttribute("crossorigin")).toBe("");
-
-    // A reboot after teardown reuses the hint instead of stacking another.
-    sharedContainer.teardownSharedWebContainer(first);
-    bootsInto(createStandInWebContainer());
-    await sharedContainer.getOrBootSharedWebContainer();
-    expect(preconnects()).toHaveLength(1);
-  });
-
   it("fetches the preview recorder while booting and installs it before handing the container out", async () => {
     const landBoot = deferNextBoot();
     const booting = sharedContainer.getOrBootSharedWebContainer();
@@ -157,7 +137,7 @@ describe("shared WebContainer lifetime", () => {
     const second = createStandInWebContainer();
     bootsInto(second);
     const next = sharedContainer.getOrBootSharedWebContainer("runtime");
-    // Only one WebContainer boots at a time: the next boot waits for the first.
+    // Only one WebNode boots at a time: the next boot waits for the first.
     await vi.waitFor(() => expect(bootWebContainer).toHaveBeenCalledOnce());
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(bootWebContainer).toHaveBeenCalledOnce();

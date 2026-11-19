@@ -47,8 +47,8 @@ app.use("*", async (c, next) => {
 // it comes before the middleware that adds headers (localDevHost.ts).
 app.use("*", requestHostGuard);
 
-// The app requires cross-origin isolation on every response (WebContainers
-// need SharedArrayBuffer). Static Assets/ASSETS.fetch don't add it, so it
+// The app requires cross-origin isolation on every response (the in-browser
+// runtime needs SharedArrayBuffer). Static Assets/ASSETS.fetch don't add it, so it
 // has to happen here. Copies the Response rather than mutating c.res.headers
 // in place, since responses coming back from a Fetcher binding (ASSETS.fetch)
 // may have immutable headers; the copy's are mutable. Copying from the
