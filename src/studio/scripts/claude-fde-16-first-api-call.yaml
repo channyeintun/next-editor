@@ -1,0 +1,665 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-16-first-api-call
+  title: "Claude FDE 16: ပထမဆုံး API call"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: reply-assistant/src/first-call.ts
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      examples/first-response.example.json: |
+        {
+          "id": "msg_01QbV3s8Lk2Wd7Hn5Xc4Rt9Z",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-opus-5-5",
+          "content": [
+            {
+              "type": "text",
+              "text": "မင်္ဂလာပါ။ internet မရလို့ အဆင်မပြေ ဖြစ်ရတဲ့အတွက် တောင်းပန်ပါတယ်။ လှိုင်မြို့နယ်က လိုင်း အခြေအနေကို ကျွန်တော်တို့ဘက်က စစ်ပြီး ပြန်လည် ဆက်သွယ်ပေးပါမယ်။ router မီး အနီရောင် ပြနေတယ် ဆိုတာကိုလည်း မှတ်ထားပါတယ်။"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 214,
+            "output_tokens": 356
+          }
+        }
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      reply-assistant/src/first-call.ts: |
+        // Reply assistant: the first Messages API call, for one ticket.
+        import Anthropic from "@anthropic-ai/sdk";
+
+        const client = new Anthropic(); // reads ANTHROPIC_API_KEY or an `ant auth login` profile
+
+        const ticket = "လှိုင်မြို့နယ်မှာ မနေ့ညကစပြီး internet မရပါဘူး။ router မီး အနီရောင် ပြနေတယ်။";
+
+        const message = await client.messages.create({
+        });
+  whiteboardAssets:
+    # Board 1 — one call: the request (violet, data moving) with its four parts,
+    # the model (blue), and the response (violet) with the two parts read here.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "request → Claude → response",
+        fontSize: 36,
+      }
+    - {
+        id: b-req,
+        kind: rectangle,
+        x: 270,
+        y: 220,
+        width: 240,
+        height: 300,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-p1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 245,
+        width: 240,
+        height: 35,
+        text: "model",
+        fontSize: 28,
+      }
+    - {
+        id: b-p2,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 305,
+        width: 240,
+        height: 35,
+        text: "max_tokens",
+        fontSize: 28,
+      }
+    - {
+        id: b-p3,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 365,
+        width: 240,
+        height: 35,
+        text: "system",
+        fontSize: 28,
+      }
+    - {
+        id: b-p4,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 425,
+        width: 240,
+        height: 35,
+        text: "messages",
+        fontSize: 28,
+      }
+    - {
+        id: b-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 520,
+        y: 350,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-model,
+        kind: rectangle,
+        x: 610,
+        y: 325,
+        width: 160,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-model-l,
+        kind: text,
+        align: center,
+        x: 610,
+        y: 352,
+        width: 160,
+        height: 35,
+        text: "Claude",
+        fontSize: 28,
+      }
+    - {
+        id: b-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 780,
+        y: 350,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-resp,
+        kind: rectangle,
+        x: 870,
+        y: 220,
+        width: 220,
+        height: 300,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-r1,
+        kind: text,
+        align: center,
+        x: 870,
+        y: 300,
+        width: 220,
+        height: 35,
+        text: "content",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2,
+        kind: text,
+        align: center,
+        x: 870,
+        y: 380,
+        width: 220,
+        height: 35,
+        text: "stop_reason",
+        fontSize: 28,
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဒုတိယ request · model က သိမလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) သိတယ်၊ API က မှတ်ထားလို့",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) မသိ၊ program က ပြန်ပို့မှ သိ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 430,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 760,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "API က request ကြား ဘာမှ မမှတ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "history ကို program က ထိန်းပြီး ပြန်ပို့",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9316
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: a-program-calls
+    chapter: Program က ခေါ်ရမယ့် Claude
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ session တွေကြား ဘာကို သယ်မလဲ၊ ဘာကို အသစ် ယူမလဲ ဆိုတဲ့ context ဆုံးဖြတ်ချက်နဲ့၊ prompt
+      မရေးခင် ဆုံးဖြတ်ချက် လေးခုကို ပြီးဆုံးခဲ့ပါတယ်။ အခု တတိယ ပတ် ရောက်ပြီမို့ Reply assistant ကို စတည်ဆောက်ပါပြီ။
+      [[mark:need]] support manager လှလှ လိုချင်တာက support agent တွေ Ticket system ထဲမှာ ticket ကို ဖွင့်တာနဲ့
+      မူကြမ်း အသင့် ရှိနေဖို့ပါ။ ဒါဆို Claude ကို စာရိုက်ပြီး မေးမှာက လူ မဟုတ်တော့ပါဘူး။ Ticket system ထဲက program
+      က ticket စာကို ပို့ပြီး မူကြမ်းကို ပြန်ယူရမှာပါ။ entry point ရွေးတုန်းက API လို့ ဆုံးဖြတ်ခဲ့တာ ဒါကြောင့်ပါ။
+      [[mark:platform]] API ဆိုတာ program တစ်ခုက နောက် program တစ်ခုကို ခေါ်သုံးတဲ့ လမ်းကြောင်းပါ။ Claude Platform
+      ကတော့ developer တွေ Claude ကို ကိုယ့် program ထဲ ထည့်သုံးနိုင်အောင် Anthropic ပေးထားတဲ့ platform ပါ။ model
+      ကို ခေါ်တာ အားလုံးက Messages API ဆိုတဲ့ endpoint တစ်ခုတည်းကနေ သွားပြီး၊ tool တွေ၊ structured output
+      တွေကလည်း သီးခြား API မဟုတ်ဘဲ ဒီ endpoint ရဲ့ feature တွေပါ။
+      [[mark:platform-2]] agent run ဖို့ လိုတဲ့ အပိုင်းတွေကို Anthropic ဘက်က run ပေးတဲ့ Managed Agents ဆိုတာလည်း
+      ရှိပါတယ်။ ဒါပေမဲ့ ကိုယ်တို့က အဆင့်တိုင်းကို ကိုယ်တိုင် မြင်ပြီး ထိန်းနိုင်အောင် Messages API ကို တိုက်ရိုက်
+      သုံးတဲ့ လမ်းကနေ စပါမယ်။
+      [[mark:sel-file]] ဒီ lesson မှာ ticket တစ်ခုအတွက် ပထမဆုံး request ကို TypeScript နဲ့ ရေးပြီး၊ ပြန်ရနိုင်တဲ့
+      response ဥပမာကို ဖတ်ကြည့်ပါမယ်။ request ဆိုတာ program က ပို့လိုက်တာ၊ response ဆိုတာ ပြန်ရတာပါ။
+    sources:
+      - {
+          title: "Intro to Claude (Claude Platform docs)",
+          url: "https://platform.claude.com/docs/en/intro",
+        }
+      - {
+          title: "Claude Managed Agents overview",
+          url: "https://platform.claude.com/docs/en/managed-agents/overview",
+        }
+    actions:
+      - {
+          id: open-call,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: reply-assistant/src/first-call.ts,
+        }
+      - id: sel-file
+        type: editor.select
+        at: { mark: sel-file }
+        target:
+          file: reply-assistant/src/first-call.ts
+          text: "// Reply assistant: the first Messages API call, for one ticket."
+
+  - id: the-shape
+    chapter: Request နဲ့ response
+    narration: >
+      [[mark:b-open]] အရင်ဆုံး request တစ်ခုရဲ့ ပုံစံကို ကြည့်ရအောင်။ program နဲ့ model ကြားမှာ သွားတာ ဒီ
+      နှစ်ခုပါပဲ။
+      [[mark:b-req]] request ထဲမှာ မပါမဖြစ် အပိုင်း သုံးခု ရှိပါတယ်။ ပထမက model ပါ။ ဘယ် model ကို ခေါ်မလဲ
+      ဆိုတာကို ID အတိအကျနဲ့ ပြောရပါတယ်။ ဒုတိယက max tokens ပါ။ model က ဒီ response မှာ အများဆုံး ဘယ်လောက်
+      ရေးခွင့်ရှိလဲ ဆိုတဲ့ ကန့်သတ်ချက်ဖြစ်ပြီး token နဲ့ တိုင်းပါတယ်။ token ဆိုတာ model က စာကို ဖြတ်ယူတဲ့
+      အပိုင်းအစလေးပါ။
+      [[mark:b-msgs]] တတိယက messages ပါ။ စကားဝိုင်းကို user နဲ့ assistant ဆိုတဲ့ role တွေနဲ့ စီထားတဲ့ စာရင်းဖြစ်ပြီး၊
+      ပထမဆုံး message က user ဖြစ်ရပါတယ်။ system ကတော့ မထည့်လည်း ရပေမဲ့ Reply assistant အတွက် အရေးကြီးပါတယ်။
+      system prompt ဆိုတာ စကားမပြောခင် model ကို ကြိုပေးထားတဲ့ တာဝန်နဲ့ စည်းကမ်းပါ။ messages ထဲက role
+      တစ်ခု မဟုတ်ဘဲ request ရဲ့ အပြင်ဆုံး အဆင့်မှာ သီးခြား ထားရပါတယ်။
+      [[mark:b-model]] program က ဒီ request ကို Messages API ဆီ ပို့လိုက်တော့၊ model က system prompt နဲ့ messages
+      ကို ဖတ်ပြီး အဖြေကို ရေးပါတယ်။
+      [[mark:b-resp]] ပြန်လာတဲ့ response ထဲမှာ အဓိက ဖတ်ရမှာက content ပါ။ content က စာသား တစ်ခုတည်း မဟုတ်ဘဲ type
+      အမျိုးမျိုး ရှိနိုင်တဲ့ block တွေရဲ့ စာရင်းပါ။ stop reason ကတော့ model က ဘာကြောင့် ရပ်သွားလဲ ပြောပြတာပါ။
+      stop reason တွေ အမျိုးမျိုးနဲ့ token ဘယ်လောက် သုံးလဲ ဆိုတာကို နောက် lesson မှာ အသေးစိတ် ကြည့်ပါမယ်။
+    sources:
+      - { title: "Get started with Claude", url: "https://platform.claude.com/docs/en/get-started" }
+    actions:
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-b-req,
+          type: whiteboard.apply,
+          at: { mark: b-req },
+          upsertIds: [b-req, b-p1, b-p2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-msgs,
+          type: whiteboard.apply,
+          at: { mark: b-msgs },
+          upsertIds: [b-p4, b-p3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-b-model,
+          type: whiteboard.apply,
+          at: { mark: b-model },
+          upsertIds: [b-a1, b-model, b-model-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-resp,
+          type: whiteboard.apply,
+          at: { mark: b-resp },
+          upsertIds: [b-a2, b-resp, b-r1, b-r2],
+          drawMs: 1800,
+        }
+
+  - id: credentials
+    chapter: Key ကို code ထဲ မထည့်ရ
+    narration: >
+      [[mark:k-close]] အခု ဒီ ပုံစံကို code နဲ့ ရေးကြည့်ရအောင်။ ထိပ်ဆုံးမှာ Anthropic ရဲ့ TypeScript SDK ကို import
+      လုပ်ထားပါတယ်။
+      [[mark:sel-client]] client ကို ဆောက်တဲ့ ဒီ စာကြောင်းမှာ API key မပါတာ သတိထားကြည့်ပါ။ SDK က key ကို
+      environment variable ကနေ ကိုယ်တိုင် ရှာပါတယ်။ local မှာ develop လုပ်တဲ့အခါ docs က ant ဆိုတဲ့ command line
+      tool နဲ့ sign in ဝင်တဲ့ နည်းကို အကြံပြုထားပြီး၊ SDK က အဲဒီ profile ကိုလည်း သူ့အလိုလို ယူသုံးပါတယ်။
+      [[mark:why-env]] key ကို code ထဲ ရိုက်ထည့်ရင် git ထဲ ရောက်သွားပြီး၊ repository ကို ဖတ်နိုင်တဲ့ လူတိုင်းဆီ
+      ရောက်သွားနိုင်ပါတယ်။ ဒါကြောင့် key က environment ထဲမှာပဲ နေရပြီး၊ code က ဘယ်ကနေ ယူရမလဲ ဆိုတာကိုပဲ
+      သိရပါမယ်။ API key ကိုတော့ Console ကနေ ထုတ်ယူရပါတယ်။ SDK မသုံးဘဲ HTTP နဲ့ တိုက်ရိုက် ခေါ်ရင်လည်း key ကို header
+      ထဲမှာ ထည့်ပြီး၊ ဘယ် API version နဲ့ ပြောနေလဲ ဆိုတာကိုပါ header နဲ့ ပို့ရပါတယ်။
+      [[mark:sel-ticket]] ticket ဆိုတဲ့ variable ထဲမှာ customer ရေးလိုက်တဲ့ စာကို ထည့်ထားပါတယ်။ တကယ့် Reply assistant
+      မှာတော့ Ticket system ကနေ ယူမှာဖြစ်ပြီး၊ ဒီ ဥပမာမှာတော့ ticket တစ်ခုကို ပုံသေ ထားလိုက်တာပါ။
+    sources:
+      - { title: "Get started with Claude", url: "https://platform.claude.com/docs/en/get-started" }
+    actions:
+      - { id: close-shape, type: whiteboard.apply, at: { mark: k-close }, open: false }
+      - {
+          id: open-call-2,
+          type: workspace.openFile,
+          at: { afterAction: close-shape },
+          path: reply-assistant/src/first-call.ts,
+        }
+      - id: sel-client
+        type: editor.select
+        at: { mark: sel-client }
+        target:
+          file: reply-assistant/src/first-call.ts
+          text: "const client = new Anthropic();"
+      - id: sel-env
+        type: editor.select
+        at: { mark: why-env }
+        target:
+          file: reply-assistant/src/first-call.ts
+          text: "// reads ANTHROPIC_API_KEY or an `ant auth login` profile"
+      - id: sel-ticket
+        type: editor.select
+        at: { mark: sel-ticket }
+        target:
+          file: reply-assistant/src/first-call.ts
+          text: "const ticket ="
+
+  - id: the-request
+    chapter: Request ကို တစ်ပိုင်းချင်း
+    narration: >
+      [[mark:type-model]] ပထမ အပိုင်းက model ပါ။ Reply assistant ကို Opus နဲ့ စမ်းမယ်လို့ ဆုံးဖြတ်ထားတာမို့ Opus
+      ရဲ့ ID ကို ထည့်ပါတယ်။ ID က version တစ်ခုကို ပုံသေ ချိတ်ထားတာမို့ ဒီ စာကြောင်းကို ကိုယ်တိုင် မပြောင်းမချင်း model
+      မပြောင်းပါဘူး။
+      [[mark:type-max]] ဒုတိယက max tokens ပါ။ ဒီ ဥပမာမှာ တစ်ထောင် ထားပါတယ်။ model ရေးနိုင်တဲ့ အရှည်ကို ကန့်သတ်တာမို့
+      ဈေးနဲ့ အချိန်ကိုလည်း ထိန်းပေးပါတယ်။ ဒါပေမဲ့ ကန့်သတ်ချက်ကို ရောက်သွားရင် အဖြေက တစ်ဝက်တစ်ပျက်နဲ့ ပြတ်သွားနိုင်တာမို့
+      အရမ်း နည်းလို့လည်း မဖြစ်ပါဘူး။
+      [[mark:type-system]] တတိယက system prompt ပါ။ model ကို နေခြည် ရဲ့ support ticket တွေအတွက် အဖြေ မူကြမ်း
+      ရေးဖို့နဲ့၊ အဲဒါက support agent စစ်မယ့် မူကြမ်း ဖြစ်တယ် ဆိုတာကို ပြောထားပါတယ်။ customer ပြောင်းတိုင်း
+      မပြောင်းတဲ့ တာဝန်မို့ system မှာ ထားတာပါ။
+      [[mark:type-messages]] နောက်ဆုံး အပိုင်းက messages ပါ။ user role နဲ့ message တစ်ခုတည်း ပါပြီး၊ content က
+      customer ရဲ့ ticket စာပါ။ ဒီ request မှာ model မြင်ရတာ system prompt နဲ့ ဒီ message ပဲ ဖြစ်ပါတယ်။ NMS ကိုရော၊
+      customer ရဲ့ plan ကိုရော မမြင်ရသေးပါဘူး။ မုန်တိုင်းကျတဲ့ညက chat AI လိုပဲ မြင်ရတာ ticket စာ တစ်ခုတည်းမို့၊
+      ဒီ မူကြမ်းကို support agent က စစ်ပြီးမှ ပို့ရပါမယ်။
+    sources:
+      - { title: "Get started with Claude", url: "https://platform.claude.com/docs/en/get-started" }
+      - {
+          title: "Models overview",
+          url: "https://platform.claude.com/docs/en/about-claude/models/overview",
+        }
+    actions:
+      - id: type-model
+        type: editor.type
+        at: { mark: type-model }
+        cadence: line-by-line
+        target:
+          {
+            file: reply-assistant/src/first-call.ts,
+            after: "const message = await client.messages.create({\n",
+          }
+        text: "  model: \"claude-opus-5-5\", // ID as of 2026-11\n"
+      - id: type-max
+        type: editor.type
+        at: { mark: type-max }
+        cadence: line-by-line
+        target:
+          {
+            file: reply-assistant/src/first-call.ts,
+            after: "  model: \"claude-opus-5-5\", // ID as of 2026-11\n",
+          }
+        text: "  max_tokens: 1000,\n"
+      - id: type-system
+        type: editor.type
+        at: { mark: type-system }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/first-call.ts, after: "  max_tokens: 1000,\n" }
+        text: "  system: \"You draft replies to Naychi Fiber support tickets for an agent to check.\",\n"
+      - id: type-messages
+        type: editor.type
+        at: { mark: type-messages }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/first-call.ts, after: "for an agent to check.\",\n" }
+        text: "  messages: [{ role: \"user\", content: ticket }],\n"
+      - id: expect-messages
+        type: expect.file
+        at: { afterAction: type-messages }
+        path: reply-assistant/src/first-call.ts
+        contains: "  messages: [{ role: \"user\", content: ticket }],\n});\n"
+
+  - id: the-response
+    chapter: Response ဥပမာ
+    narration: >
+      [[mark:r-open]] ဒီ request ကို ပို့ရင် ပြန်လာနိုင်တဲ့ response ပုံစံကို ဥပမာ တစ်ခုနဲ့ ကြည့်ရအောင်။ ဒါက ဒီ
+      lesson အတွက် ပြင်ဆင်ထားတဲ့ ဥပမာ response ပါ။
+      [[mark:sel-content]] content ထဲက block တိုင်းမှာ type ပါပါတယ်။ ဒီ ဥပမာမှာ text block တစ်ခုပဲ ရှိပြီး၊ model
+      ရေးတဲ့ မူကြမ်းက အဲဒီ block ရဲ့ text ထဲမှာ ရှိပါတယ်။ နောက်ပိုင်း tool တွေ သုံးလာတဲ့အခါ text မဟုတ်တဲ့ block
+      တွေလည်း ပါလာနိုင်ပါတယ်။
+      [[mark:sel-stop]] stop reason က end turn ဖြစ်နေတာက model က အဖြေကို ပြီးအောင် ရေးပြီးလို့ ရပ်သွားတယ်
+      ဆိုတဲ့ အဓိပ္ပာယ်ပါ။
+      [[mark:sel-role]] response ကိုယ်တိုင်ကလည်း assistant role နဲ့ ပြန်လာပြီး၊ ဘယ် model က ရေးလဲ ဆိုတာလည်း ပါပါတယ်။
+      request မအောင်မြင်ရင်တော့ ဒီလို message မဟုတ်ဘဲ error ပြန်ရပါတယ်။ key မှားရင် authentication error၊
+      ကန့်သတ်ချက် ကျော်ရင် rate limit error လို အမျိုးအစား ခွဲထားတဲ့ error တွေကို SDK က ပေးတာမို့ code က
+      တစ်ခုချင်း handle လုပ်နိုင်ပါတယ်။
+      [[mark:l-open]] ဒါဆို program က ဒီ response ထဲကနေ မူကြမ်းကို ဘယ်လို ထုတ်ယူမလဲ ဆိုတာ ရေးကြည့်ရအောင်။
+      [[mark:type-loop]] content ထဲက block တစ်ခုချင်းကို ပတ်ကြည့်ပြီး၊ type က text ဖြစ်မှ စာသားကို ယူပါတယ်။
+      TypeScript မှာ type ကို အရင် မစစ်ဘဲ ပထမ block ရဲ့ text ကို တိုက်ရိုက် ဖတ်ရင် type error ဖြစ်ပါတယ်။ block
+      မျိုးစုံ ပါလာနိုင်တာကို code က လက်ခံထားဖို့ပါ။ ဒီ ဥပမာမှာ console ထဲ ထုတ်ပြထားပေမဲ့၊ တကယ့် Reply assistant
+      မှာတော့ Ticket system ထဲ ပြန်ထည့်ရပါမယ်။
+    sources:
+      - { title: "Get started with Claude", url: "https://platform.claude.com/docs/en/get-started" }
+    actions:
+      - {
+          id: open-example,
+          type: workspace.openFile,
+          at: { mark: r-open },
+          path: examples/first-response.example.json,
+        }
+      - id: sel-content
+        type: editor.select
+        at: { mark: sel-content }
+        target:
+          file: examples/first-response.example.json
+          text: '"type": "text",'
+          occurrence: 1
+      - id: sel-stop
+        type: editor.select
+        at: { mark: sel-stop }
+        target:
+          file: examples/first-response.example.json
+          text: '"stop_reason": "end_turn"'
+      - id: sel-role
+        type: editor.select
+        at: { mark: sel-role }
+        target:
+          file: examples/first-response.example.json
+          text: '"role": "assistant",'
+      - {
+          id: open-call-3,
+          type: workspace.openFile,
+          at: { mark: l-open },
+          path: reply-assistant/src/first-call.ts,
+        }
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/first-call.ts, after: "content: ticket }],\n});\n" }
+        text: "\nfor (const block of message.content) {\n  if (block.type === \"text\") console.log(block.text);\n}\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ customer က ပထမ အဖြေကို ဖတ်ပြီး အခုထိ မရသေးဘူးလို့ ပြန်ရေးလာတယ်
+      ဆိုပါစို့။ program က ဒုတိယ request ကို ပို့တဲ့အခါ messages ထဲမှာ customer ရဲ့ message အသစ် တစ်ခုတည်းကိုပဲ
+      ထည့်လိုက်ပါတယ်။ router မီး အနီရောင် ပြနေတယ် ဆိုတာကို model က ဒုတိယ request မှာ သိမလား။
+      [[mark:q-a]] ပထမ အဖြေက သိတယ်၊ API က အရင် request ကို မှတ်ထားလို့ ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက မသိဘူး၊ program က အရင် message တွေကိုပါ ပြန်ပို့မှ သိမယ် ဆိုတာပါ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ Messages API က request တစ်ခုနဲ့ တစ်ခုကြား
+      ဘာမှ မမှတ်ထားလို့ပါ။ request တိုင်းက အသစ်ပါ။ model မြင်ရတာ အဲဒီ request ထဲမှာ ပါတဲ့ system prompt နဲ့ messages
+      ပဲ ဖြစ်ပါတယ်။ ဒါကြောင့် စကားဝိုင်း ဆက်ချင်ရင် program က customer ရဲ့ ပထမ message၊ model ရဲ့ ပထမ အဖြေနဲ့
+      message အသစ်ကို အစဉ်လိုက် messages ထဲ ထည့်ပြီး အကုန် ပြန်ပို့ရပါတယ်။
+      [[mark:q-rule]] ဒါက chat app နဲ့ ကွာတဲ့ အချက်ပါ။ chat app မှာ အရင် message တွေက chat ထဲမှာ ဆက်ရှိနေပေမဲ့၊ API
+      မှာတော့ history ကို ကိုယ့် program က သိမ်းပြီး ပြန်ပို့ရပါတယ်။
+    sources:
+      - { title: "Get started with Claude", url: "https://platform.claude.com/docs/en/get-started" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် အလုပ်အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် project ထဲက AI နဲ့ လုပ်ချင်တဲ့ အလုပ် တစ်ခုအတွက်
+      ဒီ system စာကြောင်းကို ပြန်ရေးကြည့်ပါ။ model ရဲ့ တာဝန်နဲ့၊ ရလဒ်ကို ဘယ်သူ စစ်မလဲ ဆိုတာကို တစ်ကြောင်းတည်းနဲ့
+      ရေးပါ။
+      [[mark:turn-2]] ပြီးရင် ticket နေရာမှာ ကိုယ့် program က တကယ် ပို့မယ့် user message ကို ထည့်ရေးပါ။ model က ဒီ
+      နှစ်ခုကလွဲပြီး ဘာမှ မမြင်ရဘူး ဆိုတာကို သတိထားပြီး၊ ဘာ အချက်အလက် လိုနေသေးလဲ ဆိုတာကို မှတ်ထားပါ။
+    sources:
+      - { title: "Get started with Claude", url: "https://platform.claude.com/docs/en/get-started" }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-system
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: reply-assistant/src/first-call.ts
+          text: '  system: "You draft replies to Naychi Fiber support tickets for an agent to check.",'
+      - id: sel-ticket-2
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: reply-assistant/src/first-call.ts
+          text: "const ticket ="
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ Reply assistant မှာ Claude ကို ခေါ်တာက လူ မဟုတ်ဘဲ program ပါ။ program က model၊ max tokens၊
+      system prompt နဲ့ messages ပါတဲ့ request ကို ပို့ပြီး၊ content block တွေ ပါတဲ့ response ကို ပြန်ရပါတယ်။
+      [[mark:recap-2]] key က environment ထဲမှာ နေပြီး code ထဲ မပါရပါဘူး။ API က request ကြား ဘာမှ မမှတ်တာမို့ စကားဝိုင်းကို
+      program က ထိန်းပြီး ပြန်ပို့ရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ token၊ cost နဲ့ latency ကို လေ့လာသွားပါမယ်။ CTO ဖြစ်တဲ့ အောင်အောင် က တစ်ရက်
+      မူကြမ်း ၁၈၀၀ ရေးခိုင်းရင် ဘယ်လောက် ကုန်မလဲ မေးလာတာကနေ စပါမယ်။
+    sources:
+      - { title: "Get started with Claude", url: "https://platform.claude.com/docs/en/get-started" }
+    actions:
+      - id: sel-messages
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: reply-assistant/src/first-call.ts
+          text: '  messages: [{ role: "user", content: ticket }],'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
