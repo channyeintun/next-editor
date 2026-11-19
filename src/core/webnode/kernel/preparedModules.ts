@@ -2,30 +2,31 @@
 // A process asks where a file's entry is (`module.prepared`). The kernel
 // answers with one it has: in the filesystem already, or kept between visits
 // by the editor's page (preparedStorage.ts), which it reaches through
-// `PagePreparedStore`. For a file it has none for, the process rewrites the
-// file itself, as it always did, and the kernel has the entry made a while
-// later, for the next visit.
+// `PagePreparedStore`. For a file it has none for, it has one made at once, in
+// a worker it starts for nothing else (`prepareInWorker`,
+// process/prepareHost.ts), by the Rust rewriter (process/loader/rewriter). A
+// module that rewriter declines the process rewrites itself, as it always
+// did, and the worker makes its entry with sucrase a while later, for the
+// next visit.
 //
-// Why the kernel has them made, and a second time at that: an entry outlives
-// the project that made it, and a process runs the project's code. So the
-// kernel reads the file itself, names the entry by a SHA-256 of what it read,
-// and hands those same bytes to a worker it starts for nothing else
-// (`prepareInWorker`, process/loader/prepareWorker.ts), which runs only the
-// runtime's own code: an entry is always the rewrite of exactly the source
-// its key names, whatever a process wrote where. And the entries are kept on
-// the editor's origin, which nothing a project runs can reach: a process
-// cannot put one there.
+// Why a worker of the kernel's, and not the process that needs the module:
+// an entry outlives the project that made it, and a process runs the
+// project's code. So the kernel reads the file itself, names the entry by a
+// SHA-256 of what it read, and hands those same bytes to the worker, which
+// runs only the runtime's own code: an entry is always the rewrite of exactly
+// the source its key names, whatever a process wrote where. And the entries
+// are kept on the editor's origin, which nothing a project runs can reach: a
+// process cannot put one there.
 //
-// Why a while later: the rewrite of a large file takes tens of megabytes of
-// heap, and the browser gives no heap back once a worker has used it. Made
-// while the project's processes start, that heap would add to theirs (a first
-// visit measured 70 to 100 MB higher). A minute on, their heaps have shrunk,
-// and the rewrite fits in what they let go. Why in a worker of its own: the
-// kernel answers every process, and a rewrite would hold it for a third of a
-// second.
+// Why sucrase only a while later: its rewrite of a large file takes tens of
+// megabytes of JavaScript heap, and the browser gives heap back slowly, if at
+// all, once a worker has used it. Made while the project's processes start,
+// that heap would add to theirs (a first visit measured 70 to 100 MB higher).
+// A minute on, their heaps have shrunk, and the rewrite fits in what they let
+// go. The Rust rewriter's work is the WebAssembly module's own memory, which
+// goes with the worker: it can be done at once.
 import { PREPARED_DIR, decodePreparedEntry, isPreparable } from "../process/loader/preparedEntry";
-import type { KernelEvent } from "../protocol";
-import type { KernelWorker } from "./kernel";
+import type { KernelEvent, PrepareReply, PrepareRequest } from "../protocol";
 import { O_CREAT, O_TRUNC, O_WRONLY, S_IFMT, S_IFREG } from "./vfs/types";
 import type { VfsApi } from "./vfs/types";
 
@@ -37,36 +38,55 @@ export interface PreparedStore {
   put(key: string, entry: Uint8Array): void;
 }
 
-/** How long the page has to answer for an entry before the process rewrites the file instead. */
+/** How long the page has to answer for an entry before the kernel has it made. */
 const PAGE_ANSWER_MS = 1500;
-/** How long after the last module was asked for the waiting entries are made. */
+/** How long after the last module was asked for the entries sucrase must make are made. */
 const MAKE_AFTER_MS = 60_000;
-/** How long a worker has to make one entry. */
+/** How long the worker has to make one entry. */
 const MAKE_WITHIN_MS = 60_000;
 /**
- * How long the worker stays after its last entry. Ended at once, the heap its
- * rewrites used stays the runtime's for the rest of the session; left idle,
- * the browser shrinks that heap first (it does within some thirty seconds),
- * and gives it back.
+ * How long the worker stays after an entry the Rust rewriter made: the next
+ * module of a starting program is asked for within the second, and the
+ * rewriter's memory is the worker's until it ends.
  */
-const WORKER_STAYS_MS = 45_000;
+const WORKER_STAYS_MS = 2000;
+/**
+ * How long it stays after one sucrase made. Ended at once, the heap that
+ * rewrite used stays the runtime's for the rest of the session; left idle,
+ * the browser shrinks that heap first (it does within some thirty seconds).
+ */
+const WORKER_STAYS_AFTER_SUCRASE_MS = 45_000;
+
+/** The worker that makes entries (process/prepareHost.ts), as the kernel holds it. */
+export interface PrepareWorker {
+  postMessage(message: PrepareRequest, transfer?: Transferable[]): void;
+  terminate(): void;
+  onmessage: ((event: MessageEvent<PrepareReply>) => void) | null;
+  onerror: ((event: ErrorEvent) => void) | null;
+}
 
 /** What makes entries. */
 export interface EntryMaker {
-  /** The entry of `filename` from its `source`; null for a source that cannot be rewritten. One at a time. */
-  make(filename: string, source: Uint8Array): Promise<Uint8Array | null>;
+  /**
+   * The entry of `filename` from its `source`. Without `fallback` only the
+   * Rust rewriter makes it, and the answer is null for a module it declines;
+   * with it sucrase rewrites such a module. Null too for a source nothing
+   * rewrites, and where there is no worker.
+   */
+  make(filename: string, source: Uint8Array, fallback: boolean): Promise<Uint8Array | null>;
   /** Nothing more is asked of it. */
   stop(): void;
 }
 
 /**
- * Makes entries in a worker of their own: the process script, sent a
- * `prepare` request where a process is sent `init`. The worker is started for
- * the first entry and ended a while after the last.
+ * Makes entries in a worker of their own, one at a time. The worker is
+ * started for the first entry and ended a while after the last.
+ * `createWorker` answers null where no such worker can be started.
  */
-export function prepareInWorker(createWorker: (name: string) => KernelWorker): EntryMaker {
-  let worker: KernelWorker | null = null;
+export function prepareInWorker(createWorker: () => PrepareWorker | null): EntryMaker {
+  let worker: PrepareWorker | null = null;
   let leaving: ReturnType<typeof setTimeout> | null = null;
+  let last: Promise<unknown> = Promise.resolve();
   const end = () => {
     if (leaving !== null) {
       clearTimeout(leaving);
@@ -75,33 +95,44 @@ export function prepareInWorker(createWorker: (name: string) => KernelWorker): E
     worker?.terminate();
     worker = null;
   };
-  return {
-    make: (filename, source) =>
-      new Promise((resolve) => {
-        if (leaving !== null) {
-          clearTimeout(leaving);
-          leaving = null;
-        }
-        const working = (worker ??= createWorker("webnode prepare"));
-        const late = setTimeout(() => {
-          end();
-          resolve(null);
-        }, MAKE_WITHIN_MS);
-        working.onmessage = (event) => {
-          if (event.data.type === "prepared") {
-            clearTimeout(late);
-            leaving = setTimeout(end, WORKER_STAYS_MS);
-            resolve(event.data.entry);
-          }
-        };
-        working.onerror = (event) => {
-          event.preventDefault?.();
+  const ask = (filename: string, source: Uint8Array, fallback: boolean) =>
+    new Promise<Uint8Array | null>((resolve) => {
+      if (leaving !== null) {
+        clearTimeout(leaving);
+        leaving = null;
+      }
+      const working = (worker ??= createWorker());
+      if (working === null) {
+        resolve(null);
+        return;
+      }
+      const late = setTimeout(() => {
+        end();
+        resolve(null);
+      }, MAKE_WITHIN_MS);
+      working.onmessage = (event) => {
+        if (event.data.type === "prepared") {
           clearTimeout(late);
-          end();
-          resolve(null);
-        };
-        working.postMessage({ type: "prepare", filename, source }, [source.buffer as ArrayBuffer]);
-      }),
+          leaving = setTimeout(end, fallback ? WORKER_STAYS_AFTER_SUCRASE_MS : WORKER_STAYS_MS);
+          resolve(event.data.entry);
+        }
+      };
+      working.onerror = (event) => {
+        event.preventDefault?.();
+        clearTimeout(late);
+        end();
+        resolve(null);
+      };
+      working.postMessage({ type: "prepare", filename, source, fallback }, [
+        source.buffer as ArrayBuffer,
+      ]);
+    });
+  return {
+    make(filename, source, fallback) {
+      const made = last.then(() => ask(filename, source, fallback));
+      last = made;
+      return made;
+    },
     stop: end,
   };
 }
@@ -207,8 +238,9 @@ export class PreparedModules {
   /**
    * The path of the entry for ES module file `filename`: null, at once, for a
    * file that gets none; else the entry's path once it is in the filesystem,
-   * or null when the kernel has none yet (the process then rewrites the file
-   * itself, and the entry is made for the next visit).
+   * or null when the kernel has none and none could be made at once (the
+   * process then rewrites the file itself, and the entry is made for the next
+   * visit).
    */
   locate(filename: string): Promise<string | null> | null {
     const identity = this.store === null ? null : this.identityOf(filename);
@@ -236,7 +268,9 @@ export class PreparedModules {
   }
 
   private async find(filename: string, identity: string): Promise<string | null> {
-    const key = await entryKey(filename, this.vfs.readFile(filename));
+    // A copy: the key and the entry are of the same bytes, whatever is written meanwhile.
+    const source = this.vfs.readFile(filename).slice();
+    const key = await entryKey(filename, source);
     const path = `${PREPARED_DIR}/${key}`;
     if (this.vfs.exists(path)) {
       return path;
@@ -244,6 +278,13 @@ export class PreparedModules {
     const kept = (await this.store?.get(key)) ?? null;
     if (kept !== null && decodePreparedEntry(kept) !== null) {
       this.write(path, kept);
+      return path;
+    }
+    // At once, where that costs the starting processes nothing.
+    const made = this.disposed ? null : await this.maker.make(filename, source, false);
+    if (made !== null && decodePreparedEntry(made) !== null && !this.disposed) {
+      this.write(path, made);
+      this.store?.put(key, made);
       return path;
     }
     if (!this.disposed) {
@@ -299,7 +340,7 @@ export class PreparedModules {
     const source = this.vfs.readFile(filename).slice();
     const key = await entryKey(filename, source);
     const path = `${PREPARED_DIR}/${key}`;
-    const entry = await this.maker.make(filename, source);
+    const entry = await this.maker.make(filename, source, true);
     if (this.disposed || entry === null || decodePreparedEntry(entry) === null) {
       return;
     }

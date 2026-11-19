@@ -222,6 +222,34 @@ Worker version `fc77d892`, runtime build `mwn9j7yp`, head `2ac90ae7`.
   local Worker in the same mode (the harness turns the browser's HTTP cache
   off there, so each process start downloads the process script again).
 
+## 8. The Rust rewriter (the same day, after the deploy; not deployed)
+
+The entries of large modules made at once by a Rust rewriter
+(process/loader/rewriter) instead of by sucrase a minute into a first visit.
+It took every large module of the three targets (3 of Vite 5's, 7 of the
+Vitest lesson's, 7 of the React starter's); none was left to sucrase.
+
+First visits, a fresh profile each, End / Peak MB and first preview:
+
+| Target                                | Deployed (section 2) | With the Rust rewriter |
+| ------------------------------------- | -------------------- | ---------------------- |
+| `css-course-01-basics`                | 419 / 580, 0.9 s     | 326 / 529, 0.8 s       |
+| `testing-course-02-first-vitest-test` | 462 / 552, 1.4 s     | 393 / 530, 1.4 s       |
+| `starter:react`                       | 1266 / 1266, 2.9 s   | 1177 / 1218, 2.7 s     |
+
+Later visits in the same profile are as in section 4: 316, 390 and 1141 MB at
+the end. A first visit now also keeps its entries at once, so the cost of a
+long first visit in section 5 is gone for these targets.
+
+The rewrite itself, on Vite 5's main chunk (2.09 MB): 65 ms with the Rust
+rewriter, the loader's other steps included (measured under Bun). sucrase
+took 223 ms on a 1.5 MB module (under Node 22), and held some 55 MB of heap
+after it.
+
+The scripts: `prepare.js`, the worker that carries the rewriter, is 1.49 MB
+and is loaded only when a large module has no entry yet; `process.js` and
+`kernel.js` are unchanged in size.
+
 ## Measuring again
 
 ```bash

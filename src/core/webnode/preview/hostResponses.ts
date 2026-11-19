@@ -14,7 +14,12 @@ export interface WebnodeHostResponse {
 }
 
 /** The scripts a runtime host serves, by the file name the build gives them. */
-export type WebnodeHostAsset = "preview-sw.js" | "runtime.js" | "kernel.js" | "process.js";
+export type WebnodeHostAsset =
+  | "preview-sw.js"
+  | "runtime.js"
+  | "kernel.js"
+  | "process.js"
+  | "prepare.js";
 
 /** The page that runs the kernel, on the runtime origin. */
 export const RUNTIME_FRAME_PATH = "/__webnode__/runtime.html";
@@ -24,6 +29,7 @@ const ASSET_PATHS: Record<string, WebnodeHostAsset> = {
   "/__webnode__/runtime.js": "runtime.js",
   "/__webnode__/kernel.js": "kernel.js",
   "/__webnode__/process.js": "process.js",
+  "/__webnode__/prepare.js": "prepare.js",
 };
 
 const ISOLATION_HEADERS = {
@@ -59,7 +65,7 @@ export interface WebnodeHostOptions {
 }
 
 /** The scripts that are the same bytes for every request of one build, so a browser may keep them. */
-const IMMUTABLE_ASSETS = new Set<WebnodeHostAsset>(["kernel.js", "process.js"]);
+const IMMUTABLE_ASSETS = new Set<WebnodeHostAsset>(["kernel.js", "process.js", "prepare.js"]);
 
 export { STALE_BUILD_MESSAGE };
 

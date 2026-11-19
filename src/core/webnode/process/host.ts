@@ -2,7 +2,6 @@
 // this worker to the kernel, and runs the program it was started for. This hub
 // only wires; each program lives under programs/.
 import type { KernelMessage, ProcessInit, ProcessMessage } from "../protocol";
-import { prepareForKernel } from "./loader/prepareWorker";
 import { addMacrotaskListener } from "./node/eventLoop";
 import { writeFd } from "./node/internal/fdWrite";
 import { runNode } from "./programs/node";
@@ -64,13 +63,6 @@ addMacrotaskListener(scope, "message", (event) => {
   const message = (event as MessageEvent<KernelMessage>).data;
   if (message.type === "init") {
     run(message).catch(reportAndExit);
-    return;
-  }
-  if (message.type === "prepare") {
-    // No process: the kernel's own request for one module's entry.
-    void prepareForKernel(message).then((reply) =>
-      post(reply, reply.entry ? [reply.entry.buffer as ArrayBuffer] : []),
-    );
     return;
   }
   client?.receive(message);

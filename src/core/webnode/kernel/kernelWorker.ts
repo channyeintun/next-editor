@@ -19,6 +19,7 @@ import { PREPARED_VERSION } from "../process/loader/preparedEntry";
 import { Kernel } from "./kernel";
 import type { KernelWorker } from "./kernel";
 import { PagePreparedStore } from "./preparedModules";
+import type { PrepareWorker } from "./preparedModules";
 import { Vfs } from "./vfs/vfs";
 import { createSharedFilesystem } from "../sharedfs/boot";
 
@@ -33,6 +34,9 @@ interface KernelScope {
 const scope = globalThis as unknown as KernelScope;
 /** The process worker script: this origin's own, never one the page names. */
 const PROCESS_SCRIPT_URL = new URL(versionedPath("/__webnode__/process.js"), scope.location.href)
+  .href;
+/** The script of the worker that makes large modules' entries (process/prepareHost.ts). */
+const PREPARE_SCRIPT_URL = new URL(versionedPath("/__webnode__/prepare.js"), scope.location.href)
   .href;
 
 let page: MessagePort | null = null;
@@ -68,6 +72,8 @@ const methods: Record<string, (args: never, ports: readonly MessagePort[]) => un
         emit: send,
         sharedFs,
         preparedStore,
+        createPrepareWorker: () =>
+          new Worker(PREPARE_SCRIPT_URL, { name: "webnode prepare" }) as unknown as PrepareWorker,
       },
       options.workdirName,
     );

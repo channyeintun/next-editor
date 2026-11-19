@@ -9,10 +9,9 @@ import {
   encodePreparedEntry,
 } from "../process/loader/preparedEntry";
 import { prepareSource, transformReady } from "../process/loader/transform";
-import type { KernelEvent } from "../protocol";
-import type { KernelWorker } from "./kernel";
+import type { KernelEvent, PrepareRequest } from "../protocol";
 import { PagePreparedStore, PreparedModules, prepareInWorker } from "./preparedModules";
-import type { EntryMaker, PreparedStore } from "./preparedModules";
+import type { EntryMaker, PrepareWorker, PreparedStore } from "./preparedModules";
 import { O_CREAT, O_TRUNC, O_WRONLY } from "./vfs/types";
 import { Vfs } from "./vfs/vfs";
 
@@ -54,23 +53,27 @@ class KeptEntries implements PreparedStore {
 
 const FILE = "/home/projects/app/node_modules/large/index.mjs";
 
-/** Makes an entry here, as the kernel's worker does elsewhere. */
-const rewrite: EntryMaker["make"] = (filename, source) =>
-  Promise.resolve(
-    encodePreparedEntry(prepareSource(new TextDecoder().decode(source), filename, "esm")),
-  );
+const entryOf = (filename: string, source: Uint8Array) =>
+  encodePreparedEntry(prepareSource(new TextDecoder().decode(source), filename, "esm"));
 
-/** A session: a filesystem with `source` at FILE, and its entries, made `makeAfterMs` after asked about. */
-function session(source: string, store: PreparedStore | null, makeAfterMs = 0, make = rewrite) {
+/** A worker whose Rust rewriter takes every module: an entry whenever asked. */
+const rewrites: EntryMaker["make"] = (filename, source) =>
+  Promise.resolve(entryOf(filename, source));
+
+/** A worker whose Rust rewriter declines every module: an entry only where sucrase may make it. */
+const declines: EntryMaker["make"] = (filename, source, fallback) =>
+  Promise.resolve(fallback ? entryOf(filename, source) : null);
+
+/** A session: a filesystem with `source` at FILE, and its entries. */
+function session(source: string, store: PreparedStore | null, make = rewrites, makeAfterMs = 0) {
   const vfs = new Vfs();
   write(vfs, FILE, source);
-  const maker = { make, stop: vi.fn<() => void>() };
+  const maker = { make: vi.fn<EntryMaker["make"]>(make), stop: vi.fn<() => void>() };
   return { vfs, maker, modules: new PreparedModules(vfs.privileged, store, maker, makeAfterMs) };
 }
 
-/** The entry of `file` once the kernel has made it: asked about, then waited for. */
+/** The entry of `file` once the kernel has one: asked about until it does. */
 async function made(modules: PreparedModules, file = FILE): Promise<string> {
-  await modules.locate(file);
   let path: string | null = null;
   await vi.waitFor(async () => {
     path = await modules.locate(file);
@@ -82,23 +85,36 @@ async function made(modules: PreparedModules, file = FILE): Promise<string> {
 const keyOf = (path: string) => path.slice(PREPARED_DIR.length + 1);
 
 describe("the entry of a large module", () => {
-  it("is not there for a file met first, and is made from the file a while later", async () => {
+  it("is made at once from the file, named by its source, and handed to the store", async () => {
     const store = new KeptEntries();
-    const { vfs, modules } = session(largeModule("one"), store);
-    expect(await modules.locate(FILE)).toBeNull();
-    const path = await made(modules);
+    const { vfs, maker, modules } = session(largeModule("one"), store);
+    const path = (await modules.locate(FILE))!;
     expect(path).toMatch(new RegExp(`^${PREPARED_DIR}/[0-9a-f]{64}$`));
     const entry = vfs.privileged.readFile(path);
     expect(decodePreparedEntry(entry)).toEqual(prepareSource(largeModule("one"), FILE, "esm"));
     expect(store.asked).toEqual([keyOf(path)]);
     expect(store.kept).toEqual([keyOf(path)]);
     expect(store.entries.get(keyOf(path))).toEqual(entry);
+    // Only the rewriter that costs the starting processes nothing was asked.
+    expect(maker.make.mock.calls.map(([, , fallback]) => fallback)).toEqual([false]);
   });
 
-  it("is made a while after the last module was asked for, not the first", async () => {
+  it("is not there at first for a module the rewriter declines, and is made a while later", async () => {
+    const store = new KeptEntries();
+    const { vfs, maker, modules } = session(largeModule("one"), store, declines);
+    expect(await modules.locate(FILE)).toBeNull();
+    const path = await made(modules);
+    expect(decodePreparedEntry(vfs.privileged.readFile(path))).toEqual(
+      prepareSource(largeModule("one"), FILE, "esm"),
+    );
+    expect(store.kept).toEqual([keyOf(path)]);
+    expect(maker.make.mock.calls.map(([, , fallback]) => fallback)).toEqual([false, true]);
+  });
+
+  it("that one is made a while after the last module was asked for, not the first", async () => {
     vi.useFakeTimers();
     const store = new KeptEntries();
-    const { vfs, modules } = session(largeModule("one"), store, 1000);
+    const { vfs, modules } = session(largeModule("one"), store, declines, 1000);
     const second = "/home/projects/app/node_modules/second/index.mjs";
     write(vfs, second, largeModule("two"));
     expect(await modules.locate(FILE)).toBeNull();
@@ -113,16 +129,16 @@ describe("the entry of a large module", () => {
   it("is found again in the session without the file being read or the store asked", async () => {
     const store = new KeptEntries();
     const { vfs, modules } = session(largeModule("one"), store);
-    const first = await made(modules);
+    const first = await modules.locate(FILE);
     const read = vi.spyOn(vfs.privileged, "readFile");
     expect(await modules.locate(FILE)).toBe(first);
     expect(read).not.toHaveBeenCalled();
     expect(store.asked).toHaveLength(1);
   });
 
-  it("is taken from the store on a later visit, at once, the file not rewritten", async () => {
+  it("is taken from the store on a later visit, nothing rewritten", async () => {
     const store = new KeptEntries();
-    const path = await made(session(largeModule("one"), store).modules);
+    const path = (await session(largeModule("one"), store).modules.locate(FILE))!;
     // What the store kept is what a later session runs: marked, to tell it from a rewrite.
     const kept = encodePreparedEntry({
       ...decodePreparedEntry(store.entries.get(keyOf(path))!)!,
@@ -133,37 +149,37 @@ describe("the entry of a large module", () => {
     const later = session(largeModule("one"), store);
     expect(await later.modules.locate(FILE)).toBe(path);
     expect(later.vfs.privileged.readFile(path)).toEqual(kept);
+    expect(later.maker.make).not.toHaveBeenCalled();
     expect(store.kept).toEqual([keyOf(path)]);
   });
 
   it("is another entry for another source, and for the same source elsewhere", async () => {
-    const one = await made(session(largeModule("one"), new KeptEntries()).modules);
-    const two = await made(session(largeModule("two"), new KeptEntries()).modules);
+    const one = await session(largeModule("one"), new KeptEntries()).modules.locate(FILE);
+    const two = await session(largeModule("two"), new KeptEntries()).modules.locate(FILE);
     expect(two).not.toBe(one);
 
     const { vfs, modules } = session(largeModule("one"), new KeptEntries());
     const elsewhere = "/home/projects/app/node_modules/other/index.mjs";
     write(vfs, elsewhere, largeModule("one"));
-    expect(await made(modules)).toBe(one);
-    expect(await made(modules, elsewhere)).not.toBe(one);
+    expect(await modules.locate(FILE)).toBe(one);
+    expect(await modules.locate(elsewhere)).not.toBe(one);
   });
 
   it("follows the file when it is written again", async () => {
     const { vfs, modules } = session(largeModule("one"), new KeptEntries());
-    const first = await made(modules);
+    const first = await modules.locate(FILE);
     write(vfs, FILE, largeModule("another, and longer"));
-    expect(await modules.locate(FILE)).toBeNull();
-    const second = await made(modules);
+    const second = (await modules.locate(FILE))!;
     expect(second).not.toBe(first);
     expect(decodePreparedEntry(vfs.privileged.readFile(second))).toEqual(
       prepareSource(largeModule("another, and longer"), FILE, "esm"),
     );
   });
 
-  it("is not made of a file that changed since it was asked about", async () => {
+  it("is not made later of a file that changed since it was asked about", async () => {
     vi.useFakeTimers();
     const store = new KeptEntries();
-    const { vfs, modules } = session(largeModule("one"), store, 1000);
+    const { vfs, modules } = session(largeModule("one"), store, declines, 1000);
     expect(await modules.locate(FILE)).toBeNull();
     write(vfs, FILE, largeModule("changed, and longer"));
     await vi.advanceTimersByTimeAsync(5000);
@@ -173,24 +189,26 @@ describe("the entry of a large module", () => {
 
   it("is made anew when what the store kept is no entry", async () => {
     const store = new KeptEntries();
-    const path = await made(session(largeModule("one"), store).modules);
+    const path = (await session(largeModule("one"), store).modules.locate(FILE))!;
     store.entries.set(keyOf(path), text("spoiled"));
 
     const later = session(largeModule("one"), store);
-    expect(await later.modules.locate(FILE)).toBeNull();
-    expect(await made(later.modules)).toBe(path);
+    expect(await later.modules.locate(FILE)).toBe(path);
     expect(decodePreparedEntry(later.vfs.privileged.readFile(path))).toEqual(
       prepareSource(largeModule("one"), FILE, "esm"),
     );
     expect(store.kept).toEqual([keyOf(path), keyOf(path)]);
   });
 
-  it("is not made of a source that cannot be rewritten, or by a worker that answers with no entry", async () => {
+  it("is not made of a source nothing rewrites, or by a worker that answers with no entry", async () => {
     vi.useFakeTimers();
     for (const answer of [null, text("no entry")]) {
       const store = new KeptEntries();
-      const { vfs, modules } = session(largeModule("one"), store, 1000, () =>
-        Promise.resolve(answer),
+      const { vfs, modules } = session(
+        largeModule("one"),
+        store,
+        () => Promise.resolve(answer),
+        1000,
       );
       expect(await modules.locate(FILE)).toBeNull();
       await vi.advanceTimersByTimeAsync(5000);
@@ -203,7 +221,7 @@ describe("the entry of a large module", () => {
   it("is no longer made once the kernel is gone", async () => {
     vi.useFakeTimers();
     const store = new KeptEntries();
-    const { modules, maker } = session(largeModule("one"), store, 1000);
+    const { modules, maker } = session(largeModule("one"), store, declines, 1000);
     expect(await modules.locate(FILE)).toBeNull();
     modules.dispose();
     expect(maker.stop).toHaveBeenCalled();
@@ -224,20 +242,19 @@ describe("a file that gets no entry", () => {
   });
 
   it("is every file where nothing is kept between visits", () => {
-    const make = vi.fn<EntryMaker["make"]>(rewrite);
-    const { vfs, modules } = session(largeModule("one"), null, 0, make);
+    const { vfs, maker, modules } = session(largeModule("one"), null);
     const read = vi.spyOn(vfs.privileged, "readFile");
     expect(modules.locate(FILE)).toBeNull();
     expect(read).not.toHaveBeenCalled();
-    expect(make).not.toHaveBeenCalled();
+    expect(maker.make).not.toHaveBeenCalled();
   });
 });
 
-describe("the worker an entry is made in", () => {
+describe("the worker entries are made in", () => {
   /** A worker that records what it is sent and how it ends. */
   function fakeWorker() {
-    const sent: unknown[] = [];
-    const worker: KernelWorker & { ended: boolean } = {
+    const sent: PrepareRequest[] = [];
+    const worker: PrepareWorker & { ended: boolean } = {
       ended: false,
       postMessage(message) {
         sent.push(message);
@@ -248,61 +265,96 @@ describe("the worker an entry is made in", () => {
       onmessage: null,
       onerror: null,
     };
-    return { worker, sent };
+    const answer = (entry: Uint8Array | null) =>
+      worker.onmessage!({ data: { type: "prepared", entry } } as MessageEvent);
+    return { worker, sent, answer };
   }
 
-  it("is started for the first module, handed each name and source, and ended a while after the last", async () => {
+  it("is started for the first module and ended soon after the last the rewriter made", async () => {
     vi.useFakeTimers();
-    const { worker, sent } = fakeWorker();
-    const names: string[] = [];
-    const maker = prepareInWorker((name) => {
-      names.push(name);
-      return worker;
-    });
-    const first = maker.make(FILE, text("export const a = 1;"));
-    expect(names).toEqual(["webnode prepare"]);
+    const { worker, sent, answer } = fakeWorker();
+    const start = vi.fn<() => PrepareWorker>(() => worker);
+    const maker = prepareInWorker(start);
+    const first = maker.make(FILE, text("export const a = 1;"), false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(start).toHaveBeenCalledTimes(1);
     expect(sent).toEqual([
-      { type: "prepare", filename: FILE, source: text("export const a = 1;") },
+      { type: "prepare", filename: FILE, source: text("export const a = 1;"), fallback: false },
     ]);
-    worker.onmessage!({ data: { type: "prepared", entry: text("entry") } } as MessageEvent);
+    answer(text("entry"));
     expect(await first).toEqual(text("entry"));
 
-    // The next one soon after: the same worker.
-    await vi.advanceTimersByTimeAsync(10_000);
-    const second = maker.make("/other.mjs", text("export const b = 2;"));
-    worker.onmessage!({ data: { type: "prepared", entry: text("another") } } as MessageEvent);
+    // The next one within the second: the same worker.
+    await vi.advanceTimersByTimeAsync(500);
+    const second = maker.make("/other.mjs", text("export const b = 2;"), false);
+    await vi.advanceTimersByTimeAsync(0);
+    answer(text("another"));
     expect(await second).toEqual(text("another"));
-    expect(names).toHaveLength(1);
-    expect(sent).toHaveLength(2);
+    expect(start).toHaveBeenCalledTimes(1);
 
-    // Idle long enough for its heap to shrink, then ended.
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(worker.ended).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(worker.ended).toBe(true);
+  });
+
+  it("stays long enough for its heap to shrink after an entry sucrase made", async () => {
+    vi.useFakeTimers();
+    const { worker, sent, answer } = fakeWorker();
+    const made = prepareInWorker(() => worker).make(FILE, text("x"), true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sent[0].fallback).toBe(true);
+    answer(text("entry"));
+    await made;
     await vi.advanceTimersByTimeAsync(44_000);
     expect(worker.ended).toBe(false);
     await vi.advanceTimersByTimeAsync(1000);
     expect(worker.ended).toBe(true);
   });
 
+  it("makes one entry at a time", async () => {
+    vi.useFakeTimers();
+    const { worker, sent, answer } = fakeWorker();
+    const maker = prepareInWorker(() => worker);
+    const first = maker.make(FILE, text("a"), false);
+    const second = maker.make("/other.mjs", text("b"), false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sent).toHaveLength(1);
+    answer(text("one"));
+    expect(await first).toEqual(text("one"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sent).toHaveLength(2);
+    answer(text("two"));
+    expect(await second).toEqual(text("two"));
+  });
+
   it("gives no entry, and is ended at once, when it fails, takes too long or is stopped", async () => {
     vi.useFakeTimers();
     const failing = fakeWorker();
-    const failed = prepareInWorker(() => failing.worker).make(FILE, text("x"));
+    const failed = prepareInWorker(() => failing.worker).make(FILE, text("x"), false);
+    await vi.advanceTimersByTimeAsync(0);
     failing.worker.onerror!({ preventDefault() {} } as ErrorEvent);
     expect(await failed).toBeNull();
     expect(failing.worker.ended).toBe(true);
 
     const silent = fakeWorker();
-    const late = prepareInWorker(() => silent.worker).make(FILE, text("x"));
+    const late = prepareInWorker(() => silent.worker).make(FILE, text("x"), false);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(await late).toBeNull();
     expect(silent.worker.ended).toBe(true);
 
     const stopped = fakeWorker();
     const maker = prepareInWorker(() => stopped.worker);
-    const made = maker.make(FILE, text("x"));
-    stopped.worker.onmessage!({ data: { type: "prepared", entry: text("entry") } } as MessageEvent);
+    const made = maker.make(FILE, text("x"), false);
+    await vi.advanceTimersByTimeAsync(0);
+    stopped.answer(text("entry"));
     await made;
     maker.stop();
     expect(stopped.worker.ended).toBe(true);
+  });
+
+  it("gives no entry where no worker can be started", async () => {
+    expect(await prepareInWorker(() => null).make(FILE, text("x"), false)).toBeNull();
   });
 });
 

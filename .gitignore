@@ -45,3 +45,4 @@ share/*.zip
 __pycache__/
 *.pyc
 src/core/webnode/sharedfs/crate/target/
+src/core/webnode/process/loader/rewriter/crate/target/

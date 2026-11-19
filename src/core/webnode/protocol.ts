@@ -137,17 +137,19 @@ export interface ProcessInit {
 }
 
 /**
- * What the kernel sends, in place of `init`, to a worker it starts only to
- * make one large module's entry (kernel/preparedModules.ts): the file's name
- * and its bytes. The worker is no process: it answers and is ended.
+ * What the kernel sends the worker it starts to make large modules' entries
+ * (kernel/preparedModules.ts, process/prepareHost.ts): a file's name and its
+ * bytes. `fallback` lets the worker rewrite with sucrase a module the Rust
+ * rewriter declines; without it such a module gets no entry now.
  */
 export interface PrepareRequest {
   type: "prepare";
   filename: string;
   source: Uint8Array;
+  fallback: boolean;
 }
 
-/** That worker's answer: the entry (process/loader/preparedEntry.ts), or null for a file that cannot be rewritten. */
+/** That worker's answer: the entry (process/loader/preparedEntry.ts), or null where the module gets none. */
 export interface PrepareReply {
   type: "prepared";
   entry: Uint8Array | null;
@@ -155,7 +157,6 @@ export interface PrepareReply {
 
 /** Messages a process worker sends the kernel. */
 export type ProcessMessage =
-  | PrepareReply
   /** A blocking call: the worker waits on its sync buffer for the answer. */
   | { type: "sync"; op: string; args: unknown[] }
   /** The worker supplies a bigger sync buffer and asks for the last answer again. */
@@ -168,7 +169,6 @@ export type ProcessMessage =
 /** Messages the kernel sends a process worker. */
 export type KernelMessage =
   | ProcessInit
-  | PrepareRequest
   | { type: "reply"; id: number; ok: true; value: unknown }
   | { type: "reply"; id: number; ok: false; error: SerializedError }
   /**

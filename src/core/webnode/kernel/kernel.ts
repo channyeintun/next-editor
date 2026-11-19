@@ -45,7 +45,7 @@ import { installBuiltinCommands, resolveExec } from "./exec";
 import { createPageFiles } from "./pageFiles";
 import type { PageFiles } from "./pageFiles";
 import { PreparedModules, prepareInWorker } from "./preparedModules";
-import type { PreparedStore } from "./preparedModules";
+import type { PrepareWorker, PreparedStore } from "./preparedModules";
 import type { ByteSource } from "./streams";
 import { Delivery, Pipe, PIPE_CAPACITY, Terminal, TerminalDelivery } from "./streams";
 import type { SharedFilesystem } from "../sharedfs/boot";
@@ -92,6 +92,8 @@ export interface KernelHost {
   sharedFs?: SharedFilesystem | null;
   /** Where large modules' entries are kept between visits (preparedModules.ts); null or left out: nowhere. */
   preparedStore?: PreparedStore | null;
+  /** Starts the worker that makes those entries (process/prepareHost.ts). Left out: none are made. */
+  createPrepareWorker?(): PrepareWorker;
 }
 
 /**
@@ -362,7 +364,7 @@ export class Kernel {
     this.prepared = new PreparedModules(
       vfs.privileged,
       host.preparedStore ?? null,
-      prepareInWorker((name) => host.createWorker(name)),
+      prepareInWorker(() => host.createPrepareWorker?.() ?? null),
     );
     const setup = vfs.privileged;
     setup.mkdir(this.workdir, true, 0o755);

@@ -938,11 +938,18 @@ function hoistedExport(exported: string, local: string): string {
  * of undecided format whose only module syntax is a top-level await. A
  * TypeScript or JSX file that is CommonJS by its name or package runs as
  * CommonJS, with its `import`/`export` compiled to `require`, as tsx does.
+ *
+ * `rewriteImports` stands in for sucrase where an ES module's `import` and
+ * `export` statements become calls on the loader's bindings: it is given the
+ * module's text with everything else already rewritten, and answers the code.
+ * What it throws ends the preparation (the worker that makes large modules'
+ * entries passes one, loader/rewriter).
  */
 export function prepareSource(
   source: string,
   filename: string,
   format: "esm" | "cjs" | null,
+  rewriteImports?: (text: string) => string,
 ): PreparedSource {
   const original = withoutPreamble(source);
   let text = stripTypes(original, filename);
@@ -1110,12 +1117,14 @@ export function prepareSource(
   }
 
   try {
-    let code = transform(text, {
-      transforms: ["imports"],
-      preserveDynamicImport: true,
-      disableESTransforms: true,
-      filePath: filename,
-    }).code;
+    let code = rewriteImports
+      ? rewriteImports(text)
+      : transform(text, {
+          transforms: ["imports"],
+          preserveDynamicImport: true,
+          disableESTransforms: true,
+          filePath: filename,
+        }).code;
     for (const [name, standIn] of renamed) {
       // The stand-in stays the live binding, hidden; the real name reads it.
       code +=

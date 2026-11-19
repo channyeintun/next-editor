@@ -33,6 +33,8 @@ export const WEBNODE_BUNDLE_FILES = {
   process: "process.js",
   /** The service worker of a preview origin. */
   previewServiceWorker: "preview-sw.js",
+  /** The worker that makes large modules' entries: the loader's rewrite and the Rust rewriter. */
+  prepare: "prepare.js",
 } as const;
 
 /**
@@ -110,12 +112,14 @@ function sucraseModuleBindings(): RolldownPlugin {
  * are used only by a build whose rewrite has the same name. It is a hash of
  * everything the rewritten code depends on: the rewrite's own source (which
  * imports nothing else of the engine; webnodeBundle.test.ts holds it to that),
- * this file (which renames sucrase's bindings) and the two packages it calls.
+ * the Rust rewriter as built, this file (which renames sucrase's bindings) and
+ * the two packages the rewrite calls.
  * So a deploy that changes none of them keeps what its visitors' browsers hold.
  */
 export function webnodeTransformId(): string {
   const hash = createHash("sha256");
   hash.update(readFileSync(`${ENGINE_ROOT}process/loader/transform.ts`));
+  hash.update(readFileSync(`${ENGINE_ROOT}process/loader/rewriter/wasm.generated.ts`));
   hash.update(readFileSync(fileURLToPath(import.meta.url)));
   for (const name of ["sucrase", "es-module-lexer"]) {
     // Not `<name>/package.json`: a package's exports need not offer it.
@@ -173,5 +177,6 @@ export async function buildWebnodeBundles(options: WebnodeBundleOptions): Promis
     bundle("kernel/kernelWorker.ts", WEBNODE_BUNDLE_FILES.kernel, options),
     bundle("process/host.ts", WEBNODE_BUNDLE_FILES.process, options),
     bundle("preview/sw.ts", WEBNODE_BUNDLE_FILES.previewServiceWorker, options),
+    bundle("process/prepareHost.ts", WEBNODE_BUNDLE_FILES.prepare, options),
   ]);
 }

@@ -17,6 +17,7 @@ describe("webnodeHostAsset", () => {
     expect(webnodeHostAsset("/__webnode__/runtime.js")).toBe("runtime.js");
     expect(webnodeHostAsset("/__webnode__/kernel.js")).toBe("kernel.js");
     expect(webnodeHostAsset("/__webnode__/process.js")).toBe("process.js");
+    expect(webnodeHostAsset("/__webnode__/prepare.js")).toBe("prepare.js");
     expect(webnodeHostAsset("/")).toBeNull();
     expect(webnodeHostAsset("/__webnode__/other.js")).toBeNull();
     expect(webnodeHostAsset("/src/main.ts")).toBeNull();
@@ -42,8 +43,12 @@ describe("webnodeHostResponse", () => {
     );
   });
 
-  it("serves the kernel and process scripts unchanged", () => {
-    for (const path of ["/__webnode__/kernel.js", "/__webnode__/process.js"]) {
+  it("serves the kernel, process and prepare scripts unchanged", () => {
+    for (const path of [
+      "/__webnode__/kernel.js",
+      "/__webnode__/process.js",
+      "/__webnode__/prepare.js",
+    ]) {
       const response = webnodeHostResponse(path, { editorOrigin: EDITOR, assetSource: "code();" });
       expect(response.body).toBe("code();");
       expect(response.headers["content-type"]).toBe("text/javascript; charset=utf-8");
@@ -145,8 +150,12 @@ describe("webnodeHostResponse for what a preview page asks itself", () => {
 describe("webnodeHostResponse across a deploy", () => {
   const served = { editorOrigin: EDITOR, assetSource: "code();", currentBuild: "b2" };
 
-  it("lets a browser keep the kernel and process scripts of the build it asked for", () => {
-    for (const path of ["/__webnode__/kernel.js", "/__webnode__/process.js"]) {
+  it("lets a browser keep the kernel, process and prepare scripts of the build it asked for", () => {
+    for (const path of [
+      "/__webnode__/kernel.js",
+      "/__webnode__/process.js",
+      "/__webnode__/prepare.js",
+    ]) {
       const response = webnodeHostResponse(path, { ...served, requestedBuild: "b2" });
       expect(response.status).toBe(200);
       expect(response.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
