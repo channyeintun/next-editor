@@ -1,0 +1,624 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-41-mcp-clients
+  title: "Claude FDE 41: MCP client များ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: billing-service/.mcp.json
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      billing-service/.mcp.json: |
+        {
+          "mcpServers": {
+          }
+        }
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: client-steps
+      contentType: html
+      name: Client က ဘာလုပ်လဲ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Client က server နဲ့ ဘာလုပ်လဲ</div>
+          <div class="row" style="top: 26vh"><span class="num">1</span><span class="term wide blue">async with Client</span>ချိတ်ပြီး version ညှိ</div>
+          <div class="row" style="top: 38vh"><span class="num">2</span><span class="term wide violet">list_tools()</span>tool စာရင်းကို model အတွက် ယူ</div>
+          <div class="row" style="top: 50vh"><span class="num">3</span><span class="term wide orange">call_tool()</span>model ရွေးတဲ့ tool ကို ခေါ်</div>
+          <div class="row" style="top: 62vh"><span class="num">4</span><span class="term wide violet">read_resource()</span>app ရွေးတဲ့ data ကို ဖတ်</div>
+          <div class="row" style="top: 74vh"><span class="num">5</span><span class="term wide violet">get_prompt()</span>user ရွေးတဲ့ prompt ကို ယူ</div>
+        </div>
+    - id: mcp-screen
+      contentType: html
+      name: MCP view
+      content: |
+        <style>
+          .shot { position: relative; width: 100vw; height: 100vh; background: #0b0d12; }
+          .shot img { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; object-fit: contain; }
+        </style>
+        <div class="shot"><img src="data:image/webp;base64,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" alt="Claude Code: the MCP view with the project's tickets server connected and its 2 tools"></div>
+  whiteboardAssets:
+    # Board 1 — where a server's config lives: three blue scopes with white notes, the chosen one
+    # (project) circled in green, the precedence in orange.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 820,
+        height: 45,
+        text: "server config ဘယ်မှာ ထားမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: s-b1,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 230,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 253,
+        width: 230,
+        height: 35,
+        text: "local",
+        fontSize: 28,
+      }
+    - {
+        id: s-t1,
+        kind: text,
+        x: 550,
+        y: 253,
+        width: 540,
+        height: 35,
+        text: "ကိုယ်တစ်ယောက်၊ ဒီ project (default)",
+        fontSize: 28,
+      }
+    - {
+        id: s-b2,
+        kind: rectangle,
+        x: 290,
+        y: 345,
+        width: 230,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-l2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 363,
+        width: 230,
+        height: 35,
+        text: "project",
+        fontSize: 28,
+      }
+    - {
+        id: s-t2,
+        kind: text,
+        x: 550,
+        y: 363,
+        width: 540,
+        height: 35,
+        text: ".mcp.json၊ git ထဲ၊ team တစ်ခုလုံး",
+        fontSize: 28,
+      }
+    - {
+        id: s-b3,
+        kind: rectangle,
+        x: 290,
+        y: 455,
+        width: 230,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-l3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 473,
+        width: 230,
+        height: 35,
+        text: "user",
+        fontSize: 28,
+      }
+    - {
+        id: s-t3,
+        kind: text,
+        x: 550,
+        y: 473,
+        width: 540,
+        height: 35,
+        text: "ကိုယ့် project အားလုံး",
+        fontSize: 28,
+      }
+    - {
+        id: s-pick,
+        kind: freedraw,
+        stroke: box,
+        x: 275,
+        y: 333,
+        width: 820,
+        height: 94,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-note,
+        kind: text,
+        x: 290,
+        y: 575,
+        width: 790,
+        height: 35,
+        text: "နာမည်တူရင်: local > project > user",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 820,
+        height: 45,
+        text: "pull ပြီးရင် tickets ကို ချက်ချင်း သုံးမလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) ချက်ချင်း ချိတ်ပြီး သုံးမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) ခွင့်ပြုမလား အရင် မေးမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 400,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 720,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 790,
+        height: 35,
+        text: "repo က ကိုယ့် server ကို ကိုယ် approve မလုပ်နိုင်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 790,
+        height: 35,
+        text: "developer တစ်ယောက်စီ ဖတ်ပြီးမှ ခွင့်ပြု",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9341
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Billing ရဲ့ Claude Code ကနေ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ticket-mcp server ထဲကို လိုင်းကျမှု စာရင်း resource၊ ticket history template နဲ့ outage reply
+      prompt ကို ထည့်ပြီး၊ tool၊ resource၊ prompt ကို ဘယ်သူ ရွေးလဲ ဆိုတာနဲ့ ခွဲခြားခဲ့ပါတယ်။
+      [[mark:n-open]] server ရေးပြီးသွားပါပြီ။ အခု Billing team ရဲ့ developer တွေ သုံးတဲ့ Claude Code က ဒီ server ကို
+      ချိတ်ရပါမယ်။ Claude Code ဆိုတာ terminal ထဲကနေ code ကို ဖတ်၊ ပြင်၊ command run ပေးတဲ့ coding agent ပါ။ ငွေတောင်းခံမှု
+      bug တစ်ခုကို ရှာနေတုန်း၊ အဲဒီ bug ကို တိုင်ထားတဲ့ ticket ကို terminal ကနေ မထွက်ဘဲ ဖတ်စေချင်တာပါ။
+      [[mark:n-file]] ဒီ file က Billing repository ရဲ့ အပေါ်ဆုံးမှာ ရှိတဲ့ MCP config file ပါ။ အခုတော့ server တစ်ခုမှ မရှိသေးပါဘူး။
+      [[mark:n-roles]] Model Context Protocol၊ အတိုကောက် MCP ဆိုတာ AI app တွေနဲ့ အပြင်က tool၊ data တွေကို ချိတ်တဲ့ စံ
+      သဘောတူညီချက်ပါ။ MCP မှာ Claude Code က host ပါ။ host ဆိုတာ user စကားပြောနေတဲ့
+      AI app ဖြစ်ပြီး၊ server တစ်ခုစီအတွက် client တစ်ခုစီကို ဖန်တီးပါတယ်။ client ဆိုတာ server တစ်ခုနဲ့ ချိတ်ပြီး host
+      အတွက် လုပ်ပေးတဲ့ အပိုင်းပါ။ ချိတ်ဖို့ config မရေးခင် client က model အတွက် ဘာတွေ လုပ်ပေးလဲ အရင် ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Model Context Protocol: Architecture overview (2026-07-28)",
+          url: "https://modelcontextprotocol.io/docs/2026-07-28/learn/architecture",
+        }
+    actions:
+      - {
+          id: open-config,
+          type: workspace.openFile,
+          at: { mark: n-file },
+          path: billing-service/.mcp.json,
+        }
+
+  - id: client
+    chapter: Client ရဲ့ အလုပ်
+    narration: >
+      [[mark:c-open]] client ရဲ့ အလုပ်ကို Python SDK ရဲ့ Client class နဲ့ ကြည့်ရင် ရှင်းပါတယ်။ ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ
+      SDK version ၂ မှာ Client class တစ်ခုတည်း ရှိပြီး၊ version ၁ တုန်းက transport၊ session နဲ့ လက်နဲ့ ခေါ်ရတဲ့ initialize
+      ဆိုတဲ့ အလွှာ သုံးခုကို အစားထိုးလိုက်ပါတယ်။
+      [[mark:c-1]] ပထမ အဆင့်က ချိတ်တာပါ။ Client ကို URL ပေးရင် Streamable HTTP နဲ့ ချိတ်ပြီး၊ command ပေးရင် server ကို
+      subprocess အနေနဲ့ stdio နဲ့ စ run ပါတယ်။ async with block ထဲ ဝင်တာနဲ့ ချိတ်ပြီး protocol version ကို ညှိပါတယ်။
+      server discover ကို အရင် စမ်းပြီး၊ server အဟောင်းဆိုရင် initialize handshake နဲ့ ပြန်ချိတ်ပေးပါတယ်။
+      [[mark:c-2]] ဒုတိယ အဆင့်က tool စာရင်းကို ယူတာပါ။ host က အဲဒီ စာရင်းကို model ကို ပေးပါတယ်။
+      [[mark:c-3]] တတိယ အဆင့်က model ရွေးလိုက်တဲ့ tool ကို နာမည်နဲ့ arguments ပေးပြီး ခေါ်တာပါ။ tool ထဲမှာ error ဖြစ်ရင်
+      client ဘက်မှာ exception မတက်ဘဲ is error ဆိုတဲ့ အမှတ်အသားနဲ့ ရလဒ် ပြန်ရလို့၊ model က error ကို ဖတ်ပြီး ပြင်ခေါ်နိုင်ပါတယ်။
+      [[mark:c-4]] စတုတ္ထ အဆင့်က resource ကို URI နဲ့ ဖတ်တာပါ။ ဘယ် resource ကို ဖတ်မလဲ ဆိုတာ app က ဆုံးဖြတ်ပါတယ်။
+      [[mark:c-5]] နောက်ဆုံး အဆင့်က user ရွေးလိုက်တဲ့ prompt ကို argument နဲ့ ယူပြီး message တွေ ရတာပါ။ ဆိုလိုတာက model က
+      server ကို တိုက်ရိုက် မမြင်ရပါဘူး။ client က ကြားကနေ ရှာပေး၊ ခေါ်ပေး၊ ဖတ်ပေးတာပါ။
+    sources:
+      - { title: "MCP Python SDK: Client", url: "https://py.sdk.modelcontextprotocol.io/client/" }
+      - {
+          title: "MCP Python SDK: What's new in v2",
+          url: "https://py.sdk.modelcontextprotocol.io/whats-new/",
+        }
+    actions:
+      - {
+          id: show-steps,
+          type: slide.show,
+          at: { mark: c-open, offsetMs: -1200 },
+          slideId: client-steps,
+        }
+      - { id: pt-1, type: slide.point, at: { mark: c-1 }, target: { x: 0.15, y: 0.35 } }
+      - { id: pt-2, type: slide.point, at: { mark: c-2 }, target: { x: 0.15, y: 0.47 } }
+      - { id: pt-3, type: slide.point, at: { mark: c-3 }, target: { x: 0.15, y: 0.59 } }
+      - { id: pt-4, type: slide.point, at: { mark: c-4 }, target: { x: 0.15, y: 0.71 } }
+      - { id: pt-5, type: slide.point, at: { mark: c-5 }, target: { x: 0.15, y: 0.83 } }
+
+  - id: config
+    chapter: MCP config file
+    narration: >
+      [[mark:f-open]] Claude Code ကတော့ ဒီ client အလုပ်တွေကို ကိုယ်တိုင် လုပ်ပေးပါတယ်။ ကိုယ်တို့ ပြောပေးရမှာက ဘယ် server ကို
+      ဘယ်လို စ run ရမလဲ ဆိုတာပဲ ဖြစ်ပါတယ်။ terminal ကနေ claude mcp add command နဲ့ ထည့်လို့ ရသလို၊ ဒီ file ထဲမှာ
+      ကိုယ်တိုင် ရေးလို့လည်း ရပါတယ်။ command ကို သုံးရင် server နာမည်ရဲ့ နောက်မှာ dash နှစ်ခု ခံပြီး၊ အဲဒီနောက်က
+      အရာအားလုံးကို server ကို စ run မယ့် command အဖြစ် ဘာမှ မပြင်ဘဲ ပေးပါတယ်။
+      [[mark:type-name]] server ကို tickets လို့ နာမည်ပေးပြီး၊ transport type ကို stdio လို့ ရေးပါတယ်။ type ကို အမြဲ
+      ရေးထားပါ။ URL ပဲ ရေးပြီး type မပါရင် Claude Code က stdio လို့ ယူဆလို့ error ဖြစ်ပါတယ်။
+      [[mark:type-cmd]] command နဲ့ args က Claude Code ကို server ဘယ်လို စ run ရမလဲ ပြောတာပါ။ uv နဲ့ MCP SDK ကို
+      တွဲပေးပြီး server file ကို run ပါတယ်။ server ရှိတဲ့ folder က developer တစ်ယောက်နဲ့ တစ်ယောက် မတူနိုင်လို့ environment
+      variable နဲ့ ရေးထားပါတယ်။ MCP config file က command၊ args၊ env တို့ထဲမှာ environment variable ကို ချဲ့ပေးပါတယ်။
+      [[mark:type-env]] env ကတော့ server ရဲ့ environment ထဲ ထည့်ပေးမယ့် တန်ဖိုးတွေပါ။ Ticket system နဲ့ NMS ရဲ့ API လိပ်စာကို
+      developer ရဲ့ environment ကနေ ယူပြီး ပေးပါတယ်။ လိပ်စာ အစစ်ကို file ထဲ မရေးတော့ repository ထဲ ရောက်မသွားပါဘူး။
+    sources:
+      - {
+          title: "Claude Code Docs: Connect Claude Code to tools via MCP",
+          url: "https://code.claude.com/docs/en/mcp",
+        }
+      - {
+          title: "Claude Code Docs: MCP quickstart",
+          url: "https://code.claude.com/docs/en/mcp-quickstart",
+        }
+    actions:
+      - { id: close-steps, type: slide.close, at: { mark: f-open } }
+      - id: type-name
+        type: editor.type
+        at: { mark: type-name }
+        cadence: line-by-line
+        target: { file: billing-service/.mcp.json, after: "  \"mcpServers\": {\n" }
+        text: "    \"tickets\": {\n      \"type\": \"stdio\",\n"
+      - id: type-cmd
+        type: editor.type
+        at: { mark: type-cmd }
+        cadence: line-by-line
+        target: { file: billing-service/.mcp.json, after: "      \"type\": \"stdio\",\n" }
+        text: "      \"command\": \"uv\",\n      \"args\": [\"run\", \"--with\", \"mcp[cli]\", \"${TICKET_MCP_DIR}/server.py\"],\n"
+      - id: type-env
+        type: editor.type
+        at: { mark: type-env }
+        cadence: line-by-line
+        target: { file: billing-service/.mcp.json, after: "\"${TICKET_MCP_DIR}/server.py\"],\n" }
+        text: "      \"env\": { \"TICKETS_API_URL\": \"${TICKETS_API_URL}\", \"NMS_API_URL\": \"${NMS_API_URL}\" }\n    }\n"
+      - id: expect-type
+        type: expect.file
+        at: { afterAction: type-env }
+        path: billing-service/.mcp.json
+        contains: "    \"tickets\": {\n      \"type\": \"stdio\",\n"
+
+  - id: scopes
+    chapter: Scope
+    narration: >
+      [[mark:s-open]] ဒီ config ကို ဘယ်မှာ ထားမလဲ ဆိုတာကို scope လို့ ခေါ်ပါတယ်။
+      [[mark:s-1]] local scope က default ပါ။ ဒီ project မှာ ကိုယ်တစ်ယောက်တည်းအတွက်ဖြစ်ပြီး၊ ကိုယ့် home folder ထဲက Claude
+      config file မှာ ဒီ project ရဲ့ လမ်းကြောင်းအောက်မှာ သိမ်းပါတယ်။ settings file ထဲက local settings နဲ့ နာမည်တူပေမဲ့ တခြား
+      နေရာပါ။
+      [[mark:s-2]] project scope ကတော့ ကိုယ်တို့ ရေးနေတဲ့ ဒီ file ပါ။ project ရဲ့ အပေါ်ဆုံးမှာ ရှိပြီး git ထဲ commit
+      လုပ်ထားတာမို့ team တစ်ခုလုံး မျှသုံးပါတယ်။
+      [[mark:s-3]] user scope က ကိုယ့် project အားလုံးအတွက်ပါ။
+      [[mark:s-pick]] Billing team အတွက်တော့ project scope ကို ရွေးပါတယ်။ developer တိုင်း server တူတူ၊ config တူတူ ရပြီး၊
+      ပြင်ချင်ရင် pull request တစ်ခုနဲ့ review လုပ်ပြီး ပြင်လို့ရလို့ပါ။
+      [[mark:s-note]] နာမည်တူ server က နေရာ နှစ်ခုမှာ ရှိနေရင် local က အရင်၊ ပြီးမှ project၊ ပြီးမှ user ဆိုတဲ့ အစဉ်နဲ့
+      ယူပါတယ်။ ဒါကြောင့် developer တစ်ယောက်က ကိုယ့်စက်မှာ စမ်းချင်ရင် local မှာ နာမည်တူ ထည့်ပြီး ခဏ အစားထိုးလို့ ရပါတယ်။ plugin ကနေ လာတဲ့ server တွေနဲ့ Claude app ရဲ့ connector တွေကတော့ user scope ရဲ့ နောက်မှာ
+      ရှိပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Connect Claude Code to tools via MCP",
+          url: "https://code.claude.com/docs/en/mcp",
+        }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-1,
+          type: whiteboard.apply,
+          at: { mark: s-1 },
+          upsertIds: [s-b1, s-l1, s-t1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-s-2,
+          type: whiteboard.apply,
+          at: { mark: s-2 },
+          upsertIds: [s-b2, s-l2, s-t2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-s-3,
+          type: whiteboard.apply,
+          at: { mark: s-3 },
+          upsertIds: [s-b3, s-l3, s-t3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-s-pick,
+          type: whiteboard.apply,
+          at: { mark: s-pick },
+          upsertIds: [s-pick],
+          drawMs: 900,
+        }
+      - {
+          id: draw-s-note,
+          type: whiteboard.apply,
+          at: { mark: s-note },
+          upsertIds: [s-note],
+          drawMs: 1000,
+        }
+
+  - id: screen
+    chapter: MCP view
+    narration: >
+      [[mark:m-open]] Claude Code ထဲမှာ MCP command ကို run ရင် ဒီလို မြင်ရပါတယ်။
+      [[mark:m-title]] ဒါက MCP server တွေကို စီမံတဲ့ view ပါ။ server တစ်ခုစီကို ရွေးပြီး ဝင်ကြည့်လို့ ရပါတယ်။ remote server
+      တွေမှာ OAuth နဲ့ sign in ဝင်ရမယ်ဆိုရင်လည်း ဒီ view ကနေ စလို့ ရပါတယ်။
+      [[mark:m-scope]] Project MCPs ဆိုတဲ့ ခေါင်းစဉ်အောက်မှာ project ရဲ့ MCP config file ကနေ ဖတ်ထားတဲ့ server တွေ
+      ပေါ်ပါတယ်။ ဘယ် file ကလဲ ဆိုတာကိုပါ လမ်းကြောင်းနဲ့ ပြထားပါတယ်။
+      [[mark:m-server]] tickets server က အမှန်ခြစ်နဲ့ ချိတ်ပြီးသား ဖြစ်နေပါတယ်။
+      [[mark:m-tools]] server က tool နှစ်ခု ပေးထားတာလည်း မြင်ရပါတယ်။ Claude Code ထဲမှာ ဒီ tool တွေရဲ့ နာမည် အပြည့်က mcp၊
+      server နာမည်၊ tool နာမည် ဆိုပြီး underscore နှစ်ခုစီနဲ့ ဆက်ထားတာပါ။ permission rule ထဲမှာ server နာမည်အထိ ရေးရင်
+      အဲဒီ server ရဲ့ tool အားလုံးနဲ့ ကိုက်ပြီး၊ tool နာမည်အထိ ရေးရင် tool တစ်ခုတည်းနဲ့ ကိုက်ပါတယ်။ Claude က tool ကို
+      ပထမဆုံး ခေါ်တဲ့အခါ permission မေးနိုင်ပါတယ်။
+      [[mark:m-list]] Claude Code ကို မဖွင့်ဘဲ terminal ကနေ claude mcp list ကို run ရင်လည်း server တစ်ခုစီ ချိတ်မိလား၊ authentication လိုလား၊
+      ချိတ်မရဘူးလား ဆိုတဲ့ status ကို ပြပါတယ်။
+      [[mark:m-search]] ဒီ server ရဲ့ tool တွေအတွက် tool search ကလည်း default ဖွင့်ထားပါတယ်။ session စတဲ့အခါ tool နာမည်တွေပဲ load လုပ်ပြီး၊ schema
+      အပြည့်ကို လိုတဲ့အခါမှ load လုပ်တာမို့ server များလာလည်း context ကို သိပ် မစားပါဘူး။
+    sources:
+      - {
+          title: "Claude Code Docs: Connect Claude Code to tools via MCP",
+          url: "https://code.claude.com/docs/en/mcp",
+        }
+      - {
+          title: "Claude Code Docs: Configure permissions",
+          url: "https://code.claude.com/docs/en/permissions",
+        }
+    actions:
+      - {
+          id: close-scopes,
+          type: whiteboard.apply,
+          at: { mark: m-open, offsetMs: -1400 },
+          open: false,
+        }
+      - { id: show-mcp, type: slide.show, at: { afterAction: close-scopes }, slideId: mcp-screen }
+      - { id: pt-title, type: slide.point, at: { mark: m-title }, target: { x: 0.114, y: 0.518 } }
+      - { id: pt-scope, type: slide.point, at: { mark: m-scope }, target: { x: 0.133, y: 0.624 } }
+      - { id: pt-server, type: slide.point, at: { mark: m-server }, target: { x: 0.119, y: 0.659 } }
+      - { id: pt-tools, type: slide.point, at: { mark: m-tools }, target: { x: 0.223, y: 0.659 } }
+      - { id: close-mcp, type: slide.close, at: { mark: m-list } }
+      - id: sel-entry-list
+        type: editor.select
+        at: { afterAction: close-mcp }
+        target:
+          file: billing-service/.mcp.json
+          text: '    "tickets": {'
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ Billing team lead မောင်မောင် က ဒီ config file ကို commit လုပ်ပြီး push
+      လုပ်လိုက်ပါတယ်။ နောက်တစ်နေ့ မနက် developer အသစ် တစ်ယောက်က repository ကို pull လုပ်ပြီး Claude Code ကို ဖွင့်ပါတယ်။
+      tickets server ကို ဘယ်လို ဆက်ဆံမလဲ။
+      [[mark:q-a]] ပထမ အဖြေက file ထဲမှာ ရှိနေပြီမို့ ချက်ချင်း ချိတ်ပြီး သုံးမယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက ခွင့်ပြုမလား ဆိုတာ အရင် မေးမယ် ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ Claude Code က project ရဲ့ MCP config file ထဲက server
+      တွေကို မသုံးခင် ခွင့်ပြုချက် တောင်းလို့ပါ။ ခွင့်မပြုရသေးတဲ့ server ကို approval စောင့်နေတယ်လို့ ပြပြီး၊ folder ကို
+      ယုံကြည်ကြောင်း လက်မခံရသေးရင် repository ထဲမှာ commit လုပ်ထားတဲ့ setting နဲ့လည်း ကိုယ့်ဘာသာ ခွင့်ပြုလို့ မရပါဘူး။
+      [[mark:q-rule]] ဒါဟာ မှန်ပါတယ်။ MCP server ဆိုတာ developer ရဲ့ စက်ပေါ်မှာ run မယ့် command တစ်ခု ဖြစ်လို့ပါ။ ဒါကြောင့် developer
+      တစ်ယောက်စီက config ကို ဖတ်ပြီးမှ ခွင့်ပြုပါ။ ပေးခဲ့တဲ့ အဖြေတွေကို ပြန်ဖျက်ချင်ရင်တော့ project choices ကို reset လုပ်တဲ့
+      command ရှိပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Connect Claude Code to tools via MCP",
+          url: "https://code.claude.com/docs/en/mcp",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် server ရဲ့ config
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ file ထဲမှာ tickets ရဲ့ အောက်က နေရာမှာ ကိုယ့် system
+      အတွက် server တစ်ခုရဲ့ entry ကို ရေးကြည့်ပါ။ နာမည်၊ type၊ server ကို စ run မယ့် command နဲ့ args လုံလောက်ပါတယ်။
+      [[mark:turn-2]] remote server ဆိုရင်တော့ command အစား type ကို http လို့ ပေးပြီး URL ကို ရေးပါ။ ရေးပြီးရင် လိပ်စာ၊
+      token လိုမျိုး repository ထဲ မရောက်သင့်တဲ့ တန်ဖိုး ကျန်နေသေးလား စစ်ပြီး၊ ကျန်ရင် environment variable နဲ့ အစားထိုးပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: MCP quickstart",
+          url: "https://code.claude.com/docs/en/mcp-quickstart",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-entry
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: billing-service/.mcp.json
+          text: '    "tickets": {'
+      - id: sel-env
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: billing-service/.mcp.json
+          text: '"TICKETS_API_URL": "${TICKETS_API_URL}"'
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ MCP client က host ထဲမှာ နေပြီး server ကို ချိတ်၊ tool စာရင်း ယူ၊ tool ခေါ်၊ resource
+      ဖတ်၊ prompt ယူပေးပါတယ်။ Claude Code မှာ ဒီ အလုပ်တွေကို ကိုယ်တိုင် လုပ်ပေးပြီး၊ ကိုယ်တို့က project ရဲ့ MCP config file
+      ထဲမှာ server ကို ဘယ်လို စ run မလဲ ရေးပေးရုံပါ။ team မျှသုံးတဲ့ server ကိုတော့ developer တစ်ယောက်စီက ခွင့်ပြုပြီးမှ သုံးပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ လိုင်းကျတိုင်း outage notice ကို နေခြည် ရဲ့ ပုံစံနဲ့ ဘယ်လို ရေးရမလဲ ဆိုတာ တစ်ယောက်ယောက်က
+      ထပ်ခါထပ်ခါ ရှင်းပြနေရတဲ့ ပြဿနာကနေ စပြီး၊ agent skill ဆိုတာ ဘာလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Connect Claude Code to tools via MCP",
+          url: "https://code.claude.com/docs/en/mcp",
+        }
+    actions:
+      - id: sel-type
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: billing-service/.mcp.json
+          text: '"command": "uv",'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
