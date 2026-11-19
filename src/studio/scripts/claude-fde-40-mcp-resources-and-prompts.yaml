@@ -1,0 +1,681 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-40-mcp-resources-and-prompts
+  title: "Claude FDE 40: Resource နဲ့ prompt များ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: ticket-mcp/server.py
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      ticket-mcp/backends.py: |
+        """Read-only calls to Naychi Fiber's internal Ticket system and NMS APIs."""
+        import json
+        import os
+        from urllib.error import HTTPError
+        from urllib.parse import quote
+        from urllib.request import urlopen
+
+        from mcp.server.mcpserver.exceptions import ToolError
+
+        TICKETS_API = os.environ["TICKETS_API_URL"]
+        NMS_API = os.environ["NMS_API_URL"]
+
+
+        def ticket_summary(ticket_id: str) -> str:
+            try:
+                with urlopen(f"{TICKETS_API}/tickets/{quote(ticket_id)}") as resp:
+                    t = json.load(resp)
+            except HTTPError as e:
+                if e.code == 404:
+                    raise ToolError(f"No ticket {ticket_id}. Ids look like T-58213.") from e
+                raise
+            return f"{t['id']} | {t['status']} | {t['township']}\n{t['last_message']}"
+
+
+        def outage_status(township: str) -> str:
+            with urlopen(f"{NMS_API}/outages?township={quote(township)}") as resp:
+                o = json.load(resp)
+            if not o["active"]:
+                return f"No outage in {township} now."
+            return f"Outage in {township} since {o['since']}."
+
+
+        def outage_list() -> dict:
+            with urlopen(f"{NMS_API}/outages?active=true") as resp:
+                rows = json.load(resp)
+            return {"townships": [{"township": r["township"], "since": r["since"]} for r in rows]}
+
+
+        def ticket_messages(ticket_id: str) -> str:
+            with urlopen(f"{TICKETS_API}/tickets/{quote(ticket_id)}/messages") as resp:
+                msgs = json.load(resp)
+            return "\n".join(f"{m['at']} {m['from']}: {m['text']}" for m in msgs)
+      ticket-mcp/server.py: |
+        """ticket-mcp: read-only tools for Naychi Fiber's Ticket system and NMS."""
+        from typing import Annotated
+
+        from pydantic import Field
+
+        from mcp.server import MCPServer
+        from mcp.types import ToolAnnotations
+
+        from backends import outage_list, outage_status, ticket_messages, ticket_summary
+
+        mcp = MCPServer("ticket-mcp")
+
+
+        @mcp.tool(annotations=ToolAnnotations(read_only_hint=True))
+        def get_ticket(
+            ticket_id: Annotated[str, Field(description="Ticket id, for example T-58213.")],
+        ) -> str:
+            """Read one support ticket: its status, township and latest message."""
+            return ticket_summary(ticket_id)
+
+
+        @mcp.tool(annotations=ToolAnnotations(read_only_hint=True))
+        def check_outage(
+            township: Annotated[str, Field(description="Township name in English, e.g. Hlaing.")],
+        ) -> str:
+            """Check in the NMS whether a township has an outage right now."""
+            return outage_status(township)
+
+
+        if __name__ == "__main__":
+            mcp.run()
+  whiteboardAssets:
+    # Board 1 — the three primitives in three blue columns, who decides each in orange (the point of
+    # the board), and a familiar comparison in white under each.
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 820,
+        height: 45,
+        text: "server ပေးနိုင်တာ သုံးမျိုး၊ ဘယ်သူ ရွေးလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: c-b1,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 240,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 258,
+        width: 240,
+        height: 35,
+        text: "tool",
+        fontSize: 28,
+      }
+    - {
+        id: c-w1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 340,
+        width: 240,
+        height: 35,
+        text: "model က ရွေး",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-e1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 410,
+        width: 240,
+        height: 35,
+        text: "POST လို",
+        fontSize: 28,
+      }
+    - {
+        id: c-b2,
+        kind: rectangle,
+        x: 560,
+        y: 240,
+        width: 240,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-l2,
+        kind: text,
+        align: center,
+        x: 560,
+        y: 258,
+        width: 240,
+        height: 35,
+        text: "resource",
+        fontSize: 28,
+      }
+    - {
+        id: c-w2,
+        kind: text,
+        align: center,
+        x: 560,
+        y: 340,
+        width: 240,
+        height: 35,
+        text: "app က ထည့်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-e2,
+        kind: text,
+        align: center,
+        x: 560,
+        y: 410,
+        width: 240,
+        height: 35,
+        text: "GET လို",
+        fontSize: 28,
+      }
+    - {
+        id: c-b3,
+        kind: rectangle,
+        x: 830,
+        y: 240,
+        width: 240,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-l3,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 258,
+        width: 240,
+        height: 35,
+        text: "prompt",
+        fontSize: 28,
+      }
+    - {
+        id: c-w3,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 340,
+        width: 240,
+        height: 35,
+        text: "user က ရွေး",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-e3,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 410,
+        width: 240,
+        height: 35,
+        text: "slash command",
+        fontSize: 28,
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 820,
+        height: 45,
+        text: "ဒါက tool လား၊ resource လား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) resource: ticket တွေကို ကြိုထည့်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) tool: model လိုမှ ရှာ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 340,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 660,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 790,
+        height: 35,
+        text: "ဘယ်သူ၊ ဘယ်အချိန် ဆုံးဖြတ်လဲ → အမျိုးအစား",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 790,
+        height: 35,
+        text: "model ဆုံးဖြတ် = tool",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9340
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Tool မဟုတ်တဲ့ လိုအပ်ချက်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ticket-mcp server ကို Python နဲ့ ရေးပြီး၊ function ရဲ့ type hint နဲ့ docstring ကနေ model
+      မြင်ရမယ့် tool နှစ်ခုကို ထုတ်ပေးခဲ့ပါတယ်။
+      [[mark:sel-tools]] tool ဆိုတာ model က တောင်းဆိုရင် program က လုပ်ပေးတဲ့ လုပ်ဆောင်ချက် တစ်ခုပါ။ ဒီ tool တွေကို
+      ဘယ်အချိန် ခေါ်မလဲ ဆိုတာ model က ဆုံးဖြတ်ပါတယ်။
+      [[mark:n-ask1]] ဒီအပတ် support manager လှလှ ဆီက တောင်းဆိုချက် နှစ်ခု ရောက်လာပါတယ်။ ပထမ တစ်ခုက support lead တွေ
+      Claude Desktop မှာ လိုင်းကျမှု ticket တွေကို ဖြေတဲ့အခါ၊ NMS ကနေ အခု လိုင်းကျနေတဲ့ မြို့နယ် စာရင်းကို copy ကူးပြီး
+      စကားဝိုင်းထဲ ကိုယ်တိုင် ထည့်နေရတာပါ။ ဒီ စာရင်းကို ကြည့်ပြီး ထည့်ချင်တဲ့ အချိန်မှာ တစ်ချက်တည်းနဲ့ ထည့်လို့ရရင်
+      ကောင်းမယ်လို့ ပြောပါတယ်။
+      [[mark:n-ask2]] ဒုတိယ တစ်ခုက လိုင်းကျမှု အဖြေကို support lead တစ်ယောက်ချင်းစီက ညွှန်ကြားချက် မတူဘဲ ရေးခိုင်းနေတာပါ။
+      တစ်ယောက်က ပြင်ဆင်ချိန်ကို ကတိပေးခိုင်းမိပြီး၊ နောက်တစ်ယောက်က မြန်မာလို မဟုတ်ဘဲ အင်္ဂလိပ်လို ရေးခိုင်းမိပါတယ်။
+      team တစ်ခုလုံး သဘောတူထားတဲ့ ညွှန်ကြားချက် တစ်ခုကို ရွေးပြီး စလို့ရရင် ကောင်းမယ်လို့ ဆိုပါတယ်။
+      [[mark:n-q]] ဒီ နှစ်ခုလုံးမှာ ဘယ်အချိန် သုံးမလဲ ဆိုတာ model က ဆုံးဖြတ်တာ မဟုတ်ပါဘူး။ ဒါကြောင့် tool တစ်ခု ထပ်ထည့်တာက
+      အဖြေ မဟုတ်ပါဘူး။ Model Context Protocol၊ အတိုကောက် MCP server ပေးနိုင်တဲ့ နောက်ထပ် အမျိုးအစား နှစ်ခု ရှိပါတယ်။
+    sources:
+      - {
+          title: "MCP specification 2026-07-28: Server features overview",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/server",
+        }
+    actions:
+      - {
+          id: open-server,
+          type: workspace.openFile,
+          at: { mark: sel-tools },
+          path: ticket-mcp/server.py,
+        }
+      - id: sel-tools
+        type: editor.select
+        at: { mark: sel-tools, offsetMs: 900 }
+        target:
+          file: ticket-mcp/server.py
+          text: "def check_outage("
+
+  - id: control
+    chapter: ဘယ်သူ ရွေးလဲ
+    narration: >
+      [[mark:c-open]] MCP server တစ်ခုက ပေးနိုင်တာ သုံးမျိုး ရှိပါတယ်။ ခွဲခြားဖို့ အကောင်းဆုံး မေးခွန်းက ဘယ်သူ ရွေးလဲ ဆိုတာပါ။
+      [[mark:c-1]] ပထမ တစ်မျိုးက tool ပါ။ spec က tool ကို model ထိန်းချုပ်တယ်လို့ ခေါ်ပါတယ်။ model က tool စာရင်းကို
+      ကြည့်ပြီး ကိုယ်တိုင် ရွေးခေါ်ပါတယ်။ tool က အလုပ် တစ်ခုခု လုပ်တာမို့ POST request နဲ့ တူပါတယ်။
+      [[mark:c-2]] ဒုတိယ တစ်မျိုးက resource ပါ။ resource ဆိုတာ server က ဖတ်ခွင့်ပေးထားတဲ့ data ပါ။ spec မှာ application
+      ထိန်းချုပ်တယ်လို့ ခေါ်ပါတယ်။ host app က resource တစ်ခုကို ဘယ်လို သုံးမလဲ ဆုံးဖြတ်ပါတယ်။ user ရွေးဖို့ စာရင်း
+      ပြတာ ဖြစ်နိုင်သလို၊ ရှာပေးတာ၊ အလိုအလျောက် ထည့်ပေးတာလည်း ဖြစ်နိုင်ပါတယ်။ data ကို ဖတ်ရုံ ဖတ်ပြီး ဘာမှ မပြောင်းတာမို့
+      GET request နဲ့ တူပါတယ်။
+      [[mark:c-3]] တတိယ တစ်မျိုးက prompt ပါ။ server က ကြိုရေးထားတဲ့ ညွှန်ကြားချက် template ဖြစ်ပြီး၊ user ထိန်းချုပ်ပါတယ်။
+      ဆိုလိုတာက prompt ရဲ့ စာကို server က ရေးပေမဲ့၊ ဘယ်အချိန် သုံးမလဲ ဆိုတာကို user ကိုယ်တိုင် နာမည်နဲ့ ရွေးတာပါ။ app
+      တွေမှာ slash command လိုမျိုး ပေါ်လာတတ်ပါတယ်။
+      [[mark:c-human]] tool အတွက် spec က နောက်ထပ် တစ်ချက် ဆိုထားပါတယ်။ model က ကိုယ်တိုင် ရွေးခေါ်ပေမဲ့၊ tool call ကို
+      ငြင်းနိုင်တဲ့ လူ တစ်ယောက် အမြဲ ရှိသင့်ပါတယ်။ resource နဲ့ prompt မှာတော့ ရွေးတာကိုယ်တိုင်က app ဒါမှမဟုတ် user ဘက်မှာ
+      ရှိပြီးသားပါ။
+      [[mark:c-back]] ဒါဆို လှလှ ရဲ့ ပထမ တောင်းဆိုချက်က resource ဖြစ်ပြီး၊ ဒုတိယ တစ်ခုက prompt ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "MCP specification 2026-07-28: Server features overview",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/server",
+        }
+      - {
+          title: "MCP Python SDK: First steps",
+          url: "https://py.sdk.modelcontextprotocol.io/get-started/first-steps/",
+        }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-c-1,
+          type: whiteboard.apply,
+          at: { mark: c-1 },
+          upsertIds: [c-b1, c-l1, c-w1, c-e1],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-c-2,
+          type: whiteboard.apply,
+          at: { mark: c-2 },
+          upsertIds: [c-b2, c-l2, c-w2, c-e2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-c-3,
+          type: whiteboard.apply,
+          at: { mark: c-3 },
+          upsertIds: [c-b3, c-l3, c-w3, c-e3],
+          drawMs: 1800,
+        }
+      - {
+          id: point-c-back,
+          type: whiteboard.point,
+          at: { mark: c-back },
+          target: { assetId: c-w2 },
+        }
+
+  - id: resource
+    chapter: Resource
+    narration: >
+      [[mark:type-r1]] လိုင်းကျမှု စာရင်းကို resource အဖြစ် ထည့်ကြည့်ရအောင်။ decorator ထဲမှာ function နာမည် မဟုတ်ဘဲ URI
+      တစ်ခု ပေးပါတယ်။ client တွေက ဒီ resource ကို အဲဒီ URI နဲ့ ခေါ်ပါတယ်။ ဒီ function က dictionary တစ်ခု ပြန်ပေးတာမို့ SDK
+      က JSON စာသား အဖြစ် ပြောင်းပို့ပါတယ်။
+      [[mark:sel-mime]] MIME type ကို သတိထားပါ။ မပေးရင် plain text လို့ပဲ ယူဆပြီး၊ SDK က ကိုယ့်အစား ခန့်မှန်းမပေးပါဘူး။
+      JSON ပြန်ပေးတာမို့ application JSON လို့ ကိုယ်တိုင် ပြောထားရပါတယ်။
+      [[mark:r-when]] ဒီ resource က client ရဲ့ resources list ထဲမှာ ပေါ်ပါတယ်။ ဒါပေမဲ့ function က စာရင်း ပြတဲ့အချိန်မှာ
+      မ run သေးပါဘူး။ client က ဒီ URI ကို တကယ် ဖတ်တဲ့အခါ ကျမှ run ပြီး၊ အဲဒီအချိန်ရဲ့ NMS data ကို ပြန်ပေးပါတယ်။
+      host app က ဒီ resource ကို ရွေးစရာ အဖြစ် ပြပေးရင်၊ support lead က စာရင်းကို စကားဝိုင်းထဲ တစ်ချက်တည်းနဲ့ ထည့်လို့ ရသွားပါပြီ။
+      [[mark:r-types]] ပြန်ပေးတဲ့ type အလိုက်လည်း ပို့ပုံ ကွာပါတယ်။ string ဆိုရင် စာသားအတိုင်း၊ dictionary ဆိုရင် JSON
+      စာသားအဖြစ် ပို့ပြီး၊ bytes ဆိုရင်တော့ encode လုပ်ထားတဲ့ binary data အဖြစ် ပို့ပါတယ်။ ဆိုတော့ invoice PDF လို file မျိုးကိုလည်း
+      resource အဖြစ် ပေးလို့ ရပါတယ်။ Claude Code မှာဆိုရင် user က prompt box ထဲမှာ at sign ရိုက်ပြီး server ရဲ့ resource ကို
+      ညွှန်းလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "MCP Python SDK: Resources",
+          url: "https://py.sdk.modelcontextprotocol.io/servers/resources/",
+        }
+      - {
+          title: "MCP specification 2026-07-28: Resources",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/server/resources",
+        }
+    actions:
+      - {
+          id: close-control,
+          type: whiteboard.apply,
+          at: { mark: type-r1, offsetMs: -600 },
+          open: false,
+        }
+      - id: type-r1
+        type: editor.type
+        at: { mark: type-r1 }
+        cadence: line-by-line
+        target: { file: ticket-mcp/server.py, after: "    return outage_status(township)\n" }
+        text: "\n\n@mcp.resource(\"outages://current\", mime_type=\"application/json\")\ndef current_outages() -> dict:\n    \"\"\"Townships with an outage right now, from the NMS.\"\"\"\n    return outage_list()\n"
+      - id: sel-mime
+        type: editor.select
+        at: { mark: sel-mime }
+        target:
+          file: ticket-mcp/server.py
+          text: 'mime_type="application/json"'
+
+  - id: template
+    chapter: Resource template
+    narration: >
+      [[mark:type-r2]] ဒုတိယ resource က ticket တစ်ခုရဲ့ message အားလုံးပါ။ ticket တိုင်းအတွက် URI တစ်ခုစီ မရေးနိုင်တာမို့
+      URI ထဲမှာ ticket id အတွက် နေရာလွတ် တစ်ခု ထားပါတယ်။ ဒါကို resource template လို့ ခေါ်ပါတယ်။ client က အဲဒီ
+      နေရာလွတ်ကို ticket id နဲ့ ဖြည့်ပြီး ဖတ်ပါတယ်။
+      [[mark:sel-param]] နေရာလွတ်ရဲ့ နာမည်နဲ့ function ရဲ့ parameter နာမည် တူရပါမယ်။ မတူရင် file ကို import လုပ်ကတည်းက
+      SDK က error ပြပါတယ်။ server စ run မှ သိရတာ မဟုတ်လို့ အမှားကို စောစော တွေ့ရပါတယ်။
+      [[mark:r-list]] template က resources list ထဲမှာ မပေါ်ဘဲ resource templates list ဆိုတဲ့ သီးခြား စာရင်းထဲမှာ ပေါ်ပါတယ်။
+      Inspector မှာ စမ်းရင်လည်း template အတွက် သီးခြား နေရာမှာ တွေ့ရမှာပါ။ URI template တွေက internet standard တစ်ခုကို
+      လိုက်နာပြီး၊ path ကို ဘေးကင်းအောင် စစ်တာကိုလည်း SDK က default အနေနဲ့ ဖွင့်ထားပါတယ်။ ဒီ နှစ်ခုလုံးက data ကို ဖတ်ရုံပဲ ဖတ်ပြီး ဘာမှ
+      မပြင်ဘူး ဆိုတာကလည်း server ရဲ့ စည်းကမ်းနဲ့ ကိုက်ပါတယ်။
+    sources:
+      - {
+          title: "MCP Python SDK: Resources",
+          url: "https://py.sdk.modelcontextprotocol.io/servers/resources/",
+        }
+    actions:
+      - id: type-r2
+        type: editor.type
+        at: { mark: type-r2 }
+        cadence: line-by-line
+        target: { file: ticket-mcp/server.py, after: "    return outage_list()\n" }
+        text: "\n\n@mcp.resource(\"tickets://{ticket_id}/history\")\ndef ticket_history(ticket_id: str) -> str:\n    \"\"\"Every message of one ticket, oldest first.\"\"\"\n    return ticket_messages(ticket_id)\n"
+      - id: sel-param
+        type: editor.select
+        at: { mark: sel-param }
+        target:
+          file: ticket-mcp/server.py
+          text: "def ticket_history(ticket_id: str)"
+
+  - id: prompt
+    chapter: Prompt
+    narration: >
+      [[mark:type-p1]] လှလှ ရဲ့ ဒုတိယ တောင်းဆိုချက်အတွက် prompt တစ်ခု ထည့်ပါမယ်။ prompt ဆိုတာ model ကို ပေးလိုက်တဲ့ စာပါ။
+      decorator ထဲမှာ title ကို ပေးထားတာက client ရဲ့ UI မှာ user မြင်ရမယ့် နာမည်အတွက်ပါ။ function နာမည်က prompt ရဲ့ နာမည်၊
+      docstring က description ဖြစ်လာတာက tool နဲ့ အတူတူပါပဲ။
+      [[mark:type-p2]] function ကတော့ string တစ်ခု ပြန်ပေးပါတယ်။ အဲဒီ string က user message တစ်ခု ဖြစ်လာပါတယ်။ ဒီ ညွှန်ကြားချက်ထဲမှာ
+      အဲဒီ မြို့နယ်ကို check outage tool နဲ့ အရင် စစ်ဖို့၊ မြန်မာလို ယဉ်ယဉ်ကျေးကျေး တိုတိုရေးဖို့နဲ့ ပြင်ဆင်ချိန်ကို ဘယ်တော့မှ ကတိမပေးဖို့ ရေးထားပါတယ်။
+      support lead နှစ်ယောက် ကွဲပြားခဲ့တဲ့ အချက်တွေကို team က တစ်ခါပဲ ဆုံးဖြတ်ပြီး ဒီမှာ ထားလိုက်တာပါ။
+      [[mark:p-multi]] message တစ်ခုထက် ပိုလိုရင်တော့ user message နဲ့ assistant message တွေကို စာရင်း တစ်ခုနဲ့ ပြန်ပေးလို့
+      ရပါတယ်။ ဥပမာအားဖြင့် ကောင်းတဲ့ အဖြေ နမူနာ တစ်ခုကို assistant message အဖြစ် ထည့်ပေးတာမျိုးပါ။ Claude Code မှာဆိုရင်
+      ဒီ prompt က server နာမည်နဲ့ prompt နာမည် တွဲထားတဲ့ slash command တစ်ခု အဖြစ် ပေါ်လာပါတယ်။
+      [[mark:sel-arg]] prompt ရဲ့ argument တွေက နာမည်ပါတဲ့ string တွေ ဖြစ်ပြီး၊ tool လို JSON Schema မရှိပါဘူး။ ဒီမှာ မြို့နယ်
+      နာမည် တစ်ခုပဲ ယူပါတယ်။ မဖြစ်မနေ လိုတဲ့ argument ကို မပေးရင် request က error နဲ့ ပြန်ကျပါတယ်။ prompt ရဲ့ စာက server
+      ထဲမှာ ရှိတာမို့၊ ညွှန်ကြားချက် ပြောင်းချင်ရင် server ကို တစ်နေရာတည်း ပြင်ရုံပါ။
+    sources:
+      - {
+          title: "MCP Python SDK: Prompts",
+          url: "https://py.sdk.modelcontextprotocol.io/servers/prompts/",
+        }
+      - {
+          title: "MCP specification 2026-07-28: Prompts",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/server/prompts",
+        }
+    actions:
+      - id: type-p1
+        type: editor.type
+        at: { mark: type-p1 }
+        cadence: line-by-line
+        target: { file: ticket-mcp/server.py, after: "    return ticket_messages(ticket_id)\n" }
+        text: "\n\n@mcp.prompt(title=\"Outage reply\")\ndef outage_reply(township: str) -> str:\n    \"\"\"Start a reply to a customer whose township has an outage.\"\"\"\n"
+      - id: type-p2
+        type: editor.type
+        at: { mark: type-p2 }
+        cadence: line-by-line
+        target: { file: ticket-mcp/server.py, after: "whose township has an outage.\"\"\"\n" }
+        text: "    return (f\"A customer in {township} has no internet. Run check_outage for it first, \"\n            \"then draft a short, polite reply in Burmese. Never promise a repair time.\")\n"
+      - id: expect-p2
+        type: expect.file
+        at: { afterAction: type-p2 }
+        path: ticket-mcp/server.py
+        contains: "@mcp.prompt(title=\"Outage reply\")\ndef outage_reply(township: str) -> str:\n"
+      - id: sel-arg
+        type: editor.select
+        at: { mark: sel-arg }
+        target:
+          file: ticket-mcp/server.py
+          text: "def outage_reply(township: str)"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ Reply assistant က အဖြေ မူကြမ်း ရေးနေတုန်း၊ customer က အရင်ကလည်း ဒီ ပြဿနာကို
+      တိုင်ဖူးလား ဆိုတာ သိဖို့ လိုတဲ့ ticket တွေ ရှိပါတယ်။ ဒါပေမဲ့ ticket အများစုမှာတော့ မလိုပါဘူး။ customer ရဲ့ ဖုန်းနံပါတ်နဲ့
+      အရင် ticket တွေကို ရှာပေးတာကို ticket-mcp ထဲ ထည့်ချင်တယ် ဆိုပါစို့။ ဒါကို ဘယ်အမျိုးအစားနဲ့ ထုတ်ပေးသင့်မလဲ။
+      [[mark:q-a]] ပထမ အဖြေက resource ပါ။ app က ticket တိုင်းရဲ့ အစမှာ အရင် ticket တွေကို ကြိုထည့်ထားမယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက tool ပါ။ model က လိုမှ ရှာမယ် ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ ရှာဖို့ လိုမလို ဆိုတာ ticket ရဲ့ စာကို ဖတ်ပြီးမှ
+      သိရတာမို့၊ ဆုံးဖြတ်တဲ့သူက model ဖြစ်လို့ပါ။ resource နဲ့ ကြိုထည့်ရင် မလိုတဲ့ ticket တွေမှာပါ customer ရဲ့ ticket
+      အဟောင်းတွေ context ထဲ ဝင်လာပြီး၊ model က စာကို ဖြတ်ယူတဲ့ အပိုင်းအစ ဖြစ်တဲ့ token တွေလည်း ကုန်၊ ကိုယ်ရေးအချက်အလက်လည်း လိုတာထက် ပိုမြင်သွားပါမယ်။
+      [[mark:q-rule]] ဒါကြောင့် ဘယ်အမျိုးအစား ဖြစ်မလဲ ဆိုတာ data ရဲ့ ပုံစံကို မကြည့်ဘဲ၊ ဘယ်သူက ဘယ်အချိန် သုံးမလဲ ဆုံးဖြတ်တာလဲ
+      ဆိုတာကို ကြည့်ပြီး ရွေးပါ။ model ဆုံးဖြတ်ရင် tool၊ app ဆုံးဖြတ်ရင် resource၊ user ရွေးရင် prompt ပါ။
+    sources:
+      - {
+          title: "MCP specification 2026-07-28: Server features overview",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/server",
+        }
+      - {
+          title: "MCP specification 2026-07-28: Tools",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/server/tools",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: သုံးမျိုး ခွဲကြည့်ခြင်း
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် system အတွက် server တစ်ခုက ပေးနိုင်မယ့် အရာ သုံးခုကို
+      စဉ်းစားကြည့်ပါ။ ဒီ file ရဲ့ အောက်ဆုံးမှာ comment သုံးကြောင်းနဲ့ တစ်ခုစီကို ရေးပြီး၊ tool လား၊ resource လား၊ prompt လား
+      ဆိုတာ ဘေးမှာ မှတ်ပါ။
+      [[mark:turn-2]] ခွဲတဲ့အခါ မေးခွန်း တစ်ခုတည်းကိုပဲ မေးပါ။ ဒါကို ဘယ်အချိန် သုံးမလဲ ဆိုတာ model က ဆုံးဖြတ်တာလား၊ app
+      ကလား၊ user ကိုယ်တိုင် ရွေးတာလား ဆိုတာပါ။ resource ဖြစ်ရင် URI ကို၊ prompt ဖြစ်ရင် argument ကိုပါ တစ်ခါတည်း ရေးကြည့်ပါ။
+    sources:
+      - {
+          title: "MCP specification 2026-07-28: Server features overview",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/server",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-r1
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: ticket-mcp/server.py
+          text: '@mcp.resource("outages://current", mime_type="application/json")'
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ MCP server တစ်ခုက tool၊ resource၊ prompt ဆိုပြီး သုံးမျိုး ပေးနိုင်ပါတယ်။ ဘယ်အမျိုးအစား
+      ဖြစ်မလဲ ဆိုတာ ဘယ်သူ ရွေးလဲ ဆိုတာကနေ ဆုံးဖြတ်ပါတယ်။ tool ကို model၊ resource ကို application၊ prompt ကို user က
+      ရွေးပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ Billing team ရဲ့ Claude Code ကနေ ဒီ server ကို တကယ် ချိတ်ရင်း၊ MCP client က ဘာလုပ်လဲ
+      ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "MCP specification 2026-07-28: Server features overview",
+          url: "https://modelcontextprotocol.io/specification/2026-07-28/server",
+        }
+    actions:
+      - id: sel-prompt
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: ticket-mcp/server.py
+          text: '@mcp.prompt(title="Outage reply")'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
