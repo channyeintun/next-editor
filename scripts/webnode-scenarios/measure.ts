@@ -14,10 +14,14 @@
 // measures one engine. RESUME=1 keeps the runs already recorded and does only
 // the missing ones. HOLD=<seconds> leaves the first preview open that long
 // before going on, and MEASURE_DEBUG=1 prints every memory sample: together
-// they show whether memory grows while a lesson sits open. The runs are recorded, one JSON line each, in
+// they show whether memory grows while a lesson sits open. PROFILE=<dir>
+// keeps the browser's profile in that directory, so each run after the first
+// is a later visit: it finds what the editor's page keeps between visits (the
+// prepared forms of large modules, src/core/webnode/preparedStorage.ts). The
+// runs are recorded, one JSON line each, in
 // node_modules/.cache/webnode-measure/runs.jsonl (MEASURE_RUNS names another).
 //
-// One run, in a browser of its own with an empty cache:
+// One run, in a browser of its own with an empty cache (unless PROFILE):
 //   boot     the runtime boots;
 //   install  the lesson's init command, as the editor runs it (`sh -lc`), to its exit;
 //   preview  from the start of the run command until the preview shows the
@@ -445,10 +449,16 @@ async function measure(target: Target, engine: Engine, run: number): Promise<Run
     consoleErrors: [],
   };
   const server = engine === "webnode" ? await serve() : await serveWebContainerPage();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  // A profile kept between runs: a later run is a later visit of the same browser.
+  const profile = process.env.PROFILE ? resolve(ROOT, process.env.PROFILE) : null;
+  const visit = profile
+    ? await chromium.launchPersistentContext(profile, { channel: "chrome", headless: true })
+    : null;
+  const browser =
+    visit?.browser() ?? (await chromium.launch({ channel: "chrome", headless: true }));
   const memory = await sampleMemory(browser);
   try {
-    const page = await browser.newPage();
+    const page = visit ? (visit.pages()[0] ?? (await visit.newPage())) : await browser.newPage();
     const consoleErrors = new Set<string>();
     page.on("console", (message) => {
       if (message.type() === "error") {
@@ -602,7 +612,7 @@ async function measure(target: Target, engine: Engine, run: number): Promise<Run
     const sampled = await memory.stop().catch(() => null);
     result.peakMb = sampled ? Math.round(sampled.peakMb) : null;
     result.endMb = sampled ? Math.round(sampled.endMb) : null;
-    await browser.close();
+    await (visit ?? browser).close();
     server.stop();
   }
   return result;
