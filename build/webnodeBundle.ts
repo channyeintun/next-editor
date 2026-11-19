@@ -113,6 +113,10 @@ async function bundle(entry: string, file: string, options: WebnodeBundleOptions
       file: `${options.outDir}/${file}`,
       // Classic worker scripts: one file each, no imports.
       format: "iife",
+      // The browser keeps a script that has one character outside ASCII at two
+      // bytes a character, and every process is a worker with its own copy of
+      // process.js: escaped, an idle process takes 12 MB instead of 15.
+      charset: "ascii",
       // Node programs read `name` off functions and classes (`<Buffer 68 69>`,
       // `error.constructor.name`, `Module {}`), so neither the bundler's
       // renaming of clashing names nor the minifier may change it.
