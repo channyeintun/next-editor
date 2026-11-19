@@ -1,0 +1,613 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-56-expansion
+  title: "Claude FDE 56: Expansion နဲ့ ရှေ့ဆက်ရမယ့် လမ်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/56-impact-review.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/56-impact-review.md: |
+        # Impact review · launch ပြီး 6 လ (CTO အတွက်)
+
+        ## ဘာကို တိုင်းခဲ့လဲ
+
+        ## ဘာကို မျှဝေမလဲ
+
+        ## နောက် ဘာလုပ်မလဲ
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: three-kinds
+      contentType: html
+      name: FDE အလုပ် သုံးမျိုး
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">FDE ရဲ့ အလုပ် သုံးမျိုး</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term blue">နားလည်</span>Part 1–3 · model ရဲ့ သဘာဝ၊ ဆုံးဖြတ်ချက် 4 ခု</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term orange">တည်ဆောက်</span>Part 4–8 · Platform၊ Claude Code၊ MCP၊ Skills</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term green">ဖြန့်ကျက်</span>Part 9–10 · pilot၊ ROI၊ adoption</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — two ways to measure: system numbers (blue) and what people report (green); the
+    # one point of the board (orange): read them together.
+    - {
+        id: m-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "ဘယ်လို တိုင်းမလဲ: နှစ်မျိုး",
+        fontSize: 36,
+      }
+    - {
+        id: m-b1,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 380,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-b1-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 257,
+        width: 380,
+        height: 35,
+        text: "system ဂဏန်း",
+        fontSize: 28,
+      }
+    - {
+        id: m-s1,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 370,
+        height: 35,
+        text: "weekly active 290 / 430",
+        fontSize: 28,
+      }
+    - {
+        id: m-s2,
+        kind: text,
+        x: 300,
+        y: 385,
+        width: 370,
+        height: 35,
+        text: "ပြန်ဖြေချိန် 38 → 24 မိနစ်",
+        fontSize: 28,
+      }
+    - {
+        id: m-b2,
+        kind: rectangle,
+        x: 700,
+        y: 240,
+        width: 380,
+        height: 70,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: m-b2-l,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 257,
+        width: 380,
+        height: 35,
+        text: "လူတွေ ပြောတာ",
+        fontSize: 28,
+      }
+    - {
+        id: m-p1,
+        kind: text,
+        x: 710,
+        y: 335,
+        width: 370,
+        height: 35,
+        text: "survey: တစ်ပတ် 2.5 နာရီ",
+        fontSize: 28,
+      }
+    - {
+        id: m-p2,
+        kind: text,
+        x: 710,
+        y: 385,
+        width: 370,
+        height: 35,
+        text: "team lead ဖြစ်ရပ် 3 ခု",
+        fontSize: 28,
+      }
+    - {
+        id: m-both,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 790,
+        height: 35,
+        text: "နှစ်ခုလုံးကို ယှဉ်ကြည့်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the whole engagement as one line, top to bottom: red the failure we started
+    # from, blue what was built, green the measured result, white the launch, orange today.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "မုန်တိုင်းညကနေ ယနေ့အထိ",
+        fontSize: 36,
+      }
+    - {
+        id: b-axis,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 290,
+        y: 235,
+        width: 40,
+        height: 370,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-1,
+        kind: text,
+        x: 350,
+        y: 245,
+        width: 740,
+        height: 35,
+        text: "မုန်တိုင်းည: အဖြေ 64 စောင် မှား",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-2,
+        kind: text,
+        x: 350,
+        y: 320,
+        width: 740,
+        height: 35,
+        text: "ပတ် 1–9: နားလည်၊ တည်ဆောက်",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-3,
+        kind: text,
+        x: 350,
+        y: 395,
+        width: 740,
+        height: 35,
+        text: "Day 30: job 140၊ အလုပ်ရက် 17 ရက်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-4,
+        kind: text,
+        x: 350,
+        y: 470,
+        width: 740,
+        height: 35,
+        text: "Launch: ဝန်ထမ်း 430၊ CoE",
+        fontSize: 28,
+      }
+    - {
+        id: b-5,
+        kind: text,
+        x: 350,
+        y: 545,
+        width: 740,
+        height: 35,
+        text: "6 လ: Expansion",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9356
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: open
+    chapter: ခြောက်လအကြာ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ Center of Excellence ကို ဖွဲ့ပြီး၊ ဌာနထဲမှာ ရှေ့ကနေ ကူညီတဲ့ champion တွေကို ဆရာ
+      ဖြစ်လာအောင် လေ့ကျင့်ပေးတဲ့ train the trainer ကို လေ့လာခဲ့ပါတယ်။
+      [[mark:o-2]] အခု launch ပြီး ခြောက်လ ရှိပါပြီ။ CTO ဖြစ်တဲ့ အောင်အောင် က ဒါရိုက်တာ အဖွဲ့ အစည်းအဝေး မတိုင်ခင်
+      ကိုယ့်ကို မေးခွန်း နှစ်ခု မေးပါတယ်။ ဘာတွေ တကယ် ပြောင်းသွားလဲ၊ နောက် ဘာ ဆက်လုပ်မလဲ ဆိုတာပါ။
+      [[mark:o-3]] ဒီ မေးခွန်း နှစ်ခုက FDE learning path ရဲ့ တတိယ အဆင့်ဖြစ်တဲ့ Expansion ကို ဖွင့်ပေးပါတယ်။ Expansion
+      ဆိုတာ အလုပ်ဖြစ်ပြီးသား နေရာတွေကနေ use case အသစ်တွေ၊ ဆိုလိုတာက AI နဲ့ ဖြေရှင်းမယ့် အလုပ်အသစ်တွေဆီ ဆက်ချဲ့တဲ့
+      အဆင့်ပါ။ နေခြည် အတွက်ဆိုရင် ဘာ ပြောင်းသွားလဲ တိုင်းတာ၊ အလုပ်ဖြစ်တာကို မျှဝေတာ၊ နောက် use case ကို ရွေးတာ ဆိုတဲ့
+      အလုပ် သုံးခု ရှိပါတယ်။
+      [[mark:o-4]] ဒီ lesson မှာ အောင်အောင် အတွက် impact review တစ်စောင်ကို ရေးပြီး၊ ပြီးရင် course တစ်ခုလုံးကို
+      မုန်တိုင်းကျတဲ့ညကနေ ပြန်ကြည့်ပါမယ်။ ဒါက ဒီ course ရဲ့ နောက်ဆုံး lesson ပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: open-review,
+          type: workspace.openFile,
+          at: { mark: o-2 },
+          path: notebook/56-impact-review.md,
+        }
+      - id: sel-title
+        type: editor.select
+        at: { mark: o-4 }
+        target:
+          file: notebook/56-impact-review.md
+          text: "# Impact review · launch ပြီး 6 လ (CTO အတွက်)"
+
+  - id: measure
+    chapter: ဘယ်လို တိုင်းမလဲ
+    narration: >
+      [[mark:m-title]] ဘာ ပြောင်းသွားလဲ ဆိုတာကို ဂဏန်း တစ်မျိုးတည်းနဲ့ ဖြေလို့ မရပါဘူး။ တိုင်းနည်း နှစ်မျိုး လိုပါတယ်။
+      [[mark:m-sys]] ပထမ တစ်မျိုးက system ထဲက ဂဏန်းတွေပါ။ ဝန်ထမ်း ၄၃၀ ထဲက ၂၉၀ က အပတ်တိုင်း ပုံမှန် သုံးနေပါတယ်။
+      support ရဲ့ ပထမဆုံး ပြန်ဖြေချိန်ကလည်း ပျမ်းမျှ ၃၈ မိနစ်ကနေ ၂၄ မိနစ် ဖြစ်လာပါတယ်။
+      [[mark:m-sys2]] Claude Enterprise Administrator Guide မှာ အပတ်စဉ် သုံးသူကို seat တွေရဲ့ ၇၀ ရာခိုင်နှုန်းလို
+      ဂဏန်းမျိုးကို အကြံပြု target အဖြစ် ပေးထားပါတယ်။ ဒါက target ပါ၊ တခြား ကုမ္ပဏီတွေရဲ့ ရလဒ် မဟုတ်ပါဘူး။ အဲဒီ
+      guide ကပဲ သုံးနေတဲ့ ပမာဏကို ကြည့်တာကနေ business အတွက် ဘာ ပြောင်းလဲလဲ ကြည့်တာဆီ ရွှေ့ဖို့ ပြောပါတယ်။
+      ဒါကြောင့် login ဝင်တဲ့ လူအရေအတွက်ထက် ပြန်ဖြေချိန် ပြောင်းသွားတာက ပိုအရေးကြီးပါတယ်။
+      [[mark:m-dev]] developer ဘက်အတွက်တော့ Claude Code ရဲ့ analytics dashboard ကို Team နဲ့ Enterprise ရဲ့ Admin နဲ့
+      Owner တွေ ကြည့်နိုင်ပါတယ်။ အဲဒီထဲက contribution metric တွေက public beta အဆင့်မှာ ရှိပြီး၊ developer က ၂၀
+      ရာခိုင်နှုန်းထက် ပိုပြန်ရေးထားတဲ့ code ကို Claude Code ရေးတာလို့ မရေတွက်ပါဘူး။ docs ကိုယ်တိုင်က အဲဒီ ဂဏန်းတွေကို
+      တမင် လျှော့တွက်ထားတာလို့ ဆိုတာမို့၊ ဒါရိုက်တာ အဖွဲ့အတွက် ပိုယုံကြည်ရပါတယ်။
+      [[mark:m-ppl]] ဒုတိယ တစ်မျိုးက လူတွေ ကိုယ်တိုင် ပြောတာပါ။ survey မှာ ဝန်ထမ်းတွေက တစ်ပတ်ကို ပျမ်းမျှ နှစ်နာရီခွဲလောက်
+      ချွေတာနိုင်တယ်လို့ ဖြေကြပါတယ်။ team lead သုံးယောက်ဆီကလည်း တိုတိုလေး ဖြစ်ရပ် တစ်ခုစီ ရေးခိုင်းပါတယ်။ ဂဏန်းက
+      ဘယ်လောက် ပြောင်းလဲလဲ ပြပြီး၊ ဖြစ်ရပ်က ဘာကြောင့်လဲ ဆိုတာကို ပြပါတယ်။
+      [[mark:m-both]] ဒါပေမဲ့ နှစ်မျိုးလုံးကို ယှဉ်ကြည့်ရပါမယ်။ သုတေသန အဖွဲ့ တစ်ခုရဲ့ ၂၀၂၅ အစောပိုင်း လေ့လာမှုမှာ
+      developer တွေက ပိုမြန်သွားတယ်လို့ ခံစားခဲ့ပေမဲ့၊ တိုင်းကြည့်တော့ ပိုကြာနေတာကို တွေ့ခဲ့ပါတယ်။ အဲဒီ ရလဒ်ကို အဲဒီ အဖွဲ့
+      ကိုယ်တိုင်က ခေတ်မမီတော့ဘူးလို့ နောက်မှ ဆိုထားပေမဲ့၊ ခံစားချက်နဲ့ တိုင်းတာမှု ကွဲနိုင်တယ် ဆိုတဲ့ သင်ခန်းစာကတော့
+      ကျန်ပါတယ်။
+      [[mark:m-anon]] နောက်တစ်ချက်က Claude Enterprise ရဲ့ Analytics ထဲက survey တွေဟာ အမည်မဖော်တဲ့ survey မဟုတ်ပါဘူး။
+      ဒါကို ဝန်ထမ်းတွေကို ကြိုပြောထားမှ ရိုးရိုးသားသား ဖြေကြမှာပါ။
+    sources:
+      - {
+          title: "Claude Enterprise Administrator Guide (Anthropic Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+      - { title: "Claude Code docs: Analytics", url: "https://code.claude.com/docs/en/analytics" }
+      - {
+          title: "METR: Measuring the impact of early-2025 AI on experienced open-source developer productivity",
+          url: "https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/",
+        }
+      - {
+          title: "METR: uplift study update (February 2026)",
+          url: "https://metr.org/blog/2026-02-24-uplift-update/",
+        }
+      - {
+          title: "Claude Help Center: Claude Enterprise consumption guide",
+          url: "https://support.claude.com/en/articles/14782391-claude-enterprise-consumption-guide",
+        }
+    actions:
+      - {
+          id: draw-m-title,
+          type: whiteboard.apply,
+          at: { mark: m-title },
+          open: true,
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-m-sys,
+          type: whiteboard.apply,
+          at: { mark: m-sys },
+          upsertIds: [m-b1, m-b1-l, m-s1, m-s2],
+          drawMs: 1800,
+        }
+      - { id: point-m-s2, type: whiteboard.point, at: { mark: m-sys2 }, target: { assetId: m-s2 } }
+      - {
+          id: draw-m-ppl,
+          type: whiteboard.apply,
+          at: { mark: m-ppl },
+          upsertIds: [m-b2, m-b2-l, m-p1, m-p2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-m-both,
+          type: whiteboard.apply,
+          at: { mark: m-both },
+          upsertIds: [m-both],
+          drawMs: 900,
+        }
+
+  - id: review
+    chapter: Impact review
+    narration: >
+      [[mark:r-open]] ဒါတွေကို impact review ထဲ ချရေးကြည့်ရအောင်။
+      [[mark:type-measured]] ပထမ အပိုင်းမှာ system ဂဏန်းနဲ့ လူတွေ ပြောတာကို ခွဲရေးပါတယ်။ survey ဂဏန်းဘေးမှာ
+      ကိုယ်တိုင် ပြောတာ လို့ ရေးထားလို့၊ ဖတ်တဲ့သူက အဲဒါကို တိုင်းထားတဲ့ ဂဏန်းနဲ့ မရောမိပါဘူး။
+      [[mark:type-share]] ဒုတိယ အပိုင်းက ဘာကို မျှဝေမလဲ ဆိုတာပါ။ path ရဲ့ အခြေခံ စည်းမျဉ်း တစ်ခုက အောင်မြင်မှုကို
+      စနစ်တကျ မျှဝေတာပါ။ အဖွဲ့အစည်း အပြောင်းအလဲအတွက် လူသိများတဲ့ အဆင့် ရှစ်ဆင့် ပုံစံ တစ်ခုမှာလည်း အစောပိုင်း အောင်မြင်မှု အသေးလေးတွေကို စုပြီး
+      မကြာခဏ ပြောပြဖို့ ပါပါတယ်။
+      [[mark:share-2]] နေခြည် မှာတော့ လစဉ် newsletter မှာ ဌာန တစ်ခုရဲ့ ဖြစ်ရပ် တစ်ခုကို ထည့်ပြီး၊ စစ်ဆေးမှုက ဖမ်းမိခဲ့တဲ့
+      အမှားကိုလည်း ထည့်ပါတယ်။ မုန်တိုင်းကျတဲ့ညကနေ သင်ခဲ့တာက အမှားကို ဖုံးထားရင် ထပ်ဖြစ်တတ်တယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Kotter: The 8 steps for leading change",
+          url: "https://www.kotterinc.com/methodology/8-steps/",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-measure, type: whiteboard.apply, at: { mark: r-open }, open: false }
+      - {
+          id: reopen-review,
+          type: workspace.openFile,
+          at: { afterAction: close-measure },
+          path: notebook/56-impact-review.md,
+        }
+      - id: type-measured
+        type: editor.type
+        at: { mark: type-measured }
+        cadence: line-by-line
+        target: { file: notebook/56-impact-review.md, after: "## ဘာကို တိုင်းခဲ့လဲ\n" }
+        text: "- system: weekly active 290 / 430 · ပထမ ပြန်ဖြေချိန် 38 → 24 မိနစ် · report job 140 ပြီး\n- လူ: survey မှာ တစ်ပတ် 2.5 နာရီ ချွေတာ (ကိုယ်တိုင် ပြောတာ) · team lead ဖြစ်ရပ် 3 ခု\n"
+      - id: type-share
+        type: editor.type
+        at: { mark: share-2 }
+        cadence: line-by-line
+        target: { file: notebook/56-impact-review.md, after: "## ဘာကို မျှဝေမလဲ\n" }
+        text: "- လစဉ် newsletter: ဌာန 1 ခုရဲ့ ဖြစ်ရပ် · စစ်ဆေးမှုက ဖမ်းမိခဲ့တဲ့ အမှားလည်း ပါ\n"
+      - id: sel-self
+        type: editor.select
+        at: { afterAction: type-measured }
+        target:
+          file: notebook/56-impact-review.md
+          text: "(ကိုယ်တိုင် ပြောတာ)"
+      - id: sel-share
+        type: editor.select
+        at: { mark: type-share }
+        target:
+          file: notebook/56-impact-review.md
+          text: "## ဘာကို မျှဝေမလဲ"
+
+  - id: next
+    chapter: နောက် ဘာလုပ်မလဲ
+    narration: >
+      [[mark:type-next]] တတိယ အပိုင်းက နောက် ဘာလုပ်မလဲ ဆိုတာပါ။ ဒီမှာ Part ၉ မှာ use case ကို စိစစ်ခဲ့တဲ့ စံ လေးချက်ကို
+      ပြန်သုံးပါတယ်။ volume၊ complexity၊ measurability နဲ့ readiness ပါ။ field technician ၁၃၀ က အလုပ်ပြီးတိုင်း ရေးရတဲ့
+      job မှတ်စုက အရေအတွက် များပြီး၊ ရေးချိန်ကိုလည်း တိုင်းလို့ ရပါတယ်။ ဒါပေမဲ့ technician တွေထဲမှာ champion
+      မရှိသေးလို့ readiness က အားနည်းပါတယ်။ ဒါကြောင့် champion နှစ်ယောက် အရင် ရှာပြီးမှ စပါမယ်။
+      [[mark:type-next2]] Administrator Guide ကလည်း team အသစ်ဆီ ချဲ့တဲ့အခါ use case ကိုက်ညီပြီး champion လုပ်ချင်တဲ့သူ
+      ရှိတဲ့ team ကို ဦးစားပေးဖို့ အကြံပေးပါတယ်။ technician တွေအတွက် champion ကို အရင် ရှာတာလည်း ဒီ အကြောင်းကြောင့်ပါ။ finance ရဲ့ invoice agent ကတော့ champion နဲ့
+      တွဲပြီး ဆက်လုပ်နေပါတယ်။
+    sources:
+      - {
+          title: "Claude Enterprise Administrator Guide (Anthropic Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: type-next
+        type: editor.type
+        at: { mark: type-next, offsetMs: 2500 }
+        cadence: line-by-line
+        target: { file: notebook/56-impact-review.md, after: "## နောက် ဘာလုပ်မလဲ\n" }
+        text: "- field technician job မှတ်စု: volume၊ measurability ကိုက် · readiness အတွက် champion 2 ယောက် အရင်\n"
+      - id: type-next2
+        type: editor.type
+        at: { mark: type-next2 }
+        cadence: line-by-line
+        target: { file: notebook/56-impact-review.md, after: "champion 2 ယောက် အရင်\n" }
+        text: "- finance invoice agent: champion နဲ့ တွဲပြီး ဆက်\n"
+      - id: expect-next
+        type: expect.file
+        at: { afterAction: type-next2 }
+        path: notebook/56-impact-review.md
+        contains: "- field technician job မှတ်စု: volume၊ measurability ကိုက် · readiness အတွက် champion 2 ယောက် အရင်\n"
+
+  - id: look-back
+    chapter: မုန်တိုင်းညကနေ ယနေ့အထိ
+    narration: >
+      [[mark:b-title]] ခြောက်လ ဆိုတာ ဒီ course ရဲ့ ဇာတ်လမ်း အဆုံးပါ။ engagement တစ်ခုလုံးကို လိုင်း တစ်ကြောင်းတည်းနဲ့
+      ပြန်ကြည့်ရအောင်။
+      [[mark:b-1]] အစက မုန်တိုင်းကျတဲ့ညပါ။ personal account တွေနဲ့ ရေးခဲ့တဲ့ အဖြေ ၆၄ စောင်က လိုင်းကျနေတဲ့ customer တွေကို
+      router ပြန်ဖွင့်ခိုင်းခဲ့ပါတယ်။ model မပျက်ခဲ့သလို လူတွေလည်း မပေါ့ဆခဲ့ပါဘူး။ ဘယ်သူမှ design မဆွဲခဲ့တာပါ။
+      [[mark:b-2]] ပထမ ကိုးပတ်လောက်မှာ model ဘယ်လို ပြုမူလဲ ဆိုတာကို နားလည်အောင် လုပ်ပြီး၊ Reply assistant ကို Claude Platform
+      ပေါ်မှာ ဆောက်ပါတယ်။ Billing team နဲ့ Claude Code ကို သုံးတတ်အောင် လုပ်ပြီး၊ ticket နဲ့ NMS data ကို Claude
+      မြင်နိုင်အောင် ချိတ်ပေးကာ၊ team တွေ ထပ်ခါထပ်ခါ လုပ်ရတဲ့ လုပ်နည်းတွေကို skill အဖြစ် ရေးပေးပါတယ်။
+      [[mark:b-3]] ရက် ၃၀ activation မှာ developer နှစ်ယောက်က report job ၁၄၀ ကို အလုပ်ရက် ၁၇ ရက်နဲ့ ရွှေ့ပြီး၊ output
+      တိုက်စစ်မှုက job သုံးခုကို ဖမ်းမိခဲ့ပါတယ်။
+      [[mark:b-4]] အဲဒီနောက် ဝန်ထမ်း ၄၃၀ အတွက် launch လုပ်၊ CoE ကို ဖွဲ့ပြီး၊ အခု ခြောက်လအကြာမှာ နောက် use case ကို
+      ရွေးနေပါပြီ။
+      [[mark:b-5]] ဒီ လိုင်း တစ်လျှောက်မှာ ပြောင်းသွားတာက model တစ်ခုတည်း မဟုတ်ပါဘူး။ model က ဘာကို မြင်ရမလဲ၊ ရလဒ်ကို
+      ဘယ်သူ စစ်မလဲ၊ AI သုံးလို့ တကယ် အကျိုးရှိမရှိ ဘယ်လို တိုင်းမလဲ ဆိုတဲ့ မေးခွန်းတွေကို နေခြည် ရဲ့ လူတွေ ကိုယ်တိုင်
+      ဖြေတတ်လာတာပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-b-title,
+          type: whiteboard.apply,
+          at: { mark: b-title },
+          open: true,
+          clear: true,
+          upsertIds: [b-title, b-axis],
+          drawMs: 900,
+        }
+      - { id: draw-b-1, type: whiteboard.apply, at: { mark: b-1 }, upsertIds: [b-1], drawMs: 900 }
+      - { id: draw-b-2, type: whiteboard.apply, at: { mark: b-2 }, upsertIds: [b-2], drawMs: 900 }
+      - { id: draw-b-3, type: whiteboard.apply, at: { mark: b-3 }, upsertIds: [b-3], drawMs: 900 }
+      - {
+          id: draw-b-4,
+          type: whiteboard.apply,
+          at: { mark: b-4 },
+          upsertIds: [b-4, b-5],
+          drawMs: 1200,
+        }
+      - { id: point-b-1, type: whiteboard.point, at: { mark: b-5 }, target: { assetId: b-1 } }
+
+  - id: three-kinds
+    chapter: FDE ရဲ့ အလုပ် သုံးမျိုး
+    narration: >
+      [[mark:k-open]] ပထမဆုံး lesson မှာ FDE ရဲ့ အလုပ်ကို သုံးမျိုး ခွဲခဲ့တာ မှတ်မိမှာပါ။ course တစ်ခုလုံးကလည်း ဒီ
+      သုံးမျိုးအတိုင်း သွားခဲ့ပါတယ်။
+      [[mark:k-1]] ပထမ တစ်မျိုးက နားလည်တာပါ။ model က ဘာကို သိပြီး ဘာကို မသိလဲ၊ တစ်ခါမှာ ဘာကို မြင်နိုင်လဲ၊ ညွှန်ကြားချက်နဲ့
+      ဘယ်လောက် ပြောင်းလို့ရလဲ ဆိုတဲ့ သဘာဝတွေပါ။ AI နဲ့ အလုပ်လုပ်တဲ့ အလေ့အကျင့် လေးခုနဲ့၊ prompt မရေးခင် ဆုံးဖြတ်ရမယ့်
+      အချက် လေးခုလည်း ပါပါတယ်။ အဲဒါကြောင့် မထင်မှတ်တဲ့ output တစ်ခုကို မြင်ရင် ဘာကြောင့်လဲ ဆိုတာ
+      ခွဲခြားပြီး ပြင်နည်းကို ရွေးနိုင်ပါပြီ။
+      [[mark:k-2]] ဒုတိယ တစ်မျိုးက တည်ဆောက်တာပါ။ Reply assistant ကို API ပေါ်မှာ ဆောက်တာ၊ Claude Code ကို စည်းကမ်းတွေနဲ့
+      ထိန်းပြီး ကြာရှည် အလုပ်တွေကို လွှတ်ထားနိုင်အောင် လုပ်တာ၊ ကုမ္ပဏီရဲ့ system တွေကို Claude မြင်နိုင်အောင် ချိတ်တာ၊
+      team ရဲ့ လုပ်နည်းတွေကို skill အဖြစ် ရေးတာတွေ ပါပါတယ်။
+      [[mark:k-3]] တတိယ တစ်မျိုးက ဖြန့်ကျက်တာပါ။ use case ရွေးတာ၊ လူနည်းနည်းနဲ့ အရင် စမ်းတဲ့ pilot ကို design ဆွဲတာ၊
+      မစခင် ဂဏန်း ယူထားတာ၊ အဆင့်လိုက် ဖြန့်တာနဲ့ champion၊ CoE တွေကို တည်ဆောက်တာ ပါပါတယ်။ ပထမဆုံး lesson မှာ
+      ပြောခဲ့သလို နည်းပညာကို တပ်ဆင်တာက ပိုလွယ်တဲ့ အပိုင်းပါ။ လူတွေရဲ့ အလုပ်လုပ်ပုံကို ပြောင်းပြီး ရလဒ်ကို
+      သက်သေပြတာက ပိုခက်ပါတယ်။ ဒီ သုံးမျိုးလုံးကို နေခြည် ရဲ့ ဇာတ်လမ်းထဲမှာ အစကနေ အဆုံးထိ လိုက်လုပ်ကြည့်ခဲ့ပါပြီ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: close-line,
+          type: whiteboard.apply,
+          at: { mark: k-open, offsetMs: -1400 },
+          open: false,
+        }
+      - {
+          id: show-kinds,
+          type: slide.show,
+          at: { mark: k-open, offsetMs: -600 },
+          slideId: three-kinds,
+        }
+      - { id: point-k-1, type: slide.point, at: { mark: k-1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-k-2, type: slide.point, at: { mark: k-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-k-3, type: slide.point, at: { mark: k-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: your-turn
+    chapter: ကိုယ့် ပထမ ခြေလှမ်း
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် အလုပ်မှာ Claude ကို deploy လုပ်ဖို့ ဒီအပတ် လုပ်မယ့်
+      ပထမ ခြေလှမ်း တစ်ခုကို ဒီ ခေါင်းစဉ်အောက်မှာ ရေးကြည့်ပါ။ ကြီးကြီးမားမား မဟုတ်ရပါဘူး။ ကိုယ့် team မှာ AI ကို အခု
+      ဘယ်လို သုံးနေလဲ ဆိုတာကို ပထမဆုံး lesson ကလို ခေါင်းစဉ် လေးခုနဲ့ ချရေးတာ၊ ဒါမှမဟုတ် use case တစ်ခုကို စံ
+      လေးချက်နဲ့ အမှတ်ပေးကြည့်တာမျိုးပါ။
+      [[mark:turn-2]] ဘယ်နေ့ လုပ်မလဲ၊ ဘယ်သူနဲ့ လုပ်မလဲ ဆိုတာပါ ထည့်ရေးပါ။ account၊ key ဒါမှမဟုတ် install လုပ်စရာ
+      တစ်ခုမှ မလိုတဲ့ ခြေလှမ်းနဲ့ စလို့ ရပါတယ်။ FDE ရဲ့ အလုပ်က တည်ဆောက်တာ မတိုင်ခင် မေးတာနဲ့ ချရေးတာကနေ စတာပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-kinds, type: slide.close, at: { mark: turn } }
+      - id: sel-next
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/56-impact-review.md
+          text: "## နောက် ဘာလုပ်မလဲ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ Expansion မှာ system ဂဏန်းနဲ့ လူတွေ ကိုယ်တိုင် ပြောတာကို ယှဉ်ပြီး တိုင်းပါတယ်။
+      အောင်မြင်မှုနဲ့ ဖမ်းမိတဲ့ အမှားကို ပုံမှန် မျှဝေပြီး၊ နောက် use case ကို စံ လေးချက်နဲ့ ပြန်ရွေးပါတယ်။
+      [[mark:recap-2]] course တစ်ခုလုံးကို တစ်ကြောင်းတည်းနဲ့ ပြောရရင်တော့၊ forward deployed engineer ဆိုတာ model ကို
+      နားလည်ပြီး၊ ကုမ္ပဏီရဲ့ system တွေထဲမှာ တည်ဆောက်ကာ၊ လူတွေ တကယ် သုံးလာအောင် ဖြန့်ကျက်ပေးတဲ့သူပါ။
+      မုန်တိုင်းကျတဲ့ညက နေခြည် မှာ မရှိခဲ့တာ အဲဒီ design ပါ။ ကိုယ့် ကုမ္ပဏီမှာ ဒီ design ကို ဆွဲပေးမယ့်သူက ကိုယ် ဖြစ်နိုင်ပါတယ်။
+      [[mark:thanks]] Claude FDE course ကို အစကနေ အဆုံးထိ လေ့လာပေးလို့ ကျေးဇူးတင်ပါတယ် ခင်ဗျာ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-measured
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/56-impact-review.md
+          text: "## ဘာကို တိုင်းခဲ့လဲ"
+      - id: sel-review-title
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/56-impact-review.md
+          text: "# Impact review · launch ပြီး 6 လ (CTO အတွက်)"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
