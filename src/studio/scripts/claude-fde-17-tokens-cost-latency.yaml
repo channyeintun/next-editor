@@ -1,0 +1,722 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-17-tokens-cost-latency
+  title: "Claude FDE 17: Token, cost နဲ့ latency"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/17-cost.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      examples/draft-response.example.json: |
+        {
+          "id": "msg_01Hn7c2Qd5Vb8xKpR3mT9wLe",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-opus-5-5",
+          "content": [
+            {
+              "type": "text",
+              "text": "မင်္ဂလာပါ။ internet မရလို့ အဆင်မပြေ ဖြစ်ရတဲ့အတွက် တောင်းပန်ပါတယ်။ router ပေါ်က မီးတွေ ဘယ်အရောင် ပြနေလဲ ပြန်ပြောပေးပါ။ ကျွန်တော်တို့ဘက်ကလည်း လိုင်းကို ဆက်စစ်ပေးပါမယ်။"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 1480,
+            "output_tokens": 410
+          }
+        }
+      notebook/17-cost.md: |+
+        # Reply assistant: တစ်ရက် ဘယ်လောက် ကုန်မလဲ
+
+        ဈေးနှုန်း (2026-11၊ token 1 သန်း (MTok) အတွက်၊ Anthropic pricing page)
+
+        | Model | Input | Output |
+        |---|---|---|
+        | Claude Opus 5.5 | $4 | $20 |
+        | Claude Haiku 5.5 | $0.10 | $0.50 |
+
+        Haiku 5.5 ဈေးက prompt 100K token အထိ။ ယူဆချက်: ticket 1 ခု = request 1 ခု။
+
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: controls
+      contentType: html
+      name: သုံးငွေကို ထိန်းတဲ့ နေရာများ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Console မှာ သုံးငွေကို ထိန်းတဲ့ နေရာ 4 ခု</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term blue">Workspace</span>API key နဲ့ အသုံးစရိတ်ကို အုပ်စုခွဲ</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term red">Spend limit</span>workspace တစ်ခုရဲ့ သုံးငွေ အများဆုံး</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term orange">Rate limit</span>တစ်မိနစ်အတွင်း request နဲ့ token</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term green">Playground</span>code မရေးခင် prompt ကို စမ်း</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — where one ticket's tokens come from: blue parts, violet flow, red cost.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "ticket 1 ခုရဲ့ token",
+        fontSize: 36,
+      }
+    - { id: b-in1, kind: rectangle, x: 290, y: 270, width: 250, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: b-in1-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 288,
+        width: 250,
+        height: 35,
+        text: "system prompt",
+        fontSize: 28,
+      }
+    - { id: b-in2, kind: rectangle, x: 290, y: 370, width: 250, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: b-in2-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 388,
+        width: 250,
+        height: 35,
+        text: "ticket စာသား",
+        fontSize: 28,
+      }
+    - {
+        id: b-in-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 460,
+        width: 250,
+        height: 35,
+        text: "input token",
+        fontSize: 28,
+      }
+    - {
+        id: b-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 555,
+        y: 335,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-model,
+        kind: rectangle,
+        x: 650,
+        y: 310,
+        width: 140,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-model-l,
+        kind: text,
+        align: center,
+        x: 650,
+        y: 335,
+        width: 140,
+        height: 40,
+        text: "Claude",
+        fontSize: 32,
+      }
+    - {
+        id: b-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 800,
+        y: 335,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-out,
+        kind: rectangle,
+        x: 890,
+        y: 300,
+        width: 200,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-out-l,
+        kind: text,
+        align: center,
+        x: 890,
+        y: 338,
+        width: 200,
+        height: 35,
+        text: "draft reply",
+        fontSize: 28,
+      }
+    - {
+        id: b-out-t,
+        kind: text,
+        align: center,
+        x: 890,
+        y: 430,
+        width: 200,
+        height: 35,
+        text: "output token",
+        fontSize: 28,
+      }
+    - {
+        id: b-cost,
+        kind: text,
+        align: center,
+        x: 870,
+        y: 480,
+        width: 230,
+        height: 35,
+        text: "input ထက် 5 ဆ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Draft မှာ ဘာဖြစ်သွားတာလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-case,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 500,
+        height: 35,
+        text: "stop_reason: max_tokens",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 320,
+        width: 790,
+        height: 35,
+        text: "က) model က ပြီးပြီလို့ ဆုံးဖြတ်လိုက်တာ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 790,
+        height: 35,
+        text: "ခ) ပေးထားတဲ့ limit မှာ ဖြတ်ခံရတာ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 395,
+        width: 460,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 790,
+        y: 383,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 500,
+        width: 760,
+        height: 35,
+        text: "stop reason ကို အမြဲ စစ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 760,
+        height: 35,
+        text: "limit တိုး၊ ဒါမှမဟုတ် အဖြေ တိုတို တောင်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9317
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: အောင်အောင် ရဲ့ မေးခွန်း
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ Reply assistant အတွက် ပထမဆုံး API call ကို ဖတ်ခဲ့ပါတယ်။ request တစ်ခုမှာ model၊
+      max tokens၊ system prompt နဲ့ messages ပါပြီး၊ ပြန်လာတဲ့ response ထဲမှာတော့ content block တွေ ပါတာကို
+      တွေ့ခဲ့ပါတယ်။
+      [[mark:cto]] prototype ကို ဆက်ဆောက်ခွင့် မပေးခင် CTO ဖြစ်တဲ့ အောင်အောင် က မေးခွန်း တစ်ခု မေးလာပါတယ်။
+      ticket ၁၈၀၀ အတွက် draft ကို တစ်ရက်တိုင်း ရေးခိုင်းရင် ဘယ်လောက် ကုန်မလဲ ဆိုတာပါ။ ကြိုမခန့်မှန်းနိုင်တဲ့
+      အသုံးစရိတ်ကို ခွင့်မပြုချင်တာက CTO တစ်ယောက်အတွက် သဘာဝပါပဲ။
+      [[mark:open-ex]] ဒီမေးခွန်းကို အမှန်တကယ် ဖြေနိုင်ဖို့ response တစ်ခုထဲမှာ ပါလာတဲ့ ဂဏန်းတွေကနေ စရပါမယ်။
+      ဒါက connection ticket တစ်ခုအတွက် ပြန်ရလာနိုင်တဲ့ response ဥပမာ တစ်ခုပါ။
+      [[mark:sel-text]] model ရေးပေးတဲ့ draft က content ထဲက text block မှာ ရှိပါတယ်။
+      ဒါပေမဲ့ ဈေးနှုန်းကို တွက်ဖို့အတွက် ကြည့်ရမှာက draft ရဲ့ စာသား မဟုတ်ဘဲ၊ usage
+      ဆိုတဲ့ အပိုင်းပါ။ usage ကို နားလည်ဖို့ token ကို အရင် နားလည်ရပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Get started with Claude",
+          url: "https://platform.claude.com/docs/en/get-started",
+        }
+    actions:
+      - {
+          id: open-ex,
+          type: workspace.openFile,
+          at: { mark: open-ex },
+          path: examples/draft-response.example.json,
+        }
+      - id: sel-text
+        type: editor.select
+        at: { mark: sel-text }
+        target:
+          file: examples/draft-response.example.json
+          text: '"type": "text",'
+
+  - id: tokens
+    chapter: Token ဆိုတာ
+    narration: >
+      [[mark:b-open]] token ဆိုတာ model က စာကို ဖြတ်ယူတဲ့ အပိုင်းအစလေးပါ။ စာလုံး တစ်လုံး ဖြစ်နိုင်သလို၊ စာလုံး
+      တစ်လုံးရဲ့ အစိတ်အပိုင်းလည်း ဖြစ်နိုင်ပါတယ်။ API က စာလုံး အရေအတွက်နဲ့ မဟုတ်ဘဲ token နဲ့ ရေတွက်ပြီး
+      ငွေတောင်းပါတယ်။
+      [[mark:b-in]] ticket တစ်ခုအတွက် request ပို့တိုင်း model ဆီ ရောက်သွားတဲ့ စာ အားလုံးက input token ပါ။
+      Reply assistant ရဲ့ တာဝန်နဲ့ စည်းကမ်းတွေ ရေးထားတဲ့ system prompt ပါမယ်၊ customer ရေးလိုက်တဲ့ ticket
+      စာသားလည်း ပါမယ်။ API က ဘာမှ မမှတ်ထားတာမို့ စကားဝိုင်း ရှည်လာရင် အရင် message တွေကိုပါ ထပ်ပို့ရပြီး၊
+      အဲဒါတွေလည်း input ထဲ ဝင်ပါတယ်။
+      [[mark:b-model]] model က အဲဒီ input အားလုံးကို တစ်ခါ ဖတ်ပြီးမှ အဖြေကို token တစ်ခုပြီး တစ်ခု ရေးပါတယ်။
+      [[mark:b-out]] model ရေးပေးတဲ့ draft reply ကတော့ output token ပါ။ Opus မှာ thinking၊ ဆိုလိုတာက အဖြေ မရေးခင်
+      model က အဆင့်ဆင့် တွေးတာက default ဖွင့်ထားပြီး၊ အဲဒီ token တွေကို မမြင်ရပေမဲ့ output ထဲ ထည့်တွက်ပါတယ်။ input
+      နဲ့ output ကို သီးခြားစီ ရေတွက်ပြီး၊ ဈေးနှုန်းလည်း သီးခြားစီ ရှိပါတယ်။
+      [[mark:b-cost]] ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ pricing page ပေါ်က model တိုင်းမှာ output token တစ်ခုက input
+      token တစ်ခုထက် ငါးဆ ဈေးကြီးပါတယ်။ ဒါကြောင့် ရှည်လျားတဲ့ အဖြေက ဈေးကို မြန်မြန် တက်စေပါတယ်။ ဈေးနှုန်း
+      အမှန်ကိုတော့ Anthropic ရဲ့ pricing page မှာ အမြဲ ပြန်စစ်ပါ။
+    sources:
+      - {
+          title: "Claude Docs: Pricing",
+          url: "https://platform.claude.com/docs/en/about-claude/pricing",
+        }
+      - {
+          title: "Claude Docs: Reducing latency",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency",
+        }
+    actions:
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-b-in,
+          type: whiteboard.apply,
+          at: { mark: b-in },
+          upsertIds: [b-in1, b-in1-l, b-in2, b-in2-l, b-in-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-b-model,
+          type: whiteboard.apply,
+          at: { mark: b-model },
+          upsertIds: [b-a1, b-model, b-model-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-out,
+          type: whiteboard.apply,
+          at: { mark: b-out },
+          upsertIds: [b-a2, b-out, b-out-l, b-out-t],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-b-cost,
+          type: whiteboard.apply,
+          at: { mark: b-cost },
+          upsertIds: [b-cost],
+          drawMs: 700,
+        }
+
+  - id: usage-and-stop
+    chapter: usage နဲ့ stop reason
+    narration: >
+      [[mark:u-close]] ဒီ အမြင်နဲ့ ဥပမာ response ကို ပြန်ဖတ်ကြည့်ရအောင်။ usage ထဲမှာ input နဲ့ output ကို
+      ခွဲပြီး ရေတွက်ထားပါတယ်။
+      [[mark:sel-usage]] ဒီ ticket အတွက် input token က ၁၄၈၀ ရှိပြီး၊ output token က ၄၁၀ ပဲ ရှိပါတယ်။ ticket စာသား
+      တိုတိုလေး တစ်ခုအတွက် input က ဒီလောက် များနေတာက system prompt ကြောင့်ပါ။ system prompt ကို request
+      တိုင်းမှာ ထပ်ပို့ရတာမို့ ticket ၁၈၀၀ ဆိုရင် ၁၈၀၀ ခါ ငွေပေးရပါတယ်။
+      [[mark:sel-stop]] usage နဲ့ အတူ အမြဲ ကြည့်ရမယ့် field တစ်ခု ရှိပါသေးတယ်။ stop reason ပါ။ model က ဘာကြောင့်
+      ရေးတာ ရပ်သွားလဲ ဆိုတာကို ပြောပြတဲ့ field ပါ။ ဒီ ဥပမာမှာ end turn ဖြစ်နေပါတယ်။ model က အဖြေ ပြီးပြီလို့
+      ဆုံးဖြတ်ပြီး ရပ်လိုက်တာပါ။
+      [[mark:stop-2]] program က stop reason ကို မစစ်ဘဲ text ကို ယူသုံးရင် အန္တရာယ် ရှိပါတယ်။ ဥပမာအားဖြင့် tool
+      use ဆိုတဲ့ stop reason ပြန်လာရင် model က tool တစ်ခုကို ဒီ input နဲ့ ခေါ်ပေးပါလို့ တောင်းဆိုနေတာပါ။ tool
+      ဆိုတာ model တောင်းရင် ကိုယ်တို့ program က လုပ်ပေးတဲ့ လုပ်ဆောင်ချက် တစ်ခုပါ။ အဲဒီအခါ draft က မပြီးသေးပါဘူး။
+      ဒီ နှစ်ခုအပြင် Reply assistant အတွက် အရေးကြီးတဲ့ stop reason တစ်ခု ရှိပါသေးတယ်။ အဲဒါကို lesson
+      အဆုံးနားမှာ မေးခွန်း တစ်ခုနဲ့ ပြန်ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Handling stop reasons",
+          url: "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons",
+        }
+      - {
+          title: "Claude Docs: Get started with Claude",
+          url: "https://platform.claude.com/docs/en/get-started",
+        }
+    actions:
+      - { id: close-b, type: whiteboard.apply, at: { mark: u-close }, open: false }
+      - id: sel-usage
+        type: editor.select
+        at: { mark: sel-usage }
+        target:
+          file: examples/draft-response.example.json
+          text: "    \"input_tokens\": 1480,\n    \"output_tokens\": 410\n"
+      - id: sel-stop
+        type: editor.select
+        at: { mark: sel-stop }
+        target:
+          file: examples/draft-response.example.json
+          text: '"stop_reason": "end_turn",'
+
+  - id: worksheet
+    chapter: တစ်ရက် ဘယ်လောက်လဲ
+    narration: >
+      [[mark:w-open]] အခု အောင်အောင် ရဲ့ မေးခွန်းကို worksheet တစ်ခုနဲ့ ဖြေကြည့်ရအောင်။
+      [[mark:sel-prices]] ဈေးနှုန်းတွေက token တစ်သန်းစာ အတွက်ပါ။ ယှဉ်ကြည့်ဖို့ model family နှစ်ခု ယူထားပြီး၊
+      ဘယ်လ က ဈေးလဲ ဆိုတာကိုပါ ရေးထားပါတယ်။ ဈေးနှုန်းက ပြောင်းတတ်တာမို့ နောက်လတွေမှာ ဒီ worksheet ကို
+      ပြန်သုံးရင် ဈေးကို အရင် ပြန်စစ်ရပါမယ်။
+      [[mark:type-tokens]] ပထမ အဆင့်က ticket တစ်ခုရဲ့ token ပါ။ ဥပမာ response ထဲက ဂဏန်းကို ယူထားတာမို့ ဒါက
+      ယူဆချက် တစ်ခုပါ။ ticket တိုင်းက ဒီလောက် ရှည်မှာ မဟုတ်ပါဘူး။
+      [[mark:type-cost]] ဒုတိယ အဆင့်က ticket တစ်ခုရဲ့ ဈေးပါ။ input token ကို input ဈေးနဲ့၊ output token ကို output
+      ဈေးနဲ့ သီးခြားစီ မြှောက်ပြီးမှ ပေါင်းပါတယ်။ token အရေအတွက်မှာ input က သုံးဆကျော် ပိုများပေမဲ့၊ ဈေးမှာတော့
+      output ဘက်က ပိုကုန်နေတာ တွေ့ရပါတယ်။
+      [[mark:type-day]] တတိယ အဆင့်က တစ်ရက်စာပါ။ ticket တစ်ခုရဲ့ ဈေးကို ၁၈၀၀ နဲ့ မြှောက်လိုက်ရင် Opus နဲ့ဆိုရင်
+      တစ်ရက်ကို ဒေါ်လာ ၂၅ လောက်၊ တစ်လကို ဒေါ်လာ ၇၆၀ ကျော် ကုန်ပါမယ်။
+      [[mark:type-compare]] နောက်ဆုံး အဆင့်က model နှစ်မျိုး ယှဉ်တာပါ။ Haiku နဲ့ဆိုရင် တစ်ရက်ကို ဒေါ်လာ ဝက်ကျော်
+      လောက်ပဲ ကုန်ပါတယ်။ ဈေးတင် မကပါဘူး၊ latency လည်း ကွာပါတယ်။ latency ဆိုတာ request ပို့ပြီး အဖြေ
+      ပြန်ရတဲ့အထိ စောင့်ရတဲ့ အချိန်ပါ။ model အရွယ်အစား ကြီးလေ၊ ရေးရတဲ့ token များလေ ပိုကြာလေပါ။ Anthropic ရဲ့
+      models page မှာ Haiku ကို အမြန်ဆုံးလို့၊ Opus ကို အလယ်အလတ်လို့ ယှဉ်ပြထားပါတယ်။
+      [[mark:sel-decide]] ဒါပေမဲ့ ဈေးသက်သာတဲ့ model ကို ချက်ချင်း ရွေးလို့ မရပါဘူး။ draft မှားရင် support agent
+      ပြန်ပြင်ရတဲ့ အချိန်ကလည်း ကုန်ကျစရိတ်ပါ။ ဒါကြောင့် connection ticket အစစ်တွေနဲ့ draft ရဲ့ အရည်အသွေးကို
+      အရင် တိုင်းပြီးမှ ဆုံးဖြတ်ပါမယ်။
+      [[mark:measure]] token ကိုလည်း ခန့်မှန်းရုံနဲ့ မပြီးပါဘူး။ API မှာ model ဆီ မပို့ဘဲ token အရေအတွက်ကို အခမဲ့
+      ခန့်မှန်းပေးတဲ့ token counting endpoint ရှိပါတယ်။ model မျိုးဆက် မတူရင် စာ အတူတူကို token အရေအတွက်
+      မတူဘဲ ရေတွက်တတ်တာမို့ သုံးမယ့် model နဲ့ပဲ ရေတွက်ပါ။ နောက်ပြီး ဒီ worksheet က ticket တစ်ခုကို
+      request တစ်ခုလို့ ယူဆထားပါတယ်။ နောက်ပိုင်း tool တွေ ထည့်လာရင် request ပိုများလာမှာမို့ ပြန်တွက်ရပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Pricing",
+          url: "https://platform.claude.com/docs/en/about-claude/pricing",
+        }
+      - {
+          title: "Claude Docs: Models overview",
+          url: "https://platform.claude.com/docs/en/about-claude/models/overview",
+        }
+      - {
+          title: "Claude Docs: Token counting",
+          url: "https://platform.claude.com/docs/en/build-with-claude/token-counting",
+        }
+    actions:
+      - {
+          id: open-sheet,
+          type: workspace.openFile,
+          at: { mark: w-open },
+          path: notebook/17-cost.md,
+        }
+      - id: sel-prices
+        type: editor.select
+        at: { mark: sel-prices }
+        target:
+          file: notebook/17-cost.md
+          text: "ဈေးနှုန်း (2026-11၊ token 1 သန်း (MTok) အတွက်၊ Anthropic pricing page)"
+      - id: type-tokens
+        type: editor.type
+        at: { mark: type-tokens }
+        cadence: line-by-line
+        target: { file: notebook/17-cost.md, after: "ticket 1 ခု = request 1 ခု။\n\n" }
+        text: "## 1. Ticket 1 ခုရဲ့ token\n- input 1,480 · output 410 (ယူဆချက် · ဥပမာ response ရဲ့ usage)\n\n"
+      - id: type-cost
+        type: editor.type
+        at: { mark: type-cost }
+        cadence: line-by-line
+        target: { file: notebook/17-cost.md, after: "ဥပမာ response ရဲ့ usage)\n\n" }
+        text: "## 2. Ticket 1 ခုရဲ့ ဈေး (Opus 5.5)\n- 1,480 × $4 / 1M + 410 × $20 / 1M = $0.0059 + $0.0082 = $0.0141\n\n"
+      - id: type-day
+        type: editor.type
+        at: { mark: type-day }
+        cadence: line-by-line
+        target: { file: notebook/17-cost.md, after: "= $0.0141\n\n" }
+        text: "## 3. တစ်ရက် (ticket 1,800)\n- 1,800 × $0.0141 ≈ $25.4 / ရက် · 30 ရက် ≈ $762\n\n"
+      - id: type-compare
+        type: editor.type
+        at: { mark: type-compare }
+        cadence: line-by-line
+        target: { file: notebook/17-cost.md, after: "30 ရက် ≈ $762\n\n" }
+        text: "## 4. Model 2 ခု ယှဉ်ကြည့်\n- Opus 5.5: ≈ $25.4 / ရက် · latency Moderate\n- Haiku 5.5: ≈ $0.64 / ရက် · latency Fastest\n- ရွေးဖို့: connection ticket အစစ်တွေနဲ့ draft အရည်အသွေး တိုင်းပြီးမှ\n"
+      - id: expect-compare
+        type: expect.file
+        at: { afterAction: type-compare }
+        path: notebook/17-cost.md
+        contains: "- Haiku 5.5: ≈ $0.64 / ရက် · latency Fastest\n"
+      - id: sel-decide
+        type: editor.select
+        at: { mark: sel-decide }
+        target:
+          file: notebook/17-cost.md
+          text: "- ရွေးဖို့: connection ticket အစစ်တွေနဲ့ draft အရည်အသွေး တိုင်းပြီးမှ"
+
+  - id: controls
+    chapter: သုံးငွေကို ထိန်းခြင်း
+    narration: >
+      [[mark:c-open]] ခန့်မှန်းချက် ရပြီ ဆိုရင်တောင် တကယ့် သုံးငွေက ခန့်မှန်းချက်ကို မကျော်သွားအောင်
+      ထိန်းထားဖို့ လိုပါသေးတယ်။ အဲဒါကို Console မှာ လုပ်ပါတယ်။ Console ဆိုတာ API key၊ အသုံးစရိတ်နဲ့ limit
+      တွေကို စီမံတဲ့ Claude Platform ရဲ့ web dashboard ပါ။
+      [[mark:c-1]] ပထမ တစ်ခုက workspace ပါ။ workspace ဆိုတာ API key နဲ့ အသုံးစရိတ်ကို အုပ်စုခွဲ ထိန်းတဲ့ နေရာပါ။
+      Reply assistant အတွက် workspace သီးသန့် တစ်ခု ထားပြီး key ကို အဲဒီ workspace ထဲမှာပဲ ထုတ်ထားရင်၊
+      prototype ရဲ့ သုံးငွေကို တခြား project တွေနဲ့ မရောဘဲ သီးခြား မြင်ရပါတယ်။
+      [[mark:c-2]] ဒုတိယ တစ်ခုက spend limit ပါ။ workspace တစ်ခုချင်းစီအတွက် သုံးငွေ အများဆုံး ပမာဏကို
+      သတ်မှတ်ထားလို့ ရပါတယ်။ အဲဒီ ပမာဏ ပြည့်သွားရင် API က request တွေကို လက်မခံတော့ပါဘူး။ bug တစ်ခုကြောင့်
+      program က request တွေကို ရပ်မသွားဘဲ တစ်ညလုံး ပို့နေတာမျိုးကို ဒီ limit က ကာကွယ်ပေးပါတယ်။
+      [[mark:c-3]] တတိယ တစ်ခုက rate limit ပါ။ အချိန်တစ်ခုအတွင်း ဘယ်လောက်ပဲ သုံးခွင့်ရှိလဲ ဆိုတဲ့
+      ကန့်သတ်ချက်ပါ။ model တစ်ခုချင်းအတွက် တစ်မိနစ်မှာ request ဘယ်နှခု၊ input နဲ့ output token ဘယ်လောက်လဲ
+      ဆိုတာကို ကန့်သတ်ပါတယ်။ ကျော်သွားရင် API က error ပြန်ပေးပြီး ဘယ်လောက် စောင့်ရမလဲ ပြောပေးတာမို့၊
+      program က အဲဒီ error ကို handle လုပ်ပေးရပါမယ်။
+      [[mark:c-4]] စတုတ္ထ တစ်ခုက playground ပါ။ code မရေးခင် prompt နဲ့ model ကို စမ်းကြည့်ပြီး response
+      အပြည့်အစုံကို ကြည့်လို့ရတဲ့ Console ထဲက စာမျက်နှာပါ။ အရင်က Workbench လို့ ခေါ်တဲ့ နေရာကို ရပ်လိုက်ပြီး
+      playground နဲ့ အစားထိုးထားတာပါ။ playground က prompt history ကို မသိမ်းပေးတာမို့၊ ကောင်းတဲ့ prompt ရရင်
+      code အဖြစ် ထုတ်ယူပြီး ကိုယ့်ဘက်မှာ သိမ်းထားပါ။
+    sources:
+      - {
+          title: "Claude Docs: Workspaces",
+          url: "https://platform.claude.com/docs/en/manage-claude/workspaces",
+        }
+      - {
+          title: "Claude Docs: Rate limits",
+          url: "https://platform.claude.com/docs/en/api/rate-limits",
+        }
+      - {
+          title: "Claude Help Center: How do I use the Workbench?",
+          url: "https://support.claude.com/en/articles/8606378-how-do-i-use-the-workbench",
+        }
+    actions:
+      - {
+          id: show-controls,
+          type: slide.show,
+          at: { mark: c-open, offsetMs: -1200 },
+          slideId: controls,
+        }
+      - { id: point-c-1, type: slide.point, at: { mark: c-1 }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-c-2, type: slide.point, at: { mark: c-2 }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-c-3, type: slide.point, at: { mark: c-3 }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-c-4, type: slide.point, at: { mark: c-4 }, target: { x: 0.15, y: 0.81 } }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ prototype ကို စမ်းနေတုန်း response တစ်ခုက stop reason max tokens
+      နဲ့ ပြန်လာတယ် ဆိုပါစို့။ draft မှာ ဘာဖြစ်သွားတာလဲ။
+      [[mark:q-a]] ပထမ အဖြေက model က draft ပြီးပြီလို့ ဆုံးဖြတ်ပြီး ရပ်လိုက်တာ ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက request မှာ ကိုယ်တို့ ပေးထားတဲ့ output limit ကို ရောက်လို့ ရေးနေရင်း ဖြတ်ခံလိုက်ရတာ
+      ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ max tokens ဆိုတာ request မှာ ကိုယ်တို့
+      ကိုယ်တိုင် သတ်မှတ်ပေးတဲ့ output token အများဆုံး အရေအတွက်ပါ။ အဲဒီ အရေအတွက် ပြည့်သွားရင် API က
+      စာကြောင်း တစ်ဝက်၊ စာလုံး တစ်ဝက်မှာပဲ ဖြတ်ပစ်တတ်ပါတယ်။ model ကိုယ်တိုင် ပြီးပြီလို့ ဆုံးဖြတ်တာ ဆိုရင်တော့
+      end turn ပဲ ဖြစ်မှာပါ။ ဖြတ်ခံထားရတဲ့ draft ကို ပို့လိုက်ရင် customer ဆီ စာ တစ်ဝက်နဲ့ ရပ်နေတဲ့ အဖြေ
+      ရောက်သွားမှာပါ။
+      [[mark:q-rule]] ဒါကြောင့် program က stop reason ကို အမြဲ စစ်ပါ။ max tokens ဆိုရင် အဲဒီ draft ကို မသုံးဘဲ၊
+      limit ကို တိုးပေးပါ၊ ဒါမှမဟုတ် prompt ထဲမှာ အဖြေကို တိုတိုရေးဖို့ တောင်းပါ။
+    sources:
+      - {
+          title: "Claude Docs: Handling stop reasons",
+          url: "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons",
+        }
+      - {
+          title: "Claude Docs: Reducing latency",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency",
+        }
+    actions:
+      - { id: close-controls, type: slide.close, at: { mark: quiz } }
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { afterAction: close-controls },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-case],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် အလုပ်အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် project ထဲက AI နဲ့ လုပ်ချင်တဲ့ အလုပ်
+      တစ်ခုအတွက် ဒီ အဆင့် လေးဆင့်ကို ရေးကြည့်ပါ။ တစ်ကြိမ် ခေါ်ရင် input နဲ့ output token ဘယ်လောက်လဲ
+      ခန့်မှန်းပြီး၊ pricing page က ဈေးနဲ့ တွက်ပါ။ ပြီးရင် တစ်ရက်ကို ဘယ်နှကြိမ် ခေါ်မလဲ ဆိုတာနဲ့ မြှောက်ပြီး၊
+      model family နှစ်ခုကို ယှဉ်ကြည့်ပါ။
+      [[mark:turn-2]] token အရေအတွက်ကို အတိအကျ မသိသေးရင် ယူဆချက်လို့ ရေးထားပြီး ဆက်တွက်ပါ။ အရေးကြီးတာက
+      ဂဏန်း တစ်လုံးစီ ဘယ်ကလာလဲ ဆိုတာ worksheet ထဲမှာ မြင်ရဖို့ပါ။ CTO တစ်ယောက်က ယုံကြည်တာ နောက်ဆုံး
+      ဂဏန်း တစ်လုံးကို မဟုတ်ဘဲ၊ အဲဒီ ဂဏန်းကို ရောက်လာတဲ့ တွက်နည်းကိုပါ။
+    sources:
+      - {
+          title: "Claude Docs: Pricing",
+          url: "https://platform.claude.com/docs/en/about-claude/pricing",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-steps
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/17-cost.md
+          text: "## 1. Ticket 1 ခုရဲ့ token"
+      - id: sel-assume
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/17-cost.md
+          text: "ယူဆချက်: ticket 1 ခု = request 1 ခု။"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ အောင်အောင် ရဲ့ မေးခွန်းကို response ထဲက usage ကနေ ဖြေပါတယ်။ input နဲ့
+      output token ကို ဈေး သီးခြားစီနဲ့ တွက်ပြီး ticket အရေအတွက်နဲ့ မြှောက်လိုက်ရင် တစ်ရက်စာ ခန့်မှန်းချက်
+      ရပါတယ်။
+      [[mark:recap-2]] stop reason ကိုလည်း response တိုင်းမှာ စစ်ရပါမယ်။ ပြီးတော့ ခန့်မှန်းချက်ကို ယုံရုံနဲ့
+      မပြီးဘဲ၊ workspace၊ spend limit နဲ့ rate limit တွေနဲ့ တကယ့် သုံးငွေကို ကန့်သတ်ထားပါ။
+      [[mark:next]] နောက် lesson မှာတော့ stop reason က tool use နဲ့ ပြန်လာတဲ့အခါ program က ဘာဆက်လုပ်ရမလဲ
+      ဆိုတာကနေ စပြီး၊ request တစ်ခုထက် ပိုတဲ့ agent loop ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Handling stop reasons",
+          url: "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons",
+        }
+    actions:
+      - id: sel-day
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/17-cost.md
+          text: "- 1,800 × $0.0141 ≈ $25.4 / ရက် · 30 ရက် ≈ $762"
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/17-cost.md
+          text: "# Reply assistant: တစ်ရက် ဘယ်လောက် ကုန်မလဲ"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
