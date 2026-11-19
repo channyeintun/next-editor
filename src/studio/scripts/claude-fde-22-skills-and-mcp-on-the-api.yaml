@@ -1,0 +1,621 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-22-skills-and-mcp-on-the-api
+  title: "Claude FDE 22: API ပေါ်က Skills နဲ့ MCP"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: reply-assistant/src/extend.ts
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      reply-assistant/src/extend.ts: |
+        import Anthropic from "@anthropic-ai/sdk";
+
+        const client = new Anthropic();
+        const TICKETS_MCP_TOKEN = process.env.TICKETS_MCP_TOKEN; // from the environment, never in code
+
+        // Network Tools: the monthly outage report, written the same way every month.
+        export async function monthlyOutageReport(nmsExport: string) {
+          return client.messages.create({
+            model: "claude-opus-5-5", // ID as of 2026-11
+            max_tokens: 4096,
+            messages: [{ role: "user", content: `Write this month's outage report.\n${nmsExport}` }],
+          });
+        }
+
+        // Reply assistant: a ticket's history through the Ticket system's MCP server (placeholder URL).
+        export async function ticketHistory(ticketId: string) {
+          return client.beta.messages.create({
+            model: "claude-opus-5-5", // ID as of 2026-11
+            max_tokens: 1000,
+            messages: [{ role: "user", content: `Summarise the history of ticket ${ticketId}.` }],
+          });
+        }
+  whiteboardAssets:
+    # Board 1 — three ways to extend an agent: blue = the part that does the work, white = who
+    # writes it and where it runs, orange = the board's question.
+    - {
+        id: w-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "Agent ကို ချဲ့တဲ့ နည်း သုံးမျိုး",
+        fontSize: 36,
+      }
+    - {
+        id: w-b1,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 263,
+        width: 240,
+        height: 35,
+        text: "ကိုယ့် tool",
+        fontSize: 28,
+      }
+    - {
+        id: w-t1,
+        kind: text,
+        x: 560,
+        y: 263,
+        width: 520,
+        height: 35,
+        text: "schema ရော code ရော ကိုယ်တို့ ရေး",
+        fontSize: 28,
+      }
+    - {
+        id: w-b2,
+        kind: rectangle,
+        x: 290,
+        y: 350,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-l2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 373,
+        width: 240,
+        height: 35,
+        text: "Skill",
+        fontSize: 28,
+      }
+    - {
+        id: w-t2,
+        kind: text,
+        x: 560,
+        y: 373,
+        width: 520,
+        height: 35,
+        text: "လုပ်ပုံကို ရေးထား၊ လိုမှ ဖတ်",
+        fontSize: 28,
+      }
+    - {
+        id: w-b3,
+        kind: rectangle,
+        x: 290,
+        y: 460,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-l3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 483,
+        width: 240,
+        height: 35,
+        text: "MCP server",
+        fontSize: 28,
+      }
+    - {
+        id: w-t3,
+        kind: text,
+        x: 560,
+        y: 483,
+        width: 520,
+        height: 35,
+        text: "ဆောက်ပြီးသား tool တွေ ချိတ်သုံး",
+        fontSize: 28,
+      }
+    - {
+        id: w-q,
+        kind: text,
+        x: 290,
+        y: 580,
+        width: 790,
+        height: 35,
+        text: "ဘယ်သူ ရေးလဲ၊ ဘယ်မှာ run လဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Report format ခဏခဏ ပြောင်းရင်?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) MCP server တစ်ခု ဆောက်ပြီး ချိတ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) skill တစ်ခုအဖြစ် ရေးထား",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 400,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 720,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "လုပ်ပုံနဲ့ format → skill",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "ရှိပြီးသား system ကို ရောက်ချင် → MCP",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9322
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: တောင်းဆိုချက် နှစ်ခု
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ web search၊ web fetch နဲ့ code execution လို Anthropic ဘက်က run ပေးတဲ့ built-in tool
+      တွေကို request ထဲမှာ ကြေညာပြီး သုံးကြည့်ခဲ့ပါတယ်။ ဒီ tool တွေက နေခြည် ရဲ့ ကုမ္ပဏီ network ထဲက system
+      တွေကိုတော့ မရောက်ပါဘူး။
+      [[mark:sel-nms]] ဒီတစ်ပတ်မှာ တောင်းဆိုချက် နှစ်ခု ထပ်ရောက်လာပါတယ်။ ပထမ တစ်ခုက Network Tools team ဆီကပါ။
+      သူတို့က လတိုင်း NMS ကနေ လိုင်းကျမှု data ကို ထုတ်ပြီး outage report တစ်စောင် ရေးရပါတယ်။ မြို့နယ်အလိုက်
+      လိုင်းကျတဲ့ အကြိမ်ရေကို ရေတွက်တယ်၊ ပြီးခဲ့တဲ့လနဲ့ ယှဉ်တယ်၊ ပြီးတော့ သတ်မှတ်ထားတဲ့ table ပုံစံနဲ့
+      ချရေးတယ်။ အဆင့်တွေက လတိုင်း အတူတူပါပဲ။ ဒါကို Claude ကို ခိုင်းချင်ပေမဲ့၊ အဲဒီ အဆင့်တွေကို prompt ထဲမှာ
+      အခါတိုင်း ရှည်ရှည်ကြီး ကူးထည့်နေရမှာကိုတော့ မလိုလားပါဘူး။
+      [[mark:sel-ticket]] ဒုတိယ တစ်ခုက support manager လှလှ ဆီကပါ။ Reply assistant က draft မရေးခင် customer
+      ရဲ့ အရင် ticket တွေကို ဖတ်စေချင်ပါတယ်။ Ticket system မှာ ticket ရှာတာ၊ history ဖတ်တာ၊ status ကြည့်တာ
+      စတဲ့ လုပ်ဆောင်ချက် အများကြီး ရှိပါတယ်။ တစ်ခုချင်းအတွက် tool schema ကို လက်နဲ့ ရေးပြီး၊ Ticket system
+      ပြောင်းတိုင်း လိုက်ပြင်နေရရင် ထိန်းသိမ်းရတဲ့ အလုပ် အများကြီး ဖြစ်လာပါမယ်။
+      [[mark:need-3]] ဒီ lesson မှာ ဒီ တောင်းဆိုချက် နှစ်ခုကို request ကနေ ဘယ်လို ဖြေရှင်းမလဲ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Agent Skills on the API",
+          url: "https://platform.claude.com/docs/en/build-with-claude/skills-guide",
+        }
+      - {
+          title: "Claude Docs: MCP connector",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: sel-nms }, path: README.md }
+      - id: sel-nms
+        type: editor.select
+        at: { afterAction: open-readme }
+        target:
+          file: README.md
+          text: "- NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ"
+      - id: sel-ticket
+        type: editor.select
+        at: { mark: sel-ticket }
+        target:
+          file: README.md
+          text: "- Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ"
+
+  - id: three-ways
+    chapter: ချဲ့တဲ့ နည်း သုံးမျိုး
+    narration: >
+      [[mark:w-open]] agent တစ်ခုရဲ့ စွမ်းရည်ကို ချဲ့ဖို့ နည်းလမ်း သုံးမျိုး ရှိပါတယ်။ ဘယ်ဟာ ဘာနဲ့ ကွာလဲ ဆိုတာကို
+      ဘယ်သူ ရေးရလဲ၊ ဘယ်နေရာမှာ run လဲ ဆိုတဲ့ မေးခွန်း နှစ်ခုနဲ့ ခွဲကြည့်ရင် ရှင်းပါတယ်။
+      [[mark:w-1]] ပထမ နည်းက ကိုယ့် tool ပါ။ tool ဆိုတာ model က တောင်းဆိုရင် ကိုယ်တို့ program က လုပ်ပေးတဲ့
+      လုပ်ဆောင်ချက် တစ်ခုပါ။ check outage tool မှာလို name၊ description နဲ့ input schema ကို ကိုယ်တို့ ရေးတယ်၊
+      အလုပ်လုပ်တဲ့ code ကိုလည်း ကိုယ်တို့ server ပေါ်မှာ run တယ်။ အပြည့်အဝ ထိန်းချုပ်နိုင်ပေမဲ့၊ tool တစ်ခုချင်းကို
+      ကိုယ်တိုင် ရေးပြီး ကိုယ်တိုင် ထိန်းသိမ်းရပါတယ်။
+      [[mark:w-2]] ဒုတိယ နည်းက skill ပါ။ skill ဆိုတာ အလုပ် တစ်မျိုးကို ဘယ်လို လုပ်ရမလဲ ရေးထားပြီး၊ လိုတဲ့
+      အချိန်မှ Claude ဖတ်သုံးတဲ့ လမ်းညွှန်ပါ။ folder တစ်ခုထဲမှာ ညွှန်ကြားချက် ရေးထားတဲ့ SKILL.md file နဲ့ script
+      တွေ၊ template တွေ ပါနိုင်ပါတယ်။ API ပေါ်မှာတော့ skill က Anthropic ရဲ့ code execution sandbox ထဲမှာ
+      အလုပ်လုပ်ပါတယ်။ ဒါကြောင့် program အသစ် ရေးစရာ မလိုဘဲ လုပ်ပုံကို စာနဲ့ ရေးပေးထားလို့ ရပါတယ်။
+      [[mark:w-3]] တတိယ နည်းက MCP server ပါ။ Model Context Protocol၊ အတိုကောက် MCP ဆိုတာ AI app တွေနဲ့
+      အပြင်က tool၊ data တွေကို ချိတ်တဲ့ စံ သဘောတူညီချက်ပါ။ MCP server က tool တွေကို ထုတ်ပေးထားပြီးသားမို့
+      ကိုယ်တို့က schema တစ်ခုချင်း မရေးဘဲ၊ connection တစ်ခုနဲ့ tool အားလုံးကို ရောက်ပါတယ်။ tool ကို ရေးတာနဲ့
+      run တာက server ဘက်က အလုပ်ပါ။
+      [[mark:w-q]] ဒီ သုံးမျိုးက တစ်ခုကို တစ်ခု အစားထိုးတာ မဟုတ်ပါဘူး။ agent တစ်ခုမှာ သုံးမျိုးလုံး တွဲပါနိုင်ပါတယ်။
+      ပြဿနာ တစ်ခု ရောက်လာတိုင်း ဒီ မေးခွန်း နှစ်ခုကို မေးပြီး ကိုက်တဲ့ နည်းကို ရွေးရမှာပါ။
+    sources:
+      - {
+          title: "Claude Docs: Agent Skills on the API",
+          url: "https://platform.claude.com/docs/en/build-with-claude/skills-guide",
+        }
+      - {
+          title: "Claude Docs: MCP connector",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector",
+        }
+    actions:
+      - {
+          id: draw-w-open,
+          type: whiteboard.apply,
+          at: { mark: w-open },
+          open: true,
+          clear: true,
+          upsertIds: [w-title],
+        }
+      - {
+          id: draw-w-1,
+          type: whiteboard.apply,
+          at: { mark: w-1 },
+          upsertIds: [w-b1, w-l1, w-t1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-w-2,
+          type: whiteboard.apply,
+          at: { mark: w-2 },
+          upsertIds: [w-b2, w-l2, w-t2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-w-3,
+          type: whiteboard.apply,
+          at: { mark: w-3 },
+          upsertIds: [w-b3, w-l3, w-t3],
+          drawMs: 1500,
+        }
+      - { id: draw-w-q, type: whiteboard.apply, at: { mark: w-q }, upsertIds: [w-q], drawMs: 900 }
+
+  - id: skill
+    chapter: Request ထဲက skill
+    narration: >
+      [[mark:s-open]] Network Tools ရဲ့ လစဉ် report ကို skill နဲ့ လုပ်ကြည့်ရအောင်။ team က report ရေးပုံ အဆင့်တွေနဲ့
+      table ပုံစံကို SKILL.md ထဲမှာ ရေးပြီး၊ မြို့နယ်အလိုက် ရေတွက်တဲ့ script တစ်ခုကိုလည်း folder ထဲ ထည့်ထားတယ်
+      ဆိုပါစို့။ SKILL.md ရဲ့ ထိပ်ဆုံးမှာ skill ရဲ့ name နဲ့ description ကို ရေးရပါတယ်။
+      [[mark:s-upload]] ဒီ folder ကို Skills API နဲ့ နေခြည် ရဲ့ workspace ထဲ upload လုပ်ရပါတယ်။ workspace ဆိုတာ API key
+      နဲ့ အသုံးစရိတ်ကို အုပ်စုခွဲ ထိန်းတဲ့ နေရာပါ။ ကိုယ်တိုင် ဆောက်တဲ့ custom skill က အဲဒီ workspace တစ်ခုလုံးမှာ
+      မျှသုံးလို့ ရပါတယ်။ ပြင်ပြီး ပြန်တင်တဲ့ version တစ်ခုစီက folder တစ်ခုလုံးရဲ့ snapshot ဖြစ်ပါတယ်။ Skills API က beta မဟုတ်တော့ပါဘူး။
+      [[mark:type-skill]] request ထဲမှာတော့ container ဆိုတဲ့ အပိုင်းထဲကို skill ကို ထည့်ပါတယ်။ custom လို့ အမျိုးအစား
+      ပေးပြီး၊ upload လုပ်တုန်းက ရခဲ့တဲ့ skill ID နဲ့ version ကို ပေးရပါတယ်။ latest လို့ ပေးထားရင် နောက်ဆုံး
+      version ကို သုံးပါတယ်။ request တစ်ခုမှာ skill နှစ်ဆယ်အထိ ထည့်လို့ ရပါတယ်။ Anthropic ကိုယ်တိုင် ပြင်ဆင်ထားတဲ့
+      pptx၊ xlsx၊ docx နဲ့ pdf skill တွေကိုလည်း ဒီနေရာမှာပဲ ထည့်ရပါတယ်။
+      [[mark:type-exec]] skill တွေက code execution ထဲမှာ အလုပ်လုပ်တာမို့ code execution tool ကိုလည်း ကြေညာပေးရပါတယ်။
+      ပြီးခဲ့တဲ့ lesson က sandbox ထဲမှာပဲ skill ရဲ့ script က run ပါတယ်။ အဲဒီက ထွက်လာတဲ့ file တွေကို response ထဲမှာ
+      file ID အဖြစ် ပြန်ပေးပြီး၊ Files API နဲ့ download လုပ်ယူရပါတယ်။
+      [[mark:s-load]] ဒီနေရာမှာ စိတ်ဝင်စားစရာက skill ကို Claude ဘယ်လို ဖတ်လဲ ဆိုတာပါ။ အစမှာ Claude က skill
+      တစ်ခုစီရဲ့ name နဲ့ description ကိုပဲ မြင်ပါတယ်။ အခု အလုပ်နဲ့ ဆိုင်တယ်လို့ ဆုံးဖြတ်မှ ညွှန်ကြားချက် အပြည့်ကို
+      ဖွင့်ဖတ်ပါတယ်။ အကုန် မဖတ်ဘဲ လိုတဲ့ အပိုင်းကိုပဲ အဆင့်ဆင့် ဖွင့်ဖတ်တာကို progressive disclosure လို့ ခေါ်ပါတယ်။
+      ဒါကြောင့် description မှာ ဒီ skill က ဘာအလုပ်အတွက်လဲ ဆိုတာကို ရှင်းရှင်း ရေးထားဖို့ လိုပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Agent Skills on the API",
+          url: "https://platform.claude.com/docs/en/build-with-claude/skills-guide",
+        }
+      - {
+          title: "Claude Docs: Code execution tool",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/code-execution-tool",
+        }
+    actions:
+      - { id: close-ways, type: whiteboard.apply, at: { mark: s-open }, open: false }
+      - {
+          id: open-extend,
+          type: workspace.openFile,
+          at: { afterAction: close-ways },
+          path: reply-assistant/src/extend.ts,
+        }
+      - id: sel-report
+        type: editor.select
+        at: { mark: s-upload }
+        target:
+          file: reply-assistant/src/extend.ts
+          text: "export async function monthlyOutageReport(nmsExport: string) {"
+      - id: type-skill
+        type: editor.type
+        at: { mark: type-skill }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/extend.ts, after: "    max_tokens: 4096,\n" }
+        text: "    container: {\n      skills: [{ type: \"custom\", skill_id: \"skill_01Hx4Outage\", version: \"latest\" }],\n    },\n"
+      - id: type-exec
+        type: editor.type
+        at: { mark: type-exec }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/extend.ts, after: "${nmsExport}` }],\n" }
+        text: "    tools: [{ type: \"code_execution_20250825\", name: \"code_execution\" }],\n"
+      - id: sel-skill-id
+        type: editor.select
+        at: { mark: s-load }
+        target:
+          file: reply-assistant/src/extend.ts
+          text: 'skill_id: "skill_01Hx4Outage"'
+
+  - id: mcp
+    chapter: MCP connector
+    narration: >
+      [[mark:m-open]] ဒုတိယ function က Reply assistant အတွက်ပါ။ Ticket system ကို MCP server ကနေ ရောက်ချင်ရင်
+      request မှာ MCP connector ကို သုံးပါတယ်။ MCP connector ဆိုတာ ကိုယ်တို့ program ထဲမှာ MCP client
+      မရေးဘဲ၊ Messages API ကနေ remote MCP server ကို တိုက်ရိုက် ချိတ်ပေးတဲ့ feature ပါ။ ဒီ lesson ကို ရေးတဲ့
+      အချိန်မှာ beta ဖြစ်နေလို့ beta client ကို သုံးထားပါတယ်။
+      [[mark:type-servers]] ချိတ်ဖို့ အပိုင်း နှစ်ပိုင်း လိုပါတယ်။ ပထမ အပိုင်းက MCP server စာရင်းပါ။ server ရဲ့
+      လိပ်စာ၊ request ထဲမှာ ညွှန်းမယ့် နာမည်နဲ့ token ကို ပေးပါတယ်။ token ကို code ထဲမှာ မရေးဘဲ environment
+      ကနေ ယူထားတာ သတိထားပါ။ ဒီ လိပ်စာကတော့ နမူနာ လိပ်စာ သက်သက်ပါ။
+      [[mark:type-toolset]] ဒုတိယ အပိုင်းက tools ထဲက MCP toolset ပါ။ ဘယ် server ရဲ့ tool တွေကို သုံးမလဲ ဆိုတာ
+      နာမည်နဲ့ ညွှန်းရပါတယ်။ server တစ်ခုစီကို toolset တစ်ခုက ညွှန်းထားရပါမယ်။ ဒီမှာ default config နဲ့ tool
+      အားလုံးကို အရင် ပိတ်ပြီး၊ ticket history ဖတ်တဲ့ tool တစ်ခုကိုပဲ ပြန်ဖွင့်ပေးထားပါတယ်။ Reply assistant က
+      ticket ကို ဖတ်ဖို့ပဲ လိုတာမို့ ticket ပြင်တာ၊ ပိတ်တာလို tool တွေကို ခေါ်ခွင့် မပေးတာပါ။ နောက်ဆုံး စာကြောင်းကတော့
+      MCP connector ရဲ့ beta ကို သုံးမယ်လို့ ပြောတာပါ။
+      [[mark:m-limits]] MCP connector မှာ ကန့်သတ်ချက် နှစ်ခု သိထားရပါမယ်။ ပထမ တစ်ခုက server ကို internet ပေါ်ကနေ
+      HTTP နဲ့ ရောက်လို့ ရရမယ် ဆိုတာပါ။ ကိုယ့်စက်ပေါ်မှာပဲ run တဲ့ local server ကို ချိတ်လို့ မရပါဘူး။ နေခြည် ရဲ့
+      Ticket system က ကုမ္ပဏီ network ထဲမှာ ရှိတာမို့၊ အဲဒီလို server ကို internet ပေါ် တင်မလား ဆိုတာ security
+      တာဝန်ခံ ဆုံးဖြတ်ရမယ့် ကိစ္စပါ။
+      [[mark:m-limits-2]] ဒုတိယ တစ်ခုက MCP server ရဲ့ tool တွေကိုပဲ ခေါ်နိုင်ပြီး၊ resource နဲ့ prompt
+      တွေကိုတော့ ဒီ connector ကနေ မသုံးနိုင်ပါဘူး။
+      [[mark:m-blocks]] response ထဲမှာတော့ MCP tool use block နဲ့ MCP tool result block ဆိုတာ ပေါ်လာပါတယ်။ Claude က
+      ဘယ် server ရဲ့ ဘယ် tool ကို ဘာ input နဲ့ ခေါ်လဲ၊ ဘာ ပြန်ရလဲ ဆိုတာ ဖတ်လို့ ရပါတယ်။ ကိုယ့် tool မှာလို
+      tool result ကို ကိုယ်တို့ ပြန်ပို့ပေးစရာ မလိုပါဘူး။ ခေါ်တဲ့ အလုပ်ကို connector က လုပ်ပေးပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: MCP connector",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector",
+        }
+    actions:
+      - id: sel-beta
+        type: editor.select
+        at: { mark: m-open }
+        target:
+          file: reply-assistant/src/extend.ts
+          text: "client.beta.messages.create"
+      - id: type-servers
+        type: editor.type
+        at: { mark: type-servers }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/extend.ts, after: "    max_tokens: 1000,\n" }
+        text: "    mcp_servers: [\n      { type: \"url\", url: \"https://tickets-mcp.naychi.example/mcp\", name: \"tickets\",\n        authorization_token: TICKETS_MCP_TOKEN },\n    ],\n"
+      - id: type-toolset
+        type: editor.type
+        at: { mark: type-toolset }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/extend.ts, after: "${ticketId}.` }],\n" }
+        text: "    tools: [{ type: \"mcp_toolset\", mcp_server_name: \"tickets\",\n      default_config: { enabled: false },\n      configs: { get_ticket_history: { enabled: true } } }],\n    betas: [\"mcp-client-2025-11-20\"],\n"
+      - id: expect-toolset
+        type: expect.file
+        at: { afterAction: type-toolset }
+        path: reply-assistant/src/extend.ts
+        contains: "      default_config: { enabled: false },\n      configs: { get_ticket_history: { enabled: true } } }],\n"
+      - id: sel-url
+        type: editor.select
+        at: { mark: m-limits }
+        target:
+          file: reply-assistant/src/extend.ts
+          text: 'url: "https://tickets-mcp.naychi.example/mcp"'
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ နေခြည် ရဲ့ finance team က လစဉ် ဝင်ငွေ report ကို Claude နဲ့
+      ထုတ်ချင်ပါတယ်။ ဒါပေမဲ့ report ရဲ့ format က တစ်နှစ်ကို နှစ်ခါလောက် ပြောင်းတတ်ပါတယ်။ အဲဒီ format နဲ့
+      ရေးပုံ အဆင့်တွေကို agent ဆီ ဘယ်လို ပေးမလဲ။
+      [[mark:q-a]] ပထမ အဖြေက format အတွက် MCP server တစ်ခု ဆောက်ပြီး ချိတ်မယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက format နဲ့ အဆင့်တွေကို skill တစ်ခုအဖြစ် ရေးထားမယ် ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ format ဆိုတာ ရောက်ရမယ့် system
+      မဟုတ်ဘဲ၊ အလုပ်ကို ဘယ်လို လုပ်ရမလဲ ဆိုတဲ့ လုပ်ပုံ ဖြစ်လို့ပါ။ format ပြောင်းတဲ့အခါ SKILL.md နဲ့ template ကို
+      ပြင်ပြီး version အသစ် upload လုပ်ရုံပါပဲ။ request က latest ကို သုံးထားရင် program code ကို ပြင်စရာ မလိုပါဘူး။
+      [[mark:q-why]] finance team ကိုယ်တိုင်လည်း ညွှန်ကြားချက်ကို ဖတ်ပြီး စစ်နိုင်ပါတယ်။ ဝင်ငွေ ဂဏန်းတွေကိုတော့ Billing ကနေ
+      ယူရမှာမို့၊ အဲဒီ အပိုင်းကတော့ tool ဒါမှမဟုတ် MCP server ရဲ့ အလုပ်ပါ။
+      [[mark:q-rule]] ဒါကြောင့် ထပ်ခါထပ်ခါ လုပ်ရတဲ့ လုပ်ပုံနဲ့ format ဆိုရင် skill ကို ရွေးပါ။ ရှိပြီးသား system ကို
+      ရောက်ချင်ရင် MCP server ကို ရွေးပြီး၊ ကိုယ့်ဘက်မှာ အတိအကျ ထိန်းချုပ်ချင်တဲ့ လုပ်ဆောင်ချက် ဆိုရင်တော့ ကိုယ့်
+      tool ကို ရေးပါ။
+    sources:
+      - {
+          title: "Claude Docs: Agent Skills on the API",
+          url: "https://platform.claude.com/docs/en/build-with-claude/skills-guide",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် project အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ file ထဲက function နှစ်ခုရဲ့ အပေါ်မှာ ကိုယ့် project
+      အတွက် comment တစ်ကြောင်းစီ ရေးကြည့်ပါ။ ပထမ comment မှာ ကိုယ့် team က ထပ်ခါထပ်ခါ လုပ်နေရတဲ့ လုပ်ပုံ
+      တစ်ခုကို skill အဖြစ် ဘယ်လို ရေးမလဲ ရေးပါ။
+      [[mark:turn-2]] ဒုတိယ comment မှာ agent ကို ရောက်စေချင်တဲ့ system တစ်ခုကို ရေးပြီး၊ ဘယ် tool တွေကိုပဲ
+      ဖွင့်ပေးမလဲ ဆိုတာ ထည့်ရေးပါ။ အဲဒီ system ကို internet ကနေ ရောက်လို့ ရလား ဆိုတာကိုလည်း မှတ်ထားပါ။ မရဘူး
+      ဆိုရင်တော့ MCP connector နဲ့ ချိတ်လို့ မရတာမို့ ကိုယ့် tool ရေးတာမျိုး စဉ်းစားပါ။
+    sources:
+      - {
+          title: "Claude Docs: MCP connector",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-fn-report
+        type: editor.select
+        at: { mark: turn, offsetMs: 2400 }
+        target:
+          file: reply-assistant/src/extend.ts
+          text: "// Network Tools: the monthly outage report, written the same way every month."
+      - id: sel-fn-ticket
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: reply-assistant/src/extend.ts
+          text: "// Reply assistant: a ticket's history through the Ticket system's MCP server (placeholder URL)."
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ agent ကို ချဲ့တဲ့ နည်း သုံးမျိုး ရှိပါတယ်။ ကိုယ်တိုင် ရေးပြီး ကိုယ်တိုင် run တဲ့
+      ကိုယ့် tool၊ လုပ်ပုံကို ရေးထားပြီး လိုမှ ဖွင့်ဖတ်တဲ့ skill နဲ့ တခြားသူ ဆောက်ထားတဲ့ tool တွေကို connection
+      တစ်ခုနဲ့ ချိတ်တဲ့ MCP server ပါ။
+      [[mark:recap-2]] API ပေါ်မှာ skill ကို container ထဲ ထည့်ပြီး code execution နဲ့ တွဲသုံးရပါတယ်။ MCP connector
+      ကတော့ beta ဖြစ်ပါတယ်။ server စာရင်းနဲ့ toolset ဆိုတဲ့ အပိုင်း နှစ်ပိုင်း လိုပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ Knowledge base က article ၃၄၀ ကို စစ်ဖို့ အဆင့် ရာနဲ့ချီ ကြာကြာ run ရမယ့်
+      agent ကို context window ထဲမှာ ဆံ့အောင်၊ ကုန်ကျစရိတ် မများအောင် ထိန်းတဲ့ context management ကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Agent Skills on the API",
+          url: "https://platform.claude.com/docs/en/build-with-claude/skills-guide",
+        }
+      - {
+          title: "Claude Docs: MCP connector",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector",
+        }
+    actions:
+      - id: sel-recap-skill
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: reply-assistant/src/extend.ts
+          text: "    container: {"
+      - id: sel-recap-mcp
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: reply-assistant/src/extend.ts
+          text: "    mcp_servers: ["
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
