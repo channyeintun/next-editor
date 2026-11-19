@@ -1,0 +1,667 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-13-capability-features
+  title: "Claude FDE 13: Capability feature များ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/13-features.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/13-features.md: |
+        # ထပ်ခါထပ်ခါ လုပ်တဲ့ အလုပ်နဲ့ feature
+
+        plan နဲ့ feature နာမည်များက 2026-11 အတိုင်း
+
+        | အလုပ် | feature | တစ်ခါပဲ ပြင်ဆင်ရမှာ |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: five-features
+      contentType: html
+      name: Claude app ရဲ့ capability feature များ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Claude app ရဲ့ feature များ · 2026-11</div>
+          <div class="row" style="top: 26vh"><span class="num">1</span><span class="term wide blue">Project</span>အလုပ် တစ်ခုရဲ့ document နဲ့ ညွှန်ကြားချက်</div>
+          <div class="row" style="top: 38vh"><span class="num">2</span><span class="term wide blue">Artifact</span>ဆက်ပြင်ပြီး share လုပ်နိုင်တဲ့ ရလဒ်</div>
+          <div class="row" style="top: 50vh"><span class="num">3</span><span class="term wide blue">Web search</span>ရှာဖွေတာ၊ Research နဲ့ report</div>
+          <div class="row" style="top: 62vh"><span class="num">4</span><span class="term wide blue">Connector</span>တခြား tool နဲ့ data ကို ချိတ်</div>
+          <div class="row" style="top: 74vh"><span class="num">5</span><span class="term wide blue">Skill</span>လိုမှ ဖတ်တဲ့ လုပ်ထုံးလုပ်နည်း</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — one recurring job (orange, the thing this board is about) and the
+    # features it needs (blue); the connector is dashed because it is not settled
+    # yet; the feature the job does not need is red.
+    - {
+        id: j-box,
+        kind: rectangle,
+        x: 430,
+        y: 180,
+        width: 480,
+        height: 80,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: j-l,
+        kind: text,
+        align: center,
+        x: 430,
+        y: 202,
+        width: 480,
+        height: 35,
+        text: "support lead ရဲ့ ticket အဖြေ",
+        fontSize: 28,
+      }
+    - {
+        id: j-brace,
+        kind: freedraw,
+        stroke: brace-up,
+        x: 280,
+        y: 280,
+        width: 790,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f1-box,
+        kind: rectangle,
+        x: 270,
+        y: 350,
+        width: 260,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 370,
+        width: 260,
+        height: 35,
+        text: "Project",
+        fontSize: 28,
+      }
+    - {
+        id: f1-d,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 445,
+        width: 260,
+        height: 35,
+        text: "tone guide",
+        fontSize: 28,
+      }
+    - {
+        id: f2-box,
+        kind: rectangle,
+        x: 545,
+        y: 350,
+        width: 260,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f2-l,
+        kind: text,
+        align: center,
+        x: 545,
+        y: 370,
+        width: 260,
+        height: 35,
+        text: "Skill",
+        fontSize: 28,
+      }
+    - {
+        id: f2-d,
+        kind: text,
+        align: center,
+        x: 545,
+        y: 445,
+        width: 260,
+        height: 35,
+        text: "လိုင်းကျ အဖြေ",
+        fontSize: 28,
+      }
+    - {
+        id: f3-box,
+        kind: rectangle,
+        x: 820,
+        y: 350,
+        width: 260,
+        height: 75,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f3-l,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 370,
+        width: 260,
+        height: 35,
+        text: "Connector",
+        fontSize: 28,
+      }
+    - {
+        id: f3-d,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 445,
+        width: 260,
+        height: 35,
+        text: "Knowledge base?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f-not,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 760,
+        height: 35,
+        text: "Research: ဒီအလုပ်မှာ မလို",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Free plan မှာ လုံးဝ မရတာ ဘယ်ဟာလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) custom connector",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) Research",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 200,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 530,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "ကိုယ့် plan မှာ ပါလား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "လိုတဲ့ data ဆီ ရောက်လား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9313
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: same-paste
+    chapter: chat တိုင်းမှာ ကူးထည့်ရတာ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ နေခြည် ရဲ့ အလုပ် တစ်ခုချင်းကို Claude app၊ Claude Code ဒါမှမဟုတ် API ဆိုတဲ့ entry
+      point တွေထဲက ဘယ်နေရာမှာ ထားမလဲ ရွေးခဲ့ပါတယ်။ entry point ဆိုတာ Claude ကို ဘယ်နေရာကနေ သုံးမလဲ
+      ဆိုတာပါ။ ဒီတစ်ခါတော့ app ထဲမှာ ထားခဲ့တဲ့ အလုပ် တစ်ခုကို ပိုနီးနီးကပ်ကပ် ကြည့်ပါမယ်။
+      [[mark:need]] support manager လှလှ ရဲ့ team မှာ support lead တွေက ခက်တဲ့ connection ticket တွေအတွက်
+      Claude app နဲ့ အဖြေ ရေးကြပါတယ်။ ဒါပေမဲ့ chat အသစ် ဖွင့်တိုင်း နေခြည် ရဲ့ tone guide နဲ့ ပြဿနာဖြေရှင်းနည်း
+      မှတ်စုတွေကို အစကနေ ပြန်ကူးထည့်ရပါတယ်။ တစ်ယောက်က မှတ်စု အသစ်ကို ထည့်ပြီး နောက်တစ်ယောက်က
+      အဟောင်းကို ထည့်မိတာမျိုးလည်း ဖြစ်နေပါတယ်။
+      [[mark:need-kb]] Knowledge base ထဲက article ၃၄၀ ရဲ့ သုံးပုံတစ်ပုံလောက်က
+      ခေတ်နောက်ကျနေတာမို့၊ ဘယ်မှတ်စုကို ကူးထည့်လိုက်လဲ ဆိုတာပေါ်မှာ customer ရမယ့် အကြံ ပြောင်းသွားနိုင်ပါတယ်။
+      [[mark:need-2]] ဒါက prompt ကို ပိုကောင်းအောင် ရေးရုံနဲ့ ပြေလည်မယ့် ပြဿနာ မဟုတ်ပါဘူး။ prompt ဆိုတာ model
+      ကို ပေးလိုက်တဲ့ စာ၊ model ဆိုတာ အဲဒီ စာကို ဆက်ရေးပေးတဲ့ program ပါ။ ထပ်ခါထပ်ခါ လုပ်ရတဲ့ အလုပ်အတွက်
+      app ထဲမှာ capability feature တွေ ရှိပါတယ်။ prompt မရေးခင် ဆုံးဖြတ်ရမယ့် လေးခုထဲက ဒုတိယ တစ်ခုက
+      ဒီ feature တွေကို ရွေးတာ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "What are projects?",
+          url: "https://support.claude.com/en/articles/9517075-what-are-projects",
+        }
+      - { title: "Claude plans and pricing", url: "https://claude.com/pricing" }
+    actions:
+      - {
+          id: open-features,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: notebook/13-features.md,
+        }
+      - id: sel-title
+        type: editor.select
+        at: { mark: need-2 }
+        target:
+          file: notebook/13-features.md
+          text: "# ထပ်ခါထပ်ခါ လုပ်တဲ့ အလုပ်နဲ့ feature"
+
+  - id: five-features
+    chapter: Feature ငါးမျိုး
+    narration: >
+      [[mark:f-open]] Claude app ထဲက feature တွေကို လုပ်ပေးတဲ့ အလုပ်အလိုက် ငါးမျိုး ခွဲကြည့်လို့ ရပါတယ်။
+      နာမည်တွေက ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ ရှိတဲ့အတိုင်းပါ။ မကြာခဏ ပြောင်းတတ်တာမို့ Claude ရဲ့ pricing
+      စာမျက်နှာမှာ ပြန်စစ်ပါ။
+      [[mark:f-project]] ပထမ တစ်ခုက Project ပါ။ Project ဆိုတာ အလုပ် တစ်ခုအတွက် စာရွက်စာတမ်းနဲ့ ညွှန်ကြားချက်တွေ
+      စုထားတဲ့ နေရာပါ။ project knowledge ထဲကို document၊ စာသား၊ code တွေ တင်ထားရင်၊ အဲဒီ project ထဲက
+      chat တိုင်းမှာ Claude က သုံးပါတယ်။ project instructions ကလည်း chat တိုင်းမှာ သက်ရောက်ပါတယ်။ project ကို
+      ကြည့်ခွင့်၊ ပြင်ခွင့် ပေးပြီး share လုပ်တာကတော့ Team နဲ့ Enterprise plan မှာပဲ ရပါတယ်။
+      [[mark:f-artifact]] ဒုတိယ တစ်ခုက Artifact ပါ။ document၊ slide၊ dashboard လို ဆက်ပြင်ပြီး ပြန်သုံးမယ့်
+      ရလဒ်ကို chat ဘေးမှာ သီးခြား ဖွင့်ပေးပြီး၊ ဆက်ပြင်တာ၊ share လုပ်တာ လုပ်လို့ရပါတယ်။ အကြောင်းအရာ ရှည်ပြီး
+      သီးခြား ရပ်တည်နိုင်တဲ့အခါ Claude က artifact အဖြစ် ဖန်တီးတတ်ပါတယ်။ ဒါပေမဲ့ Create and edit files ဆိုတဲ့
+      setting ဖွင့်ထားမှ အလုပ်လုပ်ပါတယ်။
+      [[mark:f-search]] တတိယ တစ်ခုက အချက်အလက် ရှာတာပါ။ web search က တစ်ခါ နှစ်ခါ ရှာရုံနဲ့ ဖြေနိုင်တဲ့
+      မေးခွန်းအတွက်ပါ။ Research ကတော့ မိနစ်အနည်းငယ် ကြာအောင် ရင်းမြစ် အများကြီးကို လိုက်ရှာပြီး၊ ကိုးကားချက်
+      ပါတဲ့ report တစ်စောင် ပြန်ပေးပါတယ်။ Team နဲ့ Enterprise မှာဆိုရင် web search ကို owner က အရင် ဖွင့်ပေးရပါတယ်။
+      [[mark:f-connector]] စတုတ္ထ တစ်ခုက connector ပါ။ connector ဆိုတာ Claude ကို တခြား tool၊ data တွေနဲ့
+      ချိတ်ပေးတဲ့ အဆက်ပါ။ ချိတ်ထားတဲ့ app ထဲက data ကို ဖတ်ရုံသာမက အဲဒီထဲမှာ လုပ်ဆောင်ချက်တွေပါ လုပ်ပေးနိုင်ပါတယ်။
+      Claude က အဲဒီ service ထဲမှာ သုံးနေတဲ့ လူရဲ့ ခွင့်ပြုချက်အတိုင်းပဲ မြင်ရပါတယ်။
+      [[mark:f-skill]] ပဉ္စမ တစ်ခုက skill ပါ။ skill ဆိုတာ အလုပ် တစ်မျိုးကို ဘယ်လို လုပ်ရမလဲ ရေးထားပြီး၊ လိုတဲ့
+      အချိန်ကျမှ Claude ဖတ်သုံးတဲ့ လမ်းညွှန်ပါ။ project knowledge က chat တိုင်းမှာ အမြဲ ပါနေတဲ့ နောက်ခံ
+      အချက်အလက်ပါ။ skill ကတော့ ဆီလျော်တဲ့ အလုပ် ရောက်လာမှ ဖွင့်ဖတ်တဲ့ လုပ်ထုံးလုပ်နည်းပါ။ Excel၊ Word၊ PDF လို file တွေအတွက်
+      Anthropic ရဲ့ skill တွေ ပါပြီးသားဖြစ်ပြီး၊ ကိုယ်ပိုင် skill တွေကိုလည်း ထည့်လို့ရပါတယ်။ skill တွေ အလုပ်လုပ်ဖို့ code
+      execution ကို ဖွင့်ထားရပါတယ်။
+    sources:
+      - {
+          title: "What are projects?",
+          url: "https://support.claude.com/en/articles/9517075-what-are-projects",
+        }
+      - {
+          title: "What are artifacts and how do I use them?",
+          url: "https://support.claude.com/en/articles/17153992-what-are-artifacts-and-how-do-i-use-them",
+        }
+      - {
+          title: "When should I use web search, extended thinking and Research?",
+          url: "https://support.claude.com/en/articles/11095361-when-should-i-use-web-search-extended-thinking-and-research",
+        }
+    actions:
+      - {
+          id: show-features,
+          type: slide.show,
+          at: { mark: f-open, offsetMs: -1200 },
+          slideId: five-features,
+        }
+      - {
+          id: point-project,
+          type: slide.point,
+          at: { mark: f-project },
+          target: { x: 0.15, y: 0.35 },
+        }
+      - {
+          id: point-artifact,
+          type: slide.point,
+          at: { mark: f-artifact },
+          target: { x: 0.15, y: 0.47 },
+        }
+      - {
+          id: point-search,
+          type: slide.point,
+          at: { mark: f-search },
+          target: { x: 0.15, y: 0.59 },
+        }
+      - {
+          id: point-connector,
+          type: slide.point,
+          at: { mark: f-connector },
+          target: { x: 0.15, y: 0.71 },
+        }
+      - { id: point-skill, type: slide.point, at: { mark: f-skill }, target: { x: 0.15, y: 0.83 } }
+
+  - id: one-job
+    chapter: အလုပ်ကနေ စရွေးခြင်း
+    narration: >
+      [[mark:b-open]] feature ကို အသစ်ဆုံးမို့ ရွေးတာမျိုး မလုပ်ဘဲ၊ အလုပ်ကနေ စပြီး ရွေးရပါတယ်။ support lead တွေရဲ့
+      ticket အဖြေ ရေးတဲ့ အလုပ် တစ်ခုတည်းကို ယူပြီး လိုတဲ့ feature တွေနဲ့ တွဲကြည့်ရအောင်။
+      [[mark:b-project]] chat တိုင်းမှာ ကူးထည့်နေရတဲ့ tone guide နဲ့ ပြဿနာဖြေရှင်းနည်း မှတ်စုတွေက project
+      knowledge ထဲ ရောက်သွားပါမယ်။ ဘယ်လို လေသံနဲ့ ရေးရမလဲ ဆိုတာကိုလည်း project instructions မှာ တစ်ခါပဲ
+      ရေးထားပါမယ်။ မှတ်စု အသစ် ထွက်လာရင် project ထဲမှာ တစ်နေရာတည်း ပြင်လိုက်ရုံပါပဲ။
+      [[mark:b-skill]] လိုင်းကျနေတဲ့ မြို့နယ်က customer ကို ဘယ်လို အဆင့်လိုက် ဖြေရမလဲ ဆိုတာကတော့ skill
+      ဖြစ်သင့်ပါတယ်။ ticket တိုင်းမှာ မလိုဘဲ၊ လိုင်းကျမှု ticket ရောက်လာမှ ဖတ်ရမယ့် လုပ်ထုံးလုပ်နည်းမို့ပါ။ ကိုယ်ပိုင်
+      skill ကို ZIP file အနေနဲ့ upload လုပ်ပြီး တင်ရပါတယ်။
+      [[mark:b-conn]] Knowledge base ကို connector နဲ့ ချိတ်နိုင်ရင်တော့ article တွေကို ကူးထည့်စရာ မလိုတော့ပါဘူး။
+      ဒါပေမဲ့ ကတိမပေးခင် စစ်ရမယ့် အချက် ရှိပါတယ်။ ကိုယ်တိုင် ဆောက်တဲ့ custom connector ကို Anthropic ရဲ့ cloud
+      ကနေ ခေါ်တာမို့၊ အဲဒီ server ကို public internet ကနေ ရောက်လို့ ရရပါမယ်။ Knowledge base က ရုံးတွင်း network
+      ထဲမှာပဲ ရှိနေတယ်ဆိုရင် ဒီအတိုင်း ချိတ်လို့ မရပါဘူး။
+      [[mark:b-perm]] နောက်တစ်ချက်က ခွင့်ပြုချက်ပါ။ connector က သုံးတဲ့ လူရဲ့
+      ခွင့်ပြုချက်အတိုင်း မြင်တာမို့၊ support lead တစ်ယောက် ဖွင့်ခွင့်မရှိတဲ့ article ကို Claude ကလည်း မမြင်ရပါဘူး။
+      [[mark:b-not]] Research ကိုတော့ ဒီအလုပ်အတွက် မရွေးပါဘူး။ ကောင်းတဲ့ feature ဖြစ်ပေမဲ့ ticket တစ်ခုရဲ့ အဖြေက
+      ရင်းမြစ် အများကြီးကို မိနစ်ချီ လိုက်ရှာရမယ့် အလုပ် မဟုတ်လို့ပါ။
+      [[mark:b-back]] ဆိုလိုတာက ticket အဖြေ ဆိုတဲ့ အလုပ်ကနေ စခဲ့လို့ feature သုံးခုပဲ ကျန်ပါတယ်။ feature စာရင်းကနေ
+      စခဲ့ရင်တော့ ငါးခုလုံး ထည့်ချင်စိတ် ပေါ်လာပြီး၊ ဘယ်ဟာကိုမှ သေသေချာချာ မပြင်ဆင်ဖြစ်တာမျိုး ဖြစ်တတ်ပါတယ်။
+    sources:
+      - {
+          title: "Use connectors to extend Claude's capabilities",
+          url: "https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities",
+        }
+      - {
+          title: "What are skills?",
+          url: "https://support.claude.com/en/articles/12512176-what-are-skills",
+        }
+      - {
+          title: "Use skills in Claude",
+          url: "https://support.claude.com/en/articles/12512180-use-skills-in-claude",
+        }
+    actions:
+      - { id: close-features, type: slide.close, at: { mark: b-open } }
+      - {
+          id: draw-job,
+          type: whiteboard.apply,
+          at: { afterAction: close-features },
+          open: true,
+          clear: true,
+          upsertIds: [j-box, j-l, j-brace],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-project,
+          type: whiteboard.apply,
+          at: { mark: b-project },
+          upsertIds: [f1-box, f1-l, f1-d],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-skill,
+          type: whiteboard.apply,
+          at: { mark: b-skill },
+          upsertIds: [f2-box, f2-l, f2-d],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-conn,
+          type: whiteboard.apply,
+          at: { mark: b-conn },
+          upsertIds: [f3-box, f3-l, f3-d],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-not,
+          type: whiteboard.apply,
+          at: { mark: b-not },
+          upsertIds: [f-not],
+          drawMs: 900,
+        }
+      - { id: point-job, type: whiteboard.point, at: { mark: b-back }, target: { assetId: j-box } }
+
+  - id: the-table
+    chapter: Feature table
+    narration: >
+      [[mark:t-close]] ဒီ ရွေးပုံကို support ရဲ့ ထပ်ခါထပ်ခါ လုပ်တဲ့ အလုပ် သုံးခုအတွက် table နဲ့ ချရေးကြည့်ရအောင်။
+      တတိယ column က feature တစ်ခုချင်းအတွက် တစ်ခါပဲ ပြင်ဆင်ရမယ့် အရာပါ။ ဒါကို မရေးထားရင် feature က
+      ရှိပေမဲ့ ဘယ်သူမှ ဖွင့်မထားတာ၊ ဘယ်သူ ထိန်းမလဲ မသိတာမျိုး ဖြစ်တတ်ပါတယ်။ ဥပမာ project ထဲက မှတ်စုကို ဘယ်သူ
+      update လုပ်မလဲ ဆိုတာ မသတ်မှတ်ရင်၊ ခဏကြာတော့ chat ထဲ ကူးထည့်ခဲ့တုန်းက ပြဿနာ ပြန်ရောက်လာပါတယ်။
+      [[mark:type-1]] ပထမ အလုပ်က board ပေါ်မှာ ကြည့်ခဲ့တဲ့ ticket အဖြေ ရေးတာပါ။ project ကို တစ်ခါ ဆောက်ပြီး
+      မှတ်စုတွေ တင်၊ instructions ရေး၊ skill ကို upload လုပ်ထားရင်၊ နောက်ပိုင်း chat တိုင်းက အဲဒီ ပြင်ဆင်မှုကို
+      ပြန်သုံးပါတယ်။
+      [[mark:type-2]] ဒုတိယ အလုပ်က လှလှ ကို အပတ်တိုင်း ပို့ရတဲ့ လိုင်းကျမှု အကျဉ်းချုပ်ပါ။ ရလဒ်က ဆက်ပြင်ပြီး
+      ပြရမယ့် document မို့ artifact ပါ။ report ပုံစံကို project knowledge ထဲ တင်ထားပြီး၊ artifact အတွက် လိုတဲ့
+      setting ကိုလည်း ဖွင့်ထားရပါမယ်။
+      [[mark:type-3]] တတိယ အလုပ်က customer တွေ အသစ် ဝယ်လာတဲ့ router model တွေအတွက် ဖြေရှင်းနည်း မှတ်စု
+      ရေးတာပါ။ ထုတ်လုပ်သူရဲ့ အချက်အလက်ကို ရှာရမှာမို့ web search လိုပါတယ်။ Team plan ပေါ်မှာဆိုရင် owner က
+      web search ကို အရင် ဖွင့်ပေးမှ သုံးလို့ရပါတယ်။
+      [[mark:type-share]] နောက်ဆုံး မှတ်စု တစ်ကြောင်းက project ကို support lead အားလုံး အတူ ပြင်နိုင်အောင် share
+      လုပ်ဖို့ပါ။ ဒါက Team ဒါမှမဟုတ် Enterprise plan မှာပဲ ရတာမို့ plan ဆုံးဖြတ်ချက်နဲ့ ချိတ်နေပါတယ်။
+    sources:
+      - {
+          title: "How can I create and manage projects?",
+          url: "https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects",
+        }
+      - {
+          title: "Enable and use web search",
+          url: "https://support.claude.com/en/articles/10684626-enable-and-use-web-search",
+        }
+      - {
+          title: "What are artifacts and how do I use them?",
+          url: "https://support.claude.com/en/articles/17153992-what-are-artifacts-and-how-do-i-use-them",
+        }
+    actions:
+      - { id: close-job, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: open-features-2,
+          type: workspace.openFile,
+          at: { afterAction: close-job },
+          path: notebook/13-features.md,
+        }
+      - id: type-1
+        type: editor.type
+        at: { mark: type-1 }
+        cadence: line-by-line
+        target: { file: notebook/13-features.md, after: "|---|---|---|\n" }
+        text: "| connection ticket အဖြေ | Project · Skill | tone guide၊ notes တင်၊ instructions ရေး၊ skill ZIP တင် |\n"
+      - id: type-2
+        type: editor.type
+        at: { mark: type-2 }
+        cadence: line-by-line
+        target: { file: notebook/13-features.md, after: "skill ZIP တင် |\n" }
+        text: "| အပတ်စဉ် လိုင်းကျမှု အကျဉ်းချုပ် | Project · Artifact | report ပုံစံ တင်၊ Create and edit files ဖွင့် |\n"
+      - id: type-3
+        type: editor.type
+        at: { mark: type-3 }
+        cadence: line-by-line
+        target: { file: notebook/13-features.md, after: "Create and edit files ဖွင့် |\n" }
+        text: "| router model အသစ် မှတ်စု | Project · Web search | Team plan မှာ owner က web search ဖွင့် |\n"
+      - id: type-share
+        type: editor.type
+        at: { mark: type-share }
+        cadence: line-by-line
+        target: { file: notebook/13-features.md, after: "owner က web search ဖွင့် |\n" }
+        text: "\nproject ကို support lead အားလုံးနဲ့ share (Can edit): Team ဒါမှမဟုတ် Enterprise plan မှာပဲ\n"
+      - id: expect-row-1
+        type: expect.file
+        at: { afterAction: type-share }
+        path: notebook/13-features.md
+        contains: "| connection ticket အဖြေ | Project · Skill | tone guide၊ notes တင်၊ instructions ရေး၊ skill ZIP တင် |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ Network Tools team က Claude app ကို Free plan နဲ့ စမ်းကြည့်နေတယ်
+      ဆိုပါစို့။ သူတို့ သုံးချင်တဲ့ feature နှစ်ခု ရှိပါတယ်။ Free plan မှာ လုံးဝ မရတာ ဘယ်ဟာလဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက ကိုယ်တိုင် ဆောက်ထားတဲ့ server ကို Claude နဲ့ ချိတ်ပေးတဲ့ custom connector ပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုက ရင်းမြစ် အများကြီးကို ရှာပြီး report ပြန်ပေးတဲ့ Research ပါ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ Research ပါ။ ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ Research က Pro၊ Max၊ Ultra၊
+      Team နဲ့ Enterprise လို paid plan တွေမှာပဲ ပါပါတယ်။ custom connector ကတော့ Free အပါအဝင် plan တိုင်းမှာ
+      ရပါတယ်။ ကွာတာက Free မှာ တစ်ခုပဲ ချိတ်ခွင့် ရှိတာပါ။ ရှာဖွေတဲ့ feature မို့ plan တိုင်းမှာ ပါမယ်လို့
+      ထင်မိတတ်ပေမဲ့၊ ရှာတာက web search၊ Research က သီးခြား feature ပါ။
+      [[mark:q-rule]] ဒါကြောင့် feature တစ်ခုကို team ကို ကတိမပေးခင် နှစ်ခု စစ်ပါ။ ကိုယ့် plan မှာ ပါလား၊ ပြီးတော့
+      အဲဒီ feature က လိုတဲ့ data ဆီ တကယ် ရောက်နိုင်လား ဆိုတာပါ။
+    sources:
+      - {
+          title: "Use Research on Claude",
+          url: "https://support.claude.com/en/articles/11088861-use-research-on-claude",
+        }
+      - {
+          title: "Use connectors to extend Claude's capabilities",
+          url: "https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် team မှာ အပတ်တိုင်း ထပ်ခါထပ်ခါ လုပ်နေရတဲ့
+      အလုပ် တစ်ခုကို ရွေးပြီး ဒီ table မှာ row တစ်ခု ထပ်ရေးကြည့်ပါ။ ဘယ် feature လိုလဲ ဆိုတာထက်၊ chat တိုင်းမှာ
+      ဘာကို ထပ်ခါထပ်ခါ ကူးထည့်နေရလဲ ဆိုတာကနေ စပါ။
+      [[mark:turn-2]] row ရေးပြီးရင် feature တစ်ခုချင်းကို ကိုယ့် plan မှာ ပါလား၊ လိုတဲ့ data ဆီ ရောက်နိုင်လား ဆိုတာ
+      pricing စာမျက်နှာနဲ့ တိုက်စစ်ပြီး အမှတ်အသား လုပ်ထားပါ။ မသေချာတဲ့ ကွက်က ရှိရင် အဲဒါကို team ကို မပြောခင်
+      ဖြေရှင်းရမယ့် မေးခွန်း အဖြစ် ရေးထားပါ။
+    sources:
+      - { title: "Claude plans and pricing", url: "https://claude.com/pricing" }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/13-features.md
+          text: "| အလုပ် | feature | တစ်ခါပဲ ပြင်ဆင်ရမှာ |"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ chat တိုင်းမှာ အတူတူ ကူးထည့်နေရတာက feature တစ်ခု လိုနေတယ် ဆိုတဲ့ လက္ခဏာပါ။ အမြဲ
+      လိုတဲ့ နောက်ခံ အချက်အလက်က project ထဲ၊ ဆက်ပြင်ရမယ့် ရလဒ်က artifact ထဲ၊ လိုမှ ဖတ်ရမယ့် လုပ်ထုံးက skill
+      ထဲ ရောက်သွားပြီး၊ တခြား system က data ကတော့ connector နဲ့ ရောက်လာပါတယ်။
+      [[mark:recap-2]] feature ကို အလုပ်ကနေ စပြီး ရွေးပါ။ ကတိမပေးခင် plan နဲ့ data ကို စစ်ပါ။
+      [[mark:next]] နောက် lesson မှာတော့ တတိယ ဆုံးဖြတ်ချက်ဖြစ်တဲ့ model ရွေးချယ်ခြင်းကို လေ့လာသွားပါမယ်။
+      တစ်ရက် အဖြေ ၁၈၀၀ ရေးရမယ့် Reply assistant၊ နက်နက်နဲနဲ စဉ်းစားရမယ့် Billing report အလုပ်နဲ့၊ တစ်ရက်
+      အကြိမ် ထောင်ချီ ဆုံးဖြတ်ရမယ့် ticket ခွဲခြားတဲ့ အလုပ်တွေအတွက် model တစ်မျိုးတည်း သင့်ပါ့မလား ဆိုတာကနေ
+      စပါမယ်။
+    sources:
+      - {
+          title: "What are skills?",
+          url: "https://support.claude.com/en/articles/12512176-what-are-skills",
+        }
+    actions:
+      - id: sel-setup
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/13-features.md
+          text: "တစ်ခါပဲ ပြင်ဆင်ရမှာ |"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
