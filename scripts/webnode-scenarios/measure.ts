@@ -6,6 +6,7 @@
 //
 //   bun scripts/webnode-scenarios/measure.ts              every target, RUNS times per engine
 //   bun scripts/webnode-scenarios/measure.ts <target>...  only these: a lesson's slug, starter:<name>
+//   bun scripts/webnode-scenarios/measure.ts lessons      every lesson that installs something
 //   bun scripts/webnode-scenarios/measure.ts --list       the setups, their lessons, the targets
 //   bun scripts/webnode-scenarios/measure.ts --table      the table of the runs recorded so far
 //
@@ -160,6 +161,9 @@ interface Setup {
   lessons: string[];
 }
 
+/** The label of the setup that installs nothing. */
+const NO_DEPENDENCIES = "no dependencies";
+
 function dependenciesOf(files: Record<string, string>): [string, string][] {
   const manifest = files["package.json"] ? JSON.parse(files["package.json"]) : {};
   return Object.entries({ ...manifest.dependencies, ...manifest.devDependencies }).sort() as [
@@ -186,7 +190,7 @@ async function lessonSetups(): Promise<{ setups: Setup[]; scripts: Map<string, L
     const label =
       dependenciesOf(script.lesson.workspace.files)
         .map(([dependency, version]) => `${dependency}@${version}`)
-        .join(" ") || "no dependencies";
+        .join(" ") || NO_DEPENDENCIES;
     groups.set(label, [...(groups.get(label) ?? []), slug]);
   }
   const setups = [...groups]
@@ -245,7 +249,7 @@ async function starterTargets(): Promise<Target[]> {
       setup:
         dependenciesOf(files)
           .map(([dependency, version]) => `${dependency}@${version}`)
-          .join(" ") || "no dependencies",
+          .join(" ") || NO_DEPENDENCIES,
       files,
       finalFiles: {},
       initCommand: "pnpm install",
@@ -724,7 +728,17 @@ async function main(): Promise<void> {
     return;
   }
 
-  const names = args.length ? args : (await allTargets()).targets.map((target) => target.name);
+  const { targets, setups } = await allTargets();
+  const names = args.length
+    ? args.flatMap((name) =>
+        // `lessons`: every lesson of a setup that has dependencies.
+        name === "lessons"
+          ? setups
+              .filter((setup) => setup.label !== NO_DEPENDENCIES)
+              .flatMap((setup) => setup.lessons)
+          : [name],
+      )
+    : targets.map((target) => target.name);
   const engines = (process.env.ENGINES?.split(",") as Engine[] | undefined) ?? ENGINES;
   const runs = Number(process.env.RUNS ?? 3);
   mkdirSync(dirname(RUNS_FILE), { recursive: true });
