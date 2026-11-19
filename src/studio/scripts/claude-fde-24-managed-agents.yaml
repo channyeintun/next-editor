@@ -1,0 +1,763 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-24-managed-agents
+  title: "Claude FDE 24: Managed Agents"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: reply-assistant/managed/kb-audit-agent.ts
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      examples/audit-events.example.json: |
+        [
+          { "type": "session.status_running", "id": "sevt_01Hm3Qa8Vz5Lr2Wk7Np4Xc6B" },
+          { "type": "agent.tool_use", "id": "sevt_01Jb6Tr2Ky9Mf4Qs1Vw8Da3E", "evaluated_permission": "allow" },
+          { "type": "agent.tool_result", "id": "sevt_01Lp8Wc5Ns3Hd7Rx2Gt6Ya9F" },
+          { "type": "agent.thread_context_compacted", "id": "sevt_01Nq2Ye7Bm4Ws9Kc5Ht1Jv3G" },
+          {
+            "type": "agent.message",
+            "id": "sevt_01Pr5Ag3Dk8Xn1Lb6Ws4Mz7H",
+            "content": [{ "type": "text", "text": "KB-0213 needs an edit: it still lists last year's plan prices." }]
+          }
+        ]
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      reply-assistant/managed/kb-audit-agent.ts: |
+        import Anthropic from "@anthropic-ai/sdk";
+
+        const client = new Anthropic();
+
+        // Setup, once: store agent.id and agent.version; later changes update this agent.
+        export async function createAuditAgent() {
+          return client.beta.agents.create({
+            name: "kb-audit",
+            model: "claude-opus-5-5", // ID as of 2026-11
+            system: "Audit Naychi Fiber's Knowledge base articles. Record one finding per article.",
+          });
+        }
+
+        // Setup, once: where the sessions run.
+        export async function createAuditEnvironment() {
+          return client.beta.environments.create({
+            name: "kb-audit-env",
+            config: { type: "cloud", networking: { type: "limited", allow_package_managers: true } },
+          });
+        }
+
+        // One run: a fresh session, then read its events until it stops.
+        export async function runAudit(agentId: string, environmentId: string) {
+          const session = await client.beta.sessions.create({
+            agent: agentId,
+            environment_id: environmentId,
+          });
+
+          const stream = await client.beta.sessions.events.stream(session.id); // open first
+          await client.beta.sessions.events.send(session.id, {
+            events: [{ type: "user.message", content: [{ type: "text", text: "Audit all 340 articles." }] }],
+          });
+
+          loop: for await (const event of stream) {
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — who runs what: two columns; blue = parts of the system, green = the decisions
+    # that stay with people at နေခြည်.
+    - {
+        id: m-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "Managed agent: ဘယ်သူ ဘာ run လဲ",
+        fontSize: 36,
+      }
+    - {
+        id: m-h1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 230,
+        width: 380,
+        height: 35,
+        text: "Anthropic",
+        fontSize: 28,
+      }
+    - {
+        id: m-h2,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 230,
+        width: 380,
+        height: 35,
+        text: "နေခြည်",
+        fontSize: 28,
+      }
+    - {
+        id: m-a1,
+        kind: rectangle,
+        x: 290,
+        y: 285,
+        width: 380,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-a1-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 305,
+        width: 380,
+        height: 35,
+        text: "agent loop",
+        fontSize: 28,
+      }
+    - {
+        id: m-a2,
+        kind: rectangle,
+        x: 290,
+        y: 385,
+        width: 380,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-a2-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 405,
+        width: 380,
+        height: 35,
+        text: "session တစ်ခုစီရဲ့ sandbox",
+        fontSize: 28,
+      }
+    - {
+        id: m-o1,
+        kind: rectangle,
+        x: 700,
+        y: 285,
+        width: 380,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-o1-l,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 305,
+        width: 380,
+        height: 35,
+        text: "agent definition",
+        fontSize: 28,
+      }
+    - {
+        id: m-o2,
+        kind: rectangle,
+        x: 700,
+        y: 385,
+        width: 380,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-o2-l,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 405,
+        width: 380,
+        height: 35,
+        text: "ကိုယ့် custom tool",
+        fontSize: 28,
+      }
+    - {
+        id: m-o3,
+        kind: rectangle,
+        x: 700,
+        y: 485,
+        width: 380,
+        height: 75,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: m-o3-l,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 505,
+        width: 380,
+        height: 35,
+        text: "ခွင့်ပြု၊ ငြင်း ဆုံးဖြတ်ချက်",
+        fontSize: 28,
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Article ပြင်တိုင်း လူ စစ်ချင်ရင်?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) auto policy",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) always_ask policy",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 300,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 620,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "auto က လူ စစ်တဲ့ အဆင့် မဟုတ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "လူ ဆုံးဖြတ်ရမယ့် tool → always_ask",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9324
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: နာရီပေါင်းများစွာ run မယ့် နေရာ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ Knowledge base audit လို အဆင့် ရာချီ ကြာတဲ့ agent ကို caching၊ tool result ရှင်းတာ၊
+      compaction နဲ့ memory tool တို့နဲ့ context window ထဲ ဆံ့အောင် ထိန်းခဲ့ပါတယ်။
+      [[mark:sel-teams]] ဒါပေမဲ့ မေးခွန်း တစ်ခု ကျန်ပါသေးတယ်။ ဒီ audit ကို ဘယ်မှာ run မလဲ ဆိုတာပါ။ article ၃၄၀
+      ဆိုတော့ နာရီပေါင်းများစွာ ကြာနိုင်ပါတယ်။ ကိုယ့် loop ကို ကိုယ်တိုင် run မယ်ဆိုရင် အဲဒီ နာရီတွေ တစ်လျှောက်
+      ရပ်မသွားဘဲ run နေမယ့် server၊ file တွေနဲ့ shell သုံးလို့ရမယ့် လုံခြုံတဲ့ sandbox၊ ပြတ်သွားရင် ပြန်ဆက်မယ့်
+      code တွေ လိုပါတယ်။
+      [[mark:need-2]] နေခြည် ရဲ့ developer team လေးခုထဲမှာ အဲဒီလို infrastructure ကို နေ့တိုင်း ထိန်းပေးမယ့်သူ
+      မရှိပါဘူး။ ဒီ lesson မှာ အဲဒီ အလုပ်ကို Anthropic ဘက်က လုပ်ပေးတဲ့ Managed Agents ကို ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Managed Agents overview",
+          url: "https://platform.claude.com/docs/en/managed-agents/overview",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: sel-teams }, path: README.md }
+      - id: sel-teams
+        type: editor.select
+        at: { mark: need-2 }
+        target:
+          file: README.md
+          text: "- developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools"
+
+  - id: who-runs
+    chapter: ဘယ်သူ ဘာ run လဲ
+    narration: >
+      [[mark:m-open]] Managed Agents ဆိုတာ agent loop နဲ့ tool run တဲ့ နေရာကို Anthropic ဘက်က run ပေးတဲ့
+      ဝန်ဆောင်မှုပါ။ ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ beta ဖြစ်ပါတယ်။ endpoint တိုင်းမှာ beta header တစ်ခု လိုပေမဲ့ SDK
+      က အလိုအလျောက် ထည့်ပေးပါတယ်။
+      [[mark:m-loop]] Anthropic ဘက်မှာ run တာ နှစ်ခု ရှိပါတယ်။ ပထမ တစ်ခုက agent loop ပါ။ model ကို ခေါ်၊ tool
+      တောင်းရင် run၊ ရလဒ် ပြန်ပို့ ဆိုတဲ့ သံသရာကို Anthropic ရဲ့ orchestration အပိုင်းက လုပ်ပေးပါတယ်။ prompt caching
+      နဲ့ compaction လည်း ပါပြီးသားပါ။
+      [[mark:m-box]] ဒုတိယ တစ်ခုက session တစ်ခုစီအတွက် container ပါ။ tool တွေ တကယ် run တဲ့ နေရာက ဒီ
+      container ပါ။ Claude က အဲဒီထဲမှာ file ဖတ်၊ ရေး၊ ပြင်တာ၊ bash command run တာတွေ လုပ်နိုင်ပါတယ်။
+      [[mark:m-ours]] နေခြည် ဘက်မှာ ကျန်တာကတော့ agent ရဲ့ definition ပါ။ ဘယ် model၊ ဘယ် system prompt၊ ဘယ် tool
+      တွေ သုံးမလဲ ဆိုတာ ကိုယ်တို့ ဆုံးဖြတ်ပါတယ်။
+      [[mark:m-custom]] Knowledge base လို နေခြည် ရဲ့ system တွေကို ဖတ်ဖို့ custom tool တွေလည်း ထည့်လို့ရပါတယ်။
+      custom tool ကို Anthropic က run မပေးပါဘူး။ agent က ခေါ်တဲ့အခါ ကိုယ်တို့ app က run ပြီး ရလဒ်ကို event
+      တစ်ခုနဲ့ ပြန်ပို့ရပါတယ်။
+      [[mark:m-decide]] နောက်ဆုံး တစ်ခုက ဆုံးဖြတ်ချက်ပါ။ agent က ခွင့်တောင်းတဲ့အခါ ခွင့်ပြုမလား၊ ငြင်းမလား ဆိုတာ
+      ကိုယ်တို့ဘက်က ဖြေရပါတယ်။ loop ကို Anthropic က run ပေးပေမဲ့၊ တာဝန်ကတော့ ကိုယ်တို့ဆီမှာပဲ ရှိပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Managed Agents overview",
+          url: "https://platform.claude.com/docs/en/managed-agents/overview",
+        }
+      - {
+          title: "Claude Docs: Managed Agents reference",
+          url: "https://platform.claude.com/docs/en/managed-agents/reference",
+        }
+    actions:
+      - {
+          id: draw-m-open,
+          type: whiteboard.apply,
+          at: { mark: m-open },
+          open: true,
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-m-loop,
+          type: whiteboard.apply,
+          at: { mark: m-loop },
+          upsertIds: [m-h1, m-a1, m-a1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-m-box,
+          type: whiteboard.apply,
+          at: { mark: m-box },
+          upsertIds: [m-a2, m-a2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-m-ours,
+          type: whiteboard.apply,
+          at: { mark: m-ours },
+          upsertIds: [m-h2, m-o1, m-o1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-m-custom,
+          type: whiteboard.apply,
+          at: { mark: m-custom },
+          upsertIds: [m-o2, m-o2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-m-decide,
+          type: whiteboard.apply,
+          at: { mark: m-decide },
+          upsertIds: [m-o3, m-o3-l],
+          drawMs: 1200,
+        }
+
+  - id: setup
+    chapter: Agent နဲ့ environment
+    narration: >
+      [[mark:a-open]] Managed Agents မှာ အဓိက သဘောတရား လေးခု ရှိပါတယ်။ agent၊ environment၊ session နဲ့ event
+      ပါ။ audit ကို ဒီ အစဉ်အတိုင်း ရေးကြည့်ရအောင်။
+      [[mark:sel-once]] agent ကို setup အနေနဲ့ တစ်ခါပဲ ဖန်တီးပါတယ်။ agent မှာ version ရှိတာမို့ ID နဲ့ version ကို
+      သိမ်းထားပြီး၊ ပြင်ချင်ရင် agent အသစ် မဖန်တီးဘဲ ရှိပြီးသား agent ကို update လုပ်ရပါတယ်။ run တိုင်း agent
+      အသစ် ဖန်တီးတာက ရှောင်ရမယ့် အမှားပါ။
+      [[mark:type-tools]] agent ရဲ့ tool အဖြစ် built-in agent toolset ကို ပေးပါတယ်။ ဒီ toolset ထဲမှာ bash၊ file
+      ဖတ်၊ ရေး၊ ပြင်တာ၊ ရှာတာ၊ web search နဲ့ web fetch တွေ ပါပါတယ်။ audit က article တွေကို နေခြည် ရဲ့ မှတ်စုတွေနဲ့ပဲ
+      တိုက်ရမှာမို့ web search နဲ့ web fetch ကို ပိတ်ထားပါတယ်။
+      [[mark:sel-env]] environment က session တွေ run မယ့် နေရာရဲ့ ပုံစံပါ။ ဒီမှာ Anthropic ရဲ့ cloud sandbox ကို
+      ရွေးပြီး network ကို ကန့်သတ်ထားပါတယ်။ package registry နဲ့ code host တွေကိုပဲ ရောက်ခွင့်ပေးထားတာပါ။ ကိုယ့် infrastructure
+      ပေါ်မှာ self hosted sandbox နဲ့ run တဲ့ ရွေးချယ်မှုလည်း ရှိပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Managed Agents quickstart",
+          url: "https://platform.claude.com/docs/en/managed-agents/quickstart",
+        }
+      - {
+          title: "Claude Docs: Managed Agents overview",
+          url: "https://platform.claude.com/docs/en/managed-agents/overview",
+        }
+    actions:
+      - { id: close-who, type: whiteboard.apply, at: { mark: a-open }, open: false }
+      - {
+          id: open-agent,
+          type: workspace.openFile,
+          at: { afterAction: close-who },
+          path: reply-assistant/managed/kb-audit-agent.ts,
+        }
+      - id: sel-once
+        type: editor.select
+        at: { mark: sel-once }
+        target:
+          file: reply-assistant/managed/kb-audit-agent.ts
+          text: "// Setup, once: store agent.id and agent.version; later changes update this agent."
+      - id: type-tools
+        type: editor.type
+        at: { mark: type-tools }
+        cadence: line-by-line
+        target:
+          {
+            file: reply-assistant/managed/kb-audit-agent.ts,
+            after: "Record one finding per article.\",\n",
+          }
+        text: "    tools: [{\n      type: \"agent_toolset_20260401\",\n      configs: [{ name: \"web_search\", enabled: false }, { name: \"web_fetch\", enabled: false }],\n    }],\n"
+      - id: expect-tools
+        type: expect.file
+        at: { afterAction: type-tools }
+        path: reply-assistant/managed/kb-audit-agent.ts
+        contains: "      type: \"agent_toolset_20260401\",\n"
+      - id: sel-env
+        type: editor.select
+        at: { mark: sel-env }
+        target:
+          file: reply-assistant/managed/kb-audit-agent.ts
+          text: 'config: { type: "cloud", networking: { type: "limited", allow_package_managers: true } },'
+
+  - id: session
+    chapter: Session နဲ့ event
+    narration: >
+      [[mark:sel-session]] session က environment တစ်ခုထဲမှာ run နေတဲ့ agent ရဲ့ instance တစ်ခုပါ။ audit တစ်ခါ
+      run တိုင်း session အသစ် တစ်ခု ဖန်တီးပါတယ်။
+      [[mark:type-budget]] session မှာ budget ကို ထည့်ထားပါတယ်။ ဒါက ဒီ session ရဲ့ ကုန်ကျစရိတ်ကို ကန့်သတ်တာပါ။
+      amount ကို cent နဲ့ string အဖြစ် ပေးရလို့ ဒီမှာ ဒေါ်လာ ၂၅ ပါ။ အဲဒီ ပမာဏ ရောက်ရင် session က idle ဖြစ်ပြီး
+      ရပ်နေပါမယ်။ ညလုံးပေါက် run ထားမယ့် audit မှာ ဒါမျိုး ကန့်သတ်ချက် ရှိထားတာ ကောင်းပါတယ်။
+      [[mark:sel-stream]] event ဆိုတာ ကိုယ်တို့ app နဲ့ agent ကြား ပို့ကြတဲ့ message တွေပါ။ ဒီမှာ အရေးကြီးတာက
+      stream ကို message မပို့ခင် အရင် ဖွင့်ထားတာပါ။ stream က ဖြစ်ပြီးသား event တွေကို ပြန်မပို့ပေးတာမို့ နောက်မှ
+      ဖွင့်ရင် အစပိုင်း event တွေ လွတ်သွားနိုင်ပါတယ်။ ပြီးမှ user message event နဲ့ audit ကို စခိုင်းပါတယ်။
+      [[mark:type-message]] stream ထဲက event တွေကို တစ်ခုချင်း ဖတ်ပါတယ်။ agent message ဆိုရင် text block တွေကို
+      ထုတ်ပြပါတယ်။ ဒါက agent ရေးတဲ့ audit ဆုံးဖြတ်ချက်တွေပါ။
+      [[mark:type-stop]] ဘယ်အချိန် ရပ်မလဲ ဆိုတာလည်း ရေးရပါတယ်။ session က idle ဖြစ်ပြီး ရပ်ရတဲ့ အကြောင်းက requires action
+      မဟုတ်ရင် ရပ်ပါတယ်။ requires action ဆိုတာ ကိုယ်တို့ ခွင့်ပြုချက်ကို စောင့်နေတာမို့ အဲဒီအခါ မရပ်ရပါဘူး။ session
+      terminated ဖြစ်ရင်လည်း ရပ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Managed Agents quickstart",
+          url: "https://platform.claude.com/docs/en/managed-agents/quickstart",
+        }
+      - {
+          title: "Claude Docs: Managed Agents reference",
+          url: "https://platform.claude.com/docs/en/managed-agents/reference",
+        }
+    actions:
+      - id: sel-session
+        type: editor.select
+        at: { mark: sel-session }
+        target:
+          file: reply-assistant/managed/kb-audit-agent.ts
+          text: "const session = await client.beta.sessions.create({"
+      - id: type-budget
+        type: editor.type
+        at: { mark: type-budget }
+        cadence: line-by-line
+        target:
+          {
+            file: reply-assistant/managed/kb-audit-agent.ts,
+            after: "    environment_id: environmentId,\n",
+          }
+        text: "    budget: { type: \"limit\", max_list_cost: { amount: \"2500\", currency: \"USD\" } },\n"
+      - id: sel-stream
+        type: editor.select
+        at: { mark: sel-stream }
+        target:
+          file: reply-assistant/managed/kb-audit-agent.ts
+          text: "const stream = await client.beta.sessions.events.stream(session.id); // open first"
+      - id: type-message
+        type: editor.type
+        at: { mark: type-message }
+        cadence: line-by-line
+        target:
+          {
+            file: reply-assistant/managed/kb-audit-agent.ts,
+            after: "  loop: for await (const event of stream) {\n",
+          }
+        text: "    if (event.type === \"agent.message\")\n      for (const b of event.content) if (b.type === \"text\") process.stdout.write(b.text);\n"
+      - id: type-stop
+        type: editor.type
+        at: { mark: type-stop }
+        cadence: line-by-line
+        target:
+          {
+            file: reply-assistant/managed/kb-audit-agent.ts,
+            after: "process.stdout.write(b.text);\n",
+          }
+        text: "    if (event.type === \"session.status_idle\" && event.stop_reason.type !== \"requires_action\")\n      break loop;\n    if (event.type === \"session.status_terminated\") break loop;\n"
+
+  - id: events
+    chapter: Event တွေကို ဖတ်ခြင်း
+    narration: >
+      [[mark:e-open]] audit run နေတုန်း stream ထဲ ရောက်လာနိုင်တဲ့ event ဥပမာ တစ်ချို့ကို ကြည့်ရအောင်။ ဒီ ဥပမာမှာ
+      lesson အတွက် လိုတဲ့ field တွေကိုပဲ ချန်ထားပါတယ်။
+      [[mark:sel-running]] ပထမ event က session running ပါ။ agent အလုပ် စလုပ်ပြီ ဆိုတာပါ။ runtime ကို ငွေတောင်းတာလည်း
+      ဒီ running အခြေအနေမှာ ရှိနေတဲ့ အချိန်ကိုပဲ တွက်ပါတယ်။
+      [[mark:sel-allow]] နောက် event က agent tool use ပါ။ agent က container ထဲမှာ article file တစ်ခုကို ဖတ်ဖို့
+      tool ခေါ်တာ ဖြစ်နိုင်ပါတယ်။ evaluated permission ကို ကြည့်ပါ။ allow ဆိုတော့ permission policy အရ မမေးဘဲ
+      run ခွင့် ရခဲ့တာပါ။ ask ဆိုရင်တော့ session က ရပ်ပြီး ကိုယ်တို့ ဖြေတာကို စောင့်ပါတယ်။
+      [[mark:sel-compact]] context compacted ဆိုတဲ့ event ကလည်း စိတ်ဝင်စားစရာပါ။ history ရှည်လာလို့ Anthropic ဘက်က
+      context window ထဲ ဆံ့အောင် အကျဉ်းချုပ်လိုက်တာပါ။ ပြီးခဲ့တဲ့ lesson က compaction ကို ဒီမှာ ကိုယ်တို့ ရေးစရာ
+      မလိုတော့ပါဘူး။
+      [[mark:sel-finding]] နောက်ဆုံး event က agent message ပါ။ article တစ်ခုအတွက် ဆုံးဖြတ်ချက်ပါ။ ဒါကို support manager
+      လှလှ ရဲ့ team က ဖတ်ပြီး ပြင်မလား ဆုံးဖြတ်ရမှာပါ။
+    sources:
+      - {
+          title: "Claude Docs: Managed Agents reference",
+          url: "https://platform.claude.com/docs/en/managed-agents/reference",
+        }
+      - {
+          title: "Claude Docs: Permission policies",
+          url: "https://platform.claude.com/docs/en/managed-agents/permission-policies",
+        }
+    actions:
+      - {
+          id: open-events,
+          type: workspace.openFile,
+          at: { mark: e-open },
+          path: examples/audit-events.example.json,
+        }
+      - id: sel-running
+        type: editor.select
+        at: { mark: sel-running }
+        target:
+          file: examples/audit-events.example.json
+          text: '"type": "session.status_running"'
+      - id: sel-allow
+        type: editor.select
+        at: { mark: sel-allow }
+        target:
+          file: examples/audit-events.example.json
+          text: '"evaluated_permission": "allow"'
+      - id: sel-compact
+        type: editor.select
+        at: { mark: sel-compact }
+        target:
+          file: examples/audit-events.example.json
+          text: '"type": "agent.thread_context_compacted"'
+      - id: sel-finding
+        type: editor.select
+        at: { mark: sel-finding }
+        target:
+          file: examples/audit-events.example.json
+          text: '"KB-0213 needs an edit: it still lists last year''s plan prices."'
+
+  - id: choose
+    chapter: ကိုယ့် loop လား၊ managed agent လား
+    narration: >
+      [[mark:p-policy]] ခွင့်ပြုချက်ကို permission policy နဲ့ သတ်မှတ်ပါတယ်။ Anthropic ဘက်က run တဲ့ tool တွေအတွက်ပဲ
+      သက်ဆိုင်ပြီး၊ custom tool တွေအတွက် မဟုတ်ပါဘူး။ policy သုံးမျိုး ရှိပါတယ်။ always allow က agent toolset ရဲ့
+      default ပါ။ always ask က MCP toolset ရဲ့ default ပါ။ auto ကတော့ server က call ကို run ပေးတာ၊ အန္တရာယ်
+      များတယ်လို့ ငြင်းတာ၊ ဒါမှမဟုတ် ကိုယ်တို့ကို မေးဖို့ ရပ်ထားတာ ဆိုတဲ့ သုံးမျိုးထဲက တစ်ခုကို လုပ်ပါတယ်။
+      [[mark:p-cost]] ကုန်ကျစရိတ်ကလည်း Messages API နဲ့ မတူပါဘူး။ token ကို ပုံမှန် ဈေးနဲ့ ပေးရတဲ့အပြင်၊ session
+      running ဖြစ်နေတဲ့ အချိန်အတွက် runtime ကိုပါ ပေးရပါတယ်။ ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ session တစ်နာရီကို
+      ဒေါ်လာ ၀ ဒသမ ၀၈ ပါ။ docs ရဲ့ ဥပမာမှာ input token ငါးသောင်း၊ output token တစ်သောင်းငါးထောင်နဲ့ Opus ကို တစ်နာရီ run တဲ့ session တစ်ခုက ဒေါ်လာ ၀ ဒသမ ၅၈
+      ကျပါတယ်။ ဈေးနှုန်း အတိအကျကို pricing page မှာ ပြန်စစ်ပါ။
+      [[mark:p-own]] ဒါဆို ကိုယ့် loop ကို ဘယ်အချိန် ရွေးမလဲ။ loop ရဲ့ အဆင့်တိုင်းကို အသေးစိတ် ထိန်းချုပ်ချင်တဲ့အခါ၊
+      zero data retention လို data မသိမ်းရ ဆိုတဲ့ သဘောတူညီချက် လိုတဲ့အခါ၊ Managed Agents မရတဲ့ cloud platform
+      ပေါ်မှာ ရှိတဲ့အခါ ကိုယ့် loop က ပိုကိုက်ပါတယ်။ Ticket system ထဲမှာ စက္ကန့်ပိုင်းအတွင်း draft ပြန်ပေးရမယ့်
+      Reply assistant ကတော့ အခုလို ကိုယ့် loop နဲ့ပဲ ဆက်ထားပါမယ်။ မိနစ်နဲ့ နာရီချီ ကြာတဲ့ audit ကတော့ managed
+      agent နဲ့ ကိုက်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Permission policies",
+          url: "https://platform.claude.com/docs/en/managed-agents/permission-policies",
+        }
+      - {
+          title: "Claude Docs: Pricing",
+          url: "https://platform.claude.com/docs/en/about-claude/pricing",
+        }
+      - {
+          title: "Claude Docs: Managed Agents overview",
+          url: "https://platform.claude.com/docs/en/managed-agents/overview",
+        }
+    actions:
+      - {
+          id: back-agent,
+          type: workspace.openFile,
+          at: { mark: p-policy },
+          path: reply-assistant/managed/kb-audit-agent.ts,
+        }
+      - id: sel-toolset
+        type: editor.select
+        at: { mark: p-policy, offsetMs: 2500 }
+        target:
+          file: reply-assistant/managed/kb-audit-agent.ts
+          text: '      type: "agent_toolset_20260401",'
+      - id: sel-budget
+        type: editor.select
+        at: { mark: p-cost }
+        target:
+          file: reply-assistant/managed/kb-audit-agent.ts
+          text: '    budget: { type: "limit", max_list_cost: { amount: "2500", currency: "USD" } },'
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ audit နောက်အဆင့်မှာ Knowledge base ကို တကယ် ပြင်ပေးနိုင်တဲ့ MCP
+      tool တစ်ခုကို agent ဆီ ထည့်ပေးမယ် ဆိုပါစို့။ support manager လှလှ က article ပြင်တိုင်း လူ တစ်ယောက်က
+      ကြည့်ပြီးမှ ပြင်စေချင်ပါတယ်။ ဘယ် policy ကို ပေးမလဲ။
+      [[mark:q-a]] ပထမ အဖြေက auto policy ပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက always ask policy ပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ auto မှာ ဆုံးဖြတ်တာက server ပါ။ အန္တရာယ်
+      နည်းတယ်လို့ ယူဆတဲ့ call တွေကို လူ မမေးဘဲ run သွားနိုင်ပါတယ်။ docs ကလည်း auto က လူ စစ်တဲ့ checkpoint
+      မဟုတ်ဘူးလို့ ရှင်းရှင်း ဆိုထားပါတယ်။ always ask ဆိုရင်တော့ ပြင်မယ့် call တိုင်းမှာ session က ရပ်ပြီး၊ ကိုယ်တို့ app
+      က tool confirmation event နဲ့ allow ဒါမှမဟုတ် deny ပြန်ပို့မှ ဆက်ပါတယ်။
+      [[mark:q-rule]] ဒါကြောင့် လူ ဆုံးဖြတ်ရမယ့် လုပ်ဆောင်ချက် ဆိုရင် always ask ကို ပေးပါ။ auto ကိုတော့ ခွင့်တောင်းတာ
+      လျှော့ချင်တဲ့ အန္တရာယ်နည်း အလုပ်တွေမှာပဲ သုံးပါ။
+    sources:
+      - {
+          title: "Claude Docs: Permission policies",
+          url: "https://platform.claude.com/docs/en/managed-agents/permission-policies",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် agent အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး ကိုယ့် project အတွက် agent အကြံ တစ်ခုကို
+      စဉ်းစားပါ။ ဒီ setup comment ရဲ့ အပေါ်မှာ အဲဒီ agent ကို ကိုယ့် loop နဲ့ run မလား၊ managed agent နဲ့ run မလား
+      ဆိုတာ တစ်ကြောင်း ရေးကြည့်ပါ။
+      [[mark:turn-2]] ဘာကြောင့်လဲ ဆိုတာကိုလည်း ဘယ်လောက် ကြာကြာ run မလဲ၊ ဘယ်လောက် မြန်မြန် အဖြေ ပြန်ပေးရမလဲ၊
+      data ကို ဘယ်မှာ ထားခွင့်ရှိလဲ ဆိုတဲ့ မေးခွန်း သုံးခုနဲ့ စကားလုံး အနည်းငယ်စီ ထည့်ရေးပါ။
+    sources:
+      - {
+          title: "Claude Docs: Managed Agents overview",
+          url: "https://platform.claude.com/docs/en/managed-agents/overview",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-turn
+        type: editor.select
+        at: { mark: turn, offsetMs: 2400 }
+        target:
+          file: reply-assistant/managed/kb-audit-agent.ts
+          text: "// Setup, once: store agent.id and agent.version; later changes update this agent."
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ Managed Agents မှာ agent loop နဲ့ session တစ်ခုစီရဲ့ sandbox ကို Anthropic က
+      run ပေးပြီး၊ agent ရဲ့ definition၊ custom tool နဲ့ ခွင့်ပြုချက် ဆုံးဖြတ်ချက်တွေက ကိုယ်တို့ဆီမှာ ကျန်ပါတယ်။
+      [[mark:recap-2]] agent နဲ့ environment ကို တစ်ခါ ဖန်တီး၊ run တိုင်း session အသစ် ဖွင့်ပြီး event stream ကို
+      ဖတ်ပါတယ်။ beta ဖြစ်ပြီး token အပြင် runtime ကိုပါ ပေးရတာမို့၊ ကြာကြာ run ရတဲ့ အလုပ်မှာ သုံးပြီး၊ မြန်မြန်
+      ဖြေရမယ့် အလုပ်ကို ကိုယ့် loop နဲ့ ထားပါ။
+      [[mark:next]] နောက် lesson မှာတော့ ခြောက်ပတ်မြောက်ကို ရောက်ပြီး၊ Billing team ရဲ့ repository ထဲမှာ Claude
+      Code ဆိုတာ ဘာလဲ၊ chat tool နဲ့ ဘာကွာလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Managed Agents overview",
+          url: "https://platform.claude.com/docs/en/managed-agents/overview",
+        }
+    actions:
+      - id: sel-recap-agent
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: reply-assistant/managed/kb-audit-agent.ts
+          text: "export async function createAuditAgent() {"
+      - id: sel-recap-session
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: reply-assistant/managed/kb-audit-agent.ts
+          text: "export async function runAudit(agentId: string, environmentId: string) {"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
