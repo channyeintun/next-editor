@@ -1,0 +1,730 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-11-diligence
+  title: "Claude FDE 11: Diligence"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/11-working-agreement.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/11-working-agreement.md: |
+        # နေခြည် Support: AI နဲ့ အလုပ်လုပ်ပုံ သဘောတူညီချက်
+
+        support agent တွေနဲ့ support manager လှလှ အတူ ရေးထားတယ်။ 3 လ တစ်ခါ ပြန်ကြည့်မယ်။
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: three-habits
+      contentType: html
+      name: Diligence ကို ထမ်းနိုင်အောင်
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">တာဝန်ကို ထမ်းနိုင်အောင် ကူတဲ့ အလေ့အကျင့်</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term orange">ပွင့်လင်းမှု</span>AI ပါတာကို သိသင့်သူကို ပြော</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term red">Data</span>customer data ကို personal account ထဲ မထည့်</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term blue">မှတ်တမ်း</span>ဘယ်သူ စစ်ပြီး ပို့လဲ မှတ်ထား</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — who answers for the 64 replies: two wrong answers struck in red, the company in green,
+    # and the orange line is what this lesson sets up.
+    - {
+        id: w-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "အဖြေ 64 စောင်: ဘယ်သူ တာဝန်ယူမလဲ?",
+        fontSize: 36,
+      }
+    - { id: w-1, kind: text, x: 290, y: 270, width: 300, height: 35, text: "model", fontSize: 28 }
+    - {
+        id: w-1x,
+        kind: freedraw,
+        stroke: strike,
+        x: 285,
+        y: 270,
+        width: 95,
+        height: 35,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-2,
+        kind: text,
+        x: 290,
+        y: 350,
+        width: 600,
+        height: 35,
+        text: "support agent တစ်ယောက်ချင်း",
+        fontSize: 28,
+      }
+    - {
+        id: w-2x,
+        kind: freedraw,
+        stroke: strike,
+        x: 285,
+        y: 350,
+        width: 400,
+        height: 35,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-3,
+        kind: text,
+        x: 290,
+        y: 430,
+        width: 700,
+        height: 35,
+        text: "နေခြည် (စာ ပို့လိုက်တဲ့ ကုမ္ပဏီ)",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: w-3ok,
+        kind: freedraw,
+        stroke: check,
+        x: 800,
+        y: 423,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: w-4,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 790,
+        height: 38,
+        text: "ရှေ့လျှောက်: ဘယ်သူလဲ ဆိုတာ ကြိုသတ်မှတ်",
+        fontSize: 30,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဘယ်အကြံက Diligence လဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) reply တိုင်းမှာ AI ရေးတာမို့ မှားနိုင်ပါတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) ticket နဲ့ NMS ကို တိုက်စစ်ပြီးမှ ပို့",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 540,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 870,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "ပို့တဲ့သူက စာကို တာဝန်ယူ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "မပို့ခင် စစ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — the path of one reply, top to bottom: blue the AI step, green the human check (with a
+    # check stroke), violet the message sent; the owner of each step in white beside it.
+    - {
+        id: p-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "reply တစ်စောင်ရဲ့ လမ်းကြောင်း",
+        fontSize: 36,
+      }
+    - {
+        id: p-b1,
+        kind: rectangle,
+        x: 290,
+        y: 230,
+        width: 320,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 248,
+        width: 320,
+        height: 35,
+        text: "AI က draft ရေး",
+        fontSize: 28,
+      }
+    - {
+        id: p-o1,
+        kind: text,
+        x: 665,
+        y: 248,
+        width: 420,
+        height: 35,
+        text: "ဆောက်သူ FDE နဲ့ လှလှ",
+        fontSize: 28,
+      }
+    - {
+        id: p-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 430,
+        y: 305,
+        width: 40,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-b2,
+        kind: rectangle,
+        x: 290,
+        y: 360,
+        width: 320,
+        height: 70,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-l2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 378,
+        width: 320,
+        height: 35,
+        text: "ticket၊ NMS နဲ့ စစ်",
+        fontSize: 28,
+      }
+    - {
+        id: p-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 618,
+        y: 373,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-o2,
+        kind: text,
+        x: 665,
+        y: 378,
+        width: 420,
+        height: 35,
+        text: "support agent",
+        fontSize: 28,
+      }
+    - {
+        id: p-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 430,
+        y: 435,
+        width: 40,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-b3,
+        kind: rectangle,
+        x: 290,
+        y: 490,
+        width: 320,
+        height: 70,
+        rounded: true,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-l3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 508,
+        width: 320,
+        height: 35,
+        text: "customer ဆီ ပို့",
+        fontSize: 28,
+      }
+    - {
+        id: p-o3,
+        kind: text,
+        x: 665,
+        y: 508,
+        width: 420,
+        height: 35,
+        text: "ပို့ခလုတ် နှိပ်သူ",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9311
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: who-answers
+    chapter: အဖြေ ၆၄ စောင်အတွက် ဘယ်သူ တာဝန်ယူမလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ Discernment ကို လေ့လာခဲ့ပါတယ်။ AI ပြန်ပေးတဲ့ code နဲ့ customer reply ကို မယုံခင်၊ code
+      မျက်လုံးနဲ့ customer မျက်လုံး နှစ်ခုနဲ့ စစ်တာပါ။
+      [[mark:w-open]] ဒီနေ့တော့ ဒီ course ရဲ့ အစက မေးခွန်း တစ်ခုကို ပြန်မေးပါမယ်။ မုန်တိုင်းကျတဲ့ညက လိုင်းကျနေတဲ့
+      customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တဲ့ အဖြေ ၆၄ စောင်အတွက် ဘယ်သူ တာဝန်ယူရမလဲ။ support manager လှလှ
+      ရဲ့ team ထဲမှာ ဒီ မေးခွန်းကို မေးတိုင်း အားလုံး တိတ်သွားတတ်ပါတယ်။
+      [[mark:w-model]] model က တာဝန်ယူလို့ မရပါဘူး။ တောင်းပန်စာကို ရေးပေးနိုင်ပေမဲ့၊ customer ကို ကိုယ်စားပြုပြီး
+      ဖြေရှင်းပေးဖို့နဲ့ နောက်တစ်ခါ မဖြစ်အောင် အလုပ်လုပ်ပုံကို ပြောင်းဖို့ကတော့ လူတွေရဲ့ အလုပ်ပါ။ model က စာကို ရေးပေးတဲ့ program တစ်ခုပဲ ဖြစ်ပါတယ်။
+      [[mark:w-agents]] အဖြေ ပို့ခဲ့တဲ့ support agent တွေကို အပြစ်ပုံချရင်လည်း မမျှတပါဘူး။ ticket တွေ လေးဆ ဝင်နေတဲ့
+      ညမှာ စစ်ဖို့ အချိန်လည်း မရှိခဲ့သလို၊ ဘာကို စစ်ရမလဲ ဆိုတဲ့ စည်းကမ်းလည်း မရှိခဲ့ပါဘူး။
+      [[mark:w-answer]] ဒါကြောင့် အဲဒီညအတွက် တာဝန်ယူရတာက နေခြည် ကုမ္ပဏီ ကိုယ်တိုင်ပါ။ customer ဆီ ရောက်သွားတဲ့
+      စာတိုင်းက နေခြည် ရဲ့ စာ ဖြစ်လို့ပါ။
+      [[mark:w-ahead]] ဒါပေမဲ့ ရှေ့လျှောက် ဒီ မေးခွန်းကို ထပ်မေးရင် ဘယ်သူလဲ ဆိုတာ ချက်ချင်း ဖြေနိုင်အောင်
+      ကြိုသတ်မှတ်ထားရပါမယ်။ ဒါက 4D framework ရဲ့ နောက်ဆုံး အလေ့အကျင့် Diligence ပါ။ AI ကူလုပ်ပေးထားပေမဲ့၊ ထွက်သွားတဲ့
+      အလုပ်ကို ကိုယ့်အလုပ်လို့ သဘောထားပြီး ရှေ့ထွက် ဖြေရှင်းတာပါ။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+      - {
+          title: "AI Fluency for Builders (Anthropic and CodePath, public course description)",
+          url: "https://anthropic.skilljar.com/ai-fluency-for-builders",
+        }
+    actions:
+      - {
+          id: draw-w-open,
+          type: whiteboard.apply,
+          at: { mark: w-open },
+          open: true,
+          upsertIds: [w-title],
+        }
+      - {
+          id: draw-w-model,
+          type: whiteboard.apply,
+          at: { mark: w-model },
+          upsertIds: [w-1, w-1x],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-w-agents,
+          type: whiteboard.apply,
+          at: { mark: w-agents },
+          upsertIds: [w-2, w-2x],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-w-answer,
+          type: whiteboard.apply,
+          at: { mark: w-answer },
+          upsertIds: [w-3, w-3ok],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-w-ahead,
+          type: whiteboard.apply,
+          at: { mark: w-ahead },
+          upsertIds: [w-4],
+          drawMs: 1000,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ မုန်တိုင်းကျတဲ့ည ပြီးတော့ team ထဲကနေ အကြံ နှစ်ခု ထွက်လာပါတယ်။
+      ဘယ်အကြံက Diligence ကို ပြလဲ။
+      [[mark:q-a]] ပထမ အကြံက AI ရေးတဲ့ reply တိုင်းရဲ့ အောက်ဆုံးမှာ AI ရေးထားတာမို့ မှားနိုင်ပါတယ် ဆိုတဲ့ စာကြောင်း
+      တစ်ကြောင်း ထည့်တာပါ။
+      [[mark:q-b]] ဒုတိယ အကြံက support agent က draft တစ်စောင်ချင်းကို ticket နဲ့ NMS တို့နဲ့ တိုက်စစ်ပြီးမှ ပို့တာပါ။
+      lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ အကြံပါ။ ဘာကြောင့်လဲဆိုတော့ ပထမ အကြံက စစ်ရမယ့် တာဝန်ကို customer ဆီ
+      လွှဲပေးလိုက်တာ ဖြစ်လို့ပါ။ internet မရလို့ စာပို့လာတဲ့ customer က ဘယ်စာကြောင်း မှားနေလဲ ဆိုတာကို ဘယ်လိုမှ
+      မစစ်နိုင်ပါဘူး။ AI ပါတယ်လို့ ပြောတာက ပွင့်လင်းမှု ဖြစ်နိုင်ပေမဲ့၊ စစ်ဆေးမှုကိုတော့ အစားမထိုးနိုင်ပါဘူး။
+      [[mark:q-rule]] ဒါကြောင့် Diligence ရဲ့ ပထမ စည်းကမ်းက customer ဆီ ပို့တဲ့သူက စာကို တာဝန်ယူတာနဲ့၊ မပို့ခင်
+      စစ်တာ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+      - {
+          title: "Claude Docs: Reduce hallucinations (always validate critical information)",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: path
+    chapter: reply တစ်စောင်ရဲ့ လမ်းကြောင်း
+    narration: >
+      [[mark:p-open]] ဒါကို reply တစ်စောင်ရဲ့ လမ်းကြောင်းနဲ့ ကြည့်ရအောင်။ အဆင့် တစ်ခုစီမှာ ဘယ်သူ တာဝန်ယူလဲ ဆိုတာ
+      နာမည်တပ်ထားရပါမယ်။
+      [[mark:p1]] ပထမ အဆင့်က AI က draft ရေးတာပါ။ draft ရဲ့ အရည်အသွေးကို တာဝန်ယူတာက Reply assistant ကို ဆောက်မယ့်
+      FDE ဖြစ်တဲ့ ကိုယ်နဲ့၊ ဒီ use case ကို ပိုင်တဲ့ လှလှ ပါ။ use case ဆိုတာ AI နဲ့ ဖြေရှင်းမယ့် အလုပ် တစ်မျိုးပါ။ system
+      prompt၊ စစ်ချက်နဲ့ test တွေကို ကိုယ်တို့ တာဝန်ယူပြီး၊ draft တွေ မကြာခဏ မှားနေရင် ပြင်ရမှာလည်း ကိုယ်တို့ပါ။
+      [[mark:p2]] ဒုတိယ အဆင့်က စစ်တာပါ။ support agent က ticket နဲ့ NMS ကို တိုက်ပြီး draft ကို စစ်ပါတယ်။ ဒါက လူ
+      စစ်တဲ့ နေရာမို့ ကျော်လို့ မရပါဘူး။ ticket တွေ များတဲ့ညမှာ ဒီ အဆင့်ကို ကျော်ချင်စိတ် ပေါ်လာတတ်ပါတယ်။ အဲဒီအခါမှာ
+      မြန်မြန် ပို့တာထက် မှန်မှန် ပို့တာက ပိုအရေးကြီးပါတယ်။
+      [[mark:p2-fast]] ဒါပေမဲ့ စစ်တာက ရေးတာထက် ကြာနေရင် လူတွေ ကျော်ကြပါလိမ့်မယ်။ ဒါကြောင့် စစ်ရ မြန်အောင် design ဆွဲတာက
+      FDE ရဲ့ တာဝန်ပါ။ ဥပမာ Reply assistant က draft ရေးတဲ့အခါ ဘယ် NMS အချက်အလက်ကို သုံးခဲ့လဲ ဆိုတာကို draft ဘေးမှာ
+      ပြပေးရင်၊ support agent က တစ်ချက်ကြည့်ရုံနဲ့ တိုက်စစ်နိုင်ပါတယ်။
+      [[mark:p3]] တတိယ အဆင့်က customer ဆီ ပို့တာပါ။ ပို့ခလုတ်ကို နှိပ်လိုက်တဲ့ support agent က အဲဒီ စာကို တာဝန်ယူပါတယ်။
+      AI က ရေးပေးခဲ့ပေမဲ့ ပို့လိုက်တဲ့ အချိန်ကစပြီး ကိုယ့်စာ ဖြစ်သွားပါပြီ။ developer တစ်ယောက်က AI ရေးပေးတဲ့ code ကို
+      merge လုပ်လိုက်ရင်လည်း အဲဒီ code ကို အဲဒီ developer က တာဝန်ယူတာ အတူတူပါပဲ။
+      [[mark:p-point]] တာဝန်ယူတယ် ဆိုတာ မှားတိုင်း အပြစ်ပေးမယ်လို့ ဆိုလိုတာ မဟုတ်ပါဘူး။ မှားသွားရင် ဘယ်သူ ပြင်မလဲ၊
+      customer ကို ဘယ်သူ ရှင်းပြမလဲ ဆိုတာ ရှင်းနေတာကို ဆိုလိုတာပါ။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+      - {
+          title: "Anthropic Engineering: Building effective agents (test with guardrails; transparency)",
+          url: "https://www.anthropic.com/engineering/building-effective-agents",
+        }
+    actions:
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-p1,
+          type: whiteboard.apply,
+          at: { mark: p1 },
+          upsertIds: [p-b1, p-l1, p-o1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p2,
+          type: whiteboard.apply,
+          at: { mark: p2 },
+          upsertIds: [p-a1, p-b2, p-l2, p-ok, p-o2],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-p3,
+          type: whiteboard.apply,
+          at: { mark: p3 },
+          upsertIds: [p-a2, p-b3, p-l3, p-o3],
+          drawMs: 1800,
+        }
+      - { id: point-p-ok, type: whiteboard.point, at: { mark: p-point }, target: { assetId: p-b2 } }
+
+  - id: three-more
+    chapter: ပွင့်လင်းမှု၊ data နဲ့ မှတ်တမ်း
+    narration: >
+      [[mark:o-open]] ပို့သူ တာဝန်ယူတာနဲ့ မပို့ခင် စစ်တာ အပြင်၊ အဲဒီ တာဝန်ကို တကယ် ထမ်းနိုင်အောင် ကူညီတဲ့ အလေ့အကျင့်
+      သုံးခု ထပ်ရှိပါတယ်။
+      [[mark:o1]] ပထမ တစ်ခုက ပွင့်လင်းမှုပါ။ AI ပါတယ် ဆိုတာ သိဖို့ လိုတဲ့သူကို ပြောတာပါ။ customer က ဒီစာ AI ရေးတာလားလို့
+      တကယ် မေးလာရင် မှန်မှန် ပြောရပါမယ်။ CTO ဖြစ်တဲ့ အောင်အောင် ဆီ ပို့မယ့် report မှာလည်း ဘယ်အပိုင်းကို AI နဲ့
+      လုပ်ခဲ့လဲ ဆိုတာ ထည့်ရေးပါ။ framework ကို ရေးတဲ့ ပညာရှင်တွေကိုယ်တိုင်လည်း သူတို့ document ရဲ့ အဆုံးမှာ ဘယ် AI
+      ကူခဲ့လဲ၊ အားလုံးကို သူတို့ စစ်ပြီး တာဝန်ယူတယ် ဆိုတာ ရေးထားပါတယ်။
+      [[mark:o2]] ဒုတိယ တစ်ခုက data ကို ကာကွယ်တာပါ။ မုန်တိုင်းကျတဲ့ညက ticket စာသားတွေကို personal account တွေထဲ
+      ကူးထည့်ခဲ့ကြပါတယ်။ အဲဒီ စာသားတွေထဲမှာ customer ရဲ့ နာမည်၊ ဖုန်းနံပါတ်နဲ့ လိပ်စာတွေ ပါပါတယ်။ ဒါက support agent
+      တွေ ပေါ့ဆလို့ မဟုတ်ပါဘူး။ customer data ကို ဘယ်မှာ ထည့်ခွင့်ရှိလဲ ဆိုတာ ဘယ်သူမှ မသတ်မှတ်ထားခဲ့လို့ပါ။
+      [[mark:o3]] တတိယ တစ်ခုက မှတ်တမ်းပါ။ AI ရေးတဲ့ draft ကို ဘယ်သူ စစ်ပြီး ဘယ်အချိန် ပို့လဲ ဆိုတာ ticket မှာ
+      မှတ်ထားရင်၊ မှားတဲ့ အဖြေ တစ်စောင် တွေ့တဲ့အခါ ဘယ်အဆင့်မှာ လွတ်သွားလဲ ပြန်ရှာနိုင်ပါတယ်။ မုန်တိုင်းကျတဲ့ညက
+      ၆၄ စောင် ဆိုတဲ့ ဂဏန်းကိုတောင် customer တွေ ပြန်တိုင်ကြားမှ သိခဲ့ရတာပါ။ မှတ်တမ်း ရှိရင်တော့ လှလှ က အပတ်တိုင်း
+      draft နမူနာ တချို့ကို ပြန်ဖတ်ပြီး၊ ပြဿနာကို customer မတိုင်ကြားခင် ကိုယ်တိုင် အရင် တွေ့နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+      - {
+          title: "The Framework for AI Fluency, Practical Summary Document v1.1 (its closing Diligence Statement)",
+          url: "https://ringling.libguides.com/ai/framework",
+        }
+      - {
+          title: "Claude's constitution (honesty: not denying being an AI when sincerely asked)",
+          url: "https://www.anthropic.com/constitution",
+        }
+    actions:
+      - {
+          id: close-path,
+          type: whiteboard.apply,
+          at: { mark: o-open, offsetMs: -1500 },
+          open: false,
+        }
+      - { id: show-three, type: slide.show, at: { afterAction: close-path }, slideId: three-habits }
+      - { id: point-o1, type: slide.point, at: { mark: o1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-o2, type: slide.point, at: { mark: o2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-o3, type: slide.point, at: { mark: o3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: agreement
+    chapter: team ကိုယ်တိုင် ရေးတဲ့ သဘောတူညီချက်
+    narration: >
+      [[mark:a-open]] ဒီ အချက်တွေကို support team ရဲ့ AI သုံးပုံ သဘောတူညီချက်အဖြစ် ရေးကြည့်ရအောင်။ အရေးကြီးတာက
+      ဒီ စာကို FDE တစ်ယောက်တည်း ရေးပြီး ကပ်ပေးလိုက်တာ မဟုတ်ဘဲ၊ support agent တွေနဲ့ လှလှ အတူ ထိုင်ရေးတာပါ။ ကိုယ်တိုင်
+      ရေးထားတဲ့ စည်းကမ်းကို လူတွေက ပိုလိုက်နာတတ်လို့ပါ။ စာမျက်နှာ အများကြီး ရှိတဲ့ policy ထက်၊ မှတ်မိနိုင်တဲ့ စာကြောင်း
+      ငါးကြောင်းကို ရွေးပါတယ်။
+      [[mark:type-a1]] ပထမ စာကြောင်းက ပို့သူ တာဝန်ယူတယ် ဆိုတာပါ။ AI ရေးတဲ့ စာ ဖြစ်ပေမဲ့ ပို့လိုက်ရင် ကိုယ့်စာပဲ
+      ဆိုတာကို support agent တိုင်း သိထားဖို့ပါ။
+      [[mark:type-a2]] ဒုတိယ စာကြောင်းက မပို့ခင် စစ်တာပါ။ ဘာနဲ့ စစ်ရမလဲ ဆိုတာကိုပါ ရေးထားပြီး၊ မသေချာရင် မပို့ဘဲ
+      shift lead ကို မေးရမယ် ဆိုတာ ထည့်ထားပါတယ်။ အလုပ်များတဲ့ညမှာ ဆုံးဖြတ်ရ ခက်တဲ့ အချိန်အတွက်ပါ။
+      [[mark:type-a3]] တတိယ စာကြောင်းက data ပါ။ customer data ကို personal AI account ထဲ မထည့်ရပါဘူး။ ကုမ္ပဏီက
+      ခွင့်ပြုထားတဲ့ tool ရောက်လာမှ အဲဒီ tool ထဲမှာပဲ သုံးပါမယ်။
+      [[mark:type-a4]] စတုတ္ထ စာကြောင်းက ပွင့်လင်းမှုပါ။ customer က AI ရေးတာလားလို့ မေးရင် မှန်မှန် ဖြေမယ် ဆိုတာပါ။
+      [[mark:type-a5]] နောက်ဆုံး စာကြောင်းက မှတ်တမ်းပါ။ AI draft ကို သုံးတိုင်း ဘယ်သူ စစ်ပြီး ပို့လဲ ticket မှာ
+      မှတ်ထားပါမယ်။ ဒီ သဘောတူညီချက်ကို သုံးလ တစ်ခါ ပြန်ကြည့်ပြီး လိုသလို ပြင်ပါမယ်။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+      - {
+          title: "Creative Commons CC BY-NC-SA 4.0 licence",
+          url: "https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en",
+        }
+    actions:
+      - { id: close-three, type: slide.close, at: { mark: a-open } }
+      - {
+          id: open-agreement,
+          type: workspace.openFile,
+          at: { afterAction: close-three },
+          path: notebook/11-working-agreement.md,
+        }
+      - id: type-a1
+        type: editor.type
+        at: { mark: type-a1 }
+        cadence: line-by-line
+        target: { file: notebook/11-working-agreement.md, after: "3 လ တစ်ခါ ပြန်ကြည့်မယ်။\n" }
+        text: "\n1. customer ဆီ ပို့တဲ့သူက အဲဒီ reply ကို တာဝန်ယူတယ်။ AI ရေးတာလည်း ကိုယ့်စာပဲ\n"
+      - id: type-a2
+        type: editor.type
+        at: { mark: type-a2 }
+        cadence: line-by-line
+        target: { file: notebook/11-working-agreement.md, after: "AI ရေးတာလည်း ကိုယ့်စာပဲ\n" }
+        text: "2. မပို့ခင် ticket နဲ့ NMS ကို တိုက်စစ်တယ်။ မသေချာရင် မပို့ဘဲ shift lead ကို မေး\n"
+      - id: type-a3
+        type: editor.type
+        at: { mark: type-a3 }
+        cadence: line-by-line
+        target: { file: notebook/11-working-agreement.md, after: "shift lead ကို မေး\n" }
+        text: "3. customer data ကို personal AI account ထဲ မထည့်။ ကုမ္ပဏီ tool ရောက်မှ အဲဒီမှာပဲ\n"
+      - id: type-a4
+        type: editor.type
+        at: { mark: type-a4 }
+        cadence: line-by-line
+        target: { file: notebook/11-working-agreement.md, after: "ရောက်မှ အဲဒီမှာပဲ\n" }
+        text: "4. customer က AI ရေးတာလားလို့ မေးရင် မှန်မှန် ဖြေတယ်\n"
+      - id: type-a5
+        type: editor.type
+        at: { mark: type-a5 }
+        cadence: line-by-line
+        target: { file: notebook/11-working-agreement.md, after: "မှန်မှန် ဖြေတယ်\n" }
+        text: "5. AI draft သုံးတိုင်း ဘယ်သူ စစ်ပြီး ပို့လဲ ticket မှာ မှတ်တယ်\n"
+      - id: expect-a1
+        type: expect.file
+        at: { afterAction: type-a5 }
+        path: notebook/11-working-agreement.md
+        contains: "1. customer ဆီ ပို့တဲ့သူက အဲဒီ reply ကို တာဝန်ယူတယ်။ AI ရေးတာလည်း ကိုယ့်စာပဲ\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် team ရဲ့ သဘောတူညီချက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် team အတွက် AI သုံးပုံ သဘောတူညီချက်ရဲ့ ပထမ
+      သုံးကြောင်းကို ဒီ file ရဲ့ အောက်မှာ ရေးကြည့်ပါ။ AI နဲ့ လုပ်တဲ့ အလုပ်ကို ဘယ်သူ ပို့သလဲ ဒါမှမဟုတ် ship လုပ်သလဲ၊
+      မပို့ခင် ဘာကို စစ်မလဲ၊ ဘယ် data ကို ဘယ်မှာ ထည့်ခွင့်ရှိလဲ ဆိုတဲ့ သုံးခုနဲ့ စလို့ ရပါတယ်။
+      [[mark:turn-2]] ပြီးရင် ဒီ မူကြမ်းကို ကိုယ့် team နဲ့ အတူ ပြန်ဖတ်ပြီး ပြင်ကြည့်ပါ။ ကိုယ် တစ်ယောက်တည်း ရေးထားတဲ့
+      စည်းကမ်းထက်၊ team က ကိုယ်တိုင် ပြင်ထားတဲ့ စည်းကမ်းကို လူတွေ ပိုလိုက်နာတတ်ပါတယ်။
+      [[mark:turn-3]] developer team ဆိုရင် ဥပမာ AI ရေးတဲ့ code ကို merge လုပ်သူက ရှင်းပြနိုင်ရမယ်၊ production data
+      ကို AI tool ထဲ မထည့်ရဘူး၊ AI နဲ့ ရေးတဲ့ အပိုင်းကို pull request မှာ ပြောထားမယ် ဆိုတာမျိုး ဖြစ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+    actions:
+      - id: sel-a1
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/11-working-agreement.md
+          text: "1. customer ဆီ ပို့တဲ့သူက အဲဒီ reply ကို တာဝန်ယူတယ်။ AI ရေးတာလည်း ကိုယ့်စာပဲ"
+      - id: sel-intro
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/11-working-agreement.md
+          text: "support agent တွေနဲ့ support manager လှလှ အတူ ရေးထားတယ်။"
+      - id: sel-a5
+        type: editor.select
+        at: { mark: turn-3 }
+        target:
+          file: notebook/11-working-agreement.md
+          text: "5. AI draft သုံးတိုင်း ဘယ်သူ စစ်ပြီး ပို့လဲ ticket မှာ မှတ်တယ်"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ အဖြေ ၆၄ စောင်အတွက် တာဝန်ယူရတာက နေခြည် ကုမ္ပဏီပါ။ ရှေ့လျှောက်မှာတော့ ပို့သူက စာကို
+      တာဝန်ယူပြီး မပို့ခင် စစ်ရပါမယ်။ ပွင့်လင်းမှု၊ data ကို ကာကွယ်တာနဲ့ မှတ်တမ်း ထားတာက အဲဒီ တာဝန်ကို ထမ်းနိုင်အောင်
+      ကူညီပါတယ်။ ဒါကို team ကိုယ်တိုင် ရေးထားတာက Diligence ပါ။
+      [[mark:recap-2]] ဒီ lesson နဲ့ 4D framework ရဲ့ အလေ့အကျင့် လေးခု ပြီးသွားပါပြီ။ ဘာကို ပေးမလဲ၊ ဘယ်လို ပြောမလဲ၊
+      ဘယ်လို စစ်မလဲ၊ ဘယ်သူ တာဝန်ယူမလဲ ဆိုတဲ့ မေးခွန်း လေးခုကို AI နဲ့ အလုပ်လုပ်တိုင်း မေးပါ။ မုန်တိုင်းကျတဲ့ညကို ပြန်ကြည့်ရင်
+      ဒီ လေးခုလုံး မရှိခဲ့ပါဘူး။ အဖြေ ရေးတာကို AI ကို ပေးဖို့ ဘယ်သူမှ မဆုံးဖြတ်ခဲ့သလို၊ လိုင်းကျနေတာကို model ကို မပြောပြခဲ့၊
+      draft ကို မစစ်ခဲ့၊ ဘယ်သူ တာဝန်ယူမလဲ ဆိုတာလည်း မသတ်မှတ်ခဲ့ပါဘူး။
+      [[mark:next]] နောက် lesson မှာတော့ prompt တစ်ကြောင်းမှ မရေးခင် ချရမယ့် ဆုံးဖြတ်ချက် လေးခုထဲက ပထမဆုံး ဖြစ်တဲ့
+      entry point ကို လေ့လာပါမယ်။ entry point ဆိုတာ Claude ကို ဘယ်နေရာကနေ သုံးမလဲ ဆိုတာပါ။ နေခြည် မှာ အလုပ်
+      မတူတဲ့ အဖွဲ့ သုံးဖွဲ့အတွက် ဘယ် entry point ကို ရွေးမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+    actions:
+      - id: sel-a2
+        type: editor.select
+        at: { mark: recap-2, offsetMs: -7000 }
+        target:
+          file: notebook/11-working-agreement.md
+          text: "2. မပို့ခင် ticket နဲ့ NMS ကို တိုက်စစ်တယ်။"
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/11-working-agreement.md
+          text: "# နေခြည် Support: AI နဲ့ အလုပ်လုပ်ပုံ သဘောတူညီချက်"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
