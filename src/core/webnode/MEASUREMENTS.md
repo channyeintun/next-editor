@@ -222,7 +222,7 @@ Worker version `fc77d892`, runtime build `mwn9j7yp`, head `2ac90ae7`.
   local Worker in the same mode (the harness turns the browser's HTTP cache
   off there, so each process start downloads the process script again).
 
-## 8. The Rust rewriter (the same day, after the deploy; not deployed)
+## 8. The Rust rewriter (the same day; deployed that night)
 
 The entries of large modules made at once by a Rust rewriter
 (process/loader/rewriter) instead of by sucrase a minute into a first visit.
@@ -245,6 +245,12 @@ The rewrite itself, on Vite 5's main chunk (2.09 MB): 65 ms with the Rust
 rewriter, the loader's other steps included (measured under Bun). sucrase
 took 223 ms on a 1.5 MB module (under Node 22), and held some 55 MB of heap
 after it.
+
+Deployed as Worker version `d988dd5d`, runtime build `mwnnxh5k`, head
+`29c19dc9`. It went out on the harness measurements above, the gate and one
+first visit of the real editor on a local Worker serving `dist/` (preview after
+63 s): `editor-check.ts` could not finish that night, before or after the
+deploy, because `pnpm install` kept stalling on the npm registry.
 
 The scripts: `prepare.js`, the worker that carries the rewriter, is 1.49 MB
 and is loaded only when a large module has no entry yet; `process.js` and

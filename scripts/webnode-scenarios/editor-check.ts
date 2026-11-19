@@ -17,8 +17,9 @@
 //
 //   bun scripts/webnode-scenarios/editor-check.ts https://nexteditor.dev
 //
-// VISITS=1 opens it once and skips what needs a second visit. Exit status 0
-// only when every check held.
+// VISITS=1 opens it once and skips what needs a second visit. PREVIEW_WAIT=<s>
+// (240) is how long a preview may take: the install is the registry's speed.
+// Exit status 0 only when every check held.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -136,14 +137,22 @@ try {
       .catch(() => undefined);
     // The preview's frame exists only while its panel is open, and the panel starts closed.
     await page.getByRole("button", { name: "Preview", exact: true }).click({ timeout: 60_000 });
-    const shown = await previewShown(page, 240_000);
+    const shown = await previewShown(page, Number(process.env.PREVIEW_WAIT ?? 240) * 1000);
+    // What the editor's terminals show, for a preview that never came.
+    const terminals = shown
+      ? ""
+      : await page.evaluate(() =>
+          [...document.querySelectorAll(".xterm-rows")]
+            .map((rows) => (rows as HTMLElement).innerText.replace(/\n{2,}/g, "\n").slice(-1200))
+            .join("\n---\n"),
+        );
     check(
       `the preview shows the default project's page${shown ? ` (${(shown.ms / 1000).toFixed(1)} s, ${shown.url})` : ""}`,
       shown !== null,
       `frames: ${page
         .frames()
         .map((frame) => frame.url().slice(0, 80))
-        .join(" | ")}`,
+        .join(" | ")}\n     the terminals show:\n${terminals}`,
     );
     check(
       "the runtime is webnode, of the build the server names",
