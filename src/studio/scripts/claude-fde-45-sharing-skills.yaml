@@ -1,0 +1,609 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-45-sharing-skills
+  title: "Claude FDE 45: Skill ကို မျှဝေခြင်းနဲ့ ပြဿနာရှာခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/45-skill-troubleshooting.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/45-skill-troubleshooting.md: |
+        # Skill အလုပ်မလုပ်ရင် ပထမဆုံး စစ်ရမယ့်အရာ
+
+        | ဖြစ်နေတာ | ပထမဆုံး စစ်ရမယ့်အရာ |
+        |---|---|
+        | skill ကို စာရင်းထဲ မမြင်ရ | `/skills`။ file က `.claude/skills/<name>/SKILL.md` ဖြစ်ရမယ် |
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: skills-screen
+      contentType: html
+      name: Skills command
+      content: |
+        <style>
+          .shot { position: relative; width: 100vw; height: 100vh; background: #0b0d12; }
+          .shot img { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; object-fit: contain; }
+        </style>
+        <div class="shot"><img src="data:image/webp;base64,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" alt="Claude Code: the skills view lists one project skill, outage-notice, with its scope and size"></div>
+  whiteboardAssets:
+    # Board 1 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 820,
+        height: 45,
+        text: "နာမည်တူ skill နှစ်ခု၊ ဘယ်ဟာ run မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) project ထဲက outage-notice",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) home folder ထဲက outage-notice",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 520,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 850,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "managed > personal > project",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "plugin skill: prefix ပါလို့ မတိုက်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — three rings of sharing (blue boundaries, dashed): project inside plugin inside
+    # managed; on the right, red: the other surfaces do not sync.
+    - {
+        id: r-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "Skill ကို မျှဝေတဲ့ အဝိုင်း သုံးခု",
+        fontSize: 36,
+      }
+    - {
+        id: r-outer,
+        kind: ellipse,
+        x: 290,
+        y: 215,
+        width: 520,
+        height: 410,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-outer-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 250,
+        width: 520,
+        height: 35,
+        text: "managed: စက်တိုင်း",
+        fontSize: 28,
+      }
+    - {
+        id: r-mid,
+        kind: ellipse,
+        x: 345,
+        y: 300,
+        width: 410,
+        height: 290,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-mid-l,
+        kind: text,
+        align: center,
+        x: 345,
+        y: 330,
+        width: 410,
+        height: 35,
+        text: "plugin: team တွေ",
+        fontSize: 28,
+      }
+    - { id: r-in, kind: ellipse, x: 410, y: 390, width: 280, height: 160, strokeColor: "#1971c2" }
+    - {
+        id: r-in-l,
+        kind: text,
+        align: center,
+        x: 410,
+        y: 452,
+        width: 280,
+        height: 35,
+        text: "project: repo",
+        fontSize: 28,
+      }
+    - {
+        id: r-app,
+        kind: text,
+        x: 840,
+        y: 360,
+        width: 250,
+        height: 35,
+        text: "Claude app · API",
+        fontSize: 28,
+      }
+    - {
+        id: r-app-l,
+        kind: text,
+        x: 840,
+        y: 410,
+        width: 250,
+        height: 35,
+        text: "သီးခြား upload",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9345
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: တစ်ပတ်အတွင်း ပေါ်လာတဲ့ ပြဿနာ သုံးခု
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ လိုအပ်ချက် တစ်ခုအတွက် CLAUDE.md၊ skill၊ subagent၊ hook နဲ့ MCP server ထဲက ဘယ်ဟာကို ရွေးမလဲ
+      ဆိုတာကို မေးခွန်း တစ်ခုစီနဲ့ ဆုံးဖြတ်ခဲ့ပါတယ်။
+      [[mark:sel-teams]] outage notice skill ကို Billing repository ထဲ commit လုပ်ပြီး တစ်ပတ်အကြာမှာ ပြဿနာ သုံးခု
+      ပေါ်လာပါတယ်။ ပထမ တစ်ခုက Network Tools developer တစ်ယောက်ဆီကပါ။ သူ့ repository ထဲမှာ Claude Code ကို notice
+      ရေးခိုင်းတော့ skill ကို မတွေ့ပါဘူး။
+      [[mark:story-2]] ဒုတိယ တစ်ခုက support lead တစ်ယောက်ဆီကပါ။ Claude app ထဲမှာ notice ရေးခိုင်းတော့ credit စည်းကမ်း
+      မပါတဲ့ notice ကို ရပါတယ်။ app ထဲမှာ ဒီ skill လုံးဝ မရှိလို့ပါ။
+      [[mark:story-3]] တတိယ တစ်ခုက skill ကို ရေးခဲ့တဲ့ Billing developer ကိုယ်တိုင် ဆီက မေးခွန်းပါ။ သူက skill ကို
+      စမ်းတုန်းက ကိုယ့် home folder ထဲက skills folder မှာ credit စည်းကမ်း မပါသေးတဲ့ မူကြမ်း တစ်ခု အရင် ရေးခဲ့ပြီး၊
+      အဲဒီ မူကြမ်းကို ဖျက်ဖို့ မေ့သွားခဲ့ပါတယ်။ အခု သူ့ စက်မှာ နာမည်တူ skill နှစ်ခု ရှိနေတော့၊ Claude Code က ဘယ်ဟာကို
+      သုံးမလဲလို့ မေးလာပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills (share skills)",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { scene: start }, path: README.md }
+      - id: sel-teams
+        type: editor.select
+        at: { mark: sel-teams }
+        target:
+          file: README.md
+          text: "- developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools"
+      - id: sel-support
+        type: editor.select
+        at: { mark: story-2 }
+        target:
+          file: README.md
+          text: "- တစ်ရက် ticket 1,800 ခန့်"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] တတိယ ပြဿနာကို အရင် ကြည့်ရအောင်။ မေးခွန်း တစ်ခု မေးပါရစေ။ အဲဒီ developer ရဲ့ စက်ပေါ်မှာ outage
+      notice ဆိုတဲ့ နာမည်တူ skill နှစ်ခု ရှိနေပါတယ်။ Claude Code က ဘယ်ဟာကို သုံးမလဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက team နဲ့ မျှသုံးတဲ့ project ထဲက skill ပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုက သူ့ home folder ထဲက personal skill မူကြမ်း အဟောင်းပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ နာမည်တူ skill တွေ ရှိရင် docs အရ personal skill
+      က project skill ကို အနိုင်ယူလို့ပါ။ ဒါကြောင့် team ထဲက တခြားသူတွေ notice မှန်မှန် ရနေချိန်မှာ၊ သူ့ စက်မှာတော့
+      credit စည်းကမ်း မပါတဲ့ မူကြမ်း အဟောင်းက run နေမှာပါ။ ပြင်ဖို့
+      နည်းက personal မူကြမ်းကို ဖျက်တာ၊ ဒါမှမဟုတ် နာမည် ပြောင်းတာပါ။
+      [[mark:q-rule]] အစဉ်က ကုမ္ပဏီက managed settings နဲ့ ထည့်တဲ့ skill အရင်၊ ပြီးရင် personal၊ ပြီးရင် project ပါ။
+      plugin ထဲက skill တွေကတော့ plugin နာမည်ကို ရှေ့မှာ တွဲထားလို့ ဘယ်တော့မှ မတိုက်ပါဘူး။ command file အဟောင်းနဲ့
+      နာမည်တူရင်တော့ skill က အနိုင်ရပါတယ်။ repository ထဲက subfolder တစ်ခုမှာ နာမည်တူ skill ရှိရင်လည်း မတိုက်ဘဲ၊
+      folder နာမည်ကို ရှေ့က တွဲပြီး နှစ်ခုလုံး load ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills (where skills live, priority)",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+      - {
+          title: "Claude Code Docs: Extend Claude Code (features overview)",
+          url: "https://code.claude.com/docs/en/features-overview",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz, offsetMs: 2500 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: rings
+    chapter: မျှဝေတဲ့ အဝိုင်း သုံးခု
+    narration: >
+      [[mark:r-open]] ကျန်တဲ့ ပြဿနာ နှစ်ခုကတော့ skill ကို ဘယ်အထိ မျှဝေထားလဲ ဆိုတဲ့ ပြဿနာပါ။ မျှဝေတဲ့ နည်းကို အဝိုင်း
+      သုံးခုနဲ့ ဆွဲကြည့်ရအောင်။
+      [[mark:r-in]] အတွင်းဆုံး အဝိုင်းက project ပါ။ repository ရဲ့ skills folder ကို commit လုပ်ရင် အဲဒီ repository ကို
+      သုံးတဲ့သူ အားလုံး ရပါတယ်။ ဒါပေမဲ့ repository တစ်ခုတည်းအတွက်ပါပဲ။ Network Tools developer ရဲ့ repository မှာ မတွေ့တာ
+      ဒါကြောင့်ပါ။
+      [[mark:r-mid]] အလယ် အဝိုင်းက plugin ပါ။ plugin ဆိုတာ skill၊ hook၊ agent၊ MCP server တွေကို တစ်ထုပ်တည်း ထုပ်ပြီး
+      install လုပ်လို့ရအောင် လုပ်ထားတာပါ။ plugin ထဲက skills folder မှာ ထည့်ရင် plugin ကို enable လုပ်ထားတဲ့ team တိုင်း
+      ရပါတယ်။ command နာမည်ရှေ့မှာ plugin နာမည် ပါလာပါတယ်။ ဒါကြောင့် Billing က outage notice skill ကို team နှစ်ခု
+      သုံးနေတဲ့ နေခြည် ရဲ့ plugin ထဲ ရွှေ့ပြီး၊ project ထဲက copy ကို ဖယ်ဖို့ ဆုံးဖြတ်ပါတယ်။
+      [[mark:r-outer]] အပြင်ဆုံး အဝိုင်းက managed settings ပါ။ managed settings ဆိုတာ ကုမ္ပဏီက စက်တိုင်းကို ချပေးပြီး user
+      က ပြောင်းလို့ မရတဲ့ setting တွေပါ။ managed settings folder ထဲက skills folder မှာ ထားရင် ကုမ္ပဏီ တစ်ခုလုံးရဲ့ Claude
+      Code မှာ ရောက်ပါတယ်။ နေခြည် မှာ managed settings ကို မသုံးသေးလို့ ဒီ အဝိုင်းကို နောက်မှ စဉ်းစားပါမယ်။
+      [[mark:r-app]] ဒုတိယ ပြဿနာရဲ့ အဖြေက အဝိုင်းတွေ အပြင်မှာပါ။ custom skill တွေက Claude app၊ API နဲ့ Claude
+      Code ကြားမှာ sync မဖြစ်ပါဘူး။ support lead တွေ သုံးဖို့ဆိုရင် Claude app မှာ သီးခြား upload လုပ်ရပါတယ်။ upload
+      လုပ်တဲ့အခါ frontmatter မှာ name၊ description အပါအဝင် field အနည်းငယ်ကိုပဲ လက်ခံပြီး၊ တခြား field ပါရင် error
+      တက်ပါတယ်။ ဘယ်အဝိုင်းမှာပဲ ဖြစ်ဖြစ်၊ ယုံကြည်ရတဲ့ နေရာက skill ကိုပဲ သုံးပါ။ skill တစ်ခုက Claude ကို code run
+      ခိုင်းနိုင်လို့ပါ။
+      [[mark:r-cloud]] နောက်ထပ် သတိထားစရာ တစ်ခုက cloud session တွေပါ။ Cowork နဲ့ cloud session တွေက ကိုယ့် home folder
+      ထဲက skill တွေကို မဖတ်ပါဘူး။ အဲဒီမှာ သုံးချင်ရင် Claude account မှာ skill ကို ဖွင့်ထားရမလား၊ repository ထဲ commit
+      လုပ်ရမလား ဆိုတာ ရွေးရပါတယ်။
+      [[mark:r-move]] ဒါဆို Billing ရဲ့ ဆုံးဖြတ်ချက်ကို ပြန်ကြည့်ရအောင်။ outage notice folder တစ်ခုလုံးကို plugin ရဲ့ skills
+      folder ထဲ ရွှေ့လိုက်ပါတယ်။ Network Tools က plugin ကို update လုပ်လိုက်တာနဲ့ skill ကို ရပြီး၊ ကိုယ်တိုင် ခေါ်ချင်ရင်
+      plugin နာမည်နဲ့ skill နာမည်ကို တွဲထားတဲ့ command ကို သုံးရပါတယ်။ support lead တွေအတွက်တော့ Claude app မှာ
+      သီးခြား upload လုပ်ရမှာမို့၊ အဲဒီ copy ကို support manager လှလှ ရဲ့ team က ပိုင်ပြီး ထိန်းဖို့ သတ်မှတ်ပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills (share skills)",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+      - {
+          title: "Claude Code Docs: Plugins reference (components)",
+          url: "https://code.claude.com/docs/en/plugins/components",
+        }
+      - {
+          title: "Claude Docs: Agent Skills overview (where skills work, security)",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview",
+        }
+    actions:
+      - {
+          id: draw-r-open,
+          type: whiteboard.apply,
+          at: { mark: r-open },
+          clear: true,
+          upsertIds: [r-title],
+        }
+      - {
+          id: draw-r-in,
+          type: whiteboard.apply,
+          at: { mark: r-in },
+          upsertIds: [r-in, r-in-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-r-mid,
+          type: whiteboard.apply,
+          at: { mark: r-mid },
+          upsertIds: [r-mid, r-mid-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-r-outer,
+          type: whiteboard.apply,
+          at: { mark: r-outer },
+          upsertIds: [r-outer, r-outer-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-r-app,
+          type: whiteboard.apply,
+          at: { mark: r-app },
+          upsertIds: [r-app, r-app-l],
+          drawMs: 1200,
+        }
+      - {
+          id: point-r-in,
+          type: whiteboard.point,
+          at: { mark: r-cloud },
+          target: { assetId: r-in-l },
+        }
+      - {
+          id: point-r-mid,
+          type: whiteboard.point,
+          at: { mark: r-move },
+          target: { assetId: r-mid-l },
+        }
+
+  - id: listed
+    chapter: ဘယ် skill တွေ ရောက်နေလဲ
+    narration: >
+      [[mark:l-open]] ပြဿနာ ရှာတဲ့အခါ ပထမဆုံး လုပ်ရမှာက ဘယ် skill တွေ တကယ် ရောက်နေလဲ ဆိုတာ ကြည့်တာပါ။ ဒီ screen မှာ Billing
+      repository ထဲမှာ skills command ကို ဖွင့်ထားတာကို ဒီလို မြင်ရပါတယ်။
+      [[mark:l-skill]] outage notice skill ကို project skill အနေနဲ့ ပြထားပါတယ်။ project၊ user နဲ့ plugin ကလာတဲ့ skill
+      တွေကို ဒီ စာရင်းမှာ ပြတာမို့၊ developer ရဲ့ စက်မှာ ဒီ စာရင်းကို ကြည့်ရင် ဘယ်နေရာက skill လဲ ဆိုတာ ချက်ချင်း
+      မြင်ရပါမယ်။
+      [[mark:l-keys]] အပေါ်က စာကြောင်းမှာ key တွေကို ပြထားပါတယ်။ space key နဲ့ skill တစ်ခုချင်း ဘယ်လောက် မြင်ရမလဲ
+      ပြောင်းလို့ရပြီး၊ t key နဲ့ token အလိုက် စီကြည့်လို့ ရပါတယ်။
+      [[mark:l-size]] ဘေးက token ခန့်မှန်းချက်ကလည်း အသုံးဝင်ပါတယ်။ skill description တွေအတွက် နေရာက context window ရဲ့
+      တစ်ရာခိုင်နှုန်းပဲ ရှိလို့ပါ။ skill တွေ များလာရင် description တွေ ပြတ်သွားနိုင်ပါတယ်။ context command မှာလည်း
+      skill စာရင်းရဲ့ အရွယ်ကို ပြပြီး၊ recent version တွေမှာ skill doctor command က skill တစ်ခုစီရဲ့ ကုန်ကျမှုနဲ့
+      ဘယ်တော့မှ မသုံးဖူးတဲ့ skill တွေကို ပြပေးပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Commands (skills, context, doctor)",
+          url: "https://code.claude.com/docs/en/commands",
+        }
+      - {
+          title: "Claude Code Docs: Debug your configuration",
+          url: "https://code.claude.com/docs/en/debug-your-config",
+        }
+    actions:
+      - {
+          id: close-rings,
+          type: whiteboard.apply,
+          at: { mark: l-open, offsetMs: -1400 },
+          open: false,
+        }
+      - {
+          id: show-skills,
+          type: slide.show,
+          at: { mark: l-open, offsetMs: -700 },
+          slideId: skills-screen,
+        }
+      - {
+          id: point-l-title,
+          type: slide.point,
+          at: { mark: l-open, offsetMs: 5500 },
+          target: { x: 0.086, y: 0.553 },
+        }
+      - {
+          id: point-l-skill,
+          type: slide.point,
+          at: { mark: l-skill },
+          target: { x: 0.152, y: 0.765 },
+        }
+      - { id: point-l-keys, type: slide.point, at: { mark: l-keys }, target: { x: 0.17, y: 0.588 } }
+      - { id: point-l-size, type: slide.point, at: { mark: l-size }, target: { x: 0.34, y: 0.765 } }
+
+  - id: table
+    chapter: ပြဿနာ ရှာတဲ့ ဇယား
+    narration: >
+      [[mark:d-open]] ဒါဆို Billing နဲ့ Network Tools အတွက် ဖြစ်နေတာ တစ်ခုကို ပထမဆုံး ဘာစစ်ရမလဲ ဆိုတဲ့ ဇယား ရေးကြည့်ရအောင်။
+      ပထမ အတန်းက စာရင်းထဲ မမြင်ရတာပါ။ docs အရ skill file တစ်ခုတည်းကို skills folder ထဲ တိုက်ရိုက် ထားရင် load မဖြစ်ပါဘူး။
+      folder တစ်ခုထဲမှာ SKILL.md ရှိရပါမယ်။
+      [[mark:type-auto]] Claude က အလိုအလျောက် မသုံးရင် description ထဲမှာ user တွေ တကယ် ပြောမယ့် စကားလုံး ပါမပါ စစ်ပါ။
+      command နဲ့ ကိုယ်တိုင် ခေါ်လို့ အလုပ်လုပ်ပြီး အလိုအလျောက် မရွေးဘူး ဆိုရင်တော့ frontmatter ရဲ့ YAML မှားနေတာ
+      ဖြစ်နိုင်ပါတယ်။ အဲဒီအခါ စာကိုယ်က metadata မပါဘဲ load ဖြစ်လို့ပါ။ debug mode နဲ့ run ရင် parse error ကို မြင်ရပါတယ်။
+      [[mark:auto-2]] docs ကလည်း Claude ကို ဘယ် skill
+      တွေ ရနိုင်လဲလို့ တိုက်ရိုက် မေးကြည့်ဖို့၊ request ကို စကားလုံး ပြောင်းပြီး ပြန်ခိုင်းကြည့်ဖို့ အကြံပေးပါတယ်။
+      [[mark:type-often]] ပြောင်းပြန်အနေနဲ့ မလိုတဲ့ task မှာပါ ဝင်သုံးနေရင် description ကို ပိုကျဉ်းအောင် ရေးပါ။ ဒါမှမဟုတ် လူကပဲ
+      ခေါ်ရမယ့် skill ဆိုရင် disable model invocation ကို true ထားပါ။
+      [[mark:type-follow]] session ကြာလာတော့ skill ကို မလိုက်နာတော့ဘူး ဆိုရင်၊ မဖြစ်မနေ စည်းကမ်းကို hook ထဲ ရွှေ့ပါ။ context
+      ချုံ့ပြီးနောက်မှာ skill ကို ပြန်ခေါ်ပေးတာလည်း ကူညီပါတယ်။
+      [[mark:type-name]] တခြား version run နေရင် နာမည်တူ skill ကို ရှာပါ။ မေးခွန်းထဲက developer ရဲ့ ပြဿနာပါ။ description
+      တွေ ပြတ်နေရင်တော့ listing budget ကို settings မှာ မြှင့်လို့ ရပါတယ်။ ခဏခဏ မသုံးတဲ့ skill တွေကို နာမည်ပဲ ပြအောင်
+      ထားတာလည်း နောက်ထပ် နည်းပါ။
+      [[mark:sel-name]] ဒီ ဇယားကို Network Tools နဲ့ မျှသုံးမှာမို့ အတန်း တစ်ခုစီမှာ ပထမဆုံး စစ်ရမယ့် အရာ တစ်ခုတည်းကိုပဲ
+      ရေးထားပါတယ်။ ပြဿနာ ဖြစ်တိုင်း docs ကို အစကနေ ပြန်ဖတ်စရာ မလိုဘဲ၊ ဘယ်ကနေ စရမလဲ သိနေဖို့ပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills (troubleshooting)",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+      - {
+          title: "Claude Code Docs: Debug your configuration",
+          url: "https://code.claude.com/docs/en/debug-your-config",
+        }
+    actions:
+      - { id: close-skills, type: slide.close, at: { mark: d-open, offsetMs: -900 } }
+      - {
+          id: open-doc,
+          type: workspace.openFile,
+          at: { afterAction: close-skills },
+          path: notebook/45-skill-troubleshooting.md,
+        }
+      - id: sel-row1
+        type: editor.select
+        at: { mark: d-open, offsetMs: 6000 }
+        target:
+          file: notebook/45-skill-troubleshooting.md
+          text: "`.claude/skills/<name>/SKILL.md`"
+      - id: type-auto
+        type: editor.type
+        at: { mark: type-auto }
+        cadence: line-by-line
+        target: { file: notebook/45-skill-troubleshooting.md, after: "/SKILL.md` ဖြစ်ရမယ် |\n" }
+        text: "| Claude က အလိုအလျောက် မသုံး | description ထဲမှာ user ပြောမယ့် စကားလုံး ပါလား |\n| `/name` နဲ့မှ အလုပ်လုပ် | frontmatter YAML မှားနေလား: `claude --debug` |\n"
+      - id: type-often
+        type: editor.type
+        at: { mark: type-often }
+        cadence: line-by-line
+        target: { file: notebook/45-skill-troubleshooting.md, after: "`claude --debug` |\n" }
+        text: "| မလိုတဲ့ task မှာပါ သုံး | description ကို ကျဉ်း၊ ဒါမှမဟုတ် `disable-model-invocation: true` |\n"
+      - id: type-follow
+        type: editor.type
+        at: { mark: type-follow }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/45-skill-troubleshooting.md,
+            after: "`disable-model-invocation: true` |\n",
+          }
+        text: "| ကြာလာရင် မလိုက်နာ | မဖြစ်မနေ စည်းကမ်းကို hook ထဲ ရွှေ့ |\n"
+      - id: type-name
+        type: editor.type
+        at: { mark: type-name }
+        cadence: line-by-line
+        target: { file: notebook/45-skill-troubleshooting.md, after: "စည်းကမ်းကို hook ထဲ ရွှေ့ |\n" }
+        text: "| တခြား version run နေ | နာမည်တူ skill: managed > personal > project |\n| description တွေ ပြတ်နေ | listing budget: `skillListingBudgetFraction` |\n"
+      - id: expect-name
+        type: expect.file
+        at: { afterAction: type-name }
+        path: notebook/45-skill-troubleshooting.md
+        contains: "| တခြား version run နေ | နာမည်တူ skill: managed > personal > project |\n"
+      - id: sel-check-col
+        type: editor.select
+        at: { mark: sel-name }
+        target:
+          file: notebook/45-skill-troubleshooting.md
+          text: "ပထမဆုံး စစ်ရမယ့်အရာ |"
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် team မှာ ရှိတဲ့၊ ဒါမှမဟုတ် ရေးချင်တဲ့ skill တစ်ခုကို ရွေးပါ။
+      [[mark:turn-2]] lesson ကို pause လုပ်ပြီး၊ ဒီ ဇယားအောက်မှာ အဲဒီ skill ကို project၊ plugin၊ managed ထဲက ဘယ်အဝိုင်းမှာ
+      ထားမလဲ ဆိုတာနဲ့ ဘာကြောင့်လဲ ဆိုတာကို တစ်ကြောင်း ရေးကြည့်ပါ။ ဘယ်သူတွေ သုံးရမလဲ၊ Claude app မှာပါ လိုလား ဆိုတာကို
+      အရင် မေးကြည့်ပါ။ ကိုယ့် home folder ထဲမှာ နာမည်တူ မူကြမ်း ကျန်နေလား ဆိုတာလည်း စစ်ကြည့်ပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills (share skills)",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+    actions:
+      - id: sel-symptom
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/45-skill-troubleshooting.md
+          text: "| ဖြစ်နေတာ | ပထမဆုံး စစ်ရမယ့်အရာ |"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ ပြဿနာ သုံးခုစလုံးက skill ကို ဘယ်မှာ ထားလဲ ဆိုတဲ့ ပြဿနာပါ။ project၊ plugin၊
+      managed ဆိုတဲ့ အဝိုင်း သုံးခုထဲက လိုတဲ့ အဝိုင်းမှာ ထားပြီး၊ Claude app အတွက် သီးခြား upload လုပ်ရပါတယ်။ နာမည်တူရင်
+      personal က project ကို အနိုင်ယူပါတယ်။
+      [[mark:recap-2]] skill အလုပ်မလုပ်ရင် skills command နဲ့ ဘာရောက်နေလဲ အရင် ကြည့်ပြီး၊ ဒီ ဇယားနဲ့ ပထမဆုံး စစ်ရမယ့်
+      အရာကို စစ်ပါ။
+      [[mark:next]] နောက် lesson မှာတော့ CTO ဖြစ်တဲ့ အောင်အောင် က developer တွေအတွက် ရက် ၃၀ အစီအစဉ် တောင်းလာတဲ့အခါ၊
+      Claude Code နဲ့ လုပ်ချင်တဲ့ အလုပ်တွေထဲက ဘယ်ဟာကို ရွေးမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+    actions:
+      - id: sel-name-row
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/45-skill-troubleshooting.md
+          text: "| တခြား version run နေ | နာမည်တူ skill: managed > personal > project |"
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/45-skill-troubleshooting.md
+          text: "# Skill အလုပ်မလုပ်ရင် ပထမဆုံး စစ်ရမယ့်အရာ"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
