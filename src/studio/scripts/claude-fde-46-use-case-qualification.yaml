@@ -1,0 +1,669 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-46-use-case-qualification
+  title: "Claude FDE 46: Use case ကို စိစစ်ရွေးချယ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/46-use-case-qualification.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/46-use-case-qualification.md: |
+        # Delivery Plan Pack · 1. Use case qualification
+
+        ရက် 30 activation အတွက် developer တွေ တင်ပြတဲ့ idea 11 ခုထဲက 4 ခု (✓ ပြည့် · ~ တစ်ဝက် · ✗ မပြည့်)
+
+        | Use case | Volume | Complexity | Measurability | Readiness | ပြောင်းပုံ |
+        |---|---|---|---|---|---|
+        | invoice code အတွက် unit test | ~ | ✓ | ~ coverage ပဲ | ✓ | marginal |
+        | Customer App ကို framework အသစ်နဲ့ ပြန်ရေး | ✗ 1 ခု | ✗ နယ်နိမိတ် မရှိ | ✗ | ✗ team မစရသေး | wishlist |
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: criteria
+      contentType: html
+      name: စံ လေးခု
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Use case ကို စစ်တဲ့ စံ လေးခု</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term wide blue">Volume</span>ရေတွက်လို့ရလောက်အောင် များလား</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term wide blue">Complexity</span>လက်နဲ့ဆို ကြာပြီး နယ်နိမိတ် ရှိလား</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term wide orange">Measurability</span>Day 30 မတိုင်ခင် ဂဏန်းနဲ့ ပြနိုင်လား</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term wide green">Dev readiness</span>လုပ်မယ့်သူတွေ အဆင်သင့် ဖြစ်လား</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — marginal (blue: the same unit of work) against structural (orange hachure: the board's
+    # subject) on Billing's report migration; violet arrows are "becomes"; green the change that counts.
+    - {
+        id: g-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 820,
+        height: 45,
+        text: "Marginal gain နဲ့ Structural gain",
+        fontSize: 36,
+      }
+    - {
+        id: g-m,
+        kind: rectangle,
+        x: 290,
+        y: 225,
+        width: 380,
+        height: 250,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-m-l,
+        kind: text,
+        x: 305,
+        y: 235,
+        width: 350,
+        height: 35,
+        text: "marginal",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-m-1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 295,
+        width: 380,
+        height: 35,
+        text: "PR review တစ်ခု",
+        fontSize: 28,
+      }
+    - {
+        id: g-m-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 460,
+        y: 338,
+        width: 40,
+        height: 48,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g-m-2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 400,
+        width: 380,
+        height: 35,
+        text: "နည်းနည်း ပိုမြန်",
+        fontSize: 28,
+      }
+    - {
+        id: g-s,
+        kind: rectangle,
+        x: 720,
+        y: 225,
+        width: 370,
+        height: 250,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: g-s-l,
+        kind: text,
+        x: 735,
+        y: 235,
+        width: 340,
+        height: 35,
+        text: "structural",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g-s-1,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 295,
+        width: 370,
+        height: 35,
+        text: "လက်နဲ့: 5 × 8 ပတ် = 40",
+        fontSize: 28,
+      }
+    - {
+        id: g-s-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 885,
+        y: 338,
+        width: 40,
+        height: 48,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g-s-2,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 400,
+        width: 370,
+        height: 35,
+        text: "target: 2 × 3 ပတ် = 6",
+        fontSize: 28,
+      }
+    - {
+        id: g-m-b,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 500,
+        width: 380,
+        height: 35,
+        text: "အလုပ်ပုံစံ မပြောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: g-s-b,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 500,
+        width: 370,
+        height: 35,
+        text: "အလုပ်လုပ်ပုံ ပြောင်း",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: g-note,
+        kind: text,
+        x: 290,
+        y: 575,
+        width: 800,
+        height: 35,
+        text: "ယူနစ်: developer-week · ခန့်မှန်းချက်နဲ့ target",
+        fontSize: 28,
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 820,
+        height: 45,
+        text: "Network Tools: ဘယ်ဟာက structural လဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) alert note ကို ပိုမြန်မြန် ရေး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) လစဉ် report ကို ရေးရာကနေ စစ်ရုံ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 520,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 850,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "ဘယ်သူ ဘာလုပ်လဲ ပြောင်းသွားလား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "မြန်လာရုံ ဆိုရင် marginal",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9346
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: CTO ရဲ့ တောင်းဆိုချက်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ skill တွေကို project၊ plugin နဲ့ managed settings ဆိုတဲ့ အဝိုင်း သုံးခုနဲ့ မျှဝေပုံနဲ့၊ skill
+      အလုပ်မလုပ်ရင် ပထမဆုံး စစ်ရမယ့် အရာတွေကို လေ့လာခဲ့ပါတယ်။ ဒီ lesson ကနေ စပြီး နည်းပညာကနေ ခဏ ထွက်ပြီး၊ အလုပ်
+      တစ်ခုလုံးကို ဘယ်လို ပို့ဆောင်မလဲ ဆိုတဲ့ အပိုင်းကို ကြည့်ပါမယ်။
+      [[mark:sel-billing]] trial မှာ Billing developer နှစ်ယောက်က Claude Code နဲ့ ၃ ရက်အတွင်း report job ၁၄၀ ထဲက ၁၂ ခုကို
+      ရွှေ့ခဲ့ပြီး၊ ရွှေ့ပြီးတဲ့ job တိုင်းက job အဟောင်းရဲ့ output နဲ့ တိုက်စစ်တာ အောင်ခဲ့ပါတယ်။ Claude Code ဆိုတာ
+      terminal ထဲကနေ code ကို ဖတ်၊ ပြင်၊ command run ပေးတဲ့ coding agent ပါ။
+      [[mark:cto]] အဲဒီ ရလဒ်ကို မြင်တော့ CTO ဖြစ်တဲ့ အောင်အောင် က developer တွေအတွက် ရက် ၃၀ activation တစ်ခုကို
+      တောင်းဆိုလာပါတယ်။ activation ဆိုတာ သုံးစွဲမှုကို တကယ် စတင်နိုင်အောင် ပြင်ဆင်တဲ့ အဆင့်ပါ။ သူ လိုချင်တာက ရက် ၃၀
+      ပြည့်ရင် ဒါရိုက်တာ အဖွဲ့က ဖတ်ပြီး ဆုံးဖြတ်နိုင်မယ့် ရလဒ် တစ်ခုပါ။ ဒါကြောင့် ကိုယ်တို့က စာမျက်နှာ လေးမျက်နှာပါတဲ့
+      Delivery Plan Pack ကို ပြင်ပါမယ်။ ဒီ lesson က အဲဒီ ပထမ စာမျက်နှာပါ။
+      [[mark:ideas]] developer တွေကို Claude Code နဲ့ ဘာလုပ်ချင်လဲ မေးတော့ idea ၁၁ ခု ရောက်လာပါတယ်။ ဒါပေမဲ့ ရက် ၃၀ ထဲမှာ
+      FDE တစ်ယောက်က သေသေချာချာ ကူညီပြီး ဂဏန်းနဲ့ ပြနိုင်တာ use case တစ်ခု နှစ်ခုပဲ ရှိပါတယ်။ use case ဆိုတာ AI နဲ့
+      ဖြေရှင်းမယ့် အလုပ် တစ်မျိုးပါ။ ဒီ lesson ရဲ့ မေးခွန်းက ၁၁ ခုထဲက ဘယ်ဟာကို ရွေးမလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline, Delivery Methodology)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { scene: start }, path: README.md }
+      - id: sel-billing
+        type: editor.select
+        at: { mark: sel-billing }
+        target:
+          file: README.md
+          text: "- Billing team နဲ့ Claude Code"
+      - id: sel-teams
+        type: editor.select
+        at: { mark: ideas }
+        target:
+          file: README.md
+          text: "- developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools"
+
+  - id: two-gains
+    chapter: Marginal gain နဲ့ structural gain
+    narration: >
+      [[mark:g-open]] idea တွေကို မစစ်ခင် ပြောင်းလဲမှု နှစ်မျိုးကို ခွဲကြည့်ရအောင်။ Claude Forward Deployed Engineer learning
+      path က ဒီ နှစ်မျိုးကို marginal gain နဲ့ structural gain လို့ ခေါ်ပါတယ်။
+      [[mark:g-m]] marginal gain ဆိုတာ အလုပ် အတူတူကို နည်းနည်း ပိုမြန်သွားရုံပါ။ ဥပမာအားဖြင့် PR review တစ်ခုမှာ Claude က
+      comment တွေကို ကြိုရေးပေးလို့ reviewer က နည်းနည်း ပိုမြန်မြန် ပြီးတယ် ဆိုပါစို့။ PR တစ်ခု၊ reviewer တစ်ယောက်၊
+      review တစ်ကြိမ် ဆိုတဲ့ အလုပ်ပုံစံက မပြောင်းပါဘူး။
+      [[mark:g-m-why]] ဒီ ပြောင်းလဲမှုက တကယ် ရှိပါတယ်။ ဒါပေမဲ့ ရက် ၃၀ အတွင်း ဒါရိုက်တာ အဖွဲ့ကို ပြဖို့ ခက်ပါတယ်။ PR တစ်ခုနဲ့
+      တစ်ခု အရွယ်မတူ၊ reviewer တစ်ယောက်နဲ့ တစ်ယောက် မတူတော့ နည်းနည်း ပိုမြန်တာကို ဂဏန်းနဲ့ သေချာ ခွဲပြဖို့ အချိန်ပိုလိုလို့ပါ။
+      [[mark:g-s]] structural gain ကတော့ အလုပ်လုပ်ပုံကိုယ်တိုင် ပြောင်းသွားတာပါ။ Billing ရဲ့ report migration ကို ကြည့်ပါ။ job
+      ၁၄၀ ကို လက်နဲ့ ရွှေ့ရင် developer ငါးယောက် ရှစ်ပတ် ကြာမယ်လို့ ခန့်မှန်းထားပါတယ်။ developer တစ်ယောက် တစ်ပတ် လုပ်တာကို
+      developer week တစ်ခုလို့ ရေတွက်ရင် ၄၀ ပါ။
+      [[mark:g-s2]] Claude Code နဲ့ဆိုရင် developer နှစ်ယောက်က သုံးပတ်အတွင်း ပြီးဖို့ ရည်မှန်းပါတယ်။ developer week ခြောက်ခုပါ။
+      ဒါက ရလဒ် မဟုတ်သေးဘဲ ခန့်မှန်းချက်နဲ့ target ပါ။ ပြောင်းသွားတာက အရေအတွက်ပဲ မဟုတ်ပါဘူး။ developer တွေက job တစ်ခုချင်း
+      ကိုယ်တိုင် ပြန်ရေးမယ့်အစား Claude Code ရေးတာကို စစ်ပြီး approve လုပ်တဲ့သူ ဖြစ်သွားပါတယ်။
+      [[mark:g-b]] ဒါကြောင့် ဒီလို ပြောင်းလဲမှုကို ရက် ၃၀ မတိုင်ခင် တိုင်းလို့ ရပြီး၊ ဒါရိုက်တာ အဖွဲ့ ရှေ့မှာလည်း ခုခံပြောနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (structural gain vs marginal gain)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-g-open,
+          type: whiteboard.apply,
+          at: { mark: g-open },
+          open: true,
+          clear: true,
+          upsertIds: [g-title],
+        }
+      - {
+          id: draw-g-m,
+          type: whiteboard.apply,
+          at: { mark: g-m },
+          upsertIds: [g-m, g-m-l, g-m-1, g-m-a, g-m-2],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-g-m-why,
+          type: whiteboard.apply,
+          at: { mark: g-m-why },
+          upsertIds: [g-m-b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-g-s,
+          type: whiteboard.apply,
+          at: { mark: g-s },
+          upsertIds: [g-s, g-s-l, g-s-1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-g-s2,
+          type: whiteboard.apply,
+          at: { mark: g-s2 },
+          upsertIds: [g-s-a, g-s-2, g-note],
+          drawMs: 1500,
+        }
+      - { id: draw-g-b, type: whiteboard.apply, at: { mark: g-b }, upsertIds: [g-s-b], drawMs: 900 }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ Network Tools team ကလည်း idea နှစ်ခု တင်လာပါတယ်။ ဘယ်ဟာက structural gain
+      ဖြစ်မလဲ။
+      [[mark:q-a]] ပထမ idea က NMS alert တစ်ခု ဝင်တိုင်း developer ရေးရတဲ့ မှတ်စုကို Claude ကူရေးပေးလို့ မိနစ် အနည်းငယ်
+      ပိုမြန်လာမယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ idea က လစဉ် outage report ကို developer က ကိုယ်တိုင် ရေးစရာ မလိုတော့ဘဲ၊ skill တစ်ခုက ရေးထားတာကို
+      developer က စစ်ပြီး ပြင်ရုံပဲ ဖြစ်လာမယ် ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ idea ပါ။ ဘာကြောင့်လဲဆိုတော့ developer လုပ်ရတဲ့ အလုပ်ကိုယ်တိုင် ရေးတဲ့ အလုပ်ကနေ
+      စစ်တဲ့ အလုပ် ဖြစ်သွားလို့ပါ။ ပထမ idea မှာတော့ alert တစ်ခု၊ မှတ်စု တစ်ခု၊ developer တစ်ယောက် ဆိုတဲ့ ပုံစံ အတူတူပဲ ပိုမြန်လာတာပါ။
+      ပထမ idea လည်း အသုံးဝင်ပါတယ်။ ဒါပေမဲ့ ရက် ၃၀ ရဲ့ headline ရလဒ်အတွက် မဟုတ်ပါဘူး။
+      [[mark:q-rule]] ဒါကြောင့် idea တစ်ခုကို ကြားရင် ဘယ်သူ ဘာလုပ်ရလဲ ဆိုတာ ပြောင်းသွားလား အရင် မေးပါ။ မြန်လာရုံပဲ ဆိုရင်တော့
+      marginal gain ပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (structural gain vs marginal gain)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: criteria
+    chapter: စံ လေးခု
+    narration: >
+      [[mark:c-open]] structural gain ဖြစ်နိုင်တဲ့ idea ကို တွေ့ပြီဆိုရင်တောင် ရက် ၃၀ အတွက် သင့်တော်လား ဆိုတာ ထပ်စစ်ရပါသေးတယ်။
+      learning path က စံ လေးခုကို ပေးထားပြီး၊ ကိုယ်တို့ နေခြည် အတွက် ကိုယ့်စကားနဲ့ ဒီလို အဓိပ္ပာယ်ဖွင့်ပါတယ်။
+      [[mark:c-1]] ပထမ စံက volume ပါ။ ရက် ၃၀ အတွင်း တစ်ပတ်ချင်း ရေတွက်ပြလို့ ရလောက်အောင် အလုပ် ယူနစ် များလား ဆိုတာပါ။ report
+      job ၁၄၀ ဆိုတာ တစ်ပတ်ချင်း ဘယ်နှခု ပြီးလဲ ပြလို့ ရပါတယ်။
+      [[mark:c-2]] ဒုတိယ စံက complexity ပါ။ လက်နဲ့ဆိုရင် အချိန် အများကြီး ကြာလောက်အောင် ခက်ပေမဲ့၊ နယ်နိမိတ် ရှင်းရှင်း ရှိရပါမယ်။
+      job တစ်ခုစီက ပုံစံ ဆင်တူပြီး၊ ဘာကို မထိရဘူးလဲ ဆိုတာ trial ကတည်းက သိပြီးသားပါ။
+      [[mark:c-3]] တတိယ စံက measurability ပါ။ ရက် ၃၀ မတိုင်ခင် ဂဏန်းနဲ့ ပြနိုင်လား ဆိုတာပါ။ job တစ်ခုစီကို output တိုက်စစ်တာ
+      အောင်မှ ပြီးတယ်လို့ ရေတွက်တာမို့ အရေအတွက်ကို ဘယ်သူ ရေရေ အတူတူ ရပါတယ်။
+      [[mark:c-4]] စတုတ္ထ စံက developer readiness ပါ။ လုပ်မယ့် developer တွေ ကိုယ်တိုင် အဆင်သင့် ဖြစ်လား ဆိုတာပါ။ trial မှာ ပါခဲ့တဲ့
+      နှစ်ယောက်က လုပ်ပုံကို သိပြီးသားပါ။ Billing team lead မောင်မောင် ကတော့ သံသယ ရှိနေဆဲပါ။ ဒါပေမဲ့ Claude Code ရဲ့
+      champion kit က သံသယ ရှိတဲ့သူကို သူကိုယ်တိုင် ရှောင်နေတဲ့ အလုပ်ဆီ ညွှန်ပြဖို့ အကြံပေးပါတယ်။ library အဟောင်းပေါ်က report
+      job တွေက Billing မှာ ဘယ်သူမှ မလုပ်ချင်တဲ့ အလုပ်ပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (the four qualification criteria)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+      - {
+          title: "Claude Code Docs: Champion kit",
+          url: "https://code.claude.com/docs/en/champion-kit",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: c-open, offsetMs: -1400 },
+          open: false,
+        }
+      - {
+          id: show-criteria,
+          type: slide.show,
+          at: { mark: c-open, offsetMs: -700 },
+          slideId: criteria,
+        }
+      - { id: point-c-1, type: slide.point, at: { mark: c-1 }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-c-2, type: slide.point, at: { mark: c-2 }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-c-3, type: slide.point, at: { mark: c-3 }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-c-4, type: slide.point, at: { mark: c-4 }, target: { x: 0.15, y: 0.81 } }
+
+  - id: score
+    chapter: Idea တွေကို အမှတ်ပေးခြင်း
+    narration: >
+      [[mark:d-open]] ဒါဆို idea တွေကို ဒီ စံ လေးခုနဲ့ စာမျက်နှာပေါ်မှာ အမှတ်ပေးကြည့်ရအောင်။ ပြည့်ရင် အမှန်ခြစ်၊ တစ်ဝက်ဆိုရင်
+      လှိုင်းတွန့်၊ မပြည့်ရင် ကြက်ခြေခတ်ပါ။ idea နှစ်ခုကို team နဲ့ အတူ အမှတ်ပေးပြီးသားပါ။
+      [[mark:sel-tests]] invoice code အတွက် unit test ရေးတာက အသုံးဝင်ပေမဲ့ coverage ဂဏန်းကလွဲလို့ ရက် ၃၀ မှာ ပြစရာ နည်းပြီး၊
+      အလုပ်ပုံစံလည်း မပြောင်းလို့ marginal လို့ မှတ်ထားပါတယ်။
+      [[mark:sel-wish]] Customer App ကို framework အသစ်နဲ့ ပြန်ရေးမယ် ဆိုတဲ့ idea ကတော့ စံ လေးခုလုံးမှာ မပြည့်ပါဘူး။ အလုပ်က
+      တစ်ခုတည်း၊ နယ်နိမိတ် မရှိ၊ ရက် ၃၀ မှာ ဘာမှ ရေတွက်စရာ မရှိပါဘူး။ ဒီလို idea မျိုးကို wishlist လို့ ခေါ်ပါတယ်။ wishlist ထဲက
+      idea တစ်ခုဟာ စံ လေးခုထဲက အနည်းဆုံး တစ်ခုမှာ ကျတတ်ပါတယ်။
+      [[mark:type-migration]] အခု report migration ကို ထည့်ပါမယ်။ စံ တစ်ခုစီကို ရှင်းတုန်းက ဒီ job တွေနဲ့ပဲ
+      စစ်ကြည့်ခဲ့ပြီး၊ လေးခုလုံး ပြည့်တာကို တွေ့ခဲ့ပါပြီ။ developer ရဲ့ အလုပ်ကလည်း ကိုယ်တိုင် ရေးတာကနေ စစ်တာ ဖြစ်သွားလို့
+      structural လို့ မှတ်ပါတယ်။
+      [[mark:type-review]] PR review ကို ပိုမြန်အောင် လုပ်မယ် ဆိုတဲ့ idea ကိုလည်း ထည့်ပါမယ်။ PR တွေ များပြီး developer တွေလည်း
+      အဆင်သင့် ဖြစ်ပါတယ်။ ဒါပေမဲ့ နည်းနည်း ပိုမြန်တာကို ရက် ၃၀ နဲ့ ခွဲပြဖို့ ခက်လို့ measurability မှာ ကျပါတယ်။ marginal ပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (use case qualification)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-criteria, type: slide.close, at: { mark: d-open, offsetMs: -900 } }
+      - {
+          id: open-doc,
+          type: workspace.openFile,
+          at: { afterAction: close-criteria },
+          path: notebook/46-use-case-qualification.md,
+        }
+      - id: sel-tests
+        type: editor.select
+        at: { mark: sel-tests }
+        target:
+          file: notebook/46-use-case-qualification.md
+          text: "| invoice code အတွက် unit test | ~ | ✓ | ~ coverage ပဲ | ✓ | marginal |"
+      - id: sel-wish
+        type: editor.select
+        at: { mark: sel-wish }
+        target:
+          file: notebook/46-use-case-qualification.md
+          text: "| Customer App ကို framework အသစ်နဲ့ ပြန်ရေး | ✗ 1 ခု | ✗ နယ်နိမိတ် မရှိ | ✗ | ✗ team မစရသေး | wishlist |"
+      - id: type-migration
+        type: editor.type
+        at: { mark: type-migration }
+        cadence: line-by-line
+        target:
+          { file: notebook/46-use-case-qualification.md, after: "| ✗ team မစရသေး | wishlist |\n" }
+        text: "| report job 140 ခု ရွှေ့ | ✓ 140 | ✓ လက်နဲ့ 40 developer-weeks | ✓ output တိုက်စစ် | ✓ trial dev 2 | structural |\n"
+      - id: expect-migration
+        type: expect.file
+        at: { afterAction: type-migration }
+        path: notebook/46-use-case-qualification.md
+        contains: "| report job 140 ခု ရွှေ့ | ✓ 140 | ✓ လက်နဲ့ 40 developer-weeks | ✓ output တိုက်စစ် | ✓ trial dev 2 | structural |\n"
+      - id: type-review
+        type: editor.type
+        at: { mark: type-review }
+        cadence: line-by-line
+        target:
+          { file: notebook/46-use-case-qualification.md, after: "| ✓ trial dev 2 | structural |\n" }
+        text: "| PR review ပိုမြန် | ✓ | ~ | ✗ ရက် 30 နဲ့ ခွဲပြဖို့ ခက် | ✓ | marginal |\n"
+
+  - id: saying-no
+    chapter: ရွေးတာ ဆိုတာ ငြင်းတာ
+    narration: >
+      [[mark:type-choice]] စာမျက်နှာရဲ့ အောက်ဆုံးမှာ ရွေးချယ်ချက်ကို ရေးပါမယ်။ ရက် ၃၀ မှာ report migration တစ်ခုတည်းကို headline
+      use case အဖြစ် ယူပါမယ်။ ခန့်မှန်းချက်နဲ့ target ကိုလည်း ဂဏန်းနဲ့ တွဲရေးထားပါတယ်။ ဒါတွေက ရလဒ် မဟုတ်သေးဘဲ၊ ရက် ၃၀
+      ပြည့်တဲ့နေ့မှာ ယှဉ်ကြည့်မယ့် ဂဏန်းတွေပါ။
+      [[mark:sel-rest]] ရွေးတယ် ဆိုတာ တကယ်တော့ ငြင်းတာပါ။ ကျန်တဲ့ idea ဆယ်ခုက မကောင်းလို့ မဟုတ်ပါဘူး။ use case များလာရင်
+      FDE ရဲ့ အကူအညီ ခွဲသွားပြီး၊ ရက် ၃၀ ပြည့်တဲ့နေ့မှာ ဘယ် ရလဒ်က ဘယ် use case ကြောင့်လဲ ခွဲပြောဖို့ ခက်လို့ပါ။ ဒါကြောင့်
+      ကျန်တဲ့ idea တွေကို ဖျက်မပစ်ဘဲ ဘာကြောင့် စောင့်ရလဲ ဆိုတာနဲ့ အတူ စာမျက်နှာပေါ်မှာ ထားခဲ့ပါတယ်။
+      [[mark:sel-why]] idea တင်ခဲ့တဲ့ developer တွေကို ပြန်ပြောတဲ့အခါမှာလည်း ဒီ ဇယားက အထောက်အကူ ဖြစ်ပါတယ်။ ကိုယ့် idea က ဘယ် စံမှာ
+      ကျလဲ မြင်ရတော့၊ ငြင်းတာက လူကို ငြင်းတာ မဟုတ်ဘဲ အချိန်ကို ရွေးတာ ဖြစ်ကြောင်း နားလည်ပါတယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (Delivery Plan Pack)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: type-choice
+        type: editor.type
+        at: { mark: type-choice }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/46-use-case-qualification.md,
+            after: "| ✗ ရက် 30 နဲ့ ခွဲပြဖို့ ခက် | ✓ | marginal |\n",
+          }
+        text: "\n## ရွေးချယ်ချက်\n- ရက် 30 ရဲ့ headline use case: report job 140 ရွှေ့ခြင်း\n- လက်နဲ့ ခန့်မှန်း: 5 ယောက် × 8 ပတ် = 40 developer-weeks။ target: 2 ယောက် × 3 ပတ် = 6\n- ကျန်တဲ့ idea 10 ခု: ရက် 30 ပြီးမှ ပြန်ကြည့်။ ဘာကြောင့် စောင့်လဲ ဇယားမှာ\n"
+      - id: sel-rest
+        type: editor.select
+        at: { mark: sel-rest }
+        target:
+          file: notebook/46-use-case-qualification.md
+          text: "- ကျန်တဲ့ idea 10 ခု: ရက် 30 ပြီးမှ ပြန်ကြည့်။ ဘာကြောင့် စောင့်လဲ ဇယားမှာ"
+      - id: sel-why
+        type: editor.select
+        at: { mark: sel-why }
+        target:
+          file: notebook/46-use-case-qualification.md
+          text: "| Volume | Complexity | Measurability | Readiness |"
+
+  - id: your-turn
+    chapter: ကိုယ့် use case အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် team မှာ AI နဲ့ လုပ်ချင်တဲ့ idea တစ်ခုကို ရွေးပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ
+      ဇယားမှာ အတန်း တစ်ခု ထပ်ထည့်ကာ volume၊ complexity၊ measurability နဲ့ developer readiness ကို အမှတ်ပေးကြည့်ပါ။
+      [[mark:turn-2]] ပြီးရင် နောက်ဆုံး ကော်လံမှာ ဘယ်သူ ဘာလုပ်ရလဲ ပြောင်းသွားမလား၊ မြန်လာရုံလား ဆိုတာ ရေးပါ။ ကြက်ခြေခတ် တစ်ခု
+      ပါနေရင်၊ အဲဒီ စံကို ပြည့်အောင် use case ကို ဘယ်လို ပြန်ကျဉ်းမလဲ ဆိုတာကိုလည်း စဉ်းစားကြည့်ပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (use case qualification)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-criteria-2
+        type: editor.select
+        at: { mark: turn, offsetMs: 2500 }
+        target:
+          file: notebook/46-use-case-qualification.md
+          text: "| Use case | Volume | Complexity | Measurability | Readiness |"
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/46-use-case-qualification.md
+          text: "ပြောင်းပုံ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ developer တွေ တင်လာတဲ့ idea ၁၁ ခုထဲက ရက် ၃၀ အတွက် report migration တစ်ခုကို ရွေးလိုက်ပါတယ်။
+      အလုပ် အတူတူ ပိုမြန်လာတာက marginal gain၊ အလုပ်လုပ်ပုံကိုယ်တိုင် ပြောင်းသွားတာက structural gain ပါ။
+      [[mark:recap-2]] volume၊ complexity၊ measurability နဲ့ developer readiness ဆိုတဲ့ စံ လေးခုနဲ့ စစ်ပြီး၊ ကျန်တာတွေကို
+      အကြောင်းပြချက်နဲ့ အတူ ငြင်းခဲ့ပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ရွေးထားတဲ့ use case အတွက်၊ ရက် ၃၀ ပြည့်တဲ့နေ့မှာ အဖြေ တစ်ခု ပေးနိုင်မယ့် pilot ကို design
+      ဆွဲပုံကို လေ့လာသွားပါမယ်။ pilot ဆိုတာ အပြည့်အဝ မသုံးခင် လူနည်းနည်းနဲ့ အချိန်တိုတို စမ်းတာပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-migration
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/46-use-case-qualification.md
+          text: "- ရက် 30 ရဲ့ headline use case: report job 140 ရွှေ့ခြင်း"
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/46-use-case-qualification.md
+          text: "# Delivery Plan Pack · 1. Use case qualification"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
