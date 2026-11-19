@@ -595,7 +595,7 @@ scenes:
       ticket တစ်ခုအတွက် အဖြေ မူကြမ်းကို ရေးပေးပြီး၊ support agent က စစ်ပြီးမှ ပို့ရမယ့် agent ဖြစ်ပါတယ်။ agent
       ဆိုတာ ရည်မှန်းချက် ရောက်တဲ့အထိ tool တွေကို ရွေးသုံးပြီး အဆင့်ဆင့် လုပ်သွားတဲ့ model ကို ခေါ်တာပါ။
       [[mark:work-2]] ဒုတိယ တစ်ခုက နေခြည် ရဲ့ developer တွေ Claude Code နဲ့ အလုပ်လုပ်တတ်လာအောင် ကူညီပေးဖို့ပါ။
-      တတိယ တစ်ခုကတော့ ကုမ္ပဏီ တစ်ခုလုံးက Claude ကို စနစ်တကျ သုံးနိုင်အောင် ပြင်ဆင်ပေးဖို့ ဖြစ်ပါတယ်။
+      Claude Code ဆိုတာ terminal ထဲကနေ code ကို ဖတ်၊ ပြင်ပြီး command တွေကိုပါ run ပေးတဲ့ coding agent ပါ။ တတိယ တစ်ခုကတော့ ကုမ္ပဏီ တစ်ခုလုံးက Claude ကို စနစ်တကျ သုံးနိုင်အောင် ပြင်ဆင်ပေးဖို့ ဖြစ်ပါတယ်။
     sources:
       - {
           title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
