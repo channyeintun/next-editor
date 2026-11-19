@@ -1,0 +1,661 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-36-verifying-unsupervised-runs
+  title: "Claude FDE 36: လွှတ်ထားတဲ့ အလုပ်ကို စစ်ဆေးခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/36-after-the-run.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      billing-service/.claude/settings.json: |
+        {
+          "hooks": {
+            "Stop": [
+              {
+                "hooks": [
+                  { "type": "command", "command": "npm test 1>&2 && npm run report:compare -- --all 1>&2 || exit 2" }
+                ]
+              }
+            ]
+          }
+        }
+      notebook/36-after-the-run.md: |
+        # လူမစောင့်ခဲ့တဲ့ run ပြီးရင် စစ်ရမယ့်အရာ
+
+        ## ပြောင်းလဲမှု
+
+        ## run ခဲ့တာ (သက်သေ)
+
+        ## ကျော်ခဲ့တာ၊ ပိတ်ခံရတာ
+
+        ## Merge မလုပ်ခင်
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: ranking
+      contentType: html
+      name: Checks from weakest to strongest
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">စစ်ဆေးနည်း: အားနည်းရာကနေ အားကောင်းရာ</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term red">prompt</span>test run ပါလို့ စာကြောင်း တစ်ကြောင်း</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term orange">/goal</span>model က စကားဝိုင်းကို ဖတ်ပြီး ဆုံးဖြတ်</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term green">Stop hook</span>Claude Code က command ကို တကယ် run</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term green">reviewer</span>context အသစ်နဲ့ ကြည့်တဲ့ review</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — a scale from "watched every step" to "saw only the report"; the orange marker is
+    # the overnight run; green checks stack up as the watching goes down.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "ဘယ်လောက် ကြည့်ခဲ့လဲ၊ ဘယ်လောက် စစ်မလဲ",
+        fontSize: 36,
+      }
+    - {
+        id: s-left,
+        kind: text,
+        x: 290,
+        y: 235,
+        width: 360,
+        height: 35,
+        text: "အဆင့်တိုင်း ကြည့်ခဲ့",
+        fontSize: 28,
+      }
+    - {
+        id: s-right,
+        kind: text,
+        align: right,
+        x: 720,
+        y: 235,
+        width: 360,
+        height: 35,
+        text: "report ပဲ မြင်ခဲ့",
+        fontSize: 28,
+      }
+    - { id: s-bar, kind: rectangle, x: 290, y: 290, width: 790, height: 16, strokeColor: "#6741d9" }
+    - {
+        id: s-mark,
+        kind: ellipse,
+        x: 1040,
+        y: 283,
+        width: 30,
+        height: 30,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: s-mark-l,
+        kind: text,
+        align: right,
+        x: 780,
+        y: 325,
+        width: 300,
+        height: 35,
+        text: "ညလုံးပေါက် run",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-c1a,
+        kind: text,
+        x: 290,
+        y: 410,
+        width: 250,
+        height: 35,
+        text: "diff",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-c2a,
+        kind: text,
+        x: 560,
+        y: 410,
+        width: 250,
+        height: 35,
+        text: "diff",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-c2b,
+        kind: text,
+        x: 560,
+        y: 455,
+        width: 250,
+        height: 35,
+        text: "+ output",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-c3a,
+        kind: text,
+        x: 830,
+        y: 410,
+        width: 250,
+        height: 35,
+        text: "diff",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-c3b,
+        kind: text,
+        x: 830,
+        y: 455,
+        width: 250,
+        height: 35,
+        text: "+ output",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-c3c,
+        kind: text,
+        x: 830,
+        y: 500,
+        width: 250,
+        height: 35,
+        text: "+ ကျော်ခဲ့တာ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဘယ်ဟာက ပိုခိုင်တဲ့ သက်သေလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) report ထဲက all tests pass စာကြောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) hook က run တဲ့ test command ရဲ့ output",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 600,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 930,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 790,
+        height: 35,
+        text: "report = Claude ရဲ့ ပြောချက်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 790,
+        height: 35,
+        text: "run ခဲ့တဲ့ command + output = သက်သေ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9336
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: All good ဆိုတဲ့ report
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ Claude နဲ့ code review လုပ်တဲ့ နည်း လေးမျိုးကို ခွဲခြားပြီး၊ review comment က အကြံပေးချက်သာ
+      ဖြစ်ပြီး merge ကို လူက approve လုပ်ရတယ် ဆိုတာ လေ့လာခဲ့ပါတယ်။
+      [[mark:n-open]] trial ပြီးသွားပါပြီ။ Billing developer နှစ်ယောက်က Claude Code နဲ့ ရက် သုံးရက်အတွင်း job ၁၄၀ ထဲက
+      ၁၂ ခုကို ရွှေ့ခဲ့ပြီး၊ ရွှေ့ခဲ့တဲ့ job တိုင်းက job အဟောင်းရဲ့ output နဲ့ တိုက်စစ်တာ အောင်ခဲ့ပါတယ်။ Claude Code ဆိုတာ
+      terminal ထဲကနေ code ကို ဖတ်၊ ပြင်၊ command run ပေးတဲ့ coding agent ပါ။
+      [[mark:n-hand]] trial မှာ edit တစ်ခုချင်းကို developer က
+      ကိုယ်တိုင် approve လုပ်ခဲ့ပါတယ်။ မနက်တိုင်း run တဲ့ check ကလည်း ရွှေ့ပြီးသား job တွေရဲ့ စုစုပေါင်း ဂဏန်းကို
+      ဆက် စစ်နေပါတယ်။
+      [[mark:n-next]] ကျန်တဲ့ job တွေအတွက်တော့ ဒီလောက် ထိုင်ကြည့်နေလို့ မဖြစ်ပါဘူး။ Billing team lead မောင်မောင် က
+      မေးခွန်း တစ်ခု မေးပါတယ်။ ညလုံးပေါက် လွှတ်ထားခဲ့လို့ မနက်မှာ job ၁၂ ခု ရွှေ့ပြီးပြီ၊ အားလုံး အဆင်ပြေတယ် ဆိုတဲ့
+      report ပြန်လာရင် အဲဒါကို ယုံလို့ ရမလား ဆိုတာပါ။
+      [[mark:n-plan]] ဒီ lesson မှာ လူမစောင့်ခဲ့တဲ့ run ပြီးရင် ဘာတွေ စစ်ရမလဲ ဆိုတဲ့ checklist ကို ရေးပြီး၊ test တွေ မအောင်မချင်း
+      Claude ကို ရပ်ခွင့် မပေးတဲ့ hook တစ်ခုကိုလည်း ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Best practices",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - {
+          id: open-list,
+          type: workspace.openFile,
+          at: { mark: n-open },
+          path: notebook/36-after-the-run.md,
+        }
+      - id: sel-title
+        type: editor.select
+        at: { mark: n-plan }
+        target:
+          file: notebook/36-after-the-run.md
+          text: "# လူမစောင့်ခဲ့တဲ့ run ပြီးရင် စစ်ရမယ့်အရာ"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ မနက်မှာ ပြန်လာတဲ့ report က test အားလုံး အောင်တယ်လို့ ပြောထားတယ် ဆိုပါစို့။ test
+      တွေ တကယ် အောင်ခဲ့လား ဆိုတာအတွက် ဘယ်ဟာက ပိုခိုင်တဲ့ သက်သေ ဖြစ်မလဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက report ထဲမှာ ရေးထားတဲ့ test အားလုံး အောင်တယ် ဆိုတဲ့ စာကြောင်းပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုက hook က run ခဲ့တဲ့ test command ကိုယ်တိုင်ရဲ့ output ပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ report ဆိုတာ Claude ရေးတဲ့ စာ ဖြစ်လို့ပါ။ docs အရ
+      Claude က အလုပ် ပြီးသလို ထင်ရတဲ့အခါ ရပ်တတ်ပါတယ်။ test တစ်ချို့ကို မ run ခဲ့ဘဲ၊ ဒါမှမဟုတ် ခွင့်မပြုလို့ run မရခဲ့ဘဲ
+      အောင်တယ်လို့ ရေးမိနိုင်ပါတယ်။ command ရဲ့ output ကတော့ တကယ် ဖြစ်ခဲ့တာ ဖြစ်ပါတယ်။
+      [[mark:q-rule]] ဒါကြောင့် report က ပြောချက် တစ်ခုသာ ဖြစ်ပြီး သက်သေ မဟုတ်ပါဘူး။ ဘယ် command ကို run ခဲ့လဲ၊ အဲဒီ
+      output က ဘာလဲ ဆိုတာကို တောင်းပါ။ docs ကလည်း ကိုယ် မကြည့်ခဲ့တဲ့ session အတွက် အဲဒါက တစ်ခုတည်းသော သက်သေပဲလို့
+      ဆိုပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Best practices",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: scale
+    chapter: နည်းနည်း ကြည့်ခဲ့ရင် များများ စစ်
+    narration: >
+      [[mark:s-open]] ဒုတိယ စည်းကမ်းက ရိုးရှင်းပါတယ်။ ဘယ်လောက် နည်းနည်း စောင့်ကြည့်ခဲ့လဲ၊ အဲဒီလောက် များများ စစ်ရပါမယ်။
+      [[mark:s-bar]] ဒါကို ဘယ်လောက် ကြည့်ခဲ့လဲ ဆိုတဲ့ ပေတံ တစ်ခုနဲ့ ဆွဲကြည့်ရအောင်။ တစ်ဖက်စွန်းက အဆင့်တိုင်းကို ထိုင်ကြည့်ခဲ့တာ၊
+      နောက်တစ်ဖက်စွန်းက နောက်ဆုံး report ကိုပဲ မြင်ခဲ့ရတာပါ။
+      [[mark:s-mark]] ညလုံးပေါက် လွှတ်ထားတဲ့ run က ဒီ အစွန်းမှာ ရှိပါတယ်။ Claude ဘာလုပ်ခဲ့လဲ ဆိုတာကို ကိုယ်တို့ တစ်ခုမှ
+      မမြင်ခဲ့ရပါဘူး။
+      [[mark:s-c1]] edit တိုင်းကို approve လုပ်ခဲ့တဲ့ trial မှာဆိုရင် နောက်ဆုံးမှာ ပြောင်းလဲမှု တစ်ခုလုံးရဲ့ diff ကို ပြန်ကြည့်ရုံနဲ့
+      လုံပါတယ်။
+      [[mark:s-c2]] အလယ်လောက်ကို ရောက်လာရင်၊ ဥပမာ ကိုယ့်အစား model တစ်ခုက action တစ်ခုချင်းကို ခွင့်ပြုပေးတဲ့ auto mode
+      နဲ့ edit တွေကို မကြည့်ဘဲ လုပ်ခိုင်းခဲ့ရင်၊ diff အပြင် Claude
+      ဘယ် command တွေ run ခဲ့လဲ၊ အဲဒီ command တွေက ဘာ output ပြန်ပေးခဲ့လဲ ဆိုတာကိုပါ ကြည့်ရပါမယ်။
+      [[mark:s-c3]] report ကိုပဲ မြင်ခဲ့ရင်တော့ ဘာကို ကျော်သွားခဲ့လဲ ဆိုတာကိုပါ ရှာရပါတယ်။ ခွင့်မပြုလို့ ငြင်းခံခဲ့ရတဲ့ tool
+      ခေါ်မှုတွေ၊ ချိတ်မရခဲ့တဲ့ tool တွေ၊ မပြီးဘဲ ကျန်ခဲ့တဲ့ အလုပ်တွေ ဖြစ်ပါတယ်။ docs ကလည်း သတ်မှတ်ချိန်မှာ အလိုအလျောက် run တဲ့ scheduled task တစ်ခုရဲ့ run
+      က Succeeded လို့ ပြရင်တောင် session က ပုံမှန်အတိုင်း ပြီးသွားတယ် ဆိုတာပဲ ဖြစ်ပြီး၊ ပိတ်ခံရတာတွေနဲ့ မပြီးတဲ့ အလုပ်တွေကို
+      transcript ထဲမှာပဲ မြင်ရတယ်လို့ ဆိုပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Best practices",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "Claude Code Docs: Scheduled tasks in the cloud",
+          url: "https://code.claude.com/docs/en/routines",
+        }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-bar,
+          type: whiteboard.apply,
+          at: { mark: s-bar },
+          upsertIds: [s-bar, s-left, s-right],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-mark,
+          type: whiteboard.apply,
+          at: { mark: s-mark },
+          upsertIds: [s-mark, s-mark-l],
+          drawMs: 900,
+        }
+      - {
+          id: draw-s-c1,
+          type: whiteboard.apply,
+          at: { mark: s-c1 },
+          upsertIds: [s-c1a],
+          drawMs: 600,
+        }
+      - {
+          id: draw-s-c2,
+          type: whiteboard.apply,
+          at: { mark: s-c2 },
+          upsertIds: [s-c2a, s-c2b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-s-c3,
+          type: whiteboard.apply,
+          at: { mark: s-c3 },
+          upsertIds: [s-c3a, s-c3b, s-c3c],
+          drawMs: 1200,
+        }
+
+  - id: ranking
+    chapter: စစ်ဆေးနည်း လေးဆင့်
+    narration: >
+      [[mark:k-open]] Claude ကို ကိုယ့်အလုပ် ကိုယ်တိုင် စစ်ခိုင်းဖို့ နည်းတွေကို docs က အားနည်းရာကနေ အားကောင်းရာကို စီပြထားပါတယ်။
+      [[mark:k-1]] အားအနည်းဆုံးက prompt ထဲမှာ ပြီးရင် test run ပါလို့ ရေးထားတာပါ။ Claude က ဖတ်ပြီး လုပ်ဖို့ များပေမဲ့
+      အမြဲ မဟုတ်ပါဘူး။
+      [[mark:k-2]] နောက်တစ်ဆင့်က goal ပါ။ အလှည့်တိုင်း model တစ်ခုက စစ်ပေမဲ့၊ စကားဝိုင်းကို ဖတ်ပြီးပဲ ဆုံးဖြတ်ပါတယ်။
+      [[mark:k-3]] တတိယ အဆင့်က Stop hook ပါ။ hook ဆိုတာ Claude Code ရဲ့ အဆင့် တစ်ခုခုမှာ အလိုအလျောက် run တဲ့ ကိုယ့်
+      command ပါ။ Stop hook က Claude ရပ်တော့မယ့် အချိန်မှာ Claude Code ကိုယ်တိုင်က command ကို တကယ် run ပါတယ်။
+      [[mark:k-4]] အားအကောင်းဆုံးက code review command လိုမျိုး context အသစ်နဲ့ ကြည့်တဲ့ reviewer ပါ။ ရေးခဲ့တဲ့ session ရဲ့
+      ယူဆချက်တွေ မပါဘဲ ပြန်ကြည့်တာမို့ ရေးသူ မမြင်တာကို တွေ့တတ်ပါတယ်။ ကိုယ်တို့ရဲ့ ညလုံးပေါက် run အတွက် တတိယနဲ့
+      စတုတ္ထ အဆင့်ကို သုံးပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Best practices",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - {
+          id: close-scale,
+          type: whiteboard.apply,
+          at: { mark: k-open, offsetMs: -1400 },
+          open: false,
+        }
+      - { id: show-ranking, type: slide.show, at: { afterAction: close-scale }, slideId: ranking }
+      - { id: pt-k-1, type: slide.point, at: { mark: k-1 }, target: { x: 0.15, y: 0.39 } }
+      - { id: pt-k-2, type: slide.point, at: { mark: k-2 }, target: { x: 0.15, y: 0.53 } }
+      - { id: pt-k-3, type: slide.point, at: { mark: k-3 }, target: { x: 0.15, y: 0.67 } }
+      - { id: pt-k-4, type: slide.point, at: { mark: k-4 }, target: { x: 0.15, y: 0.81 } }
+
+  - id: hook
+    chapter: Stop hook
+    narration: >
+      [[mark:h-open]] Billing repo ရဲ့ settings file ထဲမှာ ထည့်ထားတဲ့ Stop hook ကို ကြည့်ရအောင်။
+      [[mark:h-cmd]] Claude က အလှည့် တစ်ခုကို ပြီးတော့မယ် ဆိုတိုင်း Claude Code က test တွေနဲ့ job အားလုံးရဲ့ နှိုင်းယှဉ်မှုကို
+      run ပါတယ်။ output ကို error stream ကို ပို့ထားပြီး၊ တစ်ခုခု မအောင်ရင် exit code နှစ်နဲ့ ထွက်ပါတယ်။
+      [[mark:h-block]] Stop hook က exit code နှစ်နဲ့ ထွက်ရင် Claude ကို ရပ်ခွင့် မပေးပါဘူး။ error output က အကြောင်းပြချက် အဖြစ်
+      Claude ဆီ ပြန်ရောက်ပြီး၊ Claude က ဆက်ပြင်ပါတယ်။ ဒါကြောင့် test မအောင်မချင်း အလှည့်က မပြီးပါဘူး။ ပြီးတော့ ဒီ
+      output ကိုယ်တိုင်က transcript ထဲမှာ ကျန်ခဲ့တဲ့ သက်သေ ဖြစ်လာပါတယ်။
+      [[mark:h-cap]] ဒါပေမဲ့ ကန့်သတ်ချက် တစ်ခု ရှိပါတယ်။ tool မခေါ်ဘဲ ဆက်တိုက် ရှစ်ကြိမ် ပြန်ပို့ခံရရင် Claude Code က အလှည့်ကို
+      ပြီးဆုံးခွင့် ပေးလိုက်ပါတယ်။ environment variable တစ်ခုနဲ့ ဒီ အရေအတွက်ကို တိုးလို့ ရပါတယ်။ [[mark:h-active]] hook ကို ပေးတဲ့ input
+      ထဲမှာ stop hook active ဆိုတဲ့ field လည်း ပါလို့၊ ဘယ်တော့မှ မအောင်နိုင်တဲ့ check မျိုးမှာ အဆုံးမရှိ မပတ်အောင် အဲဒါကို
+      ကြည့်ပြီး စောစော ထွက်လို့ ရပါတယ်။ ဆိုလိုတာက hook ရှိနေရင်တောင် test မအောင်ဘဲ ပြီးသွားတဲ့ run ဖြစ်နိုင်တာမို့
+      ကိုယ်တို့ ပြန်စစ်ရဦးမှာပါ။
+      [[mark:h-verify]] နောက်တစ်ခုက verify skill ပါ။ skill ဆိုတာ အလုပ် တစ်မျိုးကို ဘယ်လို လုပ်ရမလဲ ရေးထားပြီး၊
+      လိုတဲ့အချိန်မှ Claude ဖတ်သုံးတဲ့ လမ်းညွှန်ပါ။ project ထဲမှာ verify ဆိုတဲ့ နာမည်နဲ့ skill တစ်ခု ရှိရင်၊ commit မလုပ်ခင်
+      အဲဒါကို run ဖို့ Claude ကို ပြောထားပါတယ်။ Claude Code မှာ ပါပြီးသား verify skill ကလည်း test ကို မမှီဘဲ app
+      ကို build လုပ်ပြီး တကယ် run ကြည့်ပါတယ်။ [[mark:h-sub]] အလုပ် တစ်ပိုင်းကို သီးသန့် context နဲ့ လုပ်ပေးတဲ့ subagent တွေအတွက်လည်း
+      SubagentStop hook နဲ့ ဒီလိုပဲ ထိန်းလို့ ရပါတယ်။
+      [[mark:h-before]] နောက်တစ်ခါ လွှတ်မထားခင်မှာလည်း docs က မေးခွန်း ငါးခု မေးခိုင်းပါတယ်။ ကိုယ်တို့ run အတွက်
+      အရေးအကြီးဆုံး သုံးခုကို ဖြေကြည့်ရင်၊ ပြီးတယ် ဆိုတာ ဘာလဲ ဆိုတော့ နှိုင်းယှဉ်တဲ့ command အောင်တာပါ။ ဘာကို ထိခွင့်
+      ရှိလဲ ဆိုတော့ scope ထဲက job တွေပဲ ဖြစ်ပြီး၊ မထိရမယ့် နေရာတွေကို deny rule နဲ့ ပိတ်ထားပါတယ်။ ဘာက ရပ်ပေးမလဲ ဆိုတော့
+      အလှည့် ကန့်သတ်ချက်နဲ့ ငွေ ကန့်သတ်ချက်ပါ။
+      [[mark:h-rest]] ကျန်တဲ့ နှစ်ခုကတော့ Claude ကိုယ်တိုင် စစ်နိုင်လား၊ ရလဒ်ကို ဘယ်သူ လက်မှတ်ထိုးမလဲ ဆိုတာ ဖြစ်ပြီး၊ ဒီ
+      lesson ရဲ့ hook နဲ့ checklist က အဲဒါတွေကို ဖြေပေးပါတယ်။
+    sources:
+      - { title: "Claude Code Docs: Hooks reference", url: "https://code.claude.com/docs/en/hooks" }
+      - {
+          title: "Claude Code Docs: Best practices",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - { title: "Claude Code Docs: Skills", url: "https://code.claude.com/docs/en/skills" }
+    actions:
+      - { id: close-ranking, type: slide.close, at: { mark: h-open } }
+      - {
+          id: open-settings,
+          type: workspace.openFile,
+          at: { afterAction: close-ranking },
+          path: billing-service/.claude/settings.json,
+        }
+      - id: sel-stop
+        type: editor.select
+        at: { mark: h-cmd }
+        target:
+          file: billing-service/.claude/settings.json
+          text: '"command": "npm test 1>&2 && npm run report:compare -- --all 1>&2 || exit 2"'
+      - id: sel-event
+        type: editor.select
+        at: { mark: h-block }
+        target:
+          file: billing-service/.claude/settings.json
+          text: '"Stop"'
+      - id: sel-done
+        type: editor.select
+        at: { mark: h-before }
+        target:
+          file: billing-service/.claude/settings.json
+          text: "npm run report:compare -- --all"
+
+  - id: list
+    chapter: Run ပြီးရင် checklist
+    narration: >
+      [[mark:l-open]] အခု ညလုံးပေါက် run ပြီးတဲ့ မနက်တိုင်း သုံးမယ့် checklist ကို ရေးကြည့်ရအောင်။
+      [[mark:type-change]] ပထမ အပိုင်းက ပြောင်းလဲမှုကိုယ်တိုင်ပါ။ diff ကို ကြည့်ပြီး job ၁၂ ခုပဲ ပြောင်းထားလား၊ မထိရမယ့်
+      shared helper တွေကို ထိထားလား စစ်ပါတယ်။ Bash နဲ့ ပြင်သွားတာတွေက prompt တိုင်းမှာ file တွေကို အလိုအလျောက်
+      မှတ်ထားတဲ့ checkpoint ထဲ မပါတာမို့ ပြန်ပြင်ရင် git နဲ့ပဲ ပြင်ရပါမယ်။
+      [[mark:type-evidence]] ဒုတိယ အပိုင်းက run ခဲ့တာပါ။ Stop hook ရဲ့ output ကို သက်သေ အဖြစ် ဖတ်ပြီး၊ report ထဲက အဆင်ပြေတယ်
+      ဆိုတဲ့ စာကြောင်းကိုတော့ သက်သေ အဖြစ် မယူပါဘူး။
+      [[mark:type-skipped]] တတိယ အပိုင်းက ကျော်ခဲ့တာနဲ့ ပိတ်ခံရတာပါ။ script ထဲကနေ print mode နဲ့ run ခဲ့ရင် permission denials ကို၊ auto
+      mode run ဆိုရင် permissions command ထဲက Recently blocked ကို ကြည့်ပါတယ်။ scheduled task ဆိုရင် Succeeded ဆိုတဲ့
+      status ကို မယုံဘဲ transcript ကို ဖတ်ပါတယ်။
+      [[mark:type-merge]] နောက်ဆုံး အပိုင်းက merge မလုပ်ခင်ပါ။ လူ တစ်ယောက်က diff ကို review လုပ်ပြီး approve လုပ်ရပါမယ်။
+      docs ကလည်း အသစ် ဖြစ်တဲ့ ဘယ်အလုပ်မဆို လွှတ်ထားလို့ ယုံရမယ်လို့ မဆုံးဖြတ်ခင် ပထမ run အနည်းငယ်ကို စောင့်ကြည့်ဖို့
+      အကြံပြုထားပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Best practices",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "Claude Code Docs: Run Claude Code programmatically",
+          url: "https://code.claude.com/docs/en/headless",
+        }
+      - {
+          title: "Claude Code Docs: Checkpointing",
+          url: "https://code.claude.com/docs/en/checkpointing",
+        }
+    actions:
+      - {
+          id: open-list-2,
+          type: workspace.openFile,
+          at: { mark: l-open },
+          path: notebook/36-after-the-run.md,
+        }
+      - id: type-change
+        type: editor.type
+        at: { mark: type-change }
+        cadence: line-by-line
+        target: { file: notebook/36-after-the-run.md, after: "## ပြောင်းလဲမှု\n" }
+        text: "- git diff: job 12 ခုပဲ ပြောင်းလား၊ shared helper မထိဘူးလား\n- Bash နဲ့ ပြင်တာ checkpoint ထဲ မပါ၊ git နဲ့ပဲ ပြန်ပြင်\n"
+      - id: type-evidence
+        type: editor.type
+        at: { mark: type-evidence }
+        cadence: line-by-line
+        target: { file: notebook/36-after-the-run.md, after: "## run ခဲ့တာ (သက်သေ)\n" }
+        text: "- Stop hook output: npm test နဲ့ report:compare ရဲ့ ရလဒ်\n- report ထဲက all good စာကြောင်းကို သက်သေ မယူ\n"
+      - id: expect-evidence
+        type: expect.file
+        at: { afterAction: type-evidence }
+        path: notebook/36-after-the-run.md
+        contains: "- Stop hook output: npm test နဲ့ report:compare ရဲ့ ရလဒ်\n"
+      - id: type-skipped
+        type: editor.type
+        at: { mark: type-skipped }
+        cadence: line-by-line
+        target: { file: notebook/36-after-the-run.md, after: "## ကျော်ခဲ့တာ၊ ပိတ်ခံရတာ\n" }
+        text: "- permission_denials၊ /permissions ထဲက Recently blocked\n- scheduled task: Succeeded ကို မယုံ၊ transcript ဖတ်\n"
+      - id: type-merge
+        type: editor.type
+        at: { mark: type-merge }
+        cadence: line-by-line
+        target: { file: notebook/36-after-the-run.md, after: "## Merge မလုပ်ခင်\n" }
+        text: "- လူ တစ်ယောက်က diff ကို review လုပ်ပြီး approve\n- run အသစ် တစ်မျိုးဆိုရင် ပထမ အကြိမ်အချို့ ကိုယ်တိုင် စောင့်ကြည့်\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် ပထမ စစ်ချက် သုံးခု
+    narration: >
+      အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် project မှာ Claude ကို လွှတ်ထားခဲ့တဲ့ ပြောင်းလဲမှု
+      တစ်ခု ပြန်လာရင် ပထမဆုံး စစ်မယ့် check သုံးခုကို ဒီ checklist ရဲ့ အောက်မှာ ရေးကြည့်ပါ။
+      [[mark:turn-2]] တစ်ခုက ပြောင်းလဲမှုကို ကြည့်တာ၊ တစ်ခုက run ခဲ့တဲ့ command နဲ့ output ကို ကြည့်တာ၊ တစ်ခုက ကျော်ခဲ့တာကို
+      ရှာတာ ဖြစ်အောင် ရေးပါ။ ဘယ် command ရဲ့ output ကို သက်သေ အဖြစ် ယူမလဲ ဆိုတာကိုလည်း နာမည်နဲ့ ရေးထားပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Best practices",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - id: sel-sections
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/36-after-the-run.md
+          text: "## ပြောင်းလဲမှု"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ လူမစောင့်ခဲ့တဲ့ run ကို စောင့်ကြည့်ခဲ့တာ နည်းလေ များများ စစ်လေ ဖြစ်ပါတယ်။ ပြောင်းလဲမှု၊ run ခဲ့တဲ့
+      command နဲ့ output၊ ကျော်ခဲ့တာ သုံးခုလုံးကို ကြည့်ပြီး၊ report ကို ပြောချက် အဖြစ်ပဲ ယူပါတယ်။
+      [[mark:recap-2]] Stop hook က test မအောင်ရင် Claude ကို ပြန်ပို့ပြီး ဆက်ပြင်ခိုင်းပေမဲ့ ကန့်သတ်ချက် ရှိတာမို့၊ merge
+      ကိုတော့ လူက approve လုပ်ပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ Network Tools team က Billing team ရဲ့ setup ကို လိုချင်လာတဲ့အခါ၊ skill၊ hook၊ agent
+      နဲ့ MCP server တွေကို တစ်ထုပ်တည်း ထုပ်ပြီး ပေးလို့ရတဲ့ plugin တွေကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Best practices",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - id: sel-evidence
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/36-after-the-run.md
+          text: "- Stop hook output: npm test နဲ့ report:compare ရဲ့ ရလဒ်"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
