@@ -1,0 +1,795 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-55-acceleration
+  title: "Claude FDE 55: Acceleration: Center of Excellence"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/55-coe-charter.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/55-coe-charter.md: |
+        # CoE charter · နေခြည် Fiber (launch ပြီး 3 လ)
+
+        ## ရည်ရွယ်ချက်
+
+        ## အဖွဲ့ဝင်နဲ့ အချိန်
+
+        ## CoE ပိုင်တာ
+
+        ## CoE မလုပ်တာ
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: ttt
+      contentType: html
+      name: Train the trainer
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Train the trainer: champion ဆရာ ဖြစ်လာပုံ</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term blue">ကြည့်</span>CoE ရဲ့ session ကို ဘေးကနေ ကြည့်</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term orange">ကျင့်</span>လေ့ကျင့်ခန်းကို ကိုယ်တိုင် လုပ်</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term green">သင်</span>ကိုယ့်ဌာနကို တစ်ပိုင်း သင်၊ feedback ယူ</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term violet">ဆက်ကူ</span>ပြီးနောက်လည်း CoE က ဆက်ကူ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — three months in: three departments (blue), each with its own problem (red).
+    - {
+        id: o-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "3 လအကြာ: ဌာနတိုင်း ကိုယ့်နည်း",
+        fontSize: 36,
+      }
+    - {
+        id: o-b1,
+        kind: rectangle,
+        x: 290,
+        y: 260,
+        width: 250,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 277,
+        width: 250,
+        height: 35,
+        text: "Support",
+        fontSize: 28,
+      }
+    - {
+        id: o-r1,
+        kind: text,
+        x: 290,
+        y: 360,
+        width: 250,
+        height: 35,
+        text: "prompt 3 မျိုး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-b2,
+        kind: rectangle,
+        x: 560,
+        y: 260,
+        width: 250,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-l2,
+        kind: text,
+        align: center,
+        x: 560,
+        y: 277,
+        width: 250,
+        height: 35,
+        text: "Finance",
+        fontSize: 28,
+      }
+    - {
+        id: o-r2,
+        kind: text,
+        x: 560,
+        y: 360,
+        width: 250,
+        height: 35,
+        text: "စည်းကမ်း သီးသန့်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-b3,
+        kind: rectangle,
+        x: 830,
+        y: 260,
+        width: 250,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-l3,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 277,
+        width: 250,
+        height: 35,
+        text: "Network Tools",
+        fontSize: 28,
+      }
+    - {
+        id: o-r3,
+        kind: text,
+        x: 830,
+        y: 360,
+        width: 250,
+        height: 35,
+        text: "skill ထပ်ရေး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-need,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 790,
+        height: 35,
+        text: "တစ်ခုနဲ့ တစ်ခု မမျှဝေ",
+        fontSize: 28,
+      }
+    # Board 2 — the hub: a small CoE (orange) on one side, the departments (blue) on the other;
+    # violet arrows out (shared rules, skills) and back (questions, what worked).
+    - {
+        id: h-hub,
+        kind: rectangle,
+        x: 290,
+        y: 250,
+        width: 260,
+        height: 300,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: h-hub-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 378,
+        width: 260,
+        height: 45,
+        text: "CoE",
+        fontSize: 36,
+      }
+    - {
+        id: h-d1,
+        kind: rectangle,
+        x: 780,
+        y: 250,
+        width: 300,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-d1-l,
+        kind: text,
+        align: center,
+        x: 780,
+        y: 267,
+        width: 300,
+        height: 35,
+        text: "Support",
+        fontSize: 28,
+      }
+    - {
+        id: h-d2,
+        kind: rectangle,
+        x: 780,
+        y: 365,
+        width: 300,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-d2-l,
+        kind: text,
+        align: center,
+        x: 780,
+        y: 382,
+        width: 300,
+        height: 35,
+        text: "Finance",
+        fontSize: 28,
+      }
+    - {
+        id: h-d3,
+        kind: rectangle,
+        x: 780,
+        y: 480,
+        width: 300,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-d3-l,
+        kind: text,
+        align: center,
+        x: 780,
+        y: 497,
+        width: 300,
+        height: 35,
+        text: "Developer",
+        fontSize: 28,
+      }
+    - {
+        id: h-o1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 580,
+        y: 248,
+        width: 170,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-o2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 580,
+        y: 363,
+        width: 170,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-o3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 580,
+        y: 478,
+        width: 170,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-i1,
+        kind: freedraw,
+        stroke: arrow-left,
+        x: 580,
+        y: 290,
+        width: 170,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-i2,
+        kind: freedraw,
+        stroke: arrow-left,
+        x: 580,
+        y: 405,
+        width: 170,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-i3,
+        kind: freedraw,
+        stroke: arrow-left,
+        x: 580,
+        y: 520,
+        width: 170,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Finance agent: CoE က ဘာလုပ်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) CoE က ဆောက်ပေး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) finance champion နဲ့ တွဲပြီး finance က ဆောက်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 665,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 985,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 790,
+        height: 35,
+        text: "team က ပိုင်မှ team မှာ ကျန်ခဲ့",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9355
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: open
+    chapter: သုံးလအကြာ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ support agent တွေရဲ့ စိုးရိမ်ချက်ကို ဖြေပြီး၊ CTO ဖြစ်တဲ့ အောင်အောင် ပို့မယ့် launch message
+      ကို ရေးခဲ့ပါတယ်။
+      [[mark:o-title]] launch ပြီး သုံးလ ကြာလာတော့ ဝန်ထမ်း အများစုက Claude ကို ပုံမှန် သုံးနေကြပါပြီ။ ဒါပေမဲ့ ဌာနတွေကို
+      လှည့်ကြည့်တော့ ဌာနတိုင်းက ကိုယ့်နည်း ကိုယ်ဟာနဲ့ သွားနေကြတာ တွေ့ရပါတယ်။
+      [[mark:o-1]] support မှာ connection ticket အတွက် reply prompt သုံးမျိုး ရှိနေပါတယ်။ အဲဒီထဲက တစ်ခုက NMS ကို
+      မစစ်ဘဲ router ပြန်ဖွင့်ဖို့ အကြံပေးနေဆဲပါ။ မုန်တိုင်းကျတဲ့ညက သင်ခန်းစာကို ဌာန တစ်ခုထဲမှာတောင် တစ်ဝက်ပဲ
+      မှတ်မိနေတာပါ။
+      [[mark:o-2]] finance က ဘယ် data ကို Claude ထဲ ထည့်လို့ရလဲ ဆိုတာကို ကိုယ်ပိုင် စည်းကမ်းနဲ့ ရေးထားပါတယ်။ security
+      တာဝန်ခံ ခွင့်ပြုထားတာထက် တင်းကျပ်လွန်းလို့ အလုပ်တွေ မလိုအပ်ဘဲ နှေးနေပါတယ်။
+      [[mark:o-3]] Network Tools က developer တွေကလည်း Billing မှာ ရှိပြီးသား skill တစ်ခုကို မသိဘဲ အစကနေ ပြန်ရေးနေကြပါတယ်။
+      skill ဆိုတာ အလုပ် တစ်မျိုးကို ဘယ်လို လုပ်ရမလဲ ရေးထားပြီး လိုတဲ့အခါ Claude ဖတ်သုံးတဲ့ လမ်းညွှန်ပါ။
+      [[mark:o-need]] ဒီ အမှားတွေက ကြီးကြီးမားမား မဟုတ်ပေမဲ့ တစ်ခုနဲ့ တစ်ခု မမျှဝေကြပါဘူး။ ဒါက Acceleration အဆင့်ကို
+      စရမယ့် အချိန် ရောက်ပြီ ဆိုတဲ့ လက္ခဏာပါ။ Acceleration က FDE learning path ရဲ့ အဆင့် သုံးဆင့်ထဲက
+      ဒုတိယ အဆင့်ပါ။ နေခြည် အတွက်ဆိုရင် ဌာန တစ်ခုမှာ အလုပ်ဖြစ်တဲ့ နည်းကို တခြားဌာနတွေဆီ မြန်မြန် ရောက်အောင် လုပ်တဲ့
+      အဆင့်ပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-o-title,
+          type: whiteboard.apply,
+          at: { mark: o-title },
+          open: true,
+          clear: true,
+          upsertIds: [o-title],
+        }
+      - {
+          id: draw-o-1,
+          type: whiteboard.apply,
+          at: { mark: o-1 },
+          upsertIds: [o-b1, o-l1, o-r1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-o-2,
+          type: whiteboard.apply,
+          at: { mark: o-2 },
+          upsertIds: [o-b2, o-l2, o-r2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-o-3,
+          type: whiteboard.apply,
+          at: { mark: o-3 },
+          upsertIds: [o-b3, o-l3, o-r3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-o-need,
+          type: whiteboard.apply,
+          at: { mark: o-need },
+          upsertIds: [o-need],
+          drawMs: 900,
+        }
+
+  - id: hub
+    chapter: Center of Excellence
+    narration: >
+      [[mark:h-hub]] Center of Excellence၊ အတိုကောက် CoE ဆိုတာ အတွေ့အကြုံနဲ့ စံနှုန်းတွေကို စုစည်းပြီး team တွေကို
+      ကူညီတဲ့ အဖွဲ့ငယ်ပါ။ အဖွဲ့ငယ် ဆိုတဲ့ စကားက အရေးကြီးပါတယ်။ ဌာနသစ် တစ်ခု မဟုတ်ဘဲ၊ လူ သုံးလေးယောက်က သူတို့
+      အချိန်ရဲ့ တစ်စိတ်တစ်ပိုင်းကို ပေးထားတာပါ။ Claude Enterprise Administrator Guide ကလည်း prompt တွေ၊ skill
+      တွေနဲ့ playbook တွေကို စုစည်းဖို့ ပေါ့ပါးတဲ့ CoE တစ်ခုကို စဉ်းစားဖို့ အကြံပေးပါတယ်။
+      [[mark:h-depts]] CoE ရဲ့ တစ်ဖက်မှာ ဌာနတွေ ရှိပါတယ်။ ဌာန တစ်ခုစီမှာ ရှေ့ကနေ သုံးပြပြီး တခြားသူတွေကို ကူညီတဲ့
+      champion တွေ ရှိပြီး၊ CoE နဲ့ ဌာနကို ဆက်ပေးတာက သူတို့ပါ။ ဌာနရဲ့ အလုပ်ကို CoE ထက် champion
+      တွေက ပိုသိကြပါတယ်။
+      [[mark:h-out]] CoE ကနေ ဌာနတွေဆီ သွားတာက တစ်ခါတည်း ရေးထားတဲ့ စည်းကမ်းတွေ၊ စစ်ပြီးသား prompt တွေနဲ့ skill
+      တွေပါ။ ဥပမာ reply prompt သုံးမျိုး မထားတော့ဘဲ NMS ကို အရင် စစ်တဲ့ တစ်ခုတည်းကို skill အဖြစ် ဖြန့်ပေးပါတယ်။
+      [[mark:h-gov]] finance အတွက်တော့ ဘယ် data ကို ထည့်လို့ရလဲ ဆိုတာကို security တာဝန်ခံနဲ့ အတူ တစ်ခါတည်း
+      ရေးပေးလိုက်ပါတယ်။ ဒါဆို ဌာနတိုင်း ကိုယ်ပိုင် စည်းကမ်း ထပ်ရေးစရာ မလိုတော့ပါဘူး။ ဘာကို ခွင့်ပြုလဲ ဆိုတာကို ရေးထားတဲ့ စည်းကမ်းတွေကို
+      governance လို့ ခေါ်ပါတယ်။ ခွင့်ပြုထားတာကို ရှင်းရှင်း
+      ရေးထားရင် governance က လူတွေကို ရပ်တာ မဟုတ်ဘဲ ပိုမြန်အောင် လုပ်ပေးတာပါ။
+      [[mark:h-in]] ဌာနတွေကနေ CoE ဆီ ပြန်လာတာကတော့ မေးခွန်းတွေ၊ အလုပ်ဖြစ်ခဲ့တဲ့ နည်းတွေနဲ့ အမှားတွေပါ။ Network
+      Tools က skill ကို ထပ်ရေးနေတာကို ရပ်စေတာလည်း ဒီ ပြန်လာတဲ့ လမ်းကြောင်းပါ။ Administrator Guide က survey
+      တွေ၊ champion တွေ စုဝေးပြောဆိုတဲ့ roundtable တွေနဲ့ usage review တွေကို ပုံမှန် လုပ်ဖို့ အကြံပေးပါတယ်။
+    sources:
+      - {
+          title: "Claude Enterprise Administrator Guide (Anthropic Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-h-hub,
+          type: whiteboard.apply,
+          at: { mark: h-hub },
+          clear: true,
+          upsertIds: [h-hub, h-hub-l],
+          drawMs: 900,
+        }
+      - {
+          id: draw-h-depts,
+          type: whiteboard.apply,
+          at: { mark: h-depts },
+          upsertIds: [h-d1, h-d1-l, h-d2, h-d2-l, h-d3, h-d3-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-h-out,
+          type: whiteboard.apply,
+          at: { mark: h-out },
+          upsertIds: [h-o1, h-o2, h-o3],
+          drawMs: 1200,
+        }
+      - { id: point-h-d2, type: whiteboard.point, at: { mark: h-gov }, target: { assetId: h-d2 } }
+      - {
+          id: draw-h-in,
+          type: whiteboard.apply,
+          at: { mark: h-in },
+          upsertIds: [h-i1, h-i2, h-i3],
+          drawMs: 1200,
+        }
+
+  - id: train-the-trainer
+    chapter: Train the trainer
+    narration: >
+      [[mark:t-open]] CoE က လူ သုံးလေးယောက်ပဲ ရှိတော့ ဝန်ထမ်း ၄၃၀ ကို ကိုယ်တိုင် လိုက်သင်လို့ မရပါဘူး။ FDE learning
+      path က ဒီအတွက် ဆက်တိုက် လုပ်ရမယ့် train the trainer ကို နာမည်တပ်ထားပါတယ်။ သင်တတ်သူတွေက သင်ပေးမယ့်သူ
+      အသစ်တွေကို လေ့ကျင့်ပေးပြီး၊ သင်တဲ့သူ များလာအောင် လုပ်တာပါ။ ကျန်းမာရေး ပညာပေး training တွေအတွက် ရေးထားတဲ့ လမ်းညွှန် တစ်ခုကနေ အဆင့် လေးဆင့်ကို ယူပြီး
+      နေခြည် အတွက် ညှိထားပါတယ်။
+      [[mark:t-1]] ပထမ အဆင့်မှာ support ဘက်က champion နှစ်ယောက်က CoE ရဲ့ training session တစ်ခုကို ဘေးကနေ
+      ကြည့်ပါတယ်။ လူတွေ ဘာကို ဘယ်လို မေးကြလဲ၊ ဘယ်နေရာမှာ ခက်ကြလဲ ဆိုတာကို သင်မယ့်သူ ကိုယ်တိုင် မြင်ဖို့ပါ။
+      [[mark:t-2]] ဒုတိယ အဆင့်မှာ အဲဒီ session ထဲက လေ့ကျင့်ခန်းတွေကို ကိုယ်တိုင် လုပ်ကြည့်ပါတယ်။ သင်မယ့်သူက
+      ကိုယ်တိုင် မလုပ်ဖူးတဲ့ အရာကို ယုံကြည်မှုနဲ့ မသင်နိုင်ပါဘူး။
+      [[mark:t-3]] တတိယ အဆင့်မှာ ကိုယ့် ဌာနက support agent တွေကို session ရဲ့ တစ်ပိုင်းကို သင်ပြီး၊ CoE ဆီကနေ feedback
+      ယူပါတယ်။ Anthropic ရဲ့ agentic coding guide ကလည်း pilot မှာ ပါခဲ့တဲ့သူတွေဟာ ကိုယ်ပိုင် workshop တွေ run တဲ့
+      အတွင်းပိုင်း အကြံပေးတွေ ဖြစ်လာတယ်လို့ ဆိုပါတယ်။
+      [[mark:t-4]] စတုတ္ထ အဆင့်ကတော့ သင်ပြီးနောက်မှာလည်း CoE က ဆက်ကူတာပါ။ champion က ဖြေမရတဲ့ မေးခွန်းကို CoE ဆီ
+      ပြန်ယူလာပြီး၊ အဖြေကို ဌာနတိုင်း သိအောင် ပြန်ဖြန့်ပါတယ်။ training ကိုလည်း သုံးလ တစ်ခါ ပြန်ပြင်ပြီး၊ ဝန်ထမ်းသစ်
+      orientation ထဲမှာ ထည့်ထားဖို့ Administrator Guide က အကြံပေးပါတယ်။
+    sources:
+      - {
+          title: "CDC: Training of Trainers (Healthy Schools training guide)",
+          url: "https://www.cdc.gov/healthy-schools-training/php/tot/index.html",
+        }
+      - {
+          title: "Anthropic: Rolling out agentic coding at your organization",
+          url: "https://claude.com/resources/guides/scaling-agentic-coding-across-your-organization/rolling-out-agentic-coding-at-your-organization",
+        }
+      - {
+          title: "Claude Enterprise Administrator Guide (Anthropic Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+    actions:
+      - {
+          id: close-hub,
+          type: whiteboard.apply,
+          at: { mark: t-open, offsetMs: -1400 },
+          open: false,
+        }
+      - { id: show-ttt, type: slide.show, at: { mark: t-open, offsetMs: -600 }, slideId: ttt }
+      - { id: point-t-1, type: slide.point, at: { mark: t-1 }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-t-2, type: slide.point, at: { mark: t-2 }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-t-3, type: slide.point, at: { mark: t-3 }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-t-4, type: slide.point, at: { mark: t-4 }, target: { x: 0.15, y: 0.81 } }
+
+  - id: charter
+    chapter: CoE charter
+    narration: >
+      [[mark:c-open]] ဒါတွေကို CoE charter အဖြစ် ချရေးကြည့်ရအောင်။ charter ဆိုတာ အဖွဲ့ တစ်ခုက ဘာအတွက် ရှိလဲ၊
+      ဘာကို တာဝန်ယူလဲ ဆိုတာကို သဘောတူ ရေးထားတဲ့ စာမျက်နှာ တစ်ခုပါ။
+      [[mark:type-purpose]] ပထမ အပိုင်းက ရည်ရွယ်ချက်ပါ။ တစ်ကြောင်းတည်းနဲ့ ရေးပါတယ်။ လုံခြုံဖို့နဲ့ မြန်ဖို့ နှစ်ခုလုံးကို
+      တစ်ကြောင်းထဲမှာ ထည့်ထားတာက၊ CoE ကို စည်းကမ်း ထိန်းတဲ့ အဖွဲ့ သက်သက်လို့ ဘယ်သူမှ မထင်စေချင်လို့ပါ။
+      [[mark:type-members]] ဒုတိယ အပိုင်းက အဖွဲ့ဝင်နဲ့ အချိန်ပါ။ roll out ကို run ခဲ့တဲ့ owner၊ Billing team lead မောင်မောင်
+      နဲ့ support champion တစ်ယောက် ပါပြီး၊ တစ်ယောက်စီ ဘယ်လောက် အချိန်ပေးမလဲ ဆိုတာကို သူတို့ manager တွေနဲ့
+      သဘောတူထားပါတယ်။ security တာဝန်ခံကတော့ လစဉ် တစ်ကြိမ် ပါဝင်ပါတယ်။
+      [[mark:type-owns]] တတိယ အပိုင်းက CoE ပိုင်တဲ့ အရာတွေပါ။ ဌာနတိုင်း သီးသီးသန့်သန့် ရေးနေခဲ့တဲ့ prompt၊ skill နဲ့ data
+      စည်းကမ်းတွေကို ဒီနေရာ တစ်ခုတည်းမှာ ထိန်းမှာမို့၊ support ရဲ့ prompt သုံးမျိုးလို ပြဿနာ ထပ်မဖြစ်တော့ပါဘူး။ ပုံမှန်
+      လုပ်ရမယ့် အစည်းအဝေးနဲ့ training ပြင်တာကိုလည်း ဒီမှာ ရေးထားပါတယ်။
+      [[mark:sel-usage]] ဌာနအလိုက် Claude သုံးစွဲမှုကိုလည်း
+      roll out ကာလမှာ အပတ်စဉ်၊ ပြီးရင် လစဉ် ပြန်ကြည့်ပါတယ်။ Enterprise consumption guide ကလည်း
+      ဌာနတိုင်းမှာ သုံးစွဲမှု ဂဏန်းကို ကြည့်ခွင့်ရှိတဲ့ group owner တစ်ယောက်စီ ထားဖို့နဲ့၊ group လေးခုကနေ ခြောက်ခုလောက်နဲ့
+      စဖို့ အကြံပေးပါတယ်။
+    sources:
+      - {
+          title: "Claude Enterprise Administrator Guide (Anthropic Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+      - {
+          title: "Claude Help Center: Claude Enterprise consumption guide",
+          url: "https://support.claude.com/en/articles/14782391-claude-enterprise-consumption-guide",
+        }
+    actions:
+      - { id: close-ttt, type: slide.close, at: { mark: c-open } }
+      - {
+          id: open-charter,
+          type: workspace.openFile,
+          at: { afterAction: close-ttt },
+          path: notebook/55-coe-charter.md,
+        }
+      - id: type-purpose
+        type: editor.type
+        at: { mark: type-purpose }
+        cadence: line-by-line
+        target: { file: notebook/55-coe-charter.md, after: "## ရည်ရွယ်ချက်\n" }
+        text: "ဌာနတိုင်း Claude ကို လုံလုံခြုံခြုံ၊ မြန်မြန် သုံးနိုင်အောင် စံတွေကို တစ်နေရာတည်းမှာ ထိန်းပြီး team တွေကို ကူမယ်။\n"
+      - id: type-members
+        type: editor.type
+        at: { mark: type-members }
+        cadence: line-by-line
+        target: { file: notebook/55-coe-charter.md, after: "## အဖွဲ့ဝင်နဲ့ အချိန်\n" }
+        text: "- owner (Internal Tools team lead) 50 % · မောင်မောင် 20 % · support champion 1 ယောက် 20 %\n- security တာဝန်ခံ: လစဉ် 1 ကြိမ်\n"
+      - id: type-owns
+        type: editor.type
+        at: { mark: type-owns }
+        cadence: line-by-line
+        target: { file: notebook/55-coe-charter.md, after: "## CoE ပိုင်တာ\n" }
+        text: "- shared prompt၊ skill နဲ့ plugin · ခွင့်ပြုထားတဲ့ data စာရင်း (security နဲ့)\n- champion roundtable လစဉ် · training ကို 3 လ တစ်ခါ ပြင် · usage review\n"
+      - id: sel-usage
+        type: editor.select
+        at: { mark: sel-usage }
+        target:
+          file: notebook/55-coe-charter.md
+          text: "usage review"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ finance manager က လစဉ် invoice တွေကို စစ်ပေးမယ့် agent တစ်ခု
+      လိုချင်ပြီး၊ CoE ကပဲ ဆောက်ပေးပါလို့ တောင်းဆိုလာပါတယ်။ agent ဆိုတာ ရည်မှန်းချက် ရောက်တဲ့အထိ tool တွေကို
+      ရွေးသုံးပြီး အဆင့်ဆင့် လုပ်သွားတဲ့ model ပါ။ CoE ထဲမှာ ဆောက်တတ်တဲ့ မောင်မောင် လည်း ရှိနေပါတယ်။
+      [[mark:q-a]] ပထမ ရွေးချယ်စရာက CoE က ဆောက်ပြီး finance ကို ပေးလိုက်တာပါ။
+      [[mark:q-b]] ဒုတိယ ရွေးချယ်စရာက finance ရဲ့ champion နဲ့ တွဲလုပ်ပြီး finance ကိုယ်တိုင် ဆောက်တာပါ။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ CoE က ဆောက်ပေးရင် လူ သုံးလေးယောက်ရှေ့မှာ
+      ဌာနတိုင်း တန်းစီ စောင့်ရပါမယ်။ ပြီးတော့ invoice စည်းကမ်း ပြောင်းတဲ့နေ့မှာ finance က ကိုယ့် agent ကို ကိုယ်
+      မပြင်တတ်လို့ CoE ဆီ ပြန်လာရပါမယ်။ champion နဲ့ တွဲဆောက်ရင်တော့ ဆောက်တတ်တဲ့ ကျွမ်းကျင်မှုက finance ထဲမှာ
+      ကျန်ခဲ့ပါတယ်။ ကိုယ်လည်း Day ၃၀ မှာ developer တွေကို ရှေ့ထားခဲ့တာ ဒီ အကြောင်းကြောင့်ပါပဲ။
+      [[mark:q-rule]] ဒါကြောင့် CoE က team တွေရဲ့ အလုပ်ကို ကိုယ်တိုင် မလုပ်ဘဲ၊ team က ပိုင်ပြီး ဆက်ထိန်းနိုင်အောင်
+      တွဲကူပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1],
+          drawMs: 900,
+        }
+
+  - id: not-do
+    chapter: CoE မလုပ်တာ
+    narration: >
+      [[mark:n-open]] ဒီ စည်းမျဉ်းကို charter ရဲ့ နောက်ဆုံး အပိုင်းမှာ ရေးထားရပါမယ်။ CoE မလုပ်တဲ့ အရာတွေပါ။
+      [[mark:type-not]] team တွေရဲ့ agent ဒါမှမဟုတ် workflow ကို CoE က ကိုယ်တိုင် မဆောက်ပါဘူး။ champion နဲ့ တွဲလုပ်ပြီး
+      team က ပိုင်ပါတယ်။ ဒီ တစ်ကြောင်း မရှိရင် CoE က အမြန် ဆောက်ပေးနိုင်တဲ့ အဖွဲ့လို့ နာမည်ကြီးလာပြီး၊ သုံးလ မပြည့်ခင်
+      တောင်းဆိုချက် စာရင်းရှည်ကြီးနဲ့ ပိတ်မိသွားတတ်ပါတယ်။
+      [[mark:n-gov]] ဒုတိယ တစ်ကြောင်းကလည်း ဒီလိုပဲ အရေးကြီးပါတယ်။ ခွင့်ပြုထားတဲ့ စာရင်းထဲ ပါပြီးသား အလုပ်အတွက် CoE
+      ရဲ့ ခွင့်ပြုချက်ကို ထပ် မတောင်းခိုင်းပါဘူး။ ဒါမှ governance က အမြန်လမ်း ဖြစ်မှာ ဖြစ်ပြီး၊ အတားအဆီး မဖြစ်တော့မှာပါ။
+    sources:
+      - {
+          title: "Claude Enterprise Administrator Guide (Anthropic Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: n-open }, open: false }
+      - id: type-not
+        type: editor.type
+        at: { mark: type-not }
+        cadence: line-by-line
+        target: { file: notebook/55-coe-charter.md, after: "## CoE မလုပ်တာ\n" }
+        text: "- team တွေရဲ့ agent၊ workflow ကို ကိုယ်တိုင် မဆောက်။ champion နဲ့ တွဲလုပ်ပြီး team က ပိုင်\n"
+      - id: type-gov
+        type: editor.type
+        at: { mark: n-gov }
+        cadence: line-by-line
+        target: { file: notebook/55-coe-charter.md, after: "team က ပိုင်\n" }
+        text: "- ခွင့်ပြုစာရင်းထဲ ပါပြီးသား အလုပ်အတွက် ခွင့်ပြုချက် ထပ် မတောင်းခိုင်း\n"
+      - id: expect-not
+        type: expect.file
+        at: { afterAction: type-gov }
+        path: notebook/55-coe-charter.md
+        contains: "- team တွေရဲ့ agent၊ workflow ကို ကိုယ်တိုင် မဆောက်။ champion နဲ့ တွဲလုပ်ပြီး team က ပိုင်\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် ကုမ္ပဏီအတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် ကုမ္ပဏီမှာ CoE တစ်ခု ဖွဲ့မယ်ဆိုရင် သူ့ ရည်ရွယ်ချက်ကို
+      ဒီ ပုံစံအတိုင်း တစ်ကြောင်းတည်းနဲ့ ရေးကြည့်ပါ။ AI tool မဟုတ်ဘဲ တခြား နည်းပညာ တစ်ခုအတွက်လည်း ရပါတယ်။
+      [[mark:turn-2]] ပြီးရင် CoE မလုပ်တဲ့ အရာ တစ်ခုကိုပါ ထည့်ရေးပါ။ ဘာမလုပ်ဘူး ဆိုတာ မရေးနိုင်ရင်၊ အဲဒီ အဖွဲ့က
+      နောက်ဆုံးမှာ အကုန်လုပ်ပေးရတဲ့ အဖွဲ့ ဖြစ်သွားတတ်ပါတယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-purpose
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/55-coe-charter.md
+          text: "ဌာနတိုင်း Claude ကို လုံလုံခြုံခြုံ၊ မြန်မြန် သုံးနိုင်အောင် စံတွေကို တစ်နေရာတည်းမှာ ထိန်းပြီး team တွေကို ကူမယ်။"
+      - id: sel-not
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/55-coe-charter.md
+          text: "## CoE မလုပ်တာ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ ဌာနတိုင်းက ကိုယ့်နည်း၊ ကိုယ့်အမှားနဲ့ သွားနေတဲ့အခါ လိုတာက အဖွဲ့ငယ် CoE တစ်ခုပါ။
+      လူ သုံးလေးယောက်က အချိန်ရဲ့ တစ်စိတ်တစ်ပိုင်းနဲ့ မျှဝေတဲ့ စည်းကမ်း၊ prompt နဲ့ skill တွေကို ထိန်းပြီး၊ ဌာနတွေဆီကနေ
+      မေးခွန်းနဲ့ အလုပ်ဖြစ်တဲ့ နည်းတွေကို ပြန်စုပါတယ်။
+      [[mark:recap-2]] champion တွေကို ဆရာဖြစ်လာအောင် လေ့ကျင့်ပေးပြီး၊ team တွေရဲ့ အလုပ်ကိုတော့ ကိုယ်တိုင် မလုပ်ပါဘူး။
+      [[mark:next]] နောက် lesson က ဒီ course ရဲ့ နောက်ဆုံး lesson ပါ။ နောက် lesson မှာတော့ ခြောက်လအကြာ အောင်အောင် မေးတဲ့
+      ဘာတွေ ပြောင်းသွားလဲ၊ ဘာ ဆက်လုပ်မလဲ ဆိုတဲ့ မေးခွန်းနဲ့ Expansion အဆင့်ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-owns
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/55-coe-charter.md
+          text: "## CoE ပိုင်တာ"
+      - id: sel-not-line
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/55-coe-charter.md
+          text: "- team တွေရဲ့ agent၊ workflow ကို ကိုယ်တိုင် မဆောက်။ champion နဲ့ တွဲလုပ်ပြီး team က ပိုင်"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
