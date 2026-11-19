@@ -1,0 +1,646 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-19-tool-use
+  title: "Claude FDE 19: Tool use"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: reply-assistant/src/tools.ts
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      examples/tool-round.example.json: |
+        [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "tool_use",
+                "id": "toolu_01Qm8sT4vN6xBc3kW9pLd2Hy",
+                "name": "check_outage",
+                "input": { "township": "Hlaing" }
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "tool_use_id": "toolu_01Qm8sT4vN6xBc3kW9pLd2Hy",
+                "content": "{\"township\":\"Hlaing\",\"outage\":true}"
+              }
+            ]
+          }
+        ]
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      reply-assistant/src/tools.ts: |
+        import Anthropic from "@anthropic-ai/sdk";
+        import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
+        import { z } from "zod";
+
+        const client = new Anthropic();
+
+        // Our code: the prototype's read-only NMS lookup (a stub here).
+        async function outageFor(township: string) {
+          return { township, outage: false };
+        }
+
+        export const checkOutage = betaZodTool({
+          name: "check_outage",
+          inputSchema: z.object({
+          }),
+          run: async ({ township }) => JSON.stringify(await outageFor(township)),
+        });
+
+        export async function draftReply(ticket: string) {
+        }
+  whiteboardAssets:
+    # Board 1 — one tool's journey as three cards: blue the definition we write, violet the two
+    # messages that flow, orange the field the model chooses by.
+    - {
+        id: t-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 600,
+        height: 45,
+        text: "Tool တစ်ခုရဲ့ ခရီး",
+        fontSize: 36,
+      }
+    - { id: c1, kind: rectangle, x: 290, y: 220, width: 800, height: 85, strokeColor: "#1971c2" }
+    - {
+        id: c1-h,
+        kind: text,
+        x: 310,
+        y: 245,
+        width: 180,
+        height: 35,
+        text: "Definition",
+        fontSize: 28,
+      }
+    - { id: c1-n, kind: text, x: 500, y: 245, width: 100, height: 35, text: "name ·", fontSize: 28 }
+    - {
+        id: c1-d,
+        kind: text,
+        x: 605,
+        y: 245,
+        width: 190,
+        height: 35,
+        text: "description",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c1-s,
+        kind: text,
+        x: 805,
+        y: 245,
+        width: 240,
+        height: 35,
+        text: "· input_schema",
+        fontSize: 28,
+      }
+    - {
+        id: a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 670,
+        y: 310,
+        width: 40,
+        height: 75,
+        strokeColor: "#6741d9",
+      }
+    - { id: c2, kind: rectangle, x: 290, y: 390, width: 800, height: 85, strokeColor: "#6741d9" }
+    - {
+        id: c2-h,
+        kind: text,
+        x: 310,
+        y: 415,
+        width: 180,
+        height: 35,
+        text: "tool_use",
+        fontSize: 28,
+      }
+    - {
+        id: c2-f,
+        kind: text,
+        x: 500,
+        y: 415,
+        width: 570,
+        height: 35,
+        text: "id · name · input  (Claude က ရေး)",
+        fontSize: 28,
+      }
+    - {
+        id: a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 670,
+        y: 480,
+        width: 40,
+        height: 75,
+        strokeColor: "#6741d9",
+      }
+    - { id: c3, kind: rectangle, x: 290, y: 560, width: 800, height: 85, strokeColor: "#6741d9" }
+    - {
+        id: c3-h,
+        kind: text,
+        x: 310,
+        y: 585,
+        width: 190,
+        height: 35,
+        text: "tool_result",
+        fontSize: 28,
+      }
+    - {
+        id: c3-f,
+        kind: text,
+        x: 500,
+        y: 585,
+        width: 570,
+        height: 35,
+        text: "tool_use_id · content  (code က ရေး)",
+        fontSize: 28,
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "NMS က မဖြေရင် ဘာပြန်ပို့မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) အဲဒီ tool_result ကို မပို့ဘဲ ကျော်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) is_error: true နဲ့ အကြောင်း ရေးပို့",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 520,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 830,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "tool_use တိုင်းအတွက် tool_result တစ်ခု",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "မှားရင် ဘာမှားလဲ ရေးပြီး ပြန်ပို့",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9319
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Tool အစစ်တွေ လိုလာပြီ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ agent loop ကို ကိုယ်တိုင် ရေးခဲ့ပါတယ်။ request ပို့၊ model က tool တောင်းရင် run၊ ရလဒ်ကို
+      ပြန်ပို့ ဆိုတာကို draft ပြီးတဲ့အထိ ထပ်လုပ်တဲ့ loop ပါ။ အဲဒီ loop မှာ ပုံသေ ရလဒ် ပြန်ပေးတဲ့ tool တစ်ခုပဲ
+      ရှိခဲ့ပါတယ်။
+      [[mark:sel-nms]] Reply assistant က တကယ် အသုံးဝင်ဖို့ဆိုရင် tool အစစ်တွေ လိုပါတယ်။ connection ticket
+      အတွက်ဆိုရင် မြို့နယ်မှာ လိုင်းကျနေလား ဆိုတာကို NMS ကနေ သိရပါမယ်။
+      [[mark:sel-billing]] billing ticket အတွက်ဆိုရင်တော့ customer သုံးနေတဲ့ plan နဲ့ မပေးရသေးတဲ့ invoice ကို
+      Billing ကနေ ဖတ်ရပါမယ်။ tool တွေ များလာတာနဲ့အမျှ မေးခွန်း အသစ် တစ်ခု ပေါ်လာပါတယ်။ model က ticket
+      တစ်ခုကို ဖတ်ပြီး ဘယ် tool ကို ဘယ်အချိန်မှာ ခေါ်ရမလဲ ဆိုတာ ဘယ်လို သိမလဲ ဆိုတာပါ။ model က NMS ကို
+      မမြင်ဖူးသလို၊ နေခြည် ရဲ့ Billing system ကိုလည်း မသိပါဘူး။ သိတာက ကိုယ်တို့ ရေးပေးလိုက်တဲ့ tool definition
+      ပဲ ရှိပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Define tools",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: sel-nms }, path: README.md }
+      - id: sel-nms
+        type: editor.select
+        at: { afterAction: open-readme }
+        target:
+          file: README.md
+          text: "- NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ"
+      - id: sel-billing
+        type: editor.select
+        at: { mark: sel-billing }
+        target:
+          file: README.md
+          text: "- Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)"
+
+  - id: cards
+    chapter: Tool တစ်ခုရဲ့ ခရီး
+    narration: >
+      [[mark:t-open]] tool တစ်ခုက request ကနေ ရလဒ်အထိ ဘယ်လို သွားလဲ ဆိုတာကို အဆင့် သုံးဆင့်နဲ့ ဆွဲကြည့်ရအောင်။
+      [[mark:t-def]] ပထမ အဆင့်က tool definition ပါ။ request ထဲမှာ ကိုယ်တို့ ကြေညာပေးရတဲ့ tool ရဲ့ ဖော်ပြချက်ပါ။
+      နာမည် တစ်ခု၊ ဘာလုပ်ပေးလဲ ဆိုတဲ့ description တစ်ခု၊ ဘယ်လို input လက်ခံလဲ ဆိုတဲ့ input schema တစ်ခု ပါပါတယ်။
+      input schema ဆိုတာ JSON Schema နဲ့ ရေးထားတဲ့ input ပုံစံ သတ်မှတ်ချက်ပါ။
+      [[mark:t-desc]] ဒီ သုံးခုထဲမှာ အရေးအကြီးဆုံးက description ပါ။ model က tool ကို ခေါ်မလား မခေါ်ဘူးလား၊
+      ဘယ် tool ကို ခေါ်မလဲ ဆိုတာကို description ကို ဖတ်ပြီး ဆုံးဖြတ်တာ ဖြစ်လို့ပါ။ Anthropic ရဲ့ docs ကလည်း tool
+      ကောင်းကောင်း အလုပ်လုပ်ဖို့ အဓိက အချက်က အသေးစိတ်ကျတဲ့ description ပဲလို့ ဆိုပါတယ်။
+      [[mark:t-use]] ဒုတိယ အဆင့်က tool use block ပါ။ ဒါကို model က ရေးပါတယ်။ ဘယ် tool ကို ခေါ်ချင်လဲ ဆိုတဲ့
+      နာမည်၊ schema နဲ့ ကိုက်တဲ့ input နဲ့ id တစ်ခု ပါပါတယ်။
+      [[mark:t-result]] တတိယ အဆင့်က tool result block ပါ။ ဒါကိုတော့ ကိုယ်တို့ code က ရေးပါတယ်။ tool ကို run ပြီး
+      ရလာတဲ့ ရလဒ်ကို content ထဲ ထည့်ပြီး၊ ဘယ် tool use အတွက်လဲ ဆိုတာကို id နဲ့ ပြန်ညွှန်းပါတယ်။ ဆိုလိုတာက
+      definition ကို ကိုယ်တို့ ရေး၊ တောင်းဆိုချက်ကို model က ရေး၊ ရလဒ်ကို ကိုယ်တို့ ပြန်ရေး ဆိုတဲ့ အလှည့်ကျ
+      ရေးတာပါ။
+    sources:
+      - {
+          title: "Claude Docs: Define tools",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools",
+        }
+      - {
+          title: "Claude Docs: Handle tool calls",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls",
+        }
+    actions:
+      - {
+          id: draw-t-open,
+          type: whiteboard.apply,
+          at: { mark: t-open },
+          open: true,
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-t-def,
+          type: whiteboard.apply,
+          at: { mark: t-def },
+          upsertIds: [c1, c1-h, c1-n, c1-s],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-t-desc,
+          type: whiteboard.apply,
+          at: { mark: t-desc },
+          upsertIds: [c1-d],
+          drawMs: 600,
+        }
+      - {
+          id: draw-t-use,
+          type: whiteboard.apply,
+          at: { mark: t-use },
+          upsertIds: [a1, c2, c2-h, c2-f],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-t-result,
+          type: whiteboard.apply,
+          at: { mark: t-result },
+          upsertIds: [a2, c3, c3-h, c3-f],
+          drawMs: 1600,
+        }
+
+  - id: round
+    chapter: tool use နဲ့ tool result
+    narration: >
+      [[mark:x-close]] ဒီ ဒုတိယနဲ့ တတိယ အဆင့်ကို ဥပမာ တစ်ခုနဲ့ ကြည့်ရအောင်။ ဒါက loop တစ်ပတ်မှာ စကားဝိုင်းထဲ
+      ထပ်ဝင်လာတဲ့ message နှစ်ခုရဲ့ ဥပမာပါ။
+      [[mark:sel-use]] ပထမ message က assistant ဆီက ဖြစ်ပြီး၊ model က လှိုင်မြို့နယ်အတွက် check outage ကို
+      တောင်းထားပါတယ်။ input က definition ထဲက schema အတိုင်း township ဆိုတဲ့ field တစ်ခုပဲ ပါပါတယ်။
+      [[mark:sel-result]] ဒုတိယ message က user ဆီက ဖြစ်ပြီး၊ ကိုယ်တို့ code ရေးတဲ့ tool result ပါ။ tool use id က
+      ပထမ message ထဲက id နဲ့ တစ်ထပ်တည်း ကျနေတာ သတိထားကြည့်ပါ။ အဲဒီ id တွဲထားလို့ model က ဒီ ရလဒ်ဟာ ဘယ်
+      တောင်းဆိုချက်အတွက်လဲ သိပါတယ်။
+      [[mark:sel-content]] content ကတော့ NMS က ပြန်ပေးတဲ့ ရလဒ်ပါ။ ဒီ ဥပမာမှာ လှိုင်မှာ လိုင်းကျနေတယ်လို့ ပြနေပါတယ်။
+      ဒီ ရလဒ်ကို ဖတ်ပြီးမှ model က router ပြန်ဖွင့်ခိုင်းတဲ့ အဖြေမျိုး မရေးဘဲ၊ လိုင်းကျနေကြောင်း ပြောပြတဲ့ draft ကို
+      ရေးနိုင်မှာပါ။ မုန်တိုင်းကျတဲ့ညက ပျောက်နေခဲ့တာ ဒီ message တစ်ခုပါပဲ။
+    sources:
+      - {
+          title: "Claude Docs: Handle tool calls",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls",
+        }
+    actions:
+      - { id: close-cards, type: whiteboard.apply, at: { mark: x-close }, open: false }
+      - {
+          id: open-ex,
+          type: workspace.openFile,
+          at: { afterAction: close-cards },
+          path: examples/tool-round.example.json,
+        }
+      - id: sel-use
+        type: editor.select
+        at: { mark: sel-use }
+        target:
+          file: examples/tool-round.example.json
+          text: "        \"name\": \"check_outage\",\n        \"input\": { \"township\": \"Hlaing\" }\n"
+      - id: sel-result
+        type: editor.select
+        at: { mark: sel-result }
+        target:
+          file: examples/tool-round.example.json
+          text: '"tool_use_id": "toolu_01Qm8sT4vN6xBc3kW9pLd2Hy",'
+      - id: sel-content
+        type: editor.select
+        at: { mark: sel-content }
+        target:
+          file: examples/tool-round.example.json
+          text: "\"content\": \"{\\\"township\\\":\\\"Hlaing\\\",\\\"outage\\\":true}\""
+
+  - id: define
+    chapter: Description ကို ရေးခြင်း
+    narration: >
+      [[mark:d-open]] အခု check outage ကို Reply assistant ရဲ့ code ထဲမှာ tool အဖြစ် ကြေညာကြည့်ရအောင်။ ဒီ file မှာ SDK
+      ရဲ့ helper တစ်ခုနဲ့ ရေးထားပြီး၊ နာမည်ကတော့ ပေးထားပြီးသားပါ။
+      [[mark:type-desc]] description မှာ သုံးချက် ပါအောင် ရေးပါမယ်။ ပထမ စာကြောင်းက tool က ဘာလုပ်လဲ ပြောပါတယ်။
+      ဒုတိယ စာကြောင်းက ဘယ်အချိန်မှာ သုံးရမလဲ ပြောပါတယ်။ connection ticket တိုင်းမှာ draft မရေးခင် ခေါ်ဖို့ပါ။
+      တတိယ စာကြောင်းက ဘာ ပြန်ပေးလဲ၊ ဘာကို မမြင်နိုင်ဘူးလဲ ပြောပါတယ်။ customer ရဲ့ router ကို မမြင်နိုင်ဘူး ဆိုတဲ့
+      ကန့်သတ်ချက်ကို ရေးထားမှ model က ဒီ tool ရဲ့ ရလဒ်ကို လိုတာထက် ပိုမယုံအောင် ကူညီပါတယ်။
+      [[mark:type-field]] input schema ထဲမှာ township ဆိုတဲ့ field တစ်ခု ထည့်ပါမယ်။ field မှာလည်း description
+      ပါပါတယ်။ ဥပမာ တစ်ခု ပေးထားတော့ model က မြို့နယ် နာမည်ကို NMS သုံးတဲ့ ပုံစံအတိုင်း English နဲ့ ပို့တတ်ပါတယ်။
+      [[mark:sel-run]] ဒီ helper က input ကို schema နဲ့ စစ်ပြီးမှ run function ကို ခေါ်ပါတယ်။ ဒါကြောင့် ကိုယ်တို့
+      function ထဲကို schema နဲ့ မကိုက်တဲ့ input မရောက်လာပါဘူး။
+      [[mark:strict]] helper မသုံးဘဲ definition ကို ကိုယ်တိုင် ရေးတဲ့အခါ
+      မှာတော့ tool ပေါ်မှာ strict ကို true ပေးပြီး input က schema နဲ့ အမြဲ ကိုက်အောင် API ဘက်က အာမခံခိုင်းလို့
+      ရပါတယ်။
+      [[mark:no-force]] ဘယ်နည်းပဲ သုံးသုံး၊ model ကို tool ခေါ်ဖို့ အတင်း ခိုင်းတဲ့ setting ကို Opus နဲ့ Sonnet ရဲ့ လက်ရှိ
+      model တွေ အပါအဝင် model အသစ်တချို့က လက်မခံပါဘူး။ prompt ထဲမှာ tool ကို နာမည်နဲ့ ပြောပြပြီး၊ tool ခေါ်မှု တကယ် ပါလာလား ကိုယ်တိုင် စစ်ပါ။
+    sources:
+      - {
+          title: "Claude Docs: Define tools",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools",
+        }
+      - {
+          title: "Claude Docs: Tool runner (SDK)",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-runner",
+        }
+    actions:
+      - {
+          id: open-tools,
+          type: workspace.openFile,
+          at: { mark: d-open },
+          path: reply-assistant/src/tools.ts,
+        }
+      - id: type-desc
+        type: editor.type
+        at: { mark: type-desc }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/tools.ts, after: "  name: \"check_outage\",\n" }
+        text: "  description:\n    \"Checks the NMS for a current outage in one Naychi Fiber township. \" +\n    \"Use it before drafting a reply to any connection ticket (no internet, slow). \" +\n    \"Returns whether there is an outage; it cannot see the customer's own router.\",\n"
+      - id: expect-desc
+        type: expect.file
+        at: { afterAction: type-desc }
+        path: reply-assistant/src/tools.ts
+        contains: "    \"Use it before drafting a reply to any connection ticket (no internet, slow). \" +\n"
+      - id: type-field
+        type: editor.type
+        at: { mark: type-field }
+        cadence: line-by-line
+        target: { file: reply-assistant/src/tools.ts, after: "  inputSchema: z.object({\n" }
+        text: "    township: z.string().describe(\"Township name in English, e.g. Hlaing\"),\n"
+      - id: sel-run
+        type: editor.select
+        at: { mark: sel-run }
+        target:
+          file: reply-assistant/src/tools.ts
+          text: "  run: async ({ township }) => JSON.stringify(await outageFor(township)),"
+
+  - id: runner
+    chapter: Tool Runner
+    narration: >
+      [[mark:type-runner]] tool ရပြီ ဆိုရင် ပြီးခဲ့တဲ့ lesson က loop ကို ပြန်ရေးစရာ မလိုပါဘူး။ SDK ရဲ့ Tool Runner
+      ကို ခေါ်လိုက်ရုံပါပဲ။ request ရဲ့ ပုံစံက ပုံမှန် request နဲ့ တူပြီး၊ tools ထဲမှာ ကိုယ်တို့ tool ကို ထည့်ပေးပါတယ်။
+      max iterations ကတော့ loop ရဲ့ ကန့်သတ်ချက်ပါ။ အများဆုံး ငါးပတ်အထိပဲ ပတ်ပါမယ်။
+      [[mark:sel-runner]] Tool Runner က ဘာတွေကို ဖယ်ပေးလဲ ဆိုတော့၊ ပြီးခဲ့တဲ့ lesson မှာ ကိုယ်တိုင် ရေးခဲ့ရတဲ့
+      အလုပ်တွေပါ။ stop reason ကို စစ်တာ၊ tool use block တစ်ခုချင်းအတွက် run function ကို ခေါ်တာ၊ ရလဒ်ကို id နဲ့
+      တွဲပြီး ပြန်ပို့တာ၊ စကားဝိုင်းကို ထိန်းသိမ်းတာ အားလုံးကို runner က လုပ်ပေးပြီး၊ နောက်ဆုံး message ကိုပဲ
+      ပြန်ပေးပါတယ်။ ကိုယ်တို့ ရေးရတာက tool ရဲ့ description နဲ့ run function ပဲ ကျန်ပါတော့တယ်။
+      [[mark:sel-final]] ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ TypeScript SDK ရဲ့ Tool Runner က beta ပါ။ ဒါကြောင့် client ရဲ့
+      beta ဆိုတဲ့ အပိုင်းကနေ ခေါ်ရပါတယ်။ နောက်ပြီး docs က tool တစ်ခု မ run ခင် လူ တစ်ယောက်ကို ခွင့်တောင်းရမယ့်
+      အလုပ်၊ ကိုယ်ပိုင် log ရေးရမယ့် အလုပ်မျိုးမှာ ကိုယ်တိုင် ရေးတဲ့ loop ကို သုံးဖို့ အကြံပေးပါတယ်။ Reply assistant
+      က tool တွေ အားလုံး ဖတ်ရုံပဲ လုပ်တာမို့ ဒီ အဆင့်မှာ runner နဲ့ လုံလောက်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Tool runner (SDK)",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-runner",
+        }
+    actions:
+      - id: type-runner
+        type: editor.type
+        at: { mark: type-runner }
+        cadence: line-by-line
+        target:
+          {
+            file: reply-assistant/src/tools.ts,
+            after: "export async function draftReply(ticket: string) {\n",
+          }
+        text: "  const final = await client.beta.messages.toolRunner({\n    model: \"claude-opus-5-5\", // ID as of 2026-11\n    max_tokens: 16000,\n    max_iterations: 5,\n    tools: [checkOutage],\n    messages: [{ role: \"user\", content: ticket }],\n  });\n  return final.content.map((b) => (b.type === \"text\" ? b.text : \"\")).join(\"\");\n"
+      - id: sel-runner
+        type: editor.select
+        at: { mark: sel-runner }
+        target:
+          file: reply-assistant/src/tools.ts
+          text: "  const final = await client.beta.messages.toolRunner({"
+      - id: sel-final
+        type: editor.select
+        at: { mark: sel-final }
+        target:
+          file: reply-assistant/src/tools.ts
+          text: "client.beta.messages.toolRunner"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ မိုးသည်းတဲ့ ညတစ်ည NMS က ဖြေချိန် ကျော်သွားလို့ check outage က
+      ရလဒ် မရဘူး ဆိုပါစို့။ ကိုယ်တို့ ကိုယ်တိုင် ရေးတဲ့ loop ထဲမှာဆိုရင် အဲဒီ tool use အတွက် ဘာကို ပြန်ပို့သင့်မလဲ။
+      [[mark:q-a]] ပထမ အဖြေက အဲဒီ tool result ကို မပို့ဘဲ ကျော်လိုက်ပြီး၊ ကျန်တဲ့ ရလဒ်တွေကိုပဲ ပို့တာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက is error ကို true ပေးထားတဲ့ tool result တစ်ခုကို၊ NMS က မဖြေဘူး ဆိုတဲ့ အကြောင်းနဲ့
+      ပို့တာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ tool use block တိုင်းအတွက် tool result
+      တစ်ခုစီ ပြန်ပို့ရမယ်လို့ API က သတ်မှတ်ထားလို့ပါ။ tool မအောင်မြင်ရင်လည်း ပို့ရပါတယ်။ ဘာမှားလဲ ဆိုတာကို
+      error အဖြစ် ပြောပြလိုက်ရင် model က တခြား နည်းလမ်း စမ်းတာ၊ ဒါမှမဟုတ် လိုင်းကျမှု အခြေအနေကို
+      မစစ်နိုင်သေးဘူးလို့ draft ထဲမှာ ရိုးရိုးသားသား ရေးတာမျိုး လုပ်တတ်ပါတယ်။
+      [[mark:q-runner]] Tool Runner မှာတော့ run function
+      ထဲက error ကို runner က ဖမ်းပြီး ဒီလို error result အဖြစ် အလိုအလျောက် ပြောင်းပေးပါတယ်။
+      [[mark:q-rule]] ဒါကြောင့် tool တစ်ခု မှားရင် ရလဒ်ကို ဖျောက်မထားပါနဲ့။ ဘာမှားလဲ၊ ဘာဆက်လုပ်သင့်လဲ ဆိုတာကို
+      ရေးပြီး error result အဖြစ် ပြန်ပို့ပါ။
+    sources:
+      - {
+          title: "Claude Docs: Handle tool calls",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls",
+        }
+      - {
+          title: "Claude Docs: Tool runner (SDK)",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-runner",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် tool အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် project ထဲက tool တစ်ခုအတွက် နာမည်နဲ့
+      description ကို ဒီ ပုံစံအတိုင်း ရေးကြည့်ပါ။ ပထမ စာကြောင်းမှာ ဘာလုပ်လဲ၊ ဒုတိယ စာကြောင်းမှာ ဘယ်အချိန်မှာ
+      သုံးရမလဲ ရေးပါ။ အချိန်ရရင် ဘာ ပြန်ပေးလဲ၊ ဘာကို မမြင်နိုင်ဘူးလဲ ဆိုတဲ့ တတိယ စာကြောင်းပါ ထည့်ပါ။
+      [[mark:turn-2]] ရေးပြီးရင် ကိုယ့် project ကို မသိတဲ့ developer တစ်ယောက် ဖတ်တယ်လို့ စိတ်ကူးကြည့်ပါ။ ဒီ
+      description တစ်ခုတည်းကို ဖတ်ပြီး ဘယ်အချိန်မှာ ခေါ်ရမလဲ ဆုံးဖြတ်နိုင်မလား။ လူတစ်ယောက် ဆုံးဖြတ်လို့
+      မရရင် model ကလည်း ဆုံးဖြတ်ဖို့ ခက်ပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Claude Docs: Define tools",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-desc
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: reply-assistant/src/tools.ts
+          text: "    \"Checks the NMS for a current outage in one Naychi Fiber township. \" +\n    \"Use it before drafting a reply to any connection ticket (no internet, slow). \" +\n"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ model က tool ကို ကိုယ်တို့ ရေးပေးတဲ့ definition ကနေပဲ သိပါတယ်။ အဲဒီထဲမှာ
+      description က ဘယ်အချိန်မှာ ခေါ်မလဲ ဆိုတာကို ဆုံးဖြတ်ပေးတာမို့ အသေးစိတ် ရေးရပါမယ်။ tool use ကို model
+      ရေးပြီး၊ tool result ကို ကိုယ်တို့ id နဲ့ တွဲပြန်ရေးပါတယ်။ မှားရင်လည်း error result အဖြစ် ပြန်ပို့ပါတယ်။
+      [[mark:recap-2]] Tool Runner က အဲဒီ loop တစ်ခုလုံးကို လုပ်ပေးလို့ ကိုယ်တို့ အာရုံစိုက်ရမှာက tool ရဲ့
+      description နဲ့ run function ပဲ ကျန်ပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ငွေတောင်းခံမှု အငြင်းပွားတဲ့ ticket လို ခက်ခဲတဲ့ အလုပ်မျိုးမှာ model ကို
+      ဘယ်လောက် နက်နက် တွေးခိုင်းမလဲ ဆိုတဲ့ thinking နဲ့ effort ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Docs: Tool runner (SDK)",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-runner",
+        }
+    actions:
+      - id: sel-recap-desc
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: reply-assistant/src/tools.ts
+          text: "  description:"
+      - id: sel-recap-run
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: reply-assistant/src/tools.ts
+          text: "    tools: [checkOutage],"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
