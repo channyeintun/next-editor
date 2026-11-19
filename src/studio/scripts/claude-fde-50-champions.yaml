@@ -1,0 +1,740 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-50-champions
+  title: "Claude FDE 50: Champion နဲ့ documentation"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/50-champion-plan.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/50-champion-plan.md: |
+        # Delivery Plan Pack · 4. Champion plan
+
+        ကိုယ် (FDE) ထွက်မယ့်နေ့: Day 30 showcase ပြီးရင်
+
+        ## Champion
+
+        ## ပိုင်ရမယ့်အရာ
+
+        ## Handover checklist (Day 30 မတိုင်ခင် ပြည့်ရမယ်)
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — today: every question (violet) flows to ကိုယ် in the middle;
+    # red is the risk: ကိုယ် leaves after Day 30.
+    - {
+        id: a-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "အခု: မေးခွန်းတိုင်း ကိုယ့်ဆီ",
+        fontSize: 36,
+      }
+    - {
+        id: a-me,
+        kind: rectangle,
+        x: 560,
+        y: 330,
+        width: 240,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-me-l,
+        kind: text,
+        align: center,
+        x: 560,
+        y: 357,
+        width: 240,
+        height: 35,
+        text: "ကိုယ် (FDE)",
+        fontSize: 28,
+      }
+    - {
+        id: a-d1,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 290,
+        height: 35,
+        text: "Billing developer",
+        fontSize: 28,
+      }
+    - {
+        id: a-ar1,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 440,
+        y: 282,
+        width: 110,
+        height: 45,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-d2,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 260,
+        height: 35,
+        text: "Network Tools",
+        fontSize: 28,
+      }
+    - {
+        id: a-ar2,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 440,
+        y: 423,
+        width: 110,
+        height: 45,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-d3,
+        kind: text,
+        x: 820,
+        y: 240,
+        width: 260,
+        height: 35,
+        text: "developer အသစ်",
+        fontSize: 28,
+      }
+    - {
+        id: a-ar3,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 810,
+        y: 282,
+        width: 90,
+        height: 45,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-risk,
+        kind: text,
+        x: 290,
+        y: 570,
+        width: 790,
+        height: 35,
+        text: "Day 30 နောက် ကိုယ် ထွက်ရင် ဘာဖြစ်မလဲ?",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — after Day 30, the same picture: the champion in the middle
+    # (orange, the board's subject), what they own in blue, ကိုယ် dashed at the
+    # edge on the way out, the green handover rule.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "Day 30 နောက်: ဘယ်သူ ထိန်းမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: b-tag,
+        kind: text,
+        align: center,
+        x: 540,
+        y: 288,
+        width: 280,
+        height: 35,
+        text: "champion",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-ch,
+        kind: rectangle,
+        x: 540,
+        y: 330,
+        width: 280,
+        height: 90,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: b-ch-l,
+        kind: text,
+        align: center,
+        x: 540,
+        y: 357,
+        width: 280,
+        height: 35,
+        text: "မောင်မောင်",
+        fontSize: 28,
+      }
+    - {
+        id: b-o1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 190,
+        height: 35,
+        text: "CLAUDE.md",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-o2,
+        kind: text,
+        x: 500,
+        y: 470,
+        width: 160,
+        height: 35,
+        text: "skill များ",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-o3,
+        kind: text,
+        x: 680,
+        y: 470,
+        width: 150,
+        height: 35,
+        text: "plugin",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-o4,
+        kind: text,
+        x: 850,
+        y: 470,
+        width: 220,
+        height: 35,
+        text: "office hours",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-me,
+        kind: rectangle,
+        x: 870,
+        y: 230,
+        width: 130,
+        height: 70,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-me-l,
+        kind: text,
+        align: center,
+        x: 870,
+        y: 248,
+        width: 130,
+        height: 35,
+        text: "ကိုယ်",
+        fontSize: 28,
+      }
+    - {
+        id: b-out,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 1008,
+        y: 245,
+        width: 85,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-hand,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 790,
+        height: 35,
+        text: "handover = ရက်စွဲ + checklist",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Customer App ရဲ့ champion ဘယ်သူလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) usage leaderboard ထိပ်ဆုံးက developer",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) team က အမြဲ မေးနေကျ developer၊ အချိန် ဖယ်ပေး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 640,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 1000,
+        y: 300,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "အသုံးအများဆုံး ≠ ကူညီပေးသူ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "လူတွေ မေးနေကျသူ + အချိန်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9350
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ကိုယ် ထွက်သွားရင်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ကြီးကြပ်ပြီး သုံးတာကနေ အလုပ်ကို လွှဲအပ်တာဆီ အဆင့်လိုက် ရောက်အောင် roll out plan ကို
+      ဆွဲခဲ့ပြီး၊ အဆင့်တိုင်းကို အချိန်နဲ့ မဟုတ်ဘဲ condition နဲ့ တက်မယ်လို့ သတ်မှတ်ခဲ့ပါတယ်။
+      [[mark:a-title]] အဲဒီ plan ကို ပြန်ဖတ်ရင်း မေးခွန်း တစ်ခု ပေါ်လာပါတယ်။ အခု developer တွေ ဘာမေးချင်မေးချင်
+      ကိုယ့်ဆီကိုပဲ လာမေးနေကြပါတယ်။
+      [[mark:a-devs]] Billing developer တွေက CLAUDE.md ကို ဘယ်လို ပြင်ရမလဲ မေးတယ်၊ Network Tools က setting တွေ
+      အကြောင်း မေးတယ်၊ developer အသစ်တွေကလည်း ဘယ်ကနေ စရမလဲ မေးကြပါတယ်။ CLAUDE.md ဆိုတာ project အကြောင်း Claude
+      Code အမြဲ သိထားရမယ့် အချက်တွေ ရေးထားတဲ့ file ပါ။ Claude Code ကတော့ terminal ထဲကနေ code ကို ဖတ်၊ ပြင်၊ command
+      run ပေးတဲ့ coding agent ပါ။
+      [[mark:a-risk]] ပြဿနာက နောက် ခြောက်ပတ်လောက်ဆိုရင် ရက် ၃၀ activation ပြီးပြီး ကိုယ် ထွက်သွားရမှာပါ။ မေးခွန်းတိုင်း
+      ကိုယ့်ဆီ ရောက်နေတဲ့ system က ကိုယ် ထွက်သွားတဲ့နေ့မှာ ရပ်သွားပါလိမ့်မယ်။ CLAUDE.md တွေ ခေတ်နောက်ကျလာမယ်၊ plugin
+      ကို ဘယ်သူမှ update မလုပ်တော့ဘဲ၊ လူတွေကလည်း နည်းဟောင်းဆီ တဖြည်းဖြည်း ပြန်သွားကြပါလိမ့်မယ်။
+      [[mark:a-path]] ဒါကြောင့် ကိုယ် ထွက်သွားပြီးနောက် ဆက်ထိန်းမယ့်သူကို ကြိုပြင်ဆင်ပေးတာလည်း FDE ရဲ့ အလုပ်ပါ။ Anthropic ရဲ့ FDE
+      learning path ဖော်ပြချက်မှာလည်း ဒီအကြောင်းကို delivery ရဲ့ အစိတ်အပိုင်း တစ်ခုအဖြစ် ထည့်ထားပါတယ်။ ဒီနေ့ Delivery
+      Plan Pack ရဲ့ champion plan စာမျက်နှာကို ရေးပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: open-champion,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: notebook/50-champion-plan.md,
+        }
+      - {
+          id: draw-a-title,
+          type: whiteboard.apply,
+          at: { mark: a-title },
+          open: true,
+          clear: true,
+          upsertIds: [a-title, a-me, a-me-l],
+        }
+      - {
+          id: draw-a-devs,
+          type: whiteboard.apply,
+          at: { mark: a-devs },
+          upsertIds: [a-d1, a-ar1, a-d2, a-ar2, a-d3, a-ar3],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-a-risk,
+          type: whiteboard.apply,
+          at: { mark: a-risk },
+          upsertIds: [a-risk],
+          drawMs: 900,
+        }
+
+  - id: who
+    chapter: ဘယ်သူက champion လဲ
+    narration: >
+      [[mark:w-open]] ဒါကြောင့် champion တစ်ယောက် လိုပါတယ်။ champion ဆိုတာ အဖွဲ့ထဲမှာ ရှေ့ကနေ သုံးပြပြီး တခြားသူတွေကို
+      ကူညီပေးတဲ့သူပါ။ လူအများစုက AI ကို အစွဲအလမ်း အကြီးဆုံး၊ အသံ အကျယ်ဆုံး လူကို ရွေးချင်ကြပါတယ်။ ဒါပေမဲ့ champion ရဲ့
+      အလုပ်က AI ကို ကြော်ငြာဖို့ မဟုတ်ဘဲ၊ တခြားသူတွေ အလုပ်ဖြစ်အောင် ကူညီဖို့ပါ။
+      [[mark:w-kit]] Claude Code docs ထဲက champion kit က champion ရဲ့ အလုပ်ကို အပြုအမူ သုံးခုနဲ့ ပြောပါတယ်။ champion
+      ကိုယ်တိုင် တွေ့တာကို မျှဝေတာ၊ လူတွေ လာမေးရမယ့်သူ ဖြစ်တာ၊ သုံးတဲ့သူ စက်ဝိုင်းကို ချဲ့တာပါ။ အဲဒီအတွက် တစ်ပတ်ကို မိနစ် ၄၀
+      လောက်နဲ့ စလို့ရပြီး၊ လိုသလို တွဲလုပ်ပေးတဲ့ အချိန် ထပ်ထည့်နိုင်တယ်လို့ ဆိုပါတယ်။
+      [[mark:w-ms]] champion အစီအစဉ်တွေကို လုပ်ဖူးတဲ့ Microsoft ရဲ့ လမ်းညွှန် တစ်ခုကလည်း၊ စိတ်ပါသူ ရှာဖို့ ကြေညာမယ့်အစား
+      လူတွေ ဘယ်သူ့ကို အမြဲ မေးနေကျလဲ ဆိုတာကနေ ရှာဖို့နဲ့၊ အချိန်ကို သူ့ရဲ့ manager နဲ့ သဘောတူထားဖို့ အကြံပြုပါတယ်။
+      champion ဆိုတာ support desk မဟုတ်ဘဲ team ကို ကိုယ်စားပြုတဲ့သူလို့လည်း ဆိုပါတယ်။
+      [[mark:w-pick]] နေခြည် မှာ အဲဒီလူက Billing team lead မောင်မောင် ပါ။ အစက AI ရေးတဲ့ code ကို သံသယ ရှိခဲ့ပေမဲ့
+      trial ရဲ့ output တိုက်စစ်ချက်တွေကို ကိုယ်တိုင် review လုပ်ခဲ့သူပါ။ team က ပြဿနာ ရှိရင် အရင်ဆုံး သွားမေးတာလည်း
+      သူ့ကိုပါ။ သံသယ ရှိခဲ့ဖူးလို့ သံသယ ရှိနေတဲ့ developer တွေရဲ့ မေးခွန်းကို ပိုနားလည်ပါတယ်။
+      [[mark:w-time]] champion ကို အချိန် မပေးဘဲ ရွေးရင် ဒုတိယ အလုပ် တစ်ခု ထပ်ပေးလိုက်တာနဲ့ အတူတူပါ။ ဒါကြောင့် CTO ဖြစ်တဲ့
+      အောင်အောင် နဲ့ သဘောတူပြီး မောင်မောင် ရဲ့ team lead အလုပ်ထဲက တစ်ပတ် လေးနာရီကို ဖယ်ပေးပါမယ်။ champion kit ရဲ့ အချိန်ထက်
+      ပိုများတာက၊ မောင်မောင် က ကူညီရုံ မဟုတ်ဘဲ deployment တစ်ခုလုံးကိုပါ ပိုင်ရမှာ ဖြစ်လို့ပါ။
+    sources:
+      - {
+          title: "Claude Code docs: champion kit",
+          url: "https://code.claude.com/docs/en/champion-kit",
+        }
+      - {
+          title: "Microsoft Learn: Power Platform adoption, champions",
+          url: "https://learn.microsoft.com/en-us/power-platform/guidance/adoption/champions",
+        }
+    actions:
+      - { id: close-today, type: whiteboard.apply, at: { mark: w-open }, open: false }
+      - id: type-who
+        type: editor.type
+        at: { mark: w-pick }
+        cadence: line-by-line
+        target: { file: notebook/50-champion-plan.md, after: "## Champion\n" }
+        text: "- မောင်မောင် (Billing team lead): team က ပြဿနာ ရှိရင် အရင်ဆုံး မေးတဲ့သူ\n"
+      - id: type-time
+        type: editor.type
+        at: { mark: w-time }
+        cadence: line-by-line
+        target: { file: notebook/50-champion-plan.md, after: "အရင်ဆုံး မေးတဲ့သူ\n" }
+        text: "- တစ်ပတ် 4 နာရီ: CTO နဲ့ သဘောတူ၊ team lead အလုပ်ထဲက ဖယ်ပေး\n"
+
+  - id: owns
+    chapter: Champion ပိုင်ရမယ့်အရာ
+    narration: >
+      [[mark:b-title]] ရက် ၃၀ ပြီးတဲ့နောက် ပုံကို ပြန်ဆွဲကြည့်ရအောင်။ ဒီတစ်ခါ အလယ်မှာ ရှိတဲ့ လူ ပြောင်းသွားပါတယ်။
+      [[mark:b-ch]] အလယ်မှာ champion ဖြစ်တဲ့ မောင်မောင် ရှိပါတယ်။ developer တွေရဲ့ မေးခွန်းတွေက အခု သူ့ဆီ ရောက်ပါမယ်။
+      ဒါပေမဲ့ မေးခွန်း ဖြေရုံနဲ့ deployment က အသက်ဆက်ရှင်မှာ မဟုတ်ပါဘူး။
+      [[mark:b-own]] မောင်မောင် ပိုင်ရမယ့် အရာ လေးခု ရှိပါတယ်။ repo တွေထဲက CLAUDE.md တွေ၊ team ရဲ့ procedure တွေကို
+      ထုပ်ထားတဲ့ skill တွေ၊ အဲဒါတွေကို developer တိုင်းရဲ့ စက်ထဲ ရောက်အောင် ထုပ်ထားတဲ့ plugin နဲ့ အပတ်စဉ် office hours
+      ပါ။ skill ဆိုတာ အလုပ် တစ်မျိုးကို ဘယ်လို လုပ်ရမလဲ ရေးထားပြီး လိုတဲ့အချိန်မှ Claude ဖတ်သုံးတဲ့ လမ်းညွှန်ပါ။
+      office hours ကတော့ ဘယ်သူမဆို ပြဿနာ ယူလာပြီး ထိုင်မေးလို့ရတဲ့ အချိန်ပါ။
+      [[mark:b-me]] ကိုယ်ကတော့ ပုံရဲ့ အစွန်းကနေ ထွက်သွားပါတယ်။ ကိုယ် ထွက်သွားလည်း ပုံက ပြောင်းစရာ မလိုတော့ပါဘူး။
+      [[mark:b-hand]] ဒီလို ဖြစ်ဖို့ handover ကို ရက်စွဲနဲ့ checklist ပါတဲ့ အလုပ် တစ်ခုအဖြစ် ဆွဲထားရပါမယ်။ ကိုယ်
+      ထွက်သွားမယ့်နေ့မှ စ လွှဲမယ်ဆိုရင် နောက်ကျနေပါပြီ။ checklist ထဲက အချက်တွေကို champion က ကိုယ် ရှိနေတုန်း ကိုယ်တိုင်
+      လုပ်ပြနိုင်ရပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+      - {
+          title: "Claude Code docs: champion kit",
+          url: "https://code.claude.com/docs/en/champion-kit",
+        }
+    actions:
+      - {
+          id: draw-b-title,
+          type: whiteboard.apply,
+          at: { mark: b-title },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-b-ch,
+          type: whiteboard.apply,
+          at: { mark: b-ch },
+          upsertIds: [b-tag, b-ch, b-ch-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-own,
+          type: whiteboard.apply,
+          at: { mark: b-own },
+          upsertIds: [b-o1, b-o2, b-o3, b-o4],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-b-me,
+          type: whiteboard.apply,
+          at: { mark: b-me },
+          upsertIds: [b-me, b-me-l, b-out],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-hand,
+          type: whiteboard.apply,
+          at: { mark: b-hand },
+          upsertIds: [b-hand],
+          drawMs: 900,
+        }
+
+  - id: docs
+    chapter: Documentation က infrastructure
+    narration: >
+      [[mark:d-point]] ဒီ လေးခုထဲမှာ CLAUDE.md က ထူးခြားပါတယ်။ ဖတ်တဲ့သူ နှစ်မျိုး ရှိလို့ပါ။ developer အသစ် တစ်ယောက်က
+      project ကို နားလည်ဖို့ ဖတ်သလို၊ Claude Code ကလည်း session တိုင်းမှာ ဖတ်ပါတယ်။ ဆိုလိုတာက CLAUDE.md ဟာ အလုပ်ပြီးမှ
+      ရေးတဲ့ မှတ်စု မဟုတ်ဘဲ deployment ကိုယ်တိုင်ရဲ့ အစိတ်အပိုင်း ဖြစ်ပါတယ်။ ခေတ်နောက်ကျနေတဲ့ CLAUDE.md က လူကိုရော
+      Claude ကိုပါ မှားအောင် လုပ်ပါတယ်။
+      [[mark:d-rules]] ဒါကြောင့် code ကို ဆက်ဆံသလိုပဲ ဆက်ဆံရပါမယ်။ Anthropic ရဲ့ scaling guide က CLAUDE.md ကို repo
+      ရဲ့ root မှာ commit လုပ်ထားဖို့၊ document တွေလိုပဲ PR ထဲမှာ ပြင်ဖို့၊ onboarding checklist ထဲ ထည့်ထားဖို့ အကြံပြုပါတယ်။
+      Claude Code ရဲ့ memory docs ကလည်း CLAUDE.md တစ်ခုကို စာကြောင်း ၂၀၀ အောက်မှာ ထားဖို့ ပြောပါတယ်။ ရှည်လာရင်
+      ခေါင်းစဉ်အလိုက် file ခွဲထားလို့ ရပါတယ်။
+      [[mark:d-onboard]] developer အသစ်တွေအတွက် နောက်ထပ် အထောက်အကူ တစ်ခုလည်း ရှိပါတယ်။ Claude Code ရဲ့ team onboarding
+      command က ကိုယ့်ရဲ့ နောက်ဆုံး ရက် ၃၀ က session တွေ၊ command တွေ၊ MCP server တွေကနေ team onboarding guide တစ်ခုကို
+      ထုတ်ပေးပါတယ်။ team ထဲက တခြားသူက အဲဒီ setup ကို ပြန်လုပ်နိုင်ဖို့ပါ။
+    sources:
+      - {
+          title: "Claude blog: scaling agentic coding across your organization",
+          url: "https://claude.com/blog/scaling-agentic-coding",
+        }
+      - { title: "Claude Code docs: memory", url: "https://code.claude.com/docs/en/memory" }
+      - { title: "Claude Code docs: commands", url: "https://code.claude.com/docs/en/commands" }
+    actions:
+      - { id: point-b-o1, type: whiteboard.point, at: { mark: d-point }, target: { assetId: b-o1 } }
+
+  - id: plan
+    chapter: Champion plan
+    narration: >
+      [[mark:f-close]] ဒါတွေကို champion plan ထဲမှာ ဆက်ရေးကြည့်ရအောင်။ champion ရဲ့ နာမည်နဲ့ အချိန်ကို အပေါ်မှာ
+      ရေးပြီးပါပြီ။
+      [[mark:type-second]] champion တစ်ယောက်တည်းဆိုရင် အဲဒီလူ ခွင့်ယူတဲ့ ပတ်မှာ အကုန် ရပ်သွားပါတယ်။ Claude Enterprise
+      ရဲ့ administrator guide က department ဒါမှမဟုတ် team တစ်ခုမှာ champion နှစ်ယောက် သုံးယောက် ထားဖို့ အကြံပြုပါတယ်။
+      champion kit ကလည်း မေးခွန်း အများဆုံး မေးတဲ့ လုပ်ဖော်ကိုင်ဖက်က နောက် champion ဖြစ်လာလေ့ ရှိတယ်လို့ ဆိုပါတယ်။
+      ဒါကြောင့် Network Tools ကနေ ဒုတိယ champion တစ်ယောက်ကို ရေးထားပါတယ်။
+      [[mark:type-own]] ပိုင်ရမယ့် အရာ လေးခုကို တစ်ကြောင်းစီ ရေးပါတယ်။ CLAUDE.md ကို စာကြောင်း ၂၀၀ အောက် ထားပြီး PR
+      ထဲမှာပဲ ပြင်ပါမယ်။ office hours က အင်္ဂါနေ့နဲ့ ကြာသပတေးနေ့မှာပါ။
+      [[mark:sel-security]] နောက်ဆုံး စာကြောင်းက champion မလုပ်ရမယ့် အရာပါ။ security နဲ့ data မေးခွန်းတွေကို champion
+      kit က admin ဆီ လွှဲဖို့၊ champion ကိုယ်တိုင် ထင်ရာ မဖြေဖို့ ပြောထားပါတယ်။ customer data ဘယ်ကို ရောက်လဲ ဆိုတဲ့
+      မေးခွန်းမျိုးကို မှန်းဖြေလို့ မရပါဘူး။
+      [[mark:type-check]] handover checklist မှာ အချက် သုံးချက် ရေးပါတယ်။ အချက်တိုင်းက ပြောရုံ မဟုတ်ဘဲ မျက်စိနဲ့ မြင်နိုင်တဲ့
+      အရာပါ။ မောင်မောင် တစ်ယောက်တည်း plugin update တစ်ခု ထုတ်နိုင်ရမယ်၊ developer အသစ်က document တွေနဲ့ပဲ စနိုင်ရမယ်၊
+      channel ထဲက မေးခွန်းတွေကို ကိုယ် မဟုတ်တဲ့သူတွေ ဖြေနေရမယ် ဆိုတာပါ။ နောက်ဆုံး အချက်က champion kit က အောင်မြင်မှုလို့
+      ခေါ်တဲ့ အခြေအနေ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Code docs: champion kit",
+          url: "https://code.claude.com/docs/en/champion-kit",
+        }
+      - {
+          title: "Claude Enterprise Administrator Guide (Claude Academy)",
+          url: "https://academy.claude.com/tutorials/claude-enterprise-administrator-guide",
+        }
+      - { title: "Claude Code docs: memory", url: "https://code.claude.com/docs/en/memory" }
+    actions:
+      - { id: close-owns, type: whiteboard.apply, at: { mark: f-close }, open: false }
+      - id: type-second
+        type: editor.type
+        at: { mark: type-second }
+        cadence: line-by-line
+        target: { file: notebook/50-champion-plan.md, after: "team lead အလုပ်ထဲက ဖယ်ပေး\n" }
+        text: "- ဒုတိယ champion: Network Tools developer 1 ယောက် (မေးခွန်း အများဆုံး မေးသူ)\n"
+      - id: type-own
+        type: editor.type
+        at: { mark: type-own }
+        cadence: line-by-line
+        target: { file: notebook/50-champion-plan.md, after: "## ပိုင်ရမယ့်အရာ\n" }
+        text: "- CLAUDE.md (billing-service): 200 ကြောင်းအောက်၊ PR ထဲမှာပဲ ပြင်\n- skill များနဲ့ naychi plugin: version နဲ့ ပြောင်းလဲမှု မှတ်တမ်း\n- office hours: အင်္ဂါ၊ ကြာသပတေး\n- security နဲ့ data မေးခွန်း: admin ဆီ လွှဲ၊ ကိုယ်တိုင် မဖြေ\n"
+      - id: sel-security
+        type: editor.select
+        at: { mark: sel-security }
+        target:
+          file: notebook/50-champion-plan.md
+          text: "- security နဲ့ data မေးခွန်း: admin ဆီ လွှဲ၊ ကိုယ်တိုင် မဖြေ"
+      - id: type-check
+        type: editor.type
+        at: { mark: type-check }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/50-champion-plan.md,
+            after: "## Handover checklist (Day 30 မတိုင်ခင် ပြည့်ရမယ်)\n",
+          }
+        text: "- [ ] မောင်မောင် တစ်ယောက်တည်း plugin update 1 ခု ထုတ်ပြီး\n- [ ] developer အသစ် 1 ယောက်က CLAUDE.md နဲ့ onboarding guide နဲ့ပဲ စနိုင်\n- [ ] channel ထဲက မေးခွန်းကို ကိုယ် မဟုတ်တဲ့သူတွေ ဖြေနေပြီ\n"
+      - id: expect-check
+        type: expect.file
+        at: { afterAction: type-check }
+        path: notebook/50-champion-plan.md
+        contains: "- [ ] channel ထဲက မေးခွန်းကို ကိုယ် မဟုတ်တဲ့သူတွေ ဖြေနေပြီ\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဒုတိယ wave မှာ Customer App team ဝင်လာတော့ သူတို့ team အတွက်လည်း
+      champion တစ်ယောက် လိုပါတယ်။ ဘယ်သူက ပိုသင့်တော်မလဲ။
+      [[mark:q-a]] ပထမ တစ်ယောက်က Claude Code ရဲ့ usage leaderboard မှာ ထိပ်ဆုံးက ရှိနေပြီး၊ AI အကြောင်း channel ထဲမှာ
+      အများဆုံး post တင်တဲ့ developer ပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ယောက်က team ထဲက တခြားသူတွေ ပြဿနာ ရှိတိုင်း သွားမေးနေကျ developer ဖြစ်ပြီး၊ သူ့ရဲ့ lead က
+      တစ်ပတ် သုံးနာရီ ဖယ်ပေးဖို့ သဘောတူထားပါတယ်။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ယောက်ပါ။ ဘာကြောင့်လဲဆိုတော့ champion ရဲ့ တန်ဖိုးက ကိုယ်တိုင် ဘယ်လောက်
+      သုံးလဲ မဟုတ်ဘဲ တခြားသူတွေ ဘယ်လောက် အလုပ်ဖြစ်လာလဲ ဆိုတာပါ။ လူတွေ မေးနေကျသူဆီ မေးခွန်းတွေက ရောက်ပြီးသား ဖြစ်ပြီး၊
+      အချိန်လည်း ရှိနေတော့ ဖြေပေးနိုင်ပါတယ်။ ပထမ တစ်ယောက်ကလည်း အသုံးဝင်ပါတယ်။ သူ တွေ့တာတွေကို မျှဝေပေးဖို့ပါ။
+      [[mark:q-rule]] ဒါကြောင့် champion ရွေးတိုင်း မေးခွန်း နှစ်ခု မေးပါ။ team က ဒီလူ့ကို အခုတောင် မေးနေပြီလား၊ ဒီလူ့အတွက်
+      အချိန် တကယ် ဖယ်ပေးထားလား ဆိုတာပါ။
+    sources:
+      - {
+          title: "Claude Code docs: champion kit",
+          url: "https://code.claude.com/docs/en/champion-kit",
+        }
+      - {
+          title: "Microsoft Learn: Power Platform adoption, champions",
+          url: "https://learn.microsoft.com/en-us/power-platform/guidance/adoption/champions",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule, offsetMs: 2500 },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် team ရဲ့ champion
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် team မှာ champion ဖြစ်သင့်တဲ့သူကို ဒီ champion
+      အပိုင်းအောက်မှာ ရေးကြည့်ပါ။ AI ကို အကြိုက်ဆုံးသူ မဟုတ်ဘဲ၊ လူတွေ အခု မေးနေကျသူကို စဉ်းစားပါ။
+      [[mark:turn-2]] ပြီးရင် အဲဒီလူ့ကို လွှဲပေးရမယ့် အရာ တစ်ခုကို ရေးပါ။ ကိုယ်တစ်ယောက်တည်း သိနေတဲ့ setting တစ်ခု၊ ကိုယ့်
+      ခေါင်းထဲမှာပဲ ရှိနေတဲ့ လုပ်နည်း တစ်ခု ဖြစ်နိုင်ပါတယ်။ အဲဒါကို ဒီနေ့ document တစ်ခုထဲ ချရေးလိုက်ရင် handover ရဲ့ ပထမ
+      ခြေလှမ်း ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Claude Code docs: champion kit",
+          url: "https://code.claude.com/docs/en/champion-kit",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-champion
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/50-champion-plan.md
+          text: "## Champion\n- မောင်မောင် (Billing team lead): team က ပြဿနာ ရှိရင် အရင်ဆုံး မေးတဲ့သူ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ ကိုယ် ထွက်သွားပြီးလည်း deployment ဆက်ရှင်နေဖို့ champion တစ်ယောက် လိုပါတယ်။
+      champion ဆိုတာ အသံ အကျယ်ဆုံးလူ မဟုတ်ဘဲ team က မေးနေကျ လူဖြစ်ပြီး၊ အချိန် တကယ် ဖယ်ပေးထားရပါတယ်။
+      [[mark:recap-2]] CLAUDE.md နဲ့ document တွေကို developer ရော Claude ပါ ဖတ်တာမို့ code လိုပဲ ထိန်းရပြီး၊ handover
+      ကိုလည်း ရက်စွဲနဲ့ checklist ပါတဲ့ အလုပ် တစ်ခုအဖြစ် ဆွဲထားရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ engagement တစ်ခု ပျက်တတ်တဲ့ ပုံစံတွေကို စုကြည့်ပြီး၊ လက္ခဏာ စပြတာနဲ့ ဘယ်လို ကြိုကိုင်တွယ်မလဲ
+      ဆိုတဲ့ failure mode တွေကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-own
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/50-champion-plan.md
+          text: "- တစ်ပတ် 4 နာရီ: CTO နဲ့ သဘောတူ၊ team lead အလုပ်ထဲက ဖယ်ပေး"
+      - id: sel-claude-md
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/50-champion-plan.md
+          text: "- CLAUDE.md (billing-service): 200 ကြောင်းအောက်၊ PR ထဲမှာပဲ ပြင်"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
