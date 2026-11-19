@@ -264,6 +264,20 @@ describe("createPreviewClientScript", () => {
     ]);
   });
 
+  it("acknowledges the service worker's ask for a port at once", async () => {
+    const context = createContext();
+    const ack = new MessageChannel();
+    const acknowledged = new Promise<unknown>((resolve) => {
+      ack.port2.onmessage = (event) => resolve(event.data);
+    });
+    dispatchMessage(context.serviceWorker, { type: "webnode:need-port", ack: ack.port1 });
+    expect(await acknowledged).toBe(true);
+    expect(context.parentPosts).toEqual([
+      { message: { type: "webnode:preview-connect" }, targetOrigin: EDITOR },
+    ]);
+    ack.port1.close();
+  });
+
   it("hands the service worker a fresh port when it asks for one", () => {
     const context = createContext();
     dispatchMessage(context.serviceWorker, { type: "webnode:need-port" });

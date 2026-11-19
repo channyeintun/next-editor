@@ -5,7 +5,7 @@ import { PREVIEW_CONNECT_HTML } from "./connectPage";
 import { PreviewGateway } from "./gateway";
 import { decoder, latin1, readRequest, tick, writeAll } from "./gatewayTestKit";
 import { installPreviewServiceWorker } from "./sw";
-import type { PreviewServiceWorkerScope } from "./sw";
+import type { PreviewServiceWorkerScope, PreviewServiceWorkerTimings } from "./sw";
 import { createChannelPair } from "./testChannels";
 import type { LinkedChannel } from "./testChannels";
 
@@ -38,13 +38,33 @@ function createCaches() {
   };
 }
 
+/**
+ * A window the worker can ask for a port; what it is asked goes to `posts`.
+ * With `onAsk` it is a preview with the injected client: it acknowledges the
+ * ask, then runs `onAsk` (attaching a port, or not). Without, it is a document
+ * that has no client (JSON, an image), which never answers.
+ */
+function fakeWindow(id: string, posts: unknown[], onAsk?: () => void) {
+  return {
+    id,
+    postMessage(message: unknown) {
+      const { ack, ...rest } = message as { ack?: MessagePort };
+      posts.push(rest);
+      if (onAsk) {
+        ack?.postMessage(true);
+        onAsk();
+      }
+    },
+  };
+}
+
 function createWorker(
-  timings = { idleMs: 10_000, pingTimeoutMs: 50, attachTimeoutMs: 50 },
+  timings: Partial<PreviewServiceWorkerTimings> = {},
   caches?: ReturnType<typeof createCaches>,
 ) {
   const listeners = new Map<string, Listener>();
   const clientPosts: unknown[] = [];
-  const clients = new Map<string, { id: string; postMessage(message: unknown): void }>();
+  const clients = new Map<string, ReturnType<typeof fakeWindow>>();
   const scope = {
     location: { origin: ORIGIN, host: new URL(ORIGIN).host, hostname: new URL(ORIGIN).hostname },
     clients: {
@@ -58,7 +78,13 @@ function createWorker(
       listeners.set(type, listener);
     },
   };
-  installPreviewServiceWorker(scope as unknown as PreviewServiceWorkerScope, timings);
+  installPreviewServiceWorker(scope as unknown as PreviewServiceWorkerScope, {
+    idleMs: 10_000,
+    pingTimeoutMs: 50,
+    attachTimeoutMs: 50,
+    ackTimeoutMs: 50,
+    ...timings,
+  });
 
   const servers = new Map<number, (channel: LinkedChannel) => void>();
   const serverChannels: LinkedChannel[] = [];
@@ -88,14 +114,9 @@ function createWorker(
     servers,
     serverChannels,
     clientPosts,
-    addClient(id: string, onMessage?: (message: unknown) => void) {
-      clients.set(id, {
-        id,
-        postMessage(message: unknown) {
-          clientPosts.push(message);
-          onMessage?.(message);
-        },
-      });
+    /** Adds a window this worker controls (see `fakeWindow`). */
+    addClient(id: string, onAsk?: () => void) {
+      clients.set(id, fakeWindow(id, clientPosts, onAsk));
     },
     lifecycle(type: "install" | "activate"): Promise<unknown> {
       let waited: Promise<unknown> = Promise.resolve();
@@ -193,16 +214,18 @@ describe("preview service worker", () => {
     expect(await worker.fetch(new Request(`${ORIGIN}/__webnode__/sw.js`))).toBeUndefined();
   });
 
-  it("serves the connect page for a navigation without a control port", async () => {
-    const worker = createWorker();
+  it("serves the connect page at once for a navigation without a control port or a window", async () => {
+    // A first load, or the editor's page reloaded: there is nobody to ask, so nothing waits.
+    const worker = createWorker({ attachTimeoutMs: 60_000, ackTimeoutMs: 60_000 });
     const response = (await worker.fetch(new Request(`${ORIGIN}/`), { navigate: true }))!;
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(PREVIEW_CONNECT_HTML);
     expect(response.headers.get("cross-origin-embedder-policy")).toBe("require-corp");
+    expect(worker.clientPosts).toEqual([]);
   });
 
   it("serves a reload from a restarted worker without the connect page", async () => {
-    const worker = createWorker({ idleMs: 10_000, pingTimeoutMs: 50, attachTimeoutMs: 2_000 });
+    const worker = createWorker({ attachTimeoutMs: 2_000 });
     serveText(
       worker,
       "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 5\r\n\r\n<p>hi",
@@ -217,10 +240,80 @@ describe("preview service worker", () => {
 
   it("serves the connect page for a navigation when no window attaches in time", async () => {
     const worker = createWorker();
-    worker.addClient("page");
+    // Acknowledges the ask, but no port comes.
+    worker.addClient("page", () => {});
     const response = (await worker.fetch(new Request(`${ORIGIN}/`), { navigate: true }))!;
     expect(worker.clientPosts).toEqual([{ type: "webnode:need-port" }]);
     expect(await response.text()).toBe(PREVIEW_CONNECT_HTML);
+  });
+
+  it("does not wait for a port from a window without the injected client", async () => {
+    // A JSON document, say: it can never ask the editor, so only the short acknowledgement is waited for.
+    const worker = createWorker({ attachTimeoutMs: 60_000, ackTimeoutMs: 30 });
+    worker.addClient("json");
+    const response = (await worker.fetch(new Request(`${ORIGIN}/`), { navigate: true }))!;
+    expect(worker.clientPosts).toEqual([{ type: "webnode:need-port" }]);
+    expect(await response.text()).toBe(PREVIEW_CONNECT_HTML);
+  });
+
+  it("asks every window it controls for a navigation, and takes the port one of them gets", async () => {
+    const worker = createWorker({ attachTimeoutMs: 2_000 });
+    serveText(
+      worker,
+      "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 5\r\n\r\n<p>hi",
+    );
+    worker.addClient("json");
+    worker.addClient("page", () => void worker.attach());
+    const response = (await worker.fetch(new Request(`${ORIGIN}/`), { navigate: true }))!;
+    expect(worker.clientPosts).toHaveLength(2);
+    expect(await response.text()).toContain("<p>hi");
+  });
+
+  it("asks the windows for a fresh port when the old one no longer answers its ping", async () => {
+    const worker = createWorker({ idleMs: 0, pingTimeoutMs: 30, attachTimeoutMs: 2_000 });
+    worker.attachRaw(); // a port with no gateway behind it any more
+    serveText(
+      worker,
+      "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 5\r\n\r\n<p>hi",
+    );
+    worker.addClient("page", () => void worker.attach());
+    const response = (await worker.fetch(new Request(`${ORIGIN}/`), { navigate: true }))!;
+    expect(worker.clientPosts).toEqual([{ type: "webnode:need-port" }]);
+    expect(await response.text()).toContain("<p>hi");
+  });
+
+  /** A worker whose cookie jar takes a while to read back, as a restarted one's does. */
+  function slowJarWorker() {
+    const stored = createCaches();
+    return createWorker(
+      {},
+      {
+        async open(name: string) {
+          await new Promise((resolve) => setTimeout(resolve, 40));
+          return stored.open(name);
+        },
+      },
+    );
+  }
+
+  it("keeps a replaced port open for a request it was already handed", async () => {
+    const worker = slowJarWorker();
+    await worker.attach();
+    serveText(worker, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+    const response = worker.fetch(new Request(`${ORIGIN}/x`));
+    // A newer port arrives while the request waits for its cookies on the first one.
+    await tick(10);
+    await worker.attach();
+    expect(await (await response)!.text()).toBe("ok");
+  });
+
+  it("sends a request on the newer port when one replaces the port it was about to take", async () => {
+    const worker = slowJarWorker();
+    await worker.attach();
+    serveText(worker, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+    const response = worker.fetch(new Request(`${ORIGIN}/x`));
+    await worker.attach();
+    expect(await (await response)!.text()).toBe("ok");
   });
 
   it("answers 503 for a subresource when no window attaches in time", async () => {
@@ -424,13 +517,7 @@ describe("preview service worker", () => {
       });
     });
     const posts: unknown[] = [];
-    const client = {
-      id: "c1",
-      postMessage(message: unknown) {
-        posts.push(message);
-        void worker.attach();
-      },
-    };
+    const client = fakeWindow("c1", posts, () => void worker.attach());
     const socket = new MessageChannel();
     cleanups.push(() => socket.port2.close());
     await worker.message(

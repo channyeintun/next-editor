@@ -306,7 +306,13 @@ window.addEventListener("message", function (event) {
 
 if (serviceWorker) {
   serviceWorker.addEventListener("message", function (event) {
-    if (event.data && event.data.type === "webnode:need-port") requestPort();
+    var data = event.data;
+    if (!data || data.type !== "webnode:need-port") return;
+    // Only a framed preview can get a port from the editor; it says so at once,
+    // so the worker does not wait on a window that never could.
+    var ack = data.ack || (event.ports && event.ports[0]);
+    if (ack && parentWindow) ack.postMessage(true);
+    requestPort();
   });
   if (typeof serviceWorker.startMessages === "function") serviceWorker.startMessages();
 }

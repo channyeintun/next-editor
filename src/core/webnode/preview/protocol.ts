@@ -49,9 +49,14 @@ export interface AttachedMessage {
   type: "webnode:attached";
 }
 
-/** Service worker → window: "I have no control port; get me one". */
+/**
+ * Service worker → window: "I have no control port; get me one". A window that
+ * will ask the editor posts on `ack` at once, so the worker waits for the port
+ * only from windows that can get one.
+ */
 export interface NeedPortMessage {
   type: "webnode:need-port";
+  ack?: MessagePort;
 }
 
 /** Window → service worker: open a WebSocket; events flow on `port`. */

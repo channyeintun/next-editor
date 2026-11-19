@@ -82,14 +82,21 @@ export interface PreviewServiceWorkerTimings {
   idleMs: number;
   /** How long a ping may take before the port counts as dead. */
   pingTimeoutMs: number;
-  /** How long a subresource waits for a window to attach a port. */
+  /** How long a request waits for a window to attach a port. */
   attachTimeoutMs: number;
+  /**
+   * How long a window has to say it is asking the editor for a port. A
+   * document without the injected client (JSON, an image, the connect page)
+   * never says so, and is not waited for any longer.
+   */
+  ackTimeoutMs: number;
 }
 
 const DEFAULT_TIMINGS: PreviewServiceWorkerTimings = {
   idleMs: 10_000,
   pingTimeoutMs: 1_000,
   attachTimeoutMs: 3_000,
+  ackTimeoutMs: 500,
 };
 
 const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
@@ -223,6 +230,12 @@ class ControlLink {
   readonly port: MessagePort;
   #nextId = 1;
   #pending = new Map<number, Pending>();
+  /**
+   * Requests `fetch` has taken but not sent yet (it awaits their cookies and
+   * body): a retired link stays open for them too, or a newer port's attach
+   * would close it under a request it was already handed.
+   */
+  #starting = 0;
   #pongs = new Map<number, () => void>();
   #lastHeard = Date.now();
   #ping: Promise<boolean> | null = null;
@@ -290,6 +303,32 @@ class ControlLink {
 
   /** Forwards `request`; resolves with the response once its head arrives. */
   async fetch(request: Request): Promise<Response> {
+    this.#starting += 1;
+    let prepared: { message: GatewayRequestMessage; body: ArrayBuffer | null; path: string };
+    try {
+      prepared = await this.#prepare(request);
+    } catch (error) {
+      this.#starting -= 1;
+      this.#closeIfDone();
+      throw error;
+    }
+    // From here to #pending.set nothing awaits, so the request is never uncounted.
+    this.#starting -= 1;
+    if (this.#closed) {
+      return textResponse(502, "Bad Gateway: the preview lost its connection to the runtime");
+    }
+    const { message, body, path } = prepared;
+    return new Promise<Response>((resolve) => {
+      this.#pending.set(message.id, { resolve, controller: null, path });
+      this.#post(message, body ? [body] : []);
+      this.#watch();
+    });
+  }
+
+  /** The gateway's message for `request`, with its cookies and body read. */
+  async #prepare(
+    request: Request,
+  ): Promise<{ message: GatewayRequestMessage; body: ArrayBuffer | null; path: string }> {
     const url = new URL(request.url);
     const method = request.method.toUpperCase();
     const headers: HeaderList = [];
@@ -324,30 +363,27 @@ class ControlLink {
       }
     }
     const body = method === "GET" || method === "HEAD" ? null : await request.arrayBuffer();
-    const id = this.#nextId++;
     const message: GatewayRequestMessage = {
       type: "request",
-      id,
+      id: this.#nextId++,
       method,
       url: url.pathname + url.search,
       headers,
       body,
       pageHost: this.#location.host,
     };
-    if (this.#closed) {
-      return textResponse(502, "Bad Gateway: the preview lost its connection to the runtime");
-    }
-    return new Promise<Response>((resolve) => {
-      this.#pending.set(id, { resolve, controller: null, path: url.pathname });
-      this.#post(message, body ? [body] : []);
-      this.#watch();
-    });
+    return { message, body, path: url.pathname };
   }
 
   /** Closes the port once no request is in flight on it (a newer port took over). */
   retire(): void {
     this.#retired = true;
-    if (this.#pending.size === 0) {
+    this.#closeIfDone();
+  }
+
+  /** A retired link closes once nothing it took is still in flight. */
+  #closeIfDone(): void {
+    if (this.#retired && this.#pending.size === 0 && this.#starting === 0) {
       this.close();
     }
   }
@@ -397,9 +433,7 @@ class ControlLink {
     this.#pending.delete(id);
     if (this.#pending.size === 0) {
       this.#stopWatching();
-      if (this.#retired) {
-        this.close();
-      }
+      this.#closeIfDone();
     }
   }
 
@@ -528,7 +562,8 @@ export function installPreviewServiceWorker(
       return null;
     }
     if (await current.isAlive(probe)) {
-      return current;
+      // A newer port replaced it while it was asked: requests go on that one.
+      return link === current ? current : liveLink(probe);
     }
     if (link === current) {
       link = null;
@@ -559,18 +594,38 @@ export function installPreviewServiceWorker(
 
   /**
    * Asks `windows` for a control port (their injected client asks the editor
-   * for one and attaches it); the live link once one has, else null.
+   * for one and attaches it); the live link once one has, else null. Only a
+   * window that acknowledges the ask is waited for.
    */
   async function askForPort(windows: readonly SwClient[]): Promise<ControlLink | null> {
-    if (windows.length === 0) {
-      return null;
+    // A port may have arrived while the windows were looked up: asking again
+    // would fetch a second one.
+    const arrived = await liveLink();
+    if (arrived || windows.length === 0) {
+      return arrived;
     }
-    const ask: NeedPortMessage = { type: "webnode:need-port" };
     const attached = waitForAttach();
-    for (const client of windows) {
-      client.postMessage(ask);
+    const acks: MessagePort[] = [];
+    const acknowledged = new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(false), timings.ackTimeoutMs);
+      for (const client of windows) {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => {
+          clearTimeout(timer);
+          resolve(true);
+        };
+        acks.push(channel.port1);
+        const ask: NeedPortMessage = { type: "webnode:need-port", ack: channel.port2 };
+        client.postMessage(ask, [channel.port2]);
+      }
+    });
+    const asking = await Promise.race([acknowledged, attached.then(() => true)]);
+    for (const port of acks) {
+      port.close();
     }
-    await attached;
+    if (asking) {
+      await attached;
+    }
     return liveLink();
   }
 
