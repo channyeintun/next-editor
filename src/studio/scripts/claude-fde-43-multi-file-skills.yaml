@@ -1,0 +1,766 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-43-multi-file-skills
+  title: "Claude FDE 43: Skill ကို ဖွဲ့စည်းတည်ဆောက်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: billing-service/.claude/skills/report-migration/SKILL.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      billing-service/.claude/skills/report-migration/SKILL.md: |
+        ---
+        name: report-migration
+        description: Moves one report job to the new report library and checks its output. Use when asked to migrate a report job.
+        ---
+
+        # Report migration
+
+        One job at a time, from `src/reports/jobs/`.
+
+        ## Rules
+        - Never edit the invoice code or the old job: the old job stays for the comparison.
+        - Round amounts once, at the end. Do not change the shared helpers.
+
+        ## Steps
+        1. Read the old job and list every old library call it makes.
+      billing-service/.claude/skills/report-migration/references/library-mapping.md: |
+        # Old report library → new report library
+
+        The full table has about 300 rows. This copy shows the first row of each section.
+        Read only the section the job needs.
+
+        ## Contents
+        1. Queries
+        2. Totals and rounding
+        3. Dates and time zones
+        4. Output files
+
+        ## 1. Queries
+        | Old call | New call | Note |
+        |---|---|---|
+        | `rpt.query(sql)` | `db.select(sql)` | returns rows, not a cursor |
+
+        ## 2. Totals and rounding
+        | Old call | New call | Note |
+        |---|---|---|
+        | `rpt.round(x)` | `roundKyat(x)` | once, at the end of the job |
+
+        ## 3. Dates and time zones
+        | Old call | New call | Note |
+        |---|---|---|
+        | `rpt.today()` | `todayYangon()` | from `src/lib/time.ts` |
+
+        ## 4. Output files
+        | Old call | New call | Note |
+        |---|---|---|
+        | `rpt.writeCsv(path, rows)` | `writeReport(path, rows, "csv")` | same column order |
+      billing-service/.claude/skills/report-migration/scripts/compare.sh: |
+        #!/usr/bin/env bash
+        # Runs the Billing team's output comparison for one moved report job.
+        # Prints MATCH, or DIFF and the first 20 lines of the difference. Exits 0 only on a match.
+        set -euo pipefail
+        job="$1"
+        if out=$(npm run --silent report:compare -- "$job" 2>&1); then
+          echo "MATCH $job"
+        else
+          echo "DIFF $job"
+          echo "$out" | head -n 20
+          exit 1
+        fi
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: size
+      contentType: html
+      name: SKILL.md ကို တိုအောင်
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">SKILL.md ကို တိုအောင် ထားပုံ</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term orange">500 lines</span>SKILL.md ကို စာကြောင်း 500 အောက်</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term orange">5,000 tokens</span>ညွှန်ကြားချက်ကို token 5,000 အောက်</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term blue">1 level</span>reference file ကို SKILL.md ကနေ တိုက်ရိုက် link</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term blue">Contents</span>ရှည်တဲ့ reference file မှာ မာတိကာ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 820,
+        height: 45,
+        text: "300 ကြောင်း mapping table ကို ဘယ်မှာ ထားမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) SKILL.md ထဲ တိုက်ရိုက် ကူးထည့်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) သီးခြား file၊ လိုတဲ့ အဆင့်ကနေ link",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 520,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 850,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "SKILL.md: ရွေးတိုင်း အကုန် ဝင်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "reference file: လိုမှ ဖတ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — progressive disclosure as nested boxes (blue): level 1 inside level 2 inside level 3;
+    # orange on the right is when each level loads; violet is what a script sends back.
+    - {
+        id: p-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "အဆင့် သုံးဆင့်နဲ့ ဖတ်ပုံ",
+        fontSize: 36,
+      }
+    - {
+        id: p-l3,
+        kind: rectangle,
+        x: 290,
+        y: 215,
+        width: 500,
+        height: 425,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l3-l,
+        kind: text,
+        x: 305,
+        y: 222,
+        width: 470,
+        height: 35,
+        text: "3 · reference file, script",
+        fontSize: 28,
+      }
+    - { id: p-l2, kind: rectangle, x: 310, y: 265, width: 460, height: 250, strokeColor: "#1971c2" }
+    - {
+        id: p-l2-l,
+        kind: text,
+        x: 325,
+        y: 272,
+        width: 430,
+        height: 35,
+        text: "2 · SKILL.md စာကိုယ်",
+        fontSize: 28,
+      }
+    - {
+        id: p-l1,
+        kind: rectangle,
+        x: 330,
+        y: 318,
+        width: 420,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l1-l,
+        kind: text,
+        align: center,
+        x: 330,
+        y: 340,
+        width: 420,
+        height: 35,
+        text: "1 · name + description",
+        fontSize: 28,
+      }
+    - {
+        id: p-w1,
+        kind: text,
+        x: 820,
+        y: 340,
+        width: 270,
+        height: 35,
+        text: "အမြဲ · ~100",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: p-w2,
+        kind: text,
+        x: 820,
+        y: 450,
+        width: 270,
+        height: 35,
+        text: "ရွေးမှ · < 5k",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: p-w3,
+        kind: text,
+        x: 820,
+        y: 560,
+        width: 270,
+        height: 35,
+        text: "လိုမှ · 0",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: p-ref,
+        kind: text,
+        x: 305,
+        y: 535,
+        width: 470,
+        height: 35,
+        text: "reference: ဖတ်မှ ဝင်",
+        fontSize: 28,
+      }
+    - {
+        id: p-out,
+        kind: text,
+        x: 305,
+        y: 585,
+        width: 470,
+        height: 35,
+        text: "script: output ပဲ ဝင်",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9343
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ရှည်လျားတဲ့ လုပ်ငန်းစဉ်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ outage notice skill ကို ရေးပြီး၊ description ကောင်းမှ Claude က skill ကို အချိန်မှန်
+      ရွေးတယ် ဆိုတာ လေ့လာခဲ့ပါတယ်။ အဲဒီ skill က အဆင့် လေးဆင့်ပဲ ရှိတဲ့ skill အသေးလေးပါ။
+      [[mark:sel-billing]] Billing မှာ နောက်ထပ် skill လုပ်ချင်တဲ့ လုပ်ငန်းစဉ် တစ်ခု ရှိပါတယ်။ report job ရွှေ့တဲ့
+      အလုပ်ပါ။ trial မှာ Billing developer နှစ်ယောက်က Claude Code နဲ့ ၃ ရက်အတွင်း report job ၁၄၀ ထဲက ၁၂ ခုကို
+      ရွှေ့ခဲ့ပြီး၊ ကျန်တဲ့ job တွေကိုလည်း အဲဒီ နည်းအတိုင်း ဆက်ရွှေ့ရပါမယ်။
+      [[mark:story]] ဒါပေမဲ့ ဒီ လုပ်ငန်းစဉ်က ရှည်ပါတယ်။ trial ကနေ ရလာတဲ့ စည်းကမ်းတွေ ရှိတယ်၊ library အဟောင်းရဲ့ call
+      တစ်ခုစီကို အသစ်နဲ့ ဘယ်လို အစားထိုးရမလဲ ဆိုတဲ့ mapping table က စာကြောင်း ၃၀၀ လောက် ရှိတယ်၊ ပြီးတော့ output
+      ကို job အဟောင်းနဲ့ တိုက်စစ်တဲ့ script လည်း ရှိပါတယ်။ session အသစ် တစ်ခု စတိုင်း developer တွေက ဒါတွေကို Claude
+      ကို ပြန်ရှင်းပြနေရပါတယ်။
+      [[mark:story-2]] ဒါကို skill လုပ်ဖို့ ဆုံးဖြတ်လိုက်တော့ ပထမဆုံး ပေါ်လာတဲ့ အတွေးက အားလုံးကို SKILL.md တစ်ခုတည်းထဲ
+      ထည့်လိုက်ဖို့ပါ။ ဒီ lesson မှာ အဲဒီလို ရှည်တဲ့ skill ကို context window ထဲ လိုတာလောက်ပဲ ရောက်အောင် ဘယ်လို
+      ဖွဲ့စည်းမလဲ ဆိုတာ ကြည့်ပါမယ်။ context window ဆိုတာ request တစ်ခုမှာ model မြင်နိုင်တဲ့ စာ အားလုံးအတွက်
+      နေရာပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { scene: start }, path: README.md }
+      - id: sel-billing
+        type: editor.select
+        at: { mark: sel-billing }
+        target:
+          file: README.md
+          text: "- Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] ဆက်မသွားခင် မေးခွန်း တစ်ခု မေးပါရစေ။ စာကြောင်း ၃၀၀ ရှိတဲ့ mapping table ကို ဘယ်မှာ ထားသင့်မလဲ။
+      [[mark:q-a]] ပထမ နည်းက SKILL.md ထဲကို တိုက်ရိုက် ကူးထည့်တာပါ။
+      [[mark:q-b]] ဒုတိယ နည်းက သူ့ကိုယ်ပိုင် file တစ်ခုထဲ ထားပြီး၊ table လိုတဲ့ အဆင့်ကနေ link ချိတ်ထားတာပါ။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ နည်းပါ။ ဘာကြောင့်လဲဆိုတော့ skill ကို ရွေးလိုက်တာနဲ့ SKILL.md ရဲ့ စာကိုယ်
+      အားလုံးက context ထဲ ဝင်လာပြီး၊ စကားဝိုင်း ဆုံးတဲ့အထိ ဆက်ရှိနေလို့ပါ။ table ကို တကယ် သုံးတာက job ထဲက call တွေကို
+      ရှာတဲ့ အဆင့် တစ်ဆင့်တည်းမှာပါ။ သီးခြား file ထဲ ထားရင် Claude က အဲဒီ အဆင့်ရောက်မှ ဖွင့်ဖတ်ပြီး၊ လိုတဲ့ အပိုင်းကိုပဲ
+      ဖတ်နိုင်ပါတယ်။
+      [[mark:q-rule]] ဆိုလိုတာက SKILL.md ထဲမှာ အမြဲ လိုတာကိုပဲ ထားပြီး၊ တစ်ခါတလေမှ လိုတာကို သီးခြား file ထဲ ခွဲထားပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills (skill content lifecycle)",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+      - {
+          title: "Claude Docs: Agent Skills overview",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: levels
+    chapter: အဆင့် သုံးဆင့်
+    narration: >
+      [[mark:p-open]] ဒီ စည်းကမ်းကို progressive disclosure လို့ ခေါ်ပါတယ်။ အကုန် မဖတ်ဘဲ လိုတဲ့ အပိုင်းကိုပဲ အဆင့်ဆင့်
+      ဖွင့်ဖတ်တာပါ။ skill တစ်ခုမှာ ဒီလို အဆင့် သုံးဆင့် ရှိပါတယ်။
+      [[mark:p-l1]] ပထမ အဆင့်က name နဲ့ description ပါ။ session စကတည်းက context ထဲ အမြဲ ရှိနေပြီး၊ platform docs အရ
+      skill တစ်ခုကို token ၁၀၀ လောက် ကုန်ပါတယ်။ token ဆိုတာ model က စာကို ဖြတ်ယူတဲ့ အပိုင်းအစလေးပါ။
+      [[mark:p-l2]] ဒုတိယ အဆင့်က SKILL.md ရဲ့ စာကိုယ်ပါ။ task က description နဲ့ ကိုက်လို့ skill ကို ရွေးတဲ့အခါမှ ဝင်လာပြီး၊
+      docs က token ၅၀၀၀ အောက်မှာ ထားဖို့ ပြောပါတယ်။ ဒီထဲမှာ စည်းကမ်းတွေနဲ့ အဆင့်တွေ ရှိပါတယ်။
+      [[mark:p-l3]] တတိယ အဆင့်က skill folder ထဲက တခြား file တွေပါ။ အဆင့် တစ်ခုက လိုမှပဲ ထိတာမို့၊ မထိသမျှ token
+      တစ်ခုမှ မကုန်ပါဘူး။
+      [[mark:p-ref]] ဒီ file တွေမှာ နှစ်မျိုး ရှိပါတယ်။ reference file ကို Claude က ဖတ်တာမို့၊ ဖတ်လိုက်တဲ့ အပိုင်းက context
+      ထဲ ဝင်ပါတယ်။
+      [[mark:p-out]] script ကိုတော့ Claude က run ပါတယ်။ script ရဲ့ code က context ထဲ မဝင်ဘဲ၊ run လို့ ထွက်လာတဲ့ output
+      ပဲ ဝင်ပါတယ်။ ဒါကြောင့် output တိုက်စစ်တဲ့ code ကို Claude က အလုပ် လုပ်ရင်း ကိုယ်တိုင် ရေးနေမယ့်အစား၊ စစ်ပြီးသား
+      script ကို run ခိုင်းတာက token လည်း သက်သာ၊ ရလဒ်လည်း တစ်ခါနဲ့ တစ်ခါ တူပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Agent Skills overview (how skills work)",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview",
+        }
+      - {
+          title: "Agent Skills: Specification (progressive disclosure)",
+          url: "https://agentskills.io/specification",
+        }
+    actions:
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-p-l1,
+          type: whiteboard.apply,
+          at: { mark: p-l1 },
+          upsertIds: [p-l1, p-l1-l, p-w1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-l2,
+          type: whiteboard.apply,
+          at: { mark: p-l2 },
+          upsertIds: [p-l2, p-l2-l, p-w2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-l3,
+          type: whiteboard.apply,
+          at: { mark: p-l3 },
+          upsertIds: [p-l3, p-l3-l, p-w3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-ref,
+          type: whiteboard.apply,
+          at: { mark: p-ref },
+          upsertIds: [p-ref],
+          drawMs: 900,
+        }
+      - {
+          id: draw-p-out,
+          type: whiteboard.apply,
+          at: { mark: p-out },
+          upsertIds: [p-out],
+          drawMs: 900,
+        }
+
+  - id: reference
+    chapter: Reference file
+    narration: >
+      [[mark:f-open]] ဒါဆို Billing ရဲ့ report migration skill ကို ဖွဲ့စည်းကြည့်ရအောင်။ folder ထဲမှာ SKILL.md အပြင်၊
+      Agent Skills standard က အကြံပေးထားတဲ့ နာမည်အတိုင်း references folder နဲ့ scripts folder ရှိပါတယ်။ mapping table
+      က references folder ထဲမှာပါ။
+      [[mark:sel-contents]] file ရဲ့ ထိပ်ဆုံးမှာ မာတိကာ ထားထားပါတယ်။ docs က ရှည်တဲ့ reference file ကို မာတိကာနဲ့ စဖို့
+      အကြံပေးပါတယ်။ Claude က မာတိကာကို ကြည့်ပြီး လိုတဲ့ အပိုင်းကိုပဲ ဆက်ဖတ်နိုင်လို့ပါ။
+      [[mark:sel-rules]] SKILL.md ထဲမှာတော့ job တိုင်းအတွက် လိုတဲ့ စည်းကမ်းတွေကို ထားထားပါတယ်။ invoice code နဲ့ job
+      အဟောင်းကို မပြင်ရဘူး၊ ပမာဏကို အဆုံးမှာ တစ်ခါပဲ round လုပ်ရမယ် ဆိုတာတွေပါ။ ဒါတွေက job တိုင်းမှာ လိုတာမို့
+      SKILL.md ထဲမှာ နေရမှာပါ။
+      [[mark:type-map]] အခု ဒုတိယ အဆင့်ကို ရေးပါမယ်။ call တစ်ခုစီရဲ့ ပုံစံအသစ်ကို mapping table ထဲမှာ ရှာဖို့ link နဲ့
+      ပြောထားပါတယ်။ link ထားမှ Claude က ဒီ file ထဲမှာ ဘာရှိလဲ၊ ဘယ်အချိန် ဖွင့်ရမလဲ သိပါတယ်။ docs က reference file
+      တွေကို SKILL.md ကနေ တိုက်ရိုက် link ဖို့၊ file တစ်ခုကနေ နောက် file တစ်ခုကို ဆင့်ပြီး မညွှန်ဖို့ ပြောပါတယ်။
+      [[mark:type-write]] တတိယ အဆင့်က job အသစ်ကို job အဟောင်းဘေးမှာ ရေးဖို့ပါ။ job အဟောင်းက output တိုက်စစ်ဖို့
+      ကျန်နေရမှာမို့ အစားထိုး မရေးပါဘူး။
+    sources:
+      - {
+          title: "Claude Docs: Skill authoring best practices (progressive disclosure patterns)",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices",
+        }
+      - {
+          title: "Agent Skills: Specification (optional directories)",
+          url: "https://agentskills.io/specification",
+        }
+    actions:
+      - {
+          id: close-levels,
+          type: whiteboard.apply,
+          at: { mark: f-open, offsetMs: -900 },
+          open: false,
+        }
+      - {
+          id: open-map,
+          type: workspace.openFile,
+          at: { afterAction: close-levels },
+          path: billing-service/.claude/skills/report-migration/references/library-mapping.md,
+        }
+      - id: sel-contents
+        type: editor.select
+        at: { mark: sel-contents }
+        target:
+          file: billing-service/.claude/skills/report-migration/references/library-mapping.md
+          text: "## Contents\n1. Queries\n2. Totals and rounding\n3. Dates and time zones\n4. Output files"
+      - {
+          id: open-skill,
+          type: workspace.openFile,
+          at: { mark: sel-rules },
+          path: billing-service/.claude/skills/report-migration/SKILL.md,
+        }
+      - id: sel-rules
+        type: editor.select
+        at: { afterAction: open-skill }
+        target:
+          file: billing-service/.claude/skills/report-migration/SKILL.md
+          text: "## Rules\n- Never edit the invoice code or the old job: the old job stays for the comparison.\n- Round amounts once, at the end. Do not change the shared helpers."
+      - id: type-map
+        type: editor.type
+        at: { mark: type-map }
+        cadence: line-by-line
+        target:
+          {
+            file: billing-service/.claude/skills/report-migration/SKILL.md,
+            after: "list every old library call it makes.\n",
+          }
+        text: "2. Find each call's new form in [the mapping table](references/library-mapping.md).\n"
+      - id: type-write
+        type: editor.type
+        at: { mark: type-write }
+        cadence: line-by-line
+        target:
+          {
+            file: billing-service/.claude/skills/report-migration/SKILL.md,
+            after: "(references/library-mapping.md).\n",
+          }
+        text: "3. Write the new job beside the old one, using the new calls from step 2.\n"
+
+  - id: script
+    chapter: Script ကို run ခိုင်းခြင်း
+    narration: >
+      [[mark:type-run]] စတုတ္ထ အဆင့်က output တိုက်စစ်တာပါ။ ဒီမှာ script ကို run ဖို့ ရှင်းရှင်း ရေးထားပါတယ်။ docs က script
+      တစ်ခုကို run ရမလား၊ reference အနေနဲ့ ဖတ်ရမလား ဆိုတာ Claude ကို ပြောပြဖို့ အကြံပေးပါတယ်။ ဒီ skill မှာ run ဖို့ပဲ
+      လိုပါတယ်။
+      [[mark:sel-dir]] script ရဲ့ လမ်းကြောင်းမှာ skill folder ကို ညွှန်တဲ့ variable ကို သုံးထားပါတယ်။ Claude Code က
+      ဒါကို skill folder ရဲ့ လမ်းကြောင်းနဲ့ အစားထိုးပေးတာမို့၊ ဘယ် folder ကနေ အလုပ်လုပ်နေနေ script ကို တွေ့ပါတယ်။
+      [[mark:type-commit]] နောက်ဆုံး အဆင့်က ရလဒ်အပေါ် ဘာလုပ်ရမလဲ ပြောပါတယ်။ ကိုက်ရင်မှ commit လုပ်ပြီး၊ မကိုက်ရင် ရပ်ပြီး
+      developer ကို ကွာခြားချက် ပြရပါမယ်။ trial မှာ သုံးခဲ့တဲ့ job တစ်ခု pass မှ commit တစ်ခါ ဆိုတဲ့ စည်းကမ်းပါ။
+      [[mark:sel-script]] script က Billing team ရဲ့ compare command ကို run ပြီး၊ ကိုက်ရင် MATCH၊ မကိုက်ရင် DIFF နဲ့
+      ကွာခြားချက် စာကြောင်း နှစ်ဆယ်ကိုပဲ ထုတ်ပေးပါတယ်။ ဒါကြောင့် job တစ်ခုစီကို စစ်တိုင်း context ထဲ ဝင်တာ စာကြောင်း
+      အနည်းငယ်ပဲ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Skill authoring best practices (executable scripts)",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices",
+        }
+      - {
+          title: "Claude Code Docs: Extend Claude with skills (supporting files)",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+    actions:
+      - id: type-run
+        type: editor.type
+        at: { mark: type-run }
+        cadence: line-by-line
+        target:
+          {
+            file: billing-service/.claude/skills/report-migration/SKILL.md,
+            after: "using the new calls from step 2.\n",
+          }
+        text: "4. Run `${CLAUDE_SKILL_DIR}/scripts/compare.sh <job>` and use its output.\n"
+      - id: expect-run
+        type: expect.file
+        at: { afterAction: type-run }
+        path: billing-service/.claude/skills/report-migration/SKILL.md
+        contains: "4. Run `${CLAUDE_SKILL_DIR}/scripts/compare.sh <job>` and use its output.\n"
+      - id: sel-dir
+        type: editor.select
+        at: { mark: sel-dir }
+        target:
+          file: billing-service/.claude/skills/report-migration/SKILL.md
+          text: "${CLAUDE_SKILL_DIR}"
+      - id: type-commit
+        type: editor.type
+        at: { mark: type-commit }
+        cadence: line-by-line
+        target:
+          {
+            file: billing-service/.claude/skills/report-migration/SKILL.md,
+            after: "<job>` and use its output.\n",
+          }
+        text: "5. Commit only after MATCH. After DIFF, stop and show the difference to the developer.\n"
+      - {
+          id: open-script,
+          type: workspace.openFile,
+          at: { mark: sel-script },
+          path: billing-service/.claude/skills/report-migration/scripts/compare.sh,
+        }
+      - id: sel-script
+        type: editor.select
+        at: { afterAction: open-script }
+        target:
+          file: billing-service/.claude/skills/report-migration/scripts/compare.sh
+          text: "# Prints MATCH, or DIFF and the first 20 lines of the difference. Exits 0 only on a match."
+
+  - id: frontmatter
+    chapter: allowed-tools တကယ် လုပ်တာ
+    narration: >
+      [[mark:t-back]] Billing team က Manual mode နဲ့ အလုပ်လုပ်တာမို့ script ကို run တိုင်း Claude Code က ခွင့်ပြုချက် မေးပါတယ်။ job တစ်ခုစီမှာ အကြိမ်ကြိမ် run ရတော့
+      developer တွေက ဒီ script အတွက်ပဲ မမေးစေချင်ပါဘူး။
+      [[mark:type-tools]] ဒါအတွက် frontmatter မှာ allowed tools field ကို ထည့်ပါမယ်။ ဒီ field က skill ကို ခေါ်လိုက်တဲ့
+      turn အတွင်းမှာ ဒီ tool ကို မမေးဘဲ သုံးခွင့် ကြိုပေးထားတာပါ။ developer ရဲ့ နောက် message ရောက်တာနဲ့ အဲဒီ ခွင့်က
+      ပြန်ပျောက်ပါတယ်။
+      [[mark:sel-tools]] ဒီနေရာမှာ အမှားများပါတယ်။ allowed tools က ဒီ tool တွေကိုပဲ သုံးရမယ်လို့ ကန့်သတ်တဲ့ စာရင်း မဟုတ်ပါဘူး။
+      ကျန်တဲ့ tool တွေကို ပိတ်မထားသလို၊ ခါတိုင်းလို ခွင့်တောင်းပြီး သုံးနိုင်ပါသေးတယ်။ တကယ် ကန့်သတ်ချင်ရင် disallowed tools
+      field ဒါမှမဟုတ် settings ထဲက deny rule ကို သုံးရပါတယ်။ Agent Skills standard ကလည်း ဒီ field ကို experimental လို့
+      မှတ်ထားပြီး၊ ကုမ္ပဏီတွေက managed settings ကနေ ပိတ်ထားလို့လည်း ရပါတယ်။
+      [[mark:t-other]] frontmatter မှာ တခြား option တွေလည်း ရှိပါတယ်။ disable model invocation ကို true ထားရင် skill
+      ကို လူကပဲ ခေါ်လို့ရပြီး၊ လူက မခေါ်မချင်း description က context ထဲ မဝင်ပါဘူး။ context ကို fork ထားရင် skill ရဲ့ စာကိုယ်က
+      subagent အသစ် တစ်ခုရဲ့ task ဖြစ်သွားပါတယ်။ နာမည်က fork ဖြစ်ပေမဲ့ အဲဒီ subagent က ကိုယ့် စကားဝိုင်းကို မမြင်ရပါဘူး။
+      subagent ဆိုတာ အလုပ် တစ်ပိုင်းကို သီးသန့် context နဲ့ လုပ်ပေးတဲ့ လက်ထောက် agent ပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills (frontmatter reference, pre-approve tools)",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+      - {
+          title: "Agent Skills: Specification (allowed-tools)",
+          url: "https://agentskills.io/specification",
+        }
+    actions:
+      - {
+          id: open-skill-2,
+          type: workspace.openFile,
+          at: { mark: t-back },
+          path: billing-service/.claude/skills/report-migration/SKILL.md,
+        }
+      - id: type-tools
+        type: editor.type
+        at: { mark: type-tools }
+        cadence: line-by-line
+        target:
+          {
+            file: billing-service/.claude/skills/report-migration/SKILL.md,
+            after: "Use when asked to migrate a report job.\n",
+          }
+        text: "allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/compare.sh *)\n"
+      - id: sel-tools
+        type: editor.select
+        at: { mark: sel-tools }
+        target:
+          file: billing-service/.claude/skills/report-migration/SKILL.md
+          text: "allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/compare.sh *)"
+
+  - id: size
+    chapter: SKILL.md ကို တိုအောင်
+    narration: >
+      [[mark:s-open]] skill ကို ဖွဲ့စည်းတဲ့အခါ docs က အရွယ်အစားအတွက် လမ်းညွှန် အချို့ ပေးထားပါတယ်။
+      [[mark:s-1]] ပထမ တစ်ခုက SKILL.md ကို စာကြောင်း ၅၀၀ အောက်မှာ ထားဖို့ပါ။ ဒီထက် ရှည်လာရင် အသေးစိတ်ကို သီးခြား
+      file တွေထဲ ရွှေ့ပါ။
+      [[mark:s-2]] ဒုတိယ တစ်ခုက ညွှန်ကြားချက်ကို token ၅၀၀၀ အောက်မှာ ထားဖို့ပါ။ skill ရဲ့ စာကိုယ် ဝင်လာပြီးရင် စကားဝိုင်း
+      တစ်လျှောက်လုံး ကျန်နေတာမို့ စာကြောင်း တိုင်းက turn တိုင်းမှာ token ကုန်ပါတယ်။ context ပြည့်လို့ အလိုအလျောက်
+      ချုံ့တဲ့အခါမှာလည်း Claude Code က skill တစ်ခုစီရဲ့ ပထမ token ၅၀၀၀ ကိုပဲ ပြန်တွဲပေးပါတယ်။
+      [[mark:s-3]] တတိယ တစ်ခုက reference file တွေကို SKILL.md ကနေ တစ်ဆင့်တည်း link ထားဖို့ပါ။ Billing skill မှာ
+      ရေးခဲ့သလိုပါ။
+      [[mark:s-4]] စတုတ္ထ တစ်ခုက ရှည်တဲ့ reference file မှာ မာတိကာ ထည့်ဖို့ပါ။ mapping table မှာ ထည့်ထားတဲ့ မာတိကာက
+      ဒီအတွက်ပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills (size, content lifecycle)",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+      - {
+          title: "Claude Docs: Skill authoring best practices",
+          url: "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices",
+        }
+    actions:
+      - { id: show-size, type: slide.show, at: { mark: s-open, offsetMs: -1200 }, slideId: size }
+      - { id: point-s-1, type: slide.point, at: { mark: s-1 }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-s-2, type: slide.point, at: { mark: s-2 }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-s-3, type: slide.point, at: { mark: s-3 }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-s-4, type: slide.point, at: { mark: s-4 }, target: { x: 0.15, y: 0.81 } }
+
+  - id: your-turn
+    chapter: ကိုယ့် project အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် project ထဲက ရှည်လျားတဲ့ လုပ်ငန်းစဉ် တစ်ခုကို ရွေးပါ။ release ထုတ်တာ၊
+      database ပြောင်းတာ၊ customer data export လုပ်တာ ဆိုရင် ဖြစ်ပါတယ်။
+      [[mark:turn-2]] lesson ကို pause လုပ်ပြီး၊ အဲဒီ skill ရဲ့ folder ပုံကို ရေးကြည့်ပါ။ အလုပ်တိုင်းမှာ လိုတဲ့ စည်းကမ်းနဲ့
+      အဆင့်တွေက SKILL.md ထဲ၊ တစ်ခါတလေမှ လိုတဲ့ table ဒါမှမဟုတ် docs က references folder ထဲ၊ ရလဒ်ကို စစ်တဲ့
+      command က scripts folder ထဲ ဆိုပြီး ခွဲကြည့်ပါ။
+    sources:
+      - {
+          title: "Agent Skills: Specification (directory structure)",
+          url: "https://agentskills.io/specification",
+        }
+    actions:
+      - { id: close-size, type: slide.close, at: { mark: turn } }
+      - id: sel-steps
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: billing-service/.claude/skills/report-migration/SKILL.md
+          text: "## Steps"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ ရှည်လျားတဲ့ report migration လုပ်ငန်းစဉ်ကို SKILL.md တစ်ခုတည်းထဲ မထည့်ဘဲ၊
+      အမြဲ လိုတဲ့ စည်းကမ်းနဲ့ အဆင့်တွေကိုပဲ SKILL.md ထဲ ထားလိုက်ပါတယ်။ mapping table က လိုတဲ့ အဆင့်ရောက်မှ ဖတ်ပြီး၊
+      script ကတော့ run လို့ ထွက်တဲ့ output ပဲ context ထဲ ဝင်ပါတယ်။
+      [[mark:recap-2]] allowed tools က skill ရဲ့ turn အတွင်း မမေးဘဲ သုံးခွင့် ကြိုပေးတာ ဖြစ်ပြီး၊ ဘာကိုမှ မကန့်သတ်ပါဘူး။
+      [[mark:next]] နောက် lesson မှာတော့ CLAUDE.md၊ skill၊ subagent၊ hook နဲ့ MCP server ဆိုတဲ့ Claude Code ကို
+      ပြင်ဆင်တဲ့ နည်း ငါးမျိုးထဲက လိုအပ်ချက် တစ်ခုအတွက် ဘယ်ဟာကို ရွေးမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Extend Claude with skills",
+          url: "https://code.claude.com/docs/en/skills",
+        }
+    actions:
+      - id: sel-map-line
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: billing-service/.claude/skills/report-migration/SKILL.md
+          text: "2. Find each call's new form in [the mapping table](references/library-mapping.md)."
+      - id: sel-tools-2
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: billing-service/.claude/skills/report-migration/SKILL.md
+          text: "allowed-tools:"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
