@@ -1,0 +1,680 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-10-discernment
+  title: "Claude FDE 10: Discernment"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/10-review-checklist.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/10-review-checklist.md: |
+        # Reply assistant ကို ပြင်တိုင်း စစ်ရမယ့် checklist
+
+        ပြင်တာ ဘာပဲ ဖြစ်ဖြစ် (code၊ system prompt၊ tool) merge မလုပ်ခင် ဒီ 5 ချက်ကို စစ်ပါ။
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — two results that look finished: blue is code (a part of a system), violet a message to a
+    # customer; the orange question is what the board is about.
+    - {
+        id: n-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "ပြီးပြီလို့ ထင်ရတဲ့ ရလဒ် 2 ခု",
+        fontSize: 36,
+      }
+    - {
+        id: n-c1,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 380,
+        height: 170,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-c1-h,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 258,
+        width: 380,
+        height: 38,
+        text: "code ပြောင်းလဲမှု",
+        fontSize: 30,
+      }
+    - {
+        id: n-c1-a,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 312,
+        width: 380,
+        height: 35,
+        text: "400 ကြောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: n-c1-b,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 357,
+        width: 380,
+        height: 35,
+        text: "test အားလုံး pass",
+        fontSize: 28,
+      }
+    - {
+        id: n-c2,
+        kind: rectangle,
+        x: 700,
+        y: 240,
+        width: 380,
+        height: 170,
+        rounded: true,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: n-c2-h,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 258,
+        width: 380,
+        height: 38,
+        text: "customer reply",
+        fontSize: 30,
+      }
+    - {
+        id: n-c2-a,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 312,
+        width: 380,
+        height: 35,
+        text: "ယဉ်ကျေးတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: n-c2-b,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 357,
+        width: 380,
+        height: 35,
+        text: "ဖတ်လို့ အရမ်းကောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: n-q,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 470,
+        width: 790,
+        height: 40,
+        text: "ယုံလို့ ရပြီလား?",
+        fontSize: 32,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "test အားလုံး pass ပြီ။ ဘာ အရင် လုပ်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) merge လုပ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) test က ဘာစစ်လဲ၊ ပြင်ထားလား ကြည့်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 560,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 880,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "pass = test စစ်တဲ့ အရာ မှန်တာပဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "မစစ်တဲ့ အရာကို ဘာမှ မပြော",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — two lenses: the code lens (blue frame, a part of a system) and the customer lens (green
+    # frame, read by a person), three checks each.
+    - {
+        id: l-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "စစ်တဲ့ မျက်လုံး 2 ခု",
+        fontSize: 36,
+      }
+    - {
+        id: l-f1,
+        kind: rectangle,
+        x: 290,
+        y: 225,
+        width: 380,
+        height: 370,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-h1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 242,
+        width: 380,
+        height: 38,
+        text: "code",
+        fontSize: 30,
+      }
+    - {
+        id: l-c1,
+        kind: text,
+        x: 310,
+        y: 310,
+        width: 350,
+        height: 35,
+        text: "ရလဒ် မှန်ပြီး ပြည့်စုံလား",
+        fontSize: 28,
+      }
+    - {
+        id: l-c2,
+        kind: text,
+        x: 310,
+        y: 395,
+        width: 350,
+        height: 35,
+        text: "ဘာ ဖတ်ပြီး ဘာ ကျော်ခဲ့လဲ",
+        fontSize: 28,
+      }
+    - {
+        id: l-c3,
+        kind: text,
+        x: 310,
+        y: 480,
+        width: 350,
+        height: 35,
+        text: "test ကို ပြင်ခဲ့လား",
+        fontSize: 28,
+      }
+    - {
+        id: l-f2,
+        kind: rectangle,
+        x: 700,
+        y: 225,
+        width: 380,
+        height: 370,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-h2,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 242,
+        width: 380,
+        height: 38,
+        text: "customer",
+        fontSize: 30,
+      }
+    - {
+        id: l-d1,
+        kind: text,
+        x: 720,
+        y: 310,
+        width: 350,
+        height: 35,
+        text: "ဒီ customer နားလည်လား",
+        fontSize: 28,
+      }
+    - {
+        id: l-d2,
+        kind: text,
+        x: 720,
+        y: 395,
+        width: 350,
+        height: 35,
+        text: "လူကို ငဲ့ညှာလား",
+        fontSize: 28,
+      }
+    - {
+        id: l-d3,
+        kind: text,
+        x: 720,
+        y: 480,
+        width: 350,
+        height: 35,
+        text: "ယုံပြီး လုပ်လို့ ရလား",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9310
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: looks-done
+    chapter: ပြီးပြီလို့ ထင်ရတဲ့ ရလဒ်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ Description ကို လေ့လာခဲ့ပါတယ်။ လိုချင်တဲ့ ရလဒ်၊ model မမြင်ရတဲ့ အခြေအနေ၊ ကန့်သတ်ချက်နဲ့
+      ပြီးပြီ ဆိုတာ ဘယ်လို သိမလဲ ဆိုတာကို brief တစ်စောင်အဖြစ် ရေးခဲ့ပါတယ်။
+      [[mark:n-open]] ဒီ lesson မှာတော့ AI ပြန်ပေးလာတဲ့ ရလဒ်ကို ကြည့်ပါမယ်။ late fee နှစ်ခါ ကောက်တဲ့ bug အတွက်
+      brief ကို ပေးလိုက်ပြီး နောက်တစ်နေ့မှာ ရလဒ် နှစ်ခု ရောက်လာပါတယ်။
+      [[mark:n-code]] ပထမ တစ်ခုက Billing ရဲ့ code ပြောင်းလဲမှုပါ။ စာကြောင်း ၄၀၀ လောက် ပြောင်းထားပြီး၊ test
+      အားလုံး pass တယ်လို့ AI က ပြောပါတယ်။ ရှင်းပြချက်ကလည်း သေသေသပ်သပ် ရှိပါတယ်။ ticket တွေ ဆက်ဝင်နေတော့
+      developer က သီတင်းပတ်ကုန် မတိုင်ခင် merge လုပ်ချင်နေပါတယ်။
+      [[mark:n-reply]] ဒုတိယ တစ်ခုက late fee နှစ်ခါ ကောက်ခံခဲ့ရတဲ့ customer တစ်ယောက်အတွက် support agent
+      တစ်ယောက်က AI နဲ့ ရေးထားတဲ့ reply ပါ။ ယဉ်ကျေးပြီး ဖတ်လို့ အရမ်းကောင်းတော့၊ support agent က support
+      manager လှလှ ဆီ ဒီ ပုံစံကို template အဖြစ် သုံးချင်တယ်လို့ ပြောလာပါတယ်။
+      [[mark:n-q]] နှစ်ခုလုံးက ပြီးပြီလို့ ထင်ရပါတယ်။ ဒါပေမဲ့ ယုံလို့ ရပြီလား ဆိုတာကို ဆုံးဖြတ်ရတာက လူ့တာဝန်ပါ။
+      ဒီ အလေ့အကျင့်ကို Discernment လို့ ခေါ်ပါတယ်။ AI ပြန်ပေးတာ မှန်မမှန်၊ ယုံလို့ ရမရ ကိုယ်တိုင် အကဲဖြတ်တာပါ။
+      model ရဲ့ စာက ချောမွေ့တတ်ပေမဲ့၊ ချောမွေ့တာနဲ့ စစ်ပြီးသား ဖြစ်တာ မတူလို့ ဒီ အလေ့အကျင့် လိုတာပါ။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+      - {
+          title: "AI Fluency for Builders (Anthropic and CodePath, public course description)",
+          url: "https://anthropic.skilljar.com/ai-fluency-for-builders",
+        }
+    actions:
+      - {
+          id: draw-n-open,
+          type: whiteboard.apply,
+          at: { mark: n-open },
+          open: true,
+          upsertIds: [n-title],
+        }
+      - {
+          id: draw-n-code,
+          type: whiteboard.apply,
+          at: { mark: n-code },
+          upsertIds: [n-c1, n-c1-h, n-c1-a, n-c1-b],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-n-reply,
+          type: whiteboard.apply,
+          at: { mark: n-reply },
+          upsertIds: [n-c2, n-c2-h, n-c2-a, n-c2-b],
+          drawMs: 1800,
+        }
+      - { id: draw-n-q, type: whiteboard.apply, at: { mark: n-q }, upsertIds: [n-q], drawMs: 900 }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ code ပြောင်းလဲမှုကို AI က ရေးထားပြီး test အားလုံး pass ပါတယ်။
+      Billing team အနေနဲ့ ပထမဆုံး ဘာလုပ်သင့်လဲ။
+      [[mark:q-a]] ပထမ ရွေးစရာက test pass နေပြီမို့ merge လုပ်လိုက်တာပါ။
+      [[mark:q-b]] ဒုတိယ ရွေးစရာက test တွေက ဘာကို စစ်လဲ၊ AI က test တွေကို ပြင်ထားလား ဆိုတာ အရင် ကြည့်တာပါ။ lesson
+      ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ ရွေးစရာပါ။ ဘာကြောင့်လဲဆိုတော့ test pass တယ် ဆိုတာ test တွေ စစ်တဲ့
+      အရာ မှန်တယ် ဆိုတာကိုပဲ ပြောလို့ပါ။ test မစစ်တဲ့ အရာအကြောင်းကို ဘာမှ မပြောပါဘူး။ ပြီးတော့ AI က fail ဖြစ်နေတဲ့
+      test ကို pass အောင် test ဘက်ကနေ ပြင်လိုက်တာမျိုးလည်း ဖြစ်နိုင်ပါတယ်။ အဲဒီလိုဆိုရင် pass တယ် ဆိုတဲ့ စကားက
+      ဘာကိုမှ မသက်သေပြတော့ပါဘူး။
+      [[mark:q-rule]] ဒါကြောင့် pass တယ် ဆိုတာကို စစ်ပြီးပြီလို့ မယူဆပါနဲ့။ ဘာကို စစ်ထားလဲ၊ ဘာကို မစစ်ရသေးလဲ ဆိုတာ
+      သိမှ ယုံလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices (avoid focusing on passing tests and hardcoding)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: code-lens
+    chapter: code ကို စစ်တဲ့ မျက်လုံး
+    narration: >
+      [[mark:c-open]] ဒါဆို Billing team နဲ့ အတူ ဒီ code ပြောင်းလဲမှုကို တကယ် စစ်ကြည့်ရအောင်။ AI က code ကို
+      လူထက် အများကြီး မြန်မြန် ရေးနိုင်ပေမဲ့၊ review လုပ်ရမယ့် အလုပ်ကတော့ လူ့ဆီမှာပဲ ကျန်ပါတယ်။ ဒါကြောင့် ဘာကို
+      ကြည့်ရမလဲ ဆိုတာ ကြိုသိထားဖို့ လိုပါတယ်။ code အတွက် မေးရမယ့် မေးခွန်း သုံးခု ရှိပါတယ်။
+      [[mark:c1]] ပထမ မေးခွန်းက ရလဒ် မှန်ပြီး ပြည့်စုံလား ဆိုတာပါ။ brief ထဲက invoice နဲ့ စစ်ကြည့်တော့ late fee ကို
+      ကျပ် ၃၀၀၀ တစ်ကြိမ်ပဲ ကောက်ပါတယ်။ မှန်ပါတယ်။ ဒါပေမဲ့ ရက်မှီ ပေးတဲ့ customer ကို ဘာမှ မကောက်ရဘူး ဆိုတဲ့ case
+      ကိုတော့ ဘယ် test ကမှ မစစ်ထားပါဘူး။ မှန်တာ တစ်ခု တွေ့တာနဲ့ ပြည့်စုံတယ်လို့ ပြောလို့ မရပါဘူး။
+      [[mark:c2]] ဒုတိယ မေးခွန်းက ဒီ ရလဒ်ကို ဘယ်လို ရောက်လာလဲ ဆိုတာပါ။ AI က ဘာ file တွေကို ဖတ်ခဲ့လဲ၊ ဘာတွေကို
+      ကျော်ခဲ့လဲ၊ ဘာကြောင့် ပြောင်းလဲ ဆိုတာ ရှင်းပြခိုင်းပြီး diff နဲ့ တိုက်ကြည့်ပါတယ်။ brief မှာ fee ကောက်ခင် စစ်တဲ့
+      နေရာ တစ်ခုတည်းမှာ ပြင်ပါလို့ ရေးထားပေမဲ့၊ စာကြောင်း ၄၀၀ ထဲမှာ retry job ကိုပါ ပြန်ရေးထားတာ တွေ့ပါတယ်။
+      ပြင်ရမယ့် နေရာ တစ်နေရာအတွက် စာကြောင်း ၄၀၀ ဆိုတာ သတိထားရမယ့် လက္ခဏာပါ။
+      [[mark:c3]] တတိယ မေးခွန်းက test တွေကို ပြင်ခဲ့လား ဆိုတာပါ။ ရှိပြီးသား test တစ်ခုက fail ဖြစ်တော့ AI က အဲဒီ
+      test ထဲက မျှော်လင့်တဲ့ ပမာဏကို ပြင်လိုက်တာ တွေ့ရပါတယ်။ code ကို test နဲ့ ကိုက်အောင် မပြင်ဘဲ၊ test ကို code
+      နဲ့ ကိုက်အောင် ပြင်လိုက်တာပါ။ test ပြင်တာ တစ်ခါတလေ မှန်ပေမဲ့၊ ဘာကြောင့် ပြင်လဲ ဆိုတာ လူ တစ်ယောက်က
+      သိပြီး လက်ခံရပါမယ်။
+      [[mark:c-tools]] ဒီလို စစ်တဲ့အခါ AI ကိုလည်း ကူခိုင်းလို့ ရပါတယ်။ ဥပမာ ပြောထားတဲ့ အချက် တစ်ခုချင်းစီအတွက် ဘယ်
+      file ရဲ့ ဘယ်နေရာကနေ သိလဲ ဆိုတာ ကိုးကားခိုင်းပြီး၊ ကိုးကားလို့ မရတဲ့ အချက်ကို ပြန်ရုတ်ခိုင်းတာပါ။ မေးခွန်း တူတူကို
+      အကြိမ်ကြိမ် မေးကြည့်လို့ အဖြေတွေ မတူကြရင်လည်း သတိထားရမယ့် လက္ခဏာ တစ်ခုပါ။ ဒါပေမဲ့ နောက်ဆုံး ဆုံးဖြတ်ချက်ကတော့
+      လူ့ဆီမှာ ရှိပါတယ်။
+      [[mark:c-back]] Billing team က တွေ့ခဲ့တာ သုံးခုကို brief ထဲ ပြန်ထည့်ပါတယ်။ ရက်မှီ ပေးတဲ့ case၊ retry job ကို
+      မထိရဘူး ဆိုတာကို ပိုရှင်းရှင်း ရေးတာနဲ့၊ test ကို မပြင်ရဘူး ဆိုတာပါ။ Discernment မှာ တွေ့တာက နောက်တစ်ကြိမ်ရဲ့
+      Description ဖြစ်လာတာပါ။
+    sources:
+      - {
+          title: "Claude Docs: Prompting best practices (avoid focusing on passing tests and hardcoding)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+      - {
+          title: "Claude Docs: Reduce hallucinations (read before answering; quotes and citations)",
+          url: "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations",
+        }
+    actions:
+      - {
+          id: draw-l-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          clear: true,
+          upsertIds: [l-title, l-f1, l-h1],
+          drawMs: 1200,
+        }
+      - { id: draw-c1, type: whiteboard.apply, at: { mark: c1 }, upsertIds: [l-c1], drawMs: 900 }
+      - { id: draw-c2, type: whiteboard.apply, at: { mark: c2 }, upsertIds: [l-c2], drawMs: 900 }
+      - { id: draw-c3, type: whiteboard.apply, at: { mark: c3 }, upsertIds: [l-c3], drawMs: 900 }
+      - { id: point-f1, type: whiteboard.point, at: { mark: c-back }, target: { assetId: l-f1 } }
+
+  - id: customer-lens
+    chapter: customer ရဲ့ မျက်လုံး
+    narration: >
+      [[mark:r-open]] customer ဆီ ရောက်မယ့် reply အတွက်တော့ မျက်လုံး နောက်တစ်ခု လိုပါတယ်။ အကြောင်းအရာ မှန်တာ
+      တစ်ခုတည်းနဲ့ မလုံလောက်ပါဘူး။ ဒီ customer အတွက် မှန်လား ဆိုတာပါ စစ်ရပါတယ်။
+      [[mark:r1]] ပထမ မေးခွန်းက ဒီ customer နားလည်မလား ဆိုတာပါ။ reply ထဲမှာ invoice reconciliation လို စကားလုံးတွေ
+      ပါနေပါတယ်။ Billing team အတွက် ရှင်းပေမဲ့ ဖုန်းပေါ်မှာ ဖတ်နေတဲ့ customer အတွက်တော့ နားလည်ရ ခက်ပါတယ်။
+      [[mark:r2]] ဒုတိယ မေးခွန်းက လူကို ငဲ့ညှာလား ဆိုတာပါ။ reply က စောင့်ပေးတဲ့အတွက် ယဉ်ယဉ်ကျေးကျေး ကျေးဇူးတင်ထားပေမဲ့၊ နေခြည် ဘက်က မှားခဲ့တာကို ဝန်မခံပါဘူး။ ငွေ နှစ်ခါ ကောက်ခံရလို့ စိတ်ဆိုးနေတဲ့ လူ တစ်ယောက်အတွက်
+      ယဉ်ကျေးတာနဲ့ ငဲ့ညှာတာ မတူပါဘူး။
+      [[mark:r3]] တတိယ မေးခွန်းက ယုံပြီး လုပ်လို့ ရလား ဆိုတာပါ။ reply က ပိုကောက်ထားတဲ့ ငွေကို ၂၄ နာရီအတွင်း
+      ပြန်အမ်းပါမယ်လို့ ကတိပေးထားပါတယ်။ အဲဒီ ကတိကို ဘယ်သူမှ မဆုံးဖြတ်ရသေးပါဘူး။ customer က အဲဒီ ကတိကို ယုံပြီး
+      စောင့်နေရင် နောက်ထပ် ပြဿနာ တစ်ခု ဖြစ်လာပါမယ်။
+      [[mark:r-point]] ဒီ သုံးခုကို စစ်ဖို့ အကောင်းဆုံး နည်းက reply ကို customer နေရာကနေ ဖတ်ကြည့်တာပါ။ ဒါကို
+      အရေးမကြီးတဲ့ စစ်ဆေးမှုလို့ မထင်ပါနဲ့။ code မှာ test လိုသလို၊ customer ဆီ ရောက်မယ့် စာမှာ ဒီလို ဖတ်ကြည့်တာက
+      တကယ့် စစ်ဆေးမှု တစ်ခုပါ။ ပြီးတော့ ဒီ reply ကို template အဖြစ် သုံးရင် customer ရာချီဆီ တစ်ပုံစံတည်း
+      ရောက်သွားမှာမို့၊ အမှား တစ်ခုကလည်း ရာချီ ဖြစ်သွားပါမယ်။
+    sources:
+      - {
+          title: "AI Fluency for Builders (Anthropic and CodePath, public course description)",
+          url: "https://anthropic.skilljar.com/ai-fluency-for-builders",
+        }
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+    actions:
+      - {
+          id: draw-r-open,
+          type: whiteboard.apply,
+          at: { mark: r-open },
+          upsertIds: [l-f2, l-h2],
+          drawMs: 900,
+        }
+      - { id: draw-r1, type: whiteboard.apply, at: { mark: r1 }, upsertIds: [l-d1], drawMs: 900 }
+      - { id: draw-r2, type: whiteboard.apply, at: { mark: r2 }, upsertIds: [l-d2], drawMs: 900 }
+      - { id: draw-r3, type: whiteboard.apply, at: { mark: r3 }, upsertIds: [l-d3], drawMs: 900 }
+      - { id: point-f2, type: whiteboard.point, at: { mark: r-point }, target: { assetId: l-f2 } }
+
+  - id: checklist
+    chapter: Reply assistant အတွက် checklist
+    narration: >
+      [[mark:k-open]] ကိုယ်တို့ မကြာခင် Reply assistant ကို ဆောက်ပါတော့မယ်။ ဆောက်တဲ့အခါ code၊ system prompt နဲ့
+      tool တွေကို အကြိမ်ကြိမ် ပြင်ရပါမယ်။ ပြင်တိုင်း စစ်ဖို့ checklist တစ်ခုကို အခုကတည်းက ရေးထားကြရအောင်။ checklist
+      ရှိရင် အလုပ်များနေတဲ့ နေ့မှာလည်း ဘာကို စစ်ရမလဲ ဆိုတာ မေ့မသွားပါဘူး။ ဘယ်သူ စစ်စစ် တူတူ စစ်နိုင်ပါတယ်။
+      [[mark:type-k1]] ပထမ တစ်ချက်က ticket နမူနာ အစုတစ်ခုနဲ့ draft တွေကို ထုတ်ပြီး၊ လူ တစ်ယောက်က တစ်စောင်ချင်း
+      ဖတ်ရမယ် ဆိုတာပါ။ draft တစ်စောင် ကောင်းသွားတာက ကျန်တာတွေ ကောင်းသွားတယ်လို့ မပြောနိုင်လို့ပါ။ ဘယ်လို draft ကို
+      ကောင်းတယ်လို့ ခေါ်မလဲ ဆိုတဲ့ စံကိုလည်း prompt ကို မပြင်ခင် ကြိုသတ်မှတ်ထားရပါမယ်။
+      [[mark:type-k2]] ဒုတိယ တစ်ချက်က ပြောင်းထားတဲ့ file အားလုံးကို ဖတ်ပြီး ဘာကြောင့် ပြောင်းလဲ ရှင်းပြနိုင်ရမယ်
+      ဆိုတာပါ။ ရှင်းမပြနိုင်တဲ့ ပြောင်းလဲမှုကို merge မလုပ်ပါဘူး။
+      [[mark:type-k3]] တတိယ တစ်ချက်က test အကြောင်းပါ။ test ကို ပြင်ထားရင် ဘာကြောင့်လဲ ရေးထားရမယ်၊ test မစစ်တဲ့
+      case တွေကိုလည်း စာရင်း လုပ်ထားရမယ် ဆိုတာပါ။
+      [[mark:type-k4]] စတုတ္ထ တစ်ချက်က customer မျက်လုံးပါ။ draft တွေကို customer အနေနဲ့ ဖတ်ကြည့်ပြီး၊ ရှင်းလား၊
+      ငဲ့ညှာလား စစ်ရပါမယ်။
+      [[mark:type-k5]] နောက်ဆုံး တစ်ချက်က ကတိ အကြောင်းပါ။ အချိန်၊ ငွေ၊ technician လာမယ့် နေ့ လိုမျိုး ဘယ်သူမှ
+      မဆုံးဖြတ်ရသေးတဲ့ ကတိ တစ်ခုမှ draft ထဲမှာ မပါရပါဘူး။
+    sources:
+      - {
+          title: "Claude Docs: Prompt engineering overview (success criteria and evaluations first)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview",
+        }
+      - {
+          title: "Claude Docs: Prompting best practices",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - { id: close-lenses, type: whiteboard.apply, at: { mark: k-open }, open: false }
+      - {
+          id: open-checklist,
+          type: workspace.openFile,
+          at: { afterAction: close-lenses },
+          path: notebook/10-review-checklist.md,
+        }
+      - id: type-k1
+        type: editor.type
+        at: { mark: type-k1 }
+        cadence: line-by-line
+        target: { file: notebook/10-review-checklist.md, after: "ဒီ 5 ချက်ကို စစ်ပါ။\n" }
+        text: "\n- [ ] ticket နမူနာ 20 ခုနဲ့ draft ထုတ်ပြီး လူ တစ်ယောက်က တစ်စောင်ချင်း ဖတ်ပြီးပြီ\n"
+      - id: type-k2
+        type: editor.type
+        at: { mark: type-k2 }
+        cadence: line-by-line
+        target: { file: notebook/10-review-checklist.md, after: "တစ်စောင်ချင်း ဖတ်ပြီးပြီ\n" }
+        text: "- [ ] ပြောင်းထားတဲ့ file အားလုံးကို ဖတ်ပြီး ဘာကြောင့် ပြောင်းလဲ ရှင်းပြနိုင်တယ်\n"
+      - id: type-k3
+        type: editor.type
+        at: { mark: type-k3 }
+        cadence: line-by-line
+        target: { file: notebook/10-review-checklist.md, after: "ရှင်းပြနိုင်တယ်\n" }
+        text: "- [ ] test ပြင်ထားရင် အကြောင်းပြချက် ရေးထား၊ test မစစ်တဲ့ case တွေ စာရင်းလုပ်ထား\n"
+      - id: type-k4
+        type: editor.type
+        at: { mark: type-k4 }
+        cadence: line-by-line
+        target: { file: notebook/10-review-checklist.md, after: "case တွေ စာရင်းလုပ်ထား\n" }
+        text: "- [ ] draft တွေကို customer အနေနဲ့ ဖတ်ကြည့်ပြီ: ရှင်းလား၊ ငဲ့ညှာလား\n"
+      - id: type-k5
+        type: editor.type
+        at: { mark: type-k5 }
+        cadence: line-by-line
+        target: { file: notebook/10-review-checklist.md, after: "ရှင်းလား၊ ငဲ့ညှာလား\n" }
+        text: "- [ ] ဘယ်သူမှ မဆုံးဖြတ်ရသေးတဲ့ ကတိ (အချိန်၊ ငွေ၊ ရက်) draft ထဲမှာ မပါ\n"
+      - id: expect-k3
+        type: expect.file
+        at: { afterAction: type-k5 }
+        path: notebook/10-review-checklist.md
+        contains: "- [ ] test ပြင်ထားရင် အကြောင်းပြချက် ရေးထား၊ test မစစ်တဲ့ case တွေ စာရင်းလုပ်ထား\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် team ရဲ့ checklist
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် team အတွက် လိုမယ့် စစ်ချက် နှစ်ချက်ကို ဒီ
+      checklist ရဲ့ အောက်မှာ ထပ်ရေးကြည့်ပါ။ AI ရေးပေးတဲ့ code ဖြစ်ဖြစ်၊ customer ဆီ ရောက်မယ့် စာ ဖြစ်ဖြစ်၊ ကိုယ့်
+      အလုပ်မှာ အများဆုံး ကြုံရတဲ့ ရလဒ် တစ်မျိုးကို ရွေးပါ။
+      [[mark:turn-2]] စစ်ချက် တစ်ချက်ကို ရေးတဲ့အခါ စစ်ပြီးပြီလား မပြီးသေးလား ဆိုတာ လူ တစ်ယောက်က ရှင်းရှင်း ဖြေနိုင်ရပါမယ်။
+      ကောင်းကောင်း စစ်ပါ ဆိုတဲ့ စာကြောင်းမျိုးက checklist မဟုတ်ပါဘူး။ ဘာကို ဘယ်လို စစ်မလဲ ဆိုတာ ပါမှ checklist
+      ဖြစ်ပါတယ်။
+      [[mark:turn-3]] ဥပမာ customer app ကို AI နဲ့ ပြင်နေတဲ့ team ဆိုရင်၊ screen အသေးနဲ့ ဖုန်းမှာ ဖွင့်ကြည့်ပြီးပြီ
+      ဆိုတဲ့ စစ်ချက်မျိုး လိုနိုင်ပါတယ်။ data ကို ပြောင်းတဲ့ script ဆိုရင်တော့ မ run ခင် ဘယ်နှစ်ကြောင်း ထိမလဲ
+      ရေတွက်ကြည့်ပြီးပြီ ဆိုတဲ့ စစ်ချက်မျိုးပါ။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+    actions:
+      - id: sel-k1
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/10-review-checklist.md
+          text: "- [ ] ticket နမူနာ 20 ခုနဲ့ draft ထုတ်ပြီး လူ တစ်ယောက်က တစ်စောင်ချင်း ဖတ်ပြီးပြီ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ ပြီးပြီလို့ ထင်ရတဲ့ ရလဒ်ကို ယုံလို့ ရမရ ဆုံးဖြတ်တာက Discernment ပါ။ code အတွက်ဆိုရင်
+      ရလဒ် မှန်ပြီး ပြည့်စုံလား၊ ဘယ်လို ရောက်လာလဲ၊ test တွေကို ပြင်ခဲ့လား ဆိုတာ ကြည့်ပါ။ test pass တယ် ဆိုတာ test
+      စစ်တဲ့ အရာကိုပဲ သက်သေပြပါတယ်။
+      [[mark:recap-2]] customer ဆီ ရောက်မယ့် စာအတွက်ဆိုရင် အဲဒီ customer နေရာကနေ ဖတ်ပြီး၊ နားလည်မလား၊ ငဲ့ညှာလား၊
+      ယုံပြီး လုပ်လို့ ရလား ဆိုတာ စစ်ပါ။
+      [[mark:next]] နောက် lesson မှာတော့ နောက်ဆုံး အလေ့အကျင့် Diligence ကို လေ့လာပါမယ်။ မုန်တိုင်းကျတဲ့ညက
+      ပို့ခဲ့တဲ့ အဖြေ ၆၄ စောင်အတွက် ဘယ်သူ တာဝန်ယူရမလဲ ဆိုတဲ့ မေးခွန်းကနေ စပြီး၊ team တစ်ခုအတွက် AI သုံးတဲ့
+      သဘောတူညီချက်ကို ရေးကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "AI Fluency Framework by Rick Dakan, Joseph Feller and Anthropic, CC BY-NC-SA 4.0",
+          url: "https://www-cdn.anthropic.com/b383cf6baddbfc72fdf8b0ed533a518e2872d531.pdf",
+        }
+    actions:
+      - id: sel-k3
+        type: editor.select
+        at: { mark: recap-2, offsetMs: -6000 }
+        target:
+          file: notebook/10-review-checklist.md
+          text: "- [ ] test ပြင်ထားရင် အကြောင်းပြချက် ရေးထား"
+      - id: sel-k4
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/10-review-checklist.md
+          text: "- [ ] draft တွေကို customer အနေနဲ့ ဖတ်ကြည့်ပြီ: ရှင်းလား၊ ငဲ့ညှာလား"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
