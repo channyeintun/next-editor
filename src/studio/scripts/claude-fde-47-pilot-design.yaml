@@ -1,0 +1,803 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-47-pilot-design
+  title: "Claude FDE 47: Pilot ကို design ဆွဲခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: notebook/47-pilot-design.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      notebook/47-pilot-design.md: |
+        # Delivery Plan Pack · 2. Pilot design
+
+        Use case: Billing ရဲ့ report job 140 ကို library အသစ်ဆီ ရွှေ့ခြင်း (လက်နဲ့ဆို 5 ယောက် × 8 ပတ် = 40 developer-weeks)
+
+        ## Cohort
+
+        ## Scope
+
+        ## ကြာချိန်
+
+        ## Success criteria (Day 1 မတိုင်ခင် ရေး)
+
+        ## Day 30 ဆုံးဖြတ်ချက်
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the cohort: four teams as white boxes (people); green marks the
+    # eight in the cohort; orange the one number this board is about.
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "Cohort: ဘယ်သူတွေ ပါမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: c-r1,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 380,
+        height: 130,
+        rounded: true,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 255,
+        width: 380,
+        height: 35,
+        text: "Customer App: 7",
+        fontSize: 28,
+      }
+    - {
+        id: c-r2,
+        kind: rectangle,
+        x: 700,
+        y: 235,
+        width: 380,
+        height: 130,
+        rounded: true,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-l2,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 255,
+        width: 380,
+        height: 35,
+        text: "Billing: 6",
+        fontSize: 28,
+      }
+    - {
+        id: c-r3,
+        kind: rectangle,
+        x: 290,
+        y: 395,
+        width: 380,
+        height: 130,
+        rounded: true,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-l3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 415,
+        width: 380,
+        height: 35,
+        text: "Network Tools: 6",
+        fontSize: 28,
+      }
+    - {
+        id: c-r4,
+        kind: rectangle,
+        x: 700,
+        y: 395,
+        width: 380,
+        height: 130,
+        rounded: true,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-l4,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 415,
+        width: 380,
+        height: 35,
+        text: "Internal Tools: 5",
+        fontSize: 28,
+      }
+    - {
+        id: c-f2,
+        kind: freedraw,
+        stroke: box,
+        x: 690,
+        y: 225,
+        width: 400,
+        height: 150,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-g2,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 305,
+        width: 380,
+        height: 35,
+        text: "cohort: 6 ယောက်လုံး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-f3,
+        kind: freedraw,
+        stroke: box,
+        x: 280,
+        y: 385,
+        width: 400,
+        height: 150,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-g3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 465,
+        width: 380,
+        height: 35,
+        text: "cohort: 2 ယောက်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-sum,
+        kind: text,
+        x: 290,
+        y: 570,
+        width: 700,
+        height: 38,
+        text: "cohort: 24 ယောက်ထဲက 8 ယောက်",
+        fontSize: 30,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the 30 days as a violet line; green is what is written before
+    # Day 1; the orange diamond is the decision the pilot ends in.
+    - {
+        id: t-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "Day 1 ကနေ Day 30 အထိ",
+        fontSize: 36,
+      }
+    - {
+        id: t-crit,
+        kind: text,
+        x: 290,
+        y: 235,
+        width: 580,
+        height: 35,
+        text: "Day 1 မတိုင်ခင်: criteria ရေး၊ သဘောတူ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: t-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 300,
+        width: 520,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - { id: t-d1, kind: text, x: 285, y: 360, width: 120, height: 35, text: "Day 1", fontSize: 28 }
+    - { id: t-w2, kind: text, x: 500, y: 360, width: 120, height: 35, text: "week 2", fontSize: 28 }
+    - {
+        id: t-d30,
+        kind: text,
+        x: 720,
+        y: 360,
+        width: 120,
+        height: 35,
+        text: "Day 30",
+        fontSize: 28,
+      }
+    - { id: t-dia, kind: diamond, x: 850, y: 250, width: 220, height: 150, strokeColor: "#f08c00" }
+    - {
+        id: t-dia-l,
+        kind: text,
+        align: center,
+        x: 850,
+        y: 307,
+        width: 220,
+        height: 35,
+        text: "ဆုံးဖြတ်",
+        fontSize: 28,
+      }
+    - {
+        id: t-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 940,
+        y: 410,
+        width: 40,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-go,
+        kind: text,
+        x: 830,
+        y: 465,
+        width: 250,
+        height: 35,
+        text: "ဆက်သွား",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: t-fix,
+        kind: text,
+        x: 830,
+        y: 520,
+        width: 250,
+        height: 35,
+        text: "ပြင်ပြီး ဆက်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: t-stop,
+        kind: text,
+        x: 830,
+        y: 575,
+        width: 250,
+        height: 35,
+        text: "ရပ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Day 30 မှာ ဘာနဲ့ ဆုံးဖြတ်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) support agent တွေ draft ကို သဘောကျတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) မပြင်ဘဲ ပို့တဲ့ draft အချိုး၊ ကြိုသတ်မှတ်ချက်နဲ့ ယှဉ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 600,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 1020,
+        y: 300,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "Day 30 မှာ ရေတွက်လို့ ရလား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "ပမာဏကို Day 1 မတိုင်ခင် ရေးထားလား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9347
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: တစ်လ သုံးကြည့်ရအောင်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ use case တွေကို စိစစ်ပြီး၊ အလုပ်ပုံစံကိုယ်တိုင် ပြောင်းသွားတဲ့ structural gain
+      နဲ့ အလုပ် အတူတူ နည်းနည်း ပိုမြန်သွားရုံ ဖြစ်တဲ့ marginal gain ကို ခွဲခြားခဲ့ပါတယ်။ စံ လေးခုနဲ့
+      အမှတ်ပေးပြီး Billing ရဲ့ report job တွေကို ရွှေ့တဲ့ use case ကို ရွေးခဲ့ပါတယ်။
+      [[mark:sel-usecase]] job ၁၄၀ ကို လက်နဲ့ ရွှေ့ရင် developer ငါးယောက် ရှစ်ပတ် ကြာမယ်လို့ ခန့်မှန်းထားပါတယ်။
+      trial မှာတော့ developer နှစ်ယောက်က Claude Code နဲ့ ရက် သုံးရက်အတွင်း job ၁၂ ခုကို ရွှေ့ခဲ့ပါတယ်။ Claude
+      Code ဆိုတာ terminal ထဲကနေ code ကို ဖတ်၊ ပြင်၊ command run ပေးတဲ့ coding agent ပါ။
+      [[mark:cto]] အဲဒါကို မြင်တော့ CTO ဖြစ်တဲ့ အောင်အောင် က ရက် ၃၀ activation တစ်ခုကို တောင်းဆိုလာပါတယ်။
+      activation ဆိုတာ သုံးစွဲမှုကို တကယ် စတင်နိုင်အောင် ပြင်ဆင်တဲ့ အဆင့်ပါ။ သူ လိုချင်တာက ကုမ္ပဏီရဲ့ ဒါရိုက်တာ အဖွဲ့က
+      ဖတ်ပြီး ဆုံးဖြတ်နိုင်မယ့် ရလဒ် တစ်ခုပါ။
+      [[mark:plan]] ပထမ အစည်းအဝေးမှာ တင်လာတဲ့ အစီအစဉ်ကတော့ developer ၂၄ ယောက်လုံးကို Claude Code ပေးပြီး၊ တစ်လ
+      သုံးကြည့်ပြီး ဘာဖြစ်လာလဲ စောင့်ကြည့်မယ် ဆိုတာပါ။
+      [[mark:problem]] ဒါပေမဲ့ ရက် ၃၀ ပြည့်တဲ့နေ့ကို မြင်ယောင်ကြည့်ပါ။ တချို့က အရမ်း အသုံးဝင်တယ်လို့ ပြောမယ်၊
+      တချို့က သိပ် မထူးပါဘူးလို့ ပြောမယ်။ ဘာကို တိုင်းမလဲ မသတ်မှတ်ထားတော့ နှစ်ဖက်လုံး မှန်နေပြီး၊ ဒါရိုက်တာ အဖွဲ့
+      ရှေ့မှာ ဆုံးဖြတ်ဖို့ အဖြေ မရှိပါဘူး။
+      [[mark:sel-parts]] ဒါကြောင့် pilot တစ်ခုကို design ဆွဲရပါတယ်။ pilot ဆိုတာ အပြည့်အဝ မသုံးခင် လူနည်းနည်းနဲ့
+      အချိန်တိုတို စမ်းတာပါ။ ဘယ်သူတွေ ပါမလဲ၊ ဘာကို လုပ်မလဲ၊ ဘယ်လောက် ကြာမလဲ၊ ဘာဖြစ်ရင် အောင်မြင်တယ်လို့
+      ပြောမလဲ ဆိုတဲ့ လေးခုကို ကြိုဆုံးဖြတ်ရပါတယ်။ ဒါက CTO အတွက် ပြင်နေတဲ့ Delivery Plan Pack ရဲ့ ဒုတိယ စာမျက်နှာပါ။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: open-pilot,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: notebook/47-pilot-design.md,
+        }
+      - id: sel-usecase
+        type: editor.select
+        at: { mark: sel-usecase }
+        target:
+          file: notebook/47-pilot-design.md
+          text: "Use case: Billing ရဲ့ report job 140 ကို library အသစ်ဆီ ရွှေ့ခြင်း"
+      - id: sel-parts
+        type: editor.select
+        at: { mark: sel-parts }
+        target:
+          file: notebook/47-pilot-design.md
+          text: "## Cohort\n\n## Scope\n\n## ကြာချိန်\n\n## Success criteria"
+
+  - id: cohort
+    chapter: Cohort
+    narration: >
+      [[mark:c-title]] ပထမ ဆုံးဖြတ်ချက်က cohort ပါ။ cohort ဆိုတာ pilot မှာ ပါတဲ့ လူအုပ်စုကို ခေါ်တာ ဖြစ်ပါတယ်။
+      နေခြည် မှာ developer ၂၄ ယောက် ရှိပြီး team လေးခု ခွဲထားပါတယ်။
+      [[mark:c-teams]] team တစ်ခုစီမှာ codebase လည်း မတူ၊ အလုပ်လုပ်ပုံလည်း မတူကြပါဘူး။ ၂၄ ယောက်လုံးကို
+      တစ်ပြိုင်တည်း စလိုက်ရင် FDE တစ်ယောက်တည်းနဲ့ ဘယ်သူ့ကိုမှ သေသေချာချာ ကူညီနိုင်မှာ မဟုတ်သလို၊ ဘယ် team မှာ
+      ဘာကြောင့် အလုပ်ဖြစ်လဲ ဆိုတာလည်း ခွဲပြောဖို့ ခက်ပါတယ်။
+      [[mark:c-billing]] ကိုယ်တို့ ရွေးတဲ့ cohort မှာ Billing team ခြောက်ယောက်လုံး ပါပါတယ်။ ဘာကြောင့်လဲဆိုတော့
+      report job တွေက သူတို့ရဲ့ codebase ထဲမှာ ရှိပြီး၊ ရွှေ့ပြီးတဲ့ job တွေကို နောက်ပိုင်း ဆက်ထိန်းရမယ့်သူတွေလည်း
+      သူတို့ပဲ ဖြစ်လို့ပါ။
+      [[mark:c-whole]] ဒီနေရာမှာ အရေးကြီးတာက စိတ်ပါတဲ့သူတွေချည်း ရွေးမယ့်အစား team တစ်ခုလုံးကို ယူတာပါ။
+      Billing team lead မောင်မောင် ကိုယ်တိုင်က AI ရေးတဲ့ code ကို သံသယ ရှိနေသူပါ။ AI သုံးတဲ့ developer တွေကို
+      လေ့လာတဲ့ သုတေသန အဖွဲ့ တစ်ခုက၊ ဘယ်သူတွေက လေ့လာမှုထဲ ဝင်ဖို့ သဘောတူလဲ ဆိုတာကိုက ရလဒ်ကို ပြောင်းစေတယ်လို့
+      တွေ့ခဲ့ပါတယ်။ AI ကို သဘောကျတဲ့သူတွေချည်း ပါနေတဲ့ cohort ရဲ့ ရလဒ်က၊ ကျန်တဲ့ developer တွေအတွက် ဘာကိုမှ
+      သေချာ မပြောနိုင်ပါဘူး။
+      [[mark:c-network]] Network Tools ကနေလည်း နှစ်ယောက် ထပ်ထည့်ပါတယ်။ သူတို့ရဲ့ codebase က Billing နဲ့
+      မတူတော့၊ Billing မှာ အလုပ်ဖြစ်တဲ့ CLAUDE.md နဲ့ setting တွေက တခြား codebase မှာပါ အလုပ်ဖြစ်လား ဆိုတာ
+      စောစောစီးစီး သိရပါတယ်။ CLAUDE.md ဆိုတာ project အကြောင်း Claude Code အမြဲ သိထားရမယ့် အချက်တွေ ရေးထားတဲ့
+      file ပါ။
+      [[mark:c-sum]] Anthropic ရဲ့ scaling guide က AI tool သုံးနေပြီးသား developer ၂၀ ကနေ ၅၀ လောက်နဲ့ pilot ကို
+      စဖို့ အကြံပြုပါတယ်။ နေခြည် မှာ developer စုစုပေါင်းကမှ ၂၄ ယောက်ပဲ ရှိတော့ ဂဏန်းကို မယူဘဲ ရည်ရွယ်ချက်ကိုပဲ
+      ယူပါတယ်။ codebase ပေါ်မှာ စမ်းပေးပြီး၊ နောက်ပိုင်း ကျန်တဲ့သူတွေကို သင်ပေးနိုင်မယ့် လူအုပ်စု ဖြစ်ဖို့ပါ။
+    sources:
+      - {
+          title: "Claude blog: scaling agentic coding across your organization",
+          url: "https://claude.com/blog/scaling-agentic-coding",
+        }
+      - {
+          title: "METR: uplift study update (February 2026)",
+          url: "https://metr.org/blog/2026-02-24-uplift-update/",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-c-title,
+          type: whiteboard.apply,
+          at: { mark: c-title },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-c-teams,
+          type: whiteboard.apply,
+          at: { mark: c-teams },
+          upsertIds: [c-r1, c-l1, c-r2, c-l2, c-r3, c-l3, c-r4, c-l4],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-c-billing,
+          type: whiteboard.apply,
+          at: { mark: c-billing },
+          upsertIds: [c-f2, c-g2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-network,
+          type: whiteboard.apply,
+          at: { mark: c-network },
+          upsertIds: [c-f3, c-g3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-sum,
+          type: whiteboard.apply,
+          at: { mark: c-sum },
+          upsertIds: [c-sum],
+          drawMs: 900,
+        }
+
+  - id: scope
+    chapter: Scope နဲ့ ကြာချိန်
+    narration: >
+      [[mark:s-close]] ဒီ ဆုံးဖြတ်ချက်ကို pilot design စာမျက်နှာမှာ တစ်ပိုင်းချင်း ချရေးကြည့်ရအောင်။
+      [[mark:type-cohort]] cohort အောက်မှာ လူ ရှစ်ယောက်နဲ့ သူတို့ရဲ့ တာဝန်ကို ရေးပါတယ်။ report job တွေကို
+      ရွှေ့မယ့်သူက trial မှာ ပါခဲ့တဲ့ Billing developer နှစ်ယောက်ပါ။ ကျန်တဲ့ ခြောက်ယောက်ကတော့ test ရေးတာလို နေ့စဉ် အလုပ်တွေမှာ သုံးပါမယ်။ 
+      [[mark:type-scope]] နောက်တစ်ခုက scope ပါ။ scope ဆိုတာ pilot ထဲမှာ ဘာပါပြီး ဘာမပါလဲ ဆိုတဲ့ နယ်နိမိတ်ပါ။
+      ပါတာက report job ၁၄၀ နဲ့ job တစ်ခုစီရဲ့ output ကို တိုက်စစ်တဲ့ test ပါ။ မပါတာကို ရေးထားဖို့ကလည်း
+      အရေးကြီးပါတယ်။ invoice တွက်တဲ့ code ကို ဒီ ရက် ၃၀ အတွင်း မထိပါဘူး။ customer တွေ ပေးရမယ့် ငွေကို
+      တိုက်ရိုက် ထိခိုက်နိုင်လို့ပါ။ review မလုပ်ရသေးတဲ့ ပြောင်းလဲမှုကို production ဆီ ပို့တာလည်း မပါပါဘူး။
+      [[mark:type-time]] တတိယ တစ်ခုက ကြာချိန်ပါ။ တနင်္လာနေ့ တစ်နေ့ကို ပထမ နေ့လို့ သတ်မှတ်ပြီး၊ ရက် ၃၀
+      ပြည့်တဲ့နေ့မှာ ရလဒ်ကို တင်ပြပါမယ်။ ရက် ၃၀ ဆိုတာ job တွေ ရွှေ့ဖို့ သုံးပတ်စာ အချိန် လုံလောက်ပြီး၊ ဆုံးဖြတ်ချက်
+      မြန်မြန် ချနိုင်လောက်အောင်လည်း တိုပါတယ်။ Anthropic ရဲ့ scaling guide ကလည်း pilot အဆင့်ကို အကြာကြီး
+      ဆွဲမထားဖို့ သတိပေးထားပါတယ်။
+    sources:
+      - {
+          title: "Claude blog: scaling agentic coding across your organization",
+          url: "https://claude.com/blog/scaling-agentic-coding",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-cohort, type: whiteboard.apply, at: { mark: s-close }, open: false }
+      - id: type-cohort
+        type: editor.type
+        at: { mark: type-cohort }
+        cadence: line-by-line
+        target: { file: notebook/47-pilot-design.md, after: "## Cohort\n" }
+        text: "- 24 ယောက်ထဲက 8 ယောက်: Billing 6 ယောက်လုံးနဲ့ Network Tools 2 ယောက်\n- job ရွှေ့မယ့်သူ: trial က Billing developer 2 ယောက်။ ကျန် 6 ယောက်: နေ့စဉ် အလုပ်\n"
+      - id: type-scope
+        type: editor.type
+        at: { mark: type-scope }
+        cadence: line-by-line
+        target: { file: notebook/47-pilot-design.md, after: "## Scope\n" }
+        text: "- ပါ: report job 140၊ job တစ်ခုစီရဲ့ output ကို တိုက်စစ်တဲ့ test\n- မပါ: invoice တွက်တဲ့ code၊ review မပါဘဲ production ဆီ ပို့ခြင်း\n"
+      - id: type-time
+        type: editor.type
+        at: { mark: type-time }
+        cadence: line-by-line
+        target: { file: notebook/47-pilot-design.md, after: "## ကြာချိန်\n" }
+        text: "- Day 1 (တနင်္လာ) ကနေ Day 30 အထိ၊ Day 30 မှာ ရလဒ်ကို ဖတ်ပြီး ဆုံးဖြတ်\n"
+
+  - id: criteria
+    chapter: Success criteria
+    narration: >
+      [[mark:t-open]] အခု pilot ရဲ့ အရေးအကြီးဆုံး အပိုင်းကို ကြည့်ရအောင်။ 
+      [[mark:t-line]] အလုပ်တွေက ဒီ ရက် ၃၀ အတွင်းမှာ ဖြစ်ပေမဲ့၊ pilot ရဲ့ အဖြေ ထွက်မထွက်ကိုတော့ ပထမ နေ့
+      မတိုင်ခင်ကတည်းက ဆုံးဖြတ်ပြီးသား ဖြစ်နေပါတယ်။
+      [[mark:t-criteria]] success criteria ဆိုတာ ဘာဖြစ်ရင် အောင်မြင်တယ်လို့ ပြောမလဲ ဆိုတဲ့ စံပါ။ ဒါကို ပထမ နေ့
+      မတိုင်ခင် ရေးပြီး CTO နဲ့ သဘောတူထားရပါမယ်။ ရလဒ် ထွက်လာပြီးမှ စံ သတ်မှတ်မယ်ဆိုရင်၊ မသိမသာနဲ့ ရလဒ်နဲ့
+      ကိုက်အောင် စံကို ညှိမိတတ်လို့ပါ။
+      [[mark:t-research]] ဆေးသုတေသန လောကက pilot study တွေအတွက် ရေးထားတဲ့ လမ်းညွှန် တစ်ခုကလည်း၊ pilot ရဲ့ တာဝန်ဟာ
+      အကျိုးရှိကြောင်း သက်သေပြဖို့ မဟုတ်ဘဲ ပိုကြီးတဲ့ အဆင့်ကို ဆက်လုပ်သင့်မသင့် ဆုံးဖြတ်ဖို့ ဖြစ်တယ်လို့ ဆိုပါတယ်။
+      အဲဒီ ဆုံးဖြတ်ချက်အတွက် စည်းကမ်းကိုလည်း ကြိုတင် သတ်မှတ်ထားဖို့ပါ။
+      [[mark:t-decide]] ဒါကြောင့် ရက် ၃၀ ပြည့်တဲ့နေ့ဟာ ရလဒ် ပြတဲ့နေ့ သက်သက် မဟုတ်ဘဲ ဆုံးဖြတ်ချက် ချတဲ့နေ့
+      ဖြစ်ပါတယ်။ pilot တစ်ခုက ဆုံးဖြတ်ချက် တစ်ခုနဲ့ ဆုံးရပါတယ်။
+      [[mark:t-three]] ဖြစ်နိုင်တဲ့ အဖြေ သုံးမျိုး ရှိပါတယ်။ အဓိက ရလဒ်ကို ရရင် ကျန်တဲ့ developer တွေဆီ ဆက်ဖြန့်ပါမယ်။
+      လမ်းခုလတ်မှာ အရမ်း နှေးနေရင် နည်းလမ်းကို ပြင်ပြီး ဆက်ပါမယ်။ ပြဿနာ ကြီးကြီးမားမား တွေ့ရင်တော့ ရပ်ပါမယ်။ ရပ်တာ
+      ဆိုတာလည်း ရှုံးတာ မဟုတ်ပါဘူး။ ငွေနဲ့ အချိန် ပိုမကုန်ခင် အဖြေ ရသွားတာပါ။
+
+    sources:
+      - {
+          title: "CONSORT 2010 extension to randomised pilot and feasibility trials (Eldridge et al., BMJ 2016)",
+          url: "https://europepmc.org/article/PMC/PMC5076380",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-t-title,
+          type: whiteboard.apply,
+          at: { mark: t-open },
+          open: true,
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-t-line,
+          type: whiteboard.apply,
+          at: { mark: t-line },
+          upsertIds: [t-line, t-d1, t-w2, t-d30],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-t-crit,
+          type: whiteboard.apply,
+          at: { mark: t-criteria },
+          upsertIds: [t-crit],
+          drawMs: 900,
+        }
+      - {
+          id: draw-t-decide,
+          type: whiteboard.apply,
+          at: { mark: t-decide },
+          upsertIds: [t-dia, t-dia-l, t-arrow],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-t-three,
+          type: whiteboard.apply,
+          at: { mark: t-three },
+          upsertIds: [t-go, t-fix, t-stop],
+          drawMs: 1200,
+        }
+
+  - id: write-criteria
+    chapter: Criteria ကို ဂဏန်းနဲ့ ရေးခြင်း
+    narration: >
+      [[mark:w-close]] ဒီ စံတွေကို စာမျက်နှာရဲ့ ကျန်တဲ့ အပိုင်းမှာ ဂဏန်းနဲ့ ရေးကြည့်ရအောင်။
+      [[mark:type-criteria]] success criteria အောက်က ပထမ စာကြောင်းက headline ရလဒ်ပါ။ လက်နဲ့ဆိုရင် developer
+      ငါးယောက် ရှစ်ပတ် ကြာမယ့် အလုပ်ကို developer နှစ်ယောက်က သုံးပတ်အတွင်း ပြီးအောင် လုပ်ဖို့ပါ။ developer
+      တစ်ယောက် တစ်ပတ် လုပ်တာကို developer week တစ်ခုလို့ ရေတွက်ရင်၊ developer week ၄၀ ကနေ ခြောက်ခုဆီ ရောက်တာပါ။
+      [[mark:sel-verified]] ဒီ စာကြောင်းမှာ ရွှေ့တယ် ဆိုတဲ့ စကားကို သေသေချာချာ ကန့်သတ်ထားပါတယ်။ job အဟောင်းရဲ့
+      output နဲ့ တိုက်စစ်တာ အောင်မှ ရွှေ့ပြီးတယ်လို့ ရေတွက်ပါတယ်။ ဒုတိယ စာကြောင်းကတော့ တိုင်းမယ့်ပုံပါ။
+      တစ်ပတ်ချင်း ရွှေ့ပြီး စစ်ပြီးသား job အရေအတွက်ကို မှတ်သွားပါမယ်။
+      [[mark:type-decide]] နောက်ဆုံး အပိုင်းက ရက် ၃၀ ပြည့်တဲ့နေ့ရဲ့ ဆုံးဖြတ်ချက်ပါ။ ဆက်သွားဖို့ သုံးပတ် target ကို
+      တစ်ရက်မှ မလွဲရဘူးလို့ မထားပါဘူး။ ရက် ၃၀ မပြည့်ခင် job ၁၄၀ လုံး စစ်ပြီးသား ဖြစ်ရင် ဆက်သွားပါမယ်။ ဒုတိယ ပတ်
+      ကုန်တဲ့အထိ စစ်ပြီးသား job ၄၅ ခု မပြည့်ရင်တော့၊ job တွေကို အစုသေးသေး ခွဲပြီး နည်းလမ်း ပြင်ပါမယ်။ customer data က prompt ထဲ
+      ရောက်သွားတာမျိုး တွေ့ရင်တော့ ချက်ချင်း ရပ်ပါမယ်။
+      [[mark:sel-go]] ဒီ သုံးကြောင်းကို CTO က ပထမ နေ့ မတိုင်ခင် ဖတ်ပြီး သဘောတူထားရင်၊ ရက် ၃၀ ပြည့်တဲ့နေ့မှာ
+      ငြင်းစရာ မကျန်တော့ပါဘူး။
+    sources:
+      - {
+          title: "CONSORT 2010 extension to randomised pilot and feasibility trials (Eldridge et al., BMJ 2016)",
+          url: "https://europepmc.org/article/PMC/PMC5076380",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-time, type: whiteboard.apply, at: { mark: w-close }, open: false }
+      - id: type-criteria
+        type: editor.type
+        at: { mark: type-criteria }
+        cadence: line-by-line
+        target:
+          { file: notebook/47-pilot-design.md, after: "## Success criteria (Day 1 မတိုင်ခင် ရေး)\n" }
+        text: "- developer 2 ယောက်၊ 3 ပတ် (6 developer-weeks) အတွင်း job 140 ရွှေ့ပြီး output တိုက်စစ် အောင်\n- တိုင်းမယ့်ပုံ: တစ်ပတ်ချင်း ရွှေ့ပြီး စစ်ပြီးသား job အရေအတွက်\n"
+      - id: expect-criteria
+        type: expect.file
+        at: { afterAction: type-criteria }
+        path: notebook/47-pilot-design.md
+        contains: "- developer 2 ယောက်၊ 3 ပတ် (6 developer-weeks) အတွင်း job 140 ရွှေ့ပြီး output တိုက်စစ် အောင်\n"
+      - id: sel-verified
+        type: editor.select
+        at: { mark: sel-verified }
+        target:
+          file: notebook/47-pilot-design.md
+          text: "job 140 ရွှေ့ပြီး output တိုက်စစ် အောင်"
+      - id: type-decide
+        type: editor.type
+        at: { mark: type-decide }
+        cadence: line-by-line
+        target: { file: notebook/47-pilot-design.md, after: "## Day 30 ဆုံးဖြတ်ချက်\n" }
+        text: "- ဆက်သွား: Day 30 မတိုင်ခင် job 140 လုံး စစ်ပြီး → ကျန် developer 16 ယောက်ဆီ အဆင့်လိုက် ဖြန့်\n- ပြင်ပြီး ဆက်: week 2 အဆုံး စစ်ပြီး job 45 မပြည့် → job ကို အစုသေး ခွဲ\n- ရပ်: customer data က prompt ထဲ ရောက်၊ ဒါမှမဟုတ် output တိုက်စစ်တာ ထပ်ခါ ကျ\n"
+      - id: sel-go
+        type: editor.select
+        at: { mark: sel-go }
+        target:
+          file: notebook/47-pilot-design.md
+          text: "## Day 30 ဆုံးဖြတ်ချက်"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ နေခြည် မှာ pilot နောက်တစ်ခုလည်း ရှိပါတယ်။ support agent ဆယ်ယောက်က
+      connection ticket တွေအတွက် Reply assistant ကို သုံးနေတာပါ။ Reply assistant ဆိုတာ ticket တစ်ခုအတွက် အဖြေ
+      မူကြမ်းကို ရေးပေးပြီး၊ support agent က ဖတ်ပြီးမှ ပို့ရတဲ့ AI tool ပါ။ ဒီ pilot ရဲ့ ရက် ၃၀ မှာ ဆုံးဖြတ်ချက်
+      ချဖို့ ဘယ် criterion က ပိုသုံးလို့ ရမလဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက support agent တွေက draft တွေကို သဘောကျတယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုက ဘာမှ မပြင်ဘဲ ပို့လိုက်တဲ့ draft ရဲ့ အချိုးကို၊ pilot မစခင် သတ်မှတ်ထားတဲ့ ပမာဏနဲ့
+      ယှဉ်တာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ ရက် ၃၀ ပြည့်တဲ့နေ့မှာ ရေတွက်လို့ ရပြီး၊
+      ကြိုသတ်မှတ်ထားတဲ့ ပမာဏကို ရောက်မရောက် ဘယ်သူ ကြည့်ကြည့် အဖြေ တူလို့ပါ။ သဘောကျတယ် ဆိုတာလည်း အရေးကြီးတဲ့
+      data ပါ။ ဒါပေမဲ့ ဘယ်လောက် သဘောကျရင် ဆက်သွားမလဲ ဆိုတာ သတ်မှတ်မထားရင် ဆုံးဖြတ်ချက်အတွက် သုံးလို့ မရပါဘူး။
+
+      [[mark:q-rule]] ဒါကြောင့် success criterion တစ်ခုကို ရေးတိုင်း မေးခွန်း နှစ်ခု မေးကြည့်ပါ။ ရက် ၃၀ ပြည့်တဲ့နေ့မှာ
+      ရေတွက်လို့ ရမလား၊ ဘယ်လောက် ရောက်ရင် ဆက်သွားမလဲ ဆိုတာကို မစခင် ရေးထားပြီးပြီလား ဆိုတာပါ။
+    sources:
+      - {
+          title: "CONSORT 2010 extension to randomised pilot and feasibility trials (Eldridge et al., BMJ 2016)",
+          url: "https://europepmc.org/article/PMC/PMC5076380",
+        }
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule, offsetMs: 2500 },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် pilot အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် team မှာ စမ်းချင်တဲ့ pilot တစ်ခုအတွက်
+      success criterion တစ်ကြောင်း ရေးကြည့်ပါ။ ဒီ success criteria အပိုင်းအောက်မှာ နေခြည် အတွက် ရေးထားတာကို
+      ကိုယ့်ဟာနဲ့ အစားထိုးလိုက်ပါ။
+      [[mark:turn-2]] ရေးတဲ့အခါ အချက် သုံးချက် ပါပါစေ။ ဘာကို ရေတွက်မလဲ၊ ဘယ်လောက် ရောက်ရမလဲ၊ ဘယ်နေ့မှာ
+      ကြည့်မလဲ ဆိုတာပါ။ ပြီးရင် ကိုယ့် team lead ကို ပြပြီး၊ ဒီ ဂဏန်းကို ကြည့်ပြီး ဆုံးဖြတ်ဖို့ သဘောတူမလား
+      မေးကြည့်ပါ။ 
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-criteria
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/47-pilot-design.md
+          text: "## Success criteria (Day 1 မတိုင်ခင် ရေး)\n- developer 2 ယောက်၊ 3 ပတ် (6 developer-weeks) အတွင်း job 140 ရွှေ့ပြီး output တိုက်စစ် အောင်\n- တိုင်းမယ့်ပုံ: တစ်ပတ်ချင်း ရွှေ့ပြီး စစ်ပြီးသား job အရေအတွက်"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ developer အားလုံးကို တစ်လ သုံးကြည့်ခိုင်းတာက pilot မဟုတ်ပါဘူး။ ရက် ၃၀
+      ပြည့်ရင် အဖြေ ပေးနိုင်တဲ့ pilot မှာ ဘယ်သူတွေ ပါမလဲ၊ ဘာပါပြီး ဘာမပါလဲ၊ ဘယ်လောက် ကြာမလဲ၊ ဘာဖြစ်ရင်
+      အောင်မြင်တယ်လို့ ပြောမလဲ ဆိုတာကို မစခင် ရေးထားပါတယ်။
+      [[mark:recap-2]] ပြီးတော့ pilot တစ်ခုဟာ ဆုံးဖြတ်ချက် တစ်ခုနဲ့ ဆုံးပါတယ်။ ဆက်သွားမလား၊ ပြင်ပြီး
+      ဆက်မလား၊ ရပ်မလား ဆိုတာကို ကြိုရေးထားတဲ့ စံနဲ့ ဆုံးဖြတ်တာပါ။
+      [[mark:next]] နောက် lesson မှာတော့ CTO က မေးမယ့် မေးခွန်း တစ်ခုကနေ စပါမယ်။ ဘာနဲ့ ယှဉ်ပြီး ပြောတာလဲ
+      ဆိုတဲ့ မေးခွန်းပါ။ pilot မစခင် တိုင်းထားရမယ့် baseline နဲ့ ROI ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Anthropic partner academy: Claude Forward Deployed Engineer learning path (public outline)",
+          url: "https://anthropic-partners.skilljar.com/path/claude-fde",
+        }
+    actions:
+      - id: sel-cohort
+        type: editor.select
+        at: { mark: recap }
+        target:
+          file: notebook/47-pilot-design.md
+          text: "## Cohort"
+      - id: sel-decision
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: notebook/47-pilot-design.md
+          text: "- ဆက်သွား: Day 30 မတိုင်ခင် job 140 လုံး စစ်ပြီး → ကျန် developer 16 ယောက်ဆီ အဆင့်လိုက် ဖြန့်"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
