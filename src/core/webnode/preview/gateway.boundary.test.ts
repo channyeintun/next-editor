@@ -2,7 +2,7 @@
 // What the gateway hands back and forth across the preview boundary: which
 // responses get the client script, how the server's own origin is mapped to the
 // preview's in both directions, and what an early-failing WebSocket leaves.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createGatewayHarness, decoder, header, tick, writeAll } from "./gatewayTestKit";
 
 const PAGE_HOST = "abcdefghij-3000.preview.test";
@@ -185,7 +185,8 @@ describe("WebSockets", () => {
       },
       [channel.port1],
     );
-    await tick(20);
+    // The handshake arrives when the gateway has dialled the server: no fixed wait.
+    await vi.waitFor(() => expect(received).toHaveLength(1));
     expect(header(received[0].headers, "cookie")).toBe("sid=abc");
     h.dispose();
     channel.port2.close();
