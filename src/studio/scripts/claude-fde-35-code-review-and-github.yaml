@@ -1,0 +1,636 @@
+schemaVersion: 1
+
+lesson:
+  slug: claude-fde-35-code-review-and-github
+  title: "Claude FDE 35: Code review နဲ့ GitHub Actions"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: FDE Notebook
+    entryFilePath: billing-service/.github/workflows/claude-review.yml
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # နေခြည် Fiber · FDE မှတ်စု
+
+        နေခြည် Fiber က ရန်ကုန်နဲ့ မန္တလေးမှာ fiber internet ဝန်ဆောင်မှု ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## ကုမ္ပဏီ
+
+        - customer 62,000 ခန့် (အိမ်နဲ့ ဆိုင်)
+        - ဝန်ထမ်း 430: support agent 45၊ field technician 130၊ developer 24
+        - developer team 4 ခု: Customer App, Billing, Network Tools, Internal Tools
+
+        ## Support
+
+        - တစ်ရက် ticket 1,800 ခန့်
+        - connection 55 %၊ billing 25 %၊ တပ်ဆင်နဲ့ ရွှေ့ပြောင်း 12 %၊ အခြား 8 %
+        - ပထမဆုံး ပြန်ဖြေချိန် ပျမ်းမျှ 38 မိနစ်၊ ticket တစ်ခုကို ဖြေရှင်းချိန် ပျမ်းမျှ 11 မိနစ်
+
+        ## System များ
+
+        - Ticket system: customer ရဲ့ တိုင်ကြားချက်တွေ
+        - Billing: plan၊ invoice၊ ငွေပေးချေမှု (သက်တမ်း 9 နှစ်ရှိ codebase)
+        - NMS: မြို့နယ်အလိုက် လိုင်းကျမှု အခြေအနေ
+        - Knowledge base: ပြဿနာဖြေရှင်းနည်း article 340
+
+        ## မုန်တိုင်းကျတဲ့ည
+
+        - မြို့နယ် 3 ခုမှာ လိုင်းကျ၊ ticket က ပုံမှန်ရဲ့ 4 ဆ
+        - chat AI နဲ့ ရေးထားတဲ့ အဖြေ 64 စောင်က လိုင်းကျနေတဲ့ customer တွေကို router ပြန်ဖွင့်ခိုင်းခဲ့တယ်
+
+        ## FDE အလုပ် (12 ပတ်)
+
+        - Reply assistant: support ticket အတွက် အဖြေ မူကြမ်း ရေးပေးတဲ့ agent
+        - Billing team နဲ့ Claude Code
+        - ကုမ္ပဏီ တစ်ခုလုံးအတွက် Claude
+      billing-service/.github/workflows/claude-review.yml: |
+        # Claude in billing-service pull requests: a reviewer writes @claude in a PR comment.
+        name: Claude review
+        on:
+        jobs:
+          claude:
+            runs-on: ubuntu-latest
+            permissions: { contents: write, pull-requests: write, issues: write, id-token: write, actions: read }
+            steps:
+              - uses: actions/checkout@v6
+      package.json: |
+        {
+          "name": "fde-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — four ways Claude reviews code: blue boxes are the products, white text says where
+    # and for whom each runs; the orange box marks the one this lesson's file sets up.
+    - {
+        id: r-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "Claude နဲ့ review လုပ်တဲ့ နည်း လေးမျိုး",
+        fontSize: 36,
+      }
+    - {
+        id: r-b1,
+        kind: rectangle,
+        x: 290,
+        y: 230,
+        width: 320,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 247,
+        width: 320,
+        height: 35,
+        text: "/code-review",
+        fontSize: 28,
+      }
+    - {
+        id: r-t1,
+        kind: text,
+        x: 640,
+        y: 247,
+        width: 440,
+        height: 35,
+        text: "ကိုယ့် session · plan တိုင်း",
+        fontSize: 28,
+      }
+    - {
+        id: r-b2,
+        kind: rectangle,
+        x: 290,
+        y: 320,
+        width: 320,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-l2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 337,
+        width: 320,
+        height: 35,
+        text: "Code Review",
+        fontSize: 28,
+      }
+    - {
+        id: r-t2,
+        kind: text,
+        x: 640,
+        y: 337,
+        width: 440,
+        height: 35,
+        text: "PR တိုင်း · Team, Enterprise",
+        fontSize: 28,
+      }
+    - {
+        id: r-b3,
+        kind: rectangle,
+        x: 290,
+        y: 410,
+        width: 320,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-l3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 427,
+        width: 320,
+        height: 35,
+        text: "/code-review ultra",
+        fontSize: 28,
+      }
+    - {
+        id: r-t3,
+        kind: text,
+        x: 640,
+        y: 427,
+        width: 440,
+        height: 35,
+        text: "cloud · research preview",
+        fontSize: 28,
+      }
+    - {
+        id: r-b4,
+        kind: rectangle,
+        x: 290,
+        y: 500,
+        width: 320,
+        height: 70,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: r-l4,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 517,
+        width: 320,
+        height: 35,
+        text: "GitHub Action",
+        fontSize: 28,
+      }
+    - {
+        id: r-t4,
+        kind: text,
+        x: 640,
+        y: 517,
+        width: 440,
+        height: 35,
+        text: "ကိုယ့် workflow · ကိုယ့် key",
+        fontSize: 28,
+      }
+    - {
+        id: r-cost,
+        kind: text,
+        x: 290,
+        y: 600,
+        width: 790,
+        height: 35,
+        text: "ultra: free 3 ကြိမ်၊ ပြီးရင် ~$5–25 (2026-11)",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange rule.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Code Review က merge ကို ပိတ်နိုင်လား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) ရတယ်: Important တွေ့ရင် check က fail",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) မရဘူး: comment ပဲ ရေး၊ ပိတ်လည်း မပိတ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 600,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 930,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 790,
+        height: 35,
+        text: "review comment = အကြံ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 790,
+        height: 35,
+        text: "merge ကို လူက approve + branch rule",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 9335
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Review က လမ်းကြပ်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ keyboard ရှေ့မှာ လူ မရှိဘဲ prompt ကို run ဖို့ cloud ပေါ်က scheduled task နဲ့ ကိုယ့်
+      pipeline ထဲက print mode ကို ခွဲခြားခဲ့ပါတယ်။
+      [[mark:n-open]] trial ရဲ့ ဒုတိယ ရက်မှာ ပြဿနာ အသစ် တစ်ခု ပေါ်လာပါတယ်။ Claude Code နဲ့ developer နှစ်ယောက်က job တွေကို
+      မြန်မြန် ရွှေ့လာတော့ pull request တွေ များလာပါတယ်။ Claude Code ဆိုတာ terminal ထဲကနေ code ကို ဖတ်၊ ပြင်၊ command
+      run ပေးတဲ့ coding agent ပါ။ code ကို ရေးတာ မြန်လာပေမဲ့ review လုပ်မယ့်သူ အရေအတွက်က အရင်အတိုင်းပါပဲ။
+      [[mark:n-worry]] Billing team lead မောင်မောင် ရဲ့ စိုးရိမ်ချက်က ရှင်းပါတယ်။ review စောင့်နေတဲ့ pull request တွေ
+      တန်းစီလာရင် ရေးတာ မြန်လာတာ အလကား ဖြစ်သွားမယ်။ အမြန် review လုပ်ဖို့ ဖိအားပေးရင်လည်း အမှားတွေ လွတ်သွားမယ်
+      ဆိုတာပါ။ Billing code ထဲက အမှားက customer ရဲ့ ငွေကို ထိနိုင်တာမို့ ဒီ စိုးရိမ်ချက်က မှန်ပါတယ်။
+      [[mark:n-plan]] Claude ကို review မှာ ကူခိုင်းလို့ ရပါတယ်။ ဒါပေမဲ့ ဒီနေ့ review နည်း တစ်မျိုးတည်း မဟုတ်ဘဲ၊
+      သီးခြား product တွေ ရှိပါတယ်။ ဘယ်ဟာက ဘယ်မှာ run လဲ၊ ဘယ်သူ ပေးရလဲ ခွဲပြီးမှ ဒီ workflow file ကို ရေးပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Code Review",
+          url: "https://code.claude.com/docs/en/code-review",
+        }
+    actions:
+      - {
+          id: open-wf,
+          type: workspace.openFile,
+          at: { mark: n-open },
+          path: billing-service/.github/workflows/claude-review.yml,
+        }
+      - id: sel-head
+        type: editor.select
+        at: { mark: n-plan }
+        target:
+          file: billing-service/.github/workflows/claude-review.yml
+          text: "# Claude in billing-service pull requests: a reviewer writes @claude in a PR comment."
+
+  - id: options
+    chapter: Review နည်း လေးမျိုး
+    narration: >
+      [[mark:r-open]] Claude နဲ့ code review လုပ်တဲ့ နည်းတွေကို တစ်ခုချင်း ချရေးကြည့်ရအောင်။
+      [[mark:r-1]] ပထမ တစ်ခုက ကိုယ့် session ထဲက code review command ပါ။ plan တိုင်းမှာ ရပြီး၊ ကိုယ့် session ရဲ့ usage
+      ကိုပဲ သုံးပါတယ်။ ကိုယ့် branch နဲ့ commit မလုပ်ရသေးတဲ့ ပြောင်းလဲမှုတွေကို background subagent တစ်ခုက correctness
+      bug အတွက် ကြည့်ပေးပါတယ်။ pull request နံပါတ်၊ branch နှစ်ခုကြား ဒါမှမဟုတ် path တစ်ခုကိုလည်း ပေးလို့ ရပါတယ်။
+      [[mark:r-1b]] comment flag နဲ့ဆိုရင် တွေ့တာကို GitHub pull request ပေါ်မှာ comment အဖြစ် တင်ပေးပြီး၊ fix flag နဲ့ဆိုရင်
+      ပြင်ပေးပါတယ်။ fix က background မှာ ပြင်တာမို့ checkpoint တွေထဲ မပါတာကိုတော့ သတိထားပါ။ ဒီ review က CLAUDE.md ကို
+      လိုက်နာပါတယ်။
+      [[mark:r-2]] ဒုတိယ တစ်ခုက managed Code Review ပါ။ GitHub pull request တိုင်းကို Anthropic ဘက်မှာ agent အများကြီးက
+      review လုပ်ပေးတာပါ။ ပြဿနာ ရှာ၊ တကယ် ဟုတ်မဟုတ် စစ်၊ ပြင်းထန်မှုအလိုက် စီပြီး comment တင်ပါတယ်။ ဒီ lesson ကို
+      ရေးတဲ့ အချိန်မှာ Team နဲ့ Enterprise plan မှာပဲ ရပြီး၊ GitHub အတွက်ပဲ ဖြစ်ပါတယ်။
+      [[mark:r-3]] တတိယ တစ်ခုက code review command ရဲ့ ultra ပုံစံ၊ ultra review ပါ။ reviewer အများကြီးကို cloud sandbox ထဲမှာ run ပြီး ပိုနက်နက် ကြည့်တာပါ။
+      research preview အဆင့်ပဲ ရှိသေးပြီး claude.ai နဲ့ login ဝင်ထားဖို့ လိုပါတယ်။
+      [[mark:r-cost]] ဒီ lesson ကို ရေးတဲ့ အချိန်မှာ Pro၊ Max နဲ့ Ultra plan တွေမှာ အခမဲ့ သုံးကြိမ် ရပြီး၊ ပြီးရင်
+      review တစ်ခါကို ပုံမှန်အားဖြင့် ဒေါ်လာ ငါးကနေ နှစ်ဆယ့်ငါးအထိ usage credit ကနေ ကုန်ပါတယ်။
+      [[mark:r-4]] စတုတ္ထ တစ်ခုက GitHub Action ပါ။ ကိုယ့် GitHub workflow ထဲမှာ ကိုယ့် key နဲ့ run တာပါ။ ဒီ lesson ရဲ့ file
+      က ဒီ တစ်ခုပါ။ docs ကလည်း managed Code Review၊ GitHub Action နဲ့ code review command ကို သီးခြား product တွေလို့
+      ခွဲပြထားပါတယ်။ ဒီ လေးမျိုး အပြင် GitLab CI ကနေ ကိုယ့် key နဲ့ run တာ၊ ကိုယ်ပိုင် reviewer subagent ဒါမှမဟုတ်
+      skill ရေးတာလည်း ရပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Review code locally",
+          url: "https://code.claude.com/docs/en/code-review-local",
+        }
+      - {
+          title: "Claude Code Docs: Ultrareview",
+          url: "https://code.claude.com/docs/en/ultrareview",
+        }
+      - {
+          title: "Claude Code Docs: Code Review",
+          url: "https://code.claude.com/docs/en/code-review",
+        }
+    actions:
+      - {
+          id: draw-r-open,
+          type: whiteboard.apply,
+          at: { mark: r-open },
+          open: true,
+          clear: true,
+          upsertIds: [r-title],
+        }
+      - {
+          id: draw-r-1,
+          type: whiteboard.apply,
+          at: { mark: r-1 },
+          upsertIds: [r-b1, r-l1, r-t1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r-2,
+          type: whiteboard.apply,
+          at: { mark: r-2 },
+          upsertIds: [r-b2, r-l2, r-t2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r-3,
+          type: whiteboard.apply,
+          at: { mark: r-3 },
+          upsertIds: [r-b3, r-l3, r-t3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r-cost,
+          type: whiteboard.apply,
+          at: { mark: r-cost },
+          upsertIds: [r-cost],
+          drawMs: 900,
+        }
+      - {
+          id: draw-r-4,
+          type: whiteboard.apply,
+          at: { mark: r-4 },
+          upsertIds: [r-b4, r-l4, r-t4],
+          drawMs: 1500,
+        }
+
+  - id: managed
+    chapter: Managed Code Review
+    narration: >
+      [[mark:m-back]] managed Code Review ကို နည်းနည်း ထပ်ကြည့်ရအောင်။ ဖွင့်တာကို ကုမ္ပဏီရဲ့ Owner က admin setting ထဲကနေ
+      လုပ်ပြီး၊ Claude GitHub App ကို install လုပ်ကာ repository တွေကို ရွေးပါတယ်။ workflow file ရေးစရာ မလိုပါဘူး။
+      [[mark:m-when]] repository တစ်ခုချင်းအတွက် ဘယ်အချိန် review လုပ်မလဲ ရွေးရပါတယ်။ pull request ဖွင့်ပြီး တစ်ကြိမ်၊
+      push လုပ်တိုင်း၊ ဒါမှမဟုတ် comment ထဲမှာ ကိုယ်က ခေါ်မှ ဆိုပြီး ရွေးလို့ရပြီး၊ default က push လုပ်တိုင်းပါ။ review လုပ်ပုံကို base branch ထဲက review file တစ်ခုနဲ့ ချိန်ညှိလို့ ရပြီး၊ pull request ထဲက
+      ပြောင်းလဲမှုကနေ အဲဒီ file ကို ဘယ်တော့မှ မဖတ်ပါဘူး။ Quick၊ Standard၊ Deep ဆိုတဲ့ အဆင့် သုံးဆင့်လည်း ရှိပြီး၊
+      default က Standard ပါ။
+      [[mark:m-cmd]] comment ထဲကနေ ခေါ်ချင်ရင် at claude review ဆိုပြီး ရေးရင် တစ်ကြိမ် review လုပ်ပေးပြီး၊ နောက်မှာ
+      always ထပ်ထည့်ရင် push တိုင်း review လုပ်ဖို့ မှတ်ထားပါတယ်။ repository ကို ရေးခွင့် ရှိသူတွေပဲ ခေါ်လို့ရပြီး၊ draft
+      pull request နဲ့ fork ကလာတဲ့ pull request တွေကိုတော့ အလိုအလျောက် ကျော်ပါတယ်။
+      [[mark:m-out]] review တစ်ခုက ပြင်းထန်မှု အမှတ်အသားပါတဲ့ inline comment တွေ၊ အကျဉ်းချုပ် တစ်ခုနဲ့ Claude Code Review
+      ဆိုတဲ့ check run တစ်ခုကို တင်ပေးပါတယ်။
+      [[mark:m-cost]] ငွေကတော့ plan ထဲက usage နဲ့ သီးခြားပဲ token အလိုက် usage credit နဲ့ ပေးရပါတယ်။ ပုံသေ ဈေး မရှိပါဘူး။
+      push လုပ်တိုင်း review လုပ်ခိုင်းထားရင် push များလေ ကုန်လေ ဖြစ်တာမို့ ကုမ္ပဏီ တစ်ခုလုံးအတွက် လစဉ် ကန့်သတ်ချက်
+      တစ်ခု ထားဖို့ ကောင်းပါတယ်။ credit ကုန်သွားရင် review ကို ကျော်ပြီး ဘာကြောင့်လဲ pull request ပေါ်မှာ ရေးပေးပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Set up Code Review",
+          url: "https://code.claude.com/docs/en/code-review-setup",
+        }
+      - {
+          title: "Claude Code Docs: Code Review costs",
+          url: "https://code.claude.com/docs/en/code-review-costs",
+        }
+    actions:
+      - {
+          id: point-managed,
+          type: whiteboard.point,
+          at: { mark: m-back },
+          target: { assetId: r-b2 },
+        }
+      - {
+          id: point-managed-c,
+          type: whiteboard.point,
+          at: { mark: m-cmd },
+          target: { assetId: r-l2 },
+        }
+      - {
+          id: point-managed-t,
+          type: whiteboard.point,
+          at: { mark: m-cost },
+          target: { assetId: r-t2 },
+        }
+
+  - id: action
+    chapter: GitHub Action workflow
+    narration: >
+      [[mark:a-open]] Billing team အတွက်တော့ developer တွေ pull request မတင်ခင် code review command နဲ့ ကိုယ့်ကိုယ်ကို
+      အရင် စစ်ပြီး၊ pull request ပေါ်မှာ reviewer က လိုတဲ့အခါ Claude ကို ခေါ်လို့ရအောင် GitHub Action နဲ့ စပါမယ်။ setup
+      ကို terminal ထဲက install github app command နဲ့ လုပ်လို့ ရပြီး၊ repository ရဲ့ admin ခွင့် လိုပါတယ်။
+      [[mark:a-manual]] ကိုယ်တိုင် ပြင်ဆင်ချင်ရင်တော့ Claude GitHub App ကို install လုပ်၊ secret ထည့်ပြီး docs ရဲ့ ဥပမာ workflow ကို
+      workflows folder ထဲ ကူးထည့်ရပါတယ်။
+      [[mark:type-on]] ပထမ အပိုင်းက workflow ကို ဘယ်အချိန် စမလဲ ဆိုတာပါ။ issue ဒါမှမဟုတ် pull request မှာ comment အသစ် ရေးတိုင်း
+      စပါတယ်။
+      [[mark:type-if]] ဒါပေမဲ့ comment ထဲမှာ at claude ပါမှပဲ job ကို run ပါတယ်။ action ရဲ့ trigger phrase ကလည်း ဒီ စကားလုံးပါ။
+      [[mark:sel-perm]] job ရဲ့ permission တွေကို ကြည့်ပါ။ action က repository ထဲကို ရေးခွင့်၊ pull request နဲ့ issue
+      မှာ comment ရေးခွင့် ရထားပါတယ်။ ဆိုလိုတာက ဒီ action က code ကိုပါ ပြင်ပြီး commit လုပ်နိုင်ပါတယ်။ run တာကလည်း
+      ကိုယ့် GitHub runner ပေါ်မှာပါ။ API key နဲ့ ဆိုရင် ကုန်ကျစရိတ်က ကိုယ့် API account ထဲက ကုန်ပါတယ်။
+      [[mark:type-step]] ဒုတိယ အပိုင်းက action ကိုယ်တိုင်ပါ။ anthropics ရဲ့ claude code action repository ကို version
+      တစ်နဲ့ ညွှန်းပါတယ်။ key ကို file ထဲ မရေးဘဲ GitHub secret ကနေ ယူပါတယ်။ API key အစား claude setup token command
+      နဲ့ ထုတ်တဲ့ OAuth token ကိုလည်း သုံးလို့ ရပါတယ်။
+      [[mark:type-args]] နောက်ဆုံး အပိုင်းက claude args ပါ။ Claude Code ကို ပေးတဲ့ flag တွေကို ဒီမှာ ထည့်ပါတယ်။ အလှည့်
+      ငါးခုမှာ ရပ်ခိုင်းပြီး၊ system prompt ရဲ့ နောက်မှာ report job တွေကို job အဟောင်းနဲ့ ယှဉ်ကြည့်ဖို့ ညွှန်ကြားချက်
+      တစ်ကြောင်း ထည့်ထားပါတယ်။
+      [[mark:a-v1]] internet ပေါ်က ဥပမာ အဟောင်းတွေကို ကူးတဲ့အခါ သတိထားပါ။ version တစ်မှာ beta ဆိုတဲ့ ညွှန်းပုံ၊ mode
+      input နဲ့ direct prompt input တွေ မရှိတော့ပါဘူး။ max turns နဲ့ model ကလည်း claude args ထဲကို ရွှေ့သွားပါပြီ။
+      prompt input ကို ပေးထားရင်တော့ at claude ကို မစောင့်ဘဲ schedule အပါအဝင် ဘယ် event မှာမဆို အလိုအလျောက် run ပါတယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Claude Code GitHub Actions",
+          url: "https://code.claude.com/docs/en/github-actions",
+        }
+      - {
+          title: "anthropics/claude-code-action (README)",
+          url: "https://github.com/anthropics/claude-code-action",
+        }
+    actions:
+      - { id: close-options, type: whiteboard.apply, at: { mark: a-open }, open: false }
+      - id: type-on
+        type: editor.type
+        at: { mark: type-on }
+        cadence: line-by-line
+        target: { file: billing-service/.github/workflows/claude-review.yml, after: "on:\n" }
+        text: "  issue_comment: { types: [created] }\n"
+      - id: type-if
+        type: editor.type
+        at: { mark: type-if }
+        cadence: line-by-line
+        target: { file: billing-service/.github/workflows/claude-review.yml, after: "  claude:\n" }
+        text: "    if: contains(github.event.comment.body, '@claude')\n"
+      - id: sel-perm
+        type: editor.select
+        at: { mark: sel-perm }
+        target:
+          file: billing-service/.github/workflows/claude-review.yml
+          text: "permissions: { contents: write, pull-requests: write, issues: write, id-token: write, actions: read }"
+      - id: type-step
+        type: editor.type
+        at: { mark: type-step }
+        cadence: line-by-line
+        target:
+          {
+            file: billing-service/.github/workflows/claude-review.yml,
+            after: "      - uses: actions/checkout@v6\n",
+          }
+        text: "      - uses: anthropics/claude-code-action@v1\n        with:\n          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}\n"
+      - id: expect-step
+        type: expect.file
+        at: { afterAction: type-step }
+        path: billing-service/.github/workflows/claude-review.yml
+        contains: "      - uses: anthropics/claude-code-action@v1\n"
+      - id: type-args
+        type: editor.type
+        at: { mark: type-args }
+        cadence: line-by-line
+        target:
+          {
+            file: billing-service/.github/workflows/claude-review.yml,
+            after: "${{ secrets.ANTHROPIC_API_KEY }}\n",
+          }
+        text: "          claude_args: >-\n            --max-turns 5\n            --append-system-prompt \"Compare each changed report job with its old job.\"\n"
+      - id: sel-uses
+        type: editor.select
+        at: { mark: a-v1 }
+        target:
+          file: billing-service/.github/workflows/claude-review.yml
+          text: "anthropics/claude-code-action@v1"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ နောက်တစ်ချိန် နေခြည် က managed Code Review ကို ဖွင့်လိုက်ပြီ ဆိုပါစို့။ review
+      က Important လို့ အမှတ်အသား ပါတဲ့ bug တစ်ခုကို တွေ့တယ်။ အဲဒီ check run က pull request ကို merge မလုပ်အောင်
+      ပိတ်နိုင်မလား။
+      [[mark:q-a]] ပထမ အဖြေက ပိတ်နိုင်တယ် ဆိုတာပါ။ Important ကို တွေ့ရင် check က fail ဖြစ်သွားမယ်လို့ ထင်လို့ပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက မပိတ်နိုင်ဘူး ဆိုတာပါ။ comment ပဲ ရေးပြီး ပိတ်လည်း မပိတ်ဘူးလို့ ထင်လို့ပါ။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ docs အရ managed Code Review က pull request ကို
+      ဘယ်တော့မှ approve လည်း မလုပ်၊ ပိတ်လည်း မပိတ်ပါဘူး။ Claude Code Review check run က fail အဖြစ် မပြီးဆုံးပါဘူး။
+      repository ကို ဖတ်ခွင့်ပဲ ရှိပြီး၊ code ကို build လုပ်တာ၊ run တာလည်း မလုပ်ပါဘူး။
+      [[mark:q-rule]] ဒါကြောင့် review comment ဆိုတာ အကြံပေးချက်ပါ။ merge လုပ်မလား ဆုံးဖြတ်တာက လူပါ။ Billing ရဲ့ main
+      branch မှာ လူ approve လုပ်မှ merge လုပ်ရမယ် ဆိုတဲ့ branch rule ကို ထားရပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Code Review",
+          url: "https://code.claude.com/docs/en/code-review",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် team ရဲ့ ပထမ ရွေးချယ်မှု
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ file ရဲ့ ထိပ်ဆုံး comment လိုမျိုး ကိုယ့် team အတွက်
+      comment တစ်ကြောင်း ရေးကြည့်ပါ။ review နည်း လေးမျိုးထဲက ဘယ်ဟာနဲ့ စမလဲ၊ ဘာကြောင့်လဲ ဆိုတာပါ။
+      [[mark:turn-2]] ဆုံးဖြတ်ဖို့ မေးခွန်း သုံးခု မေးကြည့်ပါ။ ကိုယ့် team ရဲ့ plan က ဘာလဲ၊ code က GitHub ပေါ်မှာလား၊
+      review တစ်ခါကို ဘယ်သူ ပေးမလဲ ဆိုတာပါ။ ဘယ်ဟာကို ရွေးရွေး merge ကို approve လုပ်မယ့်သူ ဘယ်သူလဲ ဆိုတာကိုလည်း
+      နာမည်နဲ့ ရေးထားပါ။
+    sources:
+      - {
+          title: "Claude Code Docs: Code Review",
+          url: "https://code.claude.com/docs/en/code-review",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-head-2
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: billing-service/.github/workflows/claude-review.yml
+          text: "# Claude in billing-service pull requests: a reviewer writes @claude in a PR comment."
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ ဒီနေ့ Claude နဲ့ review လုပ်ဖို့ နည်း လေးမျိုး ရှိပါတယ်။ ကိုယ့် session ထဲက code review
+      command နဲ့ အဲဒီ command ရဲ့ preview အဆင့် ultra ပုံစံ၊ pull request တိုင်းကို Anthropic ဘက်က ကြည့်ပေးတဲ့
+      managed Code Review နဲ့ ကိုယ့် workflow ထဲက GitHub Action ပါ။ တစ်ခုစီမှာ run တဲ့ နေရာ၊ plan နဲ့ ငွေပေးပုံ ကွာပါတယ်။
+      [[mark:recap-2]] ဘယ်ဟာကို သုံးသုံး review comment က အကြံပေးချက်သာ ဖြစ်ပြီး၊ merge ကို လူက approve လုပ်ပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ညလုံးပေါက် run ခဲ့တဲ့ Claude က အားလုံး အဆင်ပြေတယ်လို့ report ပြန်လာတဲ့အခါ
+      တကယ် အဆင်ပြေလား ဘယ်လို စစ်မလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Claude Code Docs: Claude Code GitHub Actions",
+          url: "https://code.claude.com/docs/en/github-actions",
+        }
+    actions:
+      - id: sel-args
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          file: billing-service/.github/workflows/claude-review.yml
+          text: '            --append-system-prompt "Compare each changed report job with its old job."'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
