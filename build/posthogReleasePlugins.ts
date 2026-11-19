@@ -21,9 +21,10 @@ export const CHUNK_RELEASE = { releaseName: "next-editor", releaseVersion: "chun
  * upload URLs in one request and gives up on it after about 30 s, which
  * fails the build. When a deploy uploaded all 327 chunks again, batches of the
  * default 50 took 11–19 s and two of them timed out; batches of 20 took 1–8 s
- * after a first one of 24 s.
+ * after a first one of 24 s. On 2026-11-19 that first batch of 20 took more
+ * than the 30 s three builds in a row (37 chunks to upload), so the batch is 8.
  */
-const UPLOAD_BATCH_SIZE = 20;
+const UPLOAD_BATCH_SIZE = 8;
 
 /** `<` would let a release id close the inline script; JSON allows `<`. */
 function inlineScriptJson(value: string): string {
