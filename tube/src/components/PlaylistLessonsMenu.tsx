@@ -6,7 +6,7 @@ import type { Playlist } from "../types";
 import { lessonHref } from "../lib/links";
 
 /**
- * The playlist's lessons, in order, inside the lesson page's playlist crumb
+ * The playlist's lessons, in order, under the lesson page's title crumb
  * (BreadcrumbMenu): where this lesson sits, and a link to every other one.
  * Built from the playlist the page already loaded for `?list=`, so it costs
  * no request of its own.

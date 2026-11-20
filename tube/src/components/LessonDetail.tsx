@@ -66,18 +66,17 @@ export default function LessonDetail({ lesson }: { lesson: Lesson }) {
           <Breadcrumb
             title={lesson.title}
             // Opened from a playlist: the trail leads back to that playlist,
-            // and its crumb opens the playlist's lessons, in order.
+            // and the lesson's own crumb opens the playlist's lessons, in order.
             parent={
               playlistMode && playlist
+                ? { to: playlistHref(playlist.slug), label: playlist.title }
+                : undefined
+            }
+            menu={
+              playlistMode && playlist
                 ? {
-                    to: playlistHref(playlist.slug),
-                    label: playlist.title,
-                    menu: {
-                      label: `Lessons in ${playlist.title}`,
-                      content: (
-                        <PlaylistLessonsMenu playlist={playlist} currentSlug={lesson.slug} />
-                      ),
-                    },
+                    label: `Lessons in ${playlist.title}`,
+                    content: <PlaylistLessonsMenu playlist={playlist} currentSlug={lesson.slug} />,
                   }
                 : undefined
             }

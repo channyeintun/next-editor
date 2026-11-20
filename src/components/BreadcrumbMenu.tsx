@@ -7,30 +7,31 @@ const OPEN_DELAY_MS = 150;
 /** How long the panel waits after the pointer leaves, so it can cross to the panel. */
 const CLOSE_DELAY_MS = 300;
 
-/** What opened the panel: the pointer resting on the crumb, or the toggle (click, tap or key). */
+/** What opened the panel: the pointer resting on the crumb, or a press of it (click, tap or key). */
 type OpenBy = "hover" | "toggle";
 
 /**
- * A breadcrumb crumb with a panel under it. Resting the pointer on the crumb
- * opens it; a small toggle beside the crumb's link opens it for the keyboard
- * and for touch, where there is no hover. The toggle is a disclosure button
- * (aria-expanded), with the panel right after it, so Tab goes on into it.
+ * The trail's current crumb (the page's own title) with a panel under it. The
+ * crumb is not a link, so the whole of it is the toggle: resting the pointer
+ * on it opens the panel, and pressing it opens it for the keyboard and for
+ * touch, where there is no hover. It is a disclosure button (aria-expanded),
+ * with the panel right after it, so Tab goes on into it.
  *
  * Content shown on hover follows WCAG 1.4.13: Escape dismisses it without
  * moving the pointer; the pointer can move onto it (it sits flush under the
  * crumb and waits before closing); and it stays until the pointer leaves, focus
- * leaves, Escape, or a press outside. Opened with the toggle, it stays until
- * the toggle, Escape, a press outside or focus leaving closes it. Following a
- * link in the panel closes it too.
+ * leaves, Escape, or a press outside. Opened with a press, it stays until
+ * another press, Escape, a press outside or focus leaving closes it. Following
+ * a link in the panel closes it too.
  */
 export default function BreadcrumbMenu({
   crumb,
   label,
   children,
 }: {
-  /** The crumb's own link. */
+  /** The crumb's text: the page's title. It goes inside the toggle, so no links or buttons. */
   crumb: ReactNode;
-  /** Names the toggle and the panel, e.g. "Lessons in Go from zero". */
+  /** Names the panel, and follows the title in the toggle's name, e.g. "Lessons in Go from zero". */
   label: string;
   /** The panel's contents. */
   children: ReactNode;
@@ -86,9 +87,9 @@ export default function BreadcrumbMenu({
   return (
     <div
       ref={rootRef}
-      className="relative flex min-w-0 max-w-[45%] shrink-0 items-center gap-0.5"
+      className="relative flex min-w-0 items-center"
       onPointerEnter={(event) => {
-        // Touch has no hover: a tap goes to the link or the toggle.
+        // Touch has no hover: a tap presses the toggle.
         if (event.pointerType === "touch" || dismissedRef.current) return;
         if (open) clearTimeout(timerRef.current);
         else later(() => setOpenBy("hover"), OPEN_DELAY_MS);
@@ -111,24 +112,29 @@ export default function BreadcrumbMenu({
         if (open && next instanceof Node && !rootRef.current?.contains(next)) close();
       }}
     >
-      {crumb}
+      {/* Padded for the ring, pulled back by the same, so the title stays where
+          a crumb without a panel has it. */}
       <button
         ref={toggleRef}
         type="button"
-        aria-label={label}
+        aria-current="page"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => {
           clearTimeout(timerRef.current);
-          // A panel the pointer opened stays open: the toggle pins it.
+          // A panel the pointer opened stays open: the press pins it.
           setOpenBy(openBy === "toggle" ? null : "toggle");
         }}
-        className="relative inline-flex size-6 shrink-0 items-center justify-center rounded text-slate-300 transition-colors hover:text-white aria-expanded:text-white"
+        className="relative -mx-1 flex h-6 min-w-0 items-center gap-0.5 rounded px-1 text-slate-200 transition-colors hover:text-white aria-expanded:text-white"
       >
+        {crumb}
+        {/* One text node with its separator, after the title the name starts
+            with (WCAG 2.5.3): "Variables, Lessons in Go from zero". */}
+        <span className="sr-only">{`, ${label}`}</span>
         <ChevronDown
           size={14}
           aria-hidden="true"
-          className={`transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
         />
         <HoverRing />
       </button>

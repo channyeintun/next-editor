@@ -19,6 +19,9 @@ describe("Breadcrumb", () => {
     expect(screen.getByRole("link", { name: "Lessons" })).toHaveAttribute("href", "/learn");
     expect(trail).toHaveTextContent("Rust from zero: Ownership");
     expect(trail.querySelector("[lang]")).toBeNull();
+    // Without a menu the title is plain text: the page it names, nothing to press.
+    expect(screen.getByText("Rust from zero: Ownership")).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("links back to the given parent instead of the gallery", () => {
@@ -47,7 +50,7 @@ describe("Breadcrumb", () => {
   });
 });
 
-describe("Breadcrumb parent menu", () => {
+describe("Breadcrumb title menu", () => {
   const label = "Lessons in Go from zero";
 
   function renderMenu() {
@@ -55,19 +58,16 @@ describe("Breadcrumb parent menu", () => {
       <MemoryRouter>
         <Breadcrumb
           title="Your first Go program"
-          parent={{
-            to: "/learn/playlist/go-course",
-            label: "Go from zero",
-            menu: {
-              label,
-              content: (
-                <ol>
-                  <li>
-                    <Link to="/learn/variables?list=go-course">Variables</Link>
-                  </li>
-                </ol>
-              ),
-            },
+          parent={{ to: "/learn/playlist/go-course", label: "Go from zero" }}
+          menu={{
+            label,
+            content: (
+              <ol>
+                <li>
+                  <Link to="/learn/variables?list=go-course">Variables</Link>
+                </li>
+              </ol>
+            ),
           }}
         />
         <button type="button">Elsewhere</button>
@@ -75,9 +75,10 @@ describe("Breadcrumb parent menu", () => {
     );
   }
 
-  const toggle = () => screen.getByRole("button", { name: label });
+  // The lesson's own crumb is the toggle: its title, then what it opens.
+  const toggle = () => screen.getByRole("button", { name: `Your first Go program, ${label}` });
   const panel = () => screen.queryByRole("group", { name: label });
-  const crumb = () => screen.getByRole("link", { name: "Go from zero" }).parentElement!;
+  const crumb = () => toggle().parentElement!;
   const advance = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
 
   beforeEach(() => {
@@ -87,15 +88,30 @@ describe("Breadcrumb parent menu", () => {
     vi.useRealTimers();
   });
 
-  it("keeps the crumb a link to the playlist, with a collapsed toggle beside it", () => {
+  it("puts the collapsed toggle on the title crumb, and leaves the playlist crumb a plain link", () => {
     renderMenu();
 
-    expect(screen.getByRole("link", { name: "Go from zero" })).toHaveAttribute(
-      "href",
-      "/learn/playlist/go-course",
-    );
+    const playlist = screen.getByRole("link", { name: "Go from zero" });
+    expect(playlist).toHaveAttribute("href", "/learn/playlist/go-course");
+    // The playlist crumb sits in the trail itself, with no toggle of its own.
+    expect(playlist.parentElement).toBe(screen.getByRole("navigation", { name: "Breadcrumb" }));
+    expect(screen.getAllByRole("button")).toEqual([
+      toggle(),
+      screen.getByRole("button", { name: "Elsewhere" }),
+    ]);
+
+    expect(toggle()).toHaveTextContent("Your first Go program");
+    expect(toggle()).toHaveAttribute("aria-current", "page");
     expect(toggle()).toHaveAttribute("aria-expanded", "false");
     expect(panel()).toBeNull();
+  });
+
+  it("opens under the title crumb, not under the playlist crumb", () => {
+    renderMenu();
+    fireEvent.click(toggle());
+
+    expect(crumb()).toContainElement(panel());
+    expect(crumb()).not.toContainElement(screen.getByRole("link", { name: "Go from zero" }));
   });
 
   it("opens and closes from the toggle, which names the panel it controls", () => {
@@ -141,7 +157,7 @@ describe("Breadcrumb parent menu", () => {
     expect(panel()).toBeNull();
   });
 
-  it("ignores touch, where a tap goes to the link or the toggle", () => {
+  it("ignores touch, where a tap presses the toggle", () => {
     renderMenu();
 
     fireEvent.pointerEnter(crumb(), { pointerType: "touch" });
