@@ -1,0 +1,2021 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claude FDE thumbnail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;500;700&display=block"
+    />
+    <!--
+      Claude FDE course (Burmese) lesson thumbnail, 1280×720 (16:9, the lesson card ratio).
+      Click a tick on the strip (or press ← / →) to load that lesson from LESSONS, or render
+      the whole set with `bun docs/claude-fde-thumbnails/render.ts`.
+
+      This course has its own look: a two-tone poster. The left side is paper and carries the
+      words (the course, the lesson number, the part, the title, and one real line of the file
+      the lesson works on). The right side is a full-height panel in the part's colour and
+      carries one drawing, in ink and white only. What it keeps from the family: the type
+      (Google Sans + Noto Sans Myanmar), the language pill, the Next Editor mark, the file
+      tab, and a lesson-by-lesson progress strip.
+
+      - Ten parts, ten panel colours, so the gallery is banded by part.
+      - Every drawing is original and built from the shapes in the DSL below. It uses four
+        tones: ink, white, a tint and a shade of the panel colour. Ink marks the thing in
+        focus. Product names appear as plain text only; no logo or brand mark is drawn.
+      - The file line is a real line of that lesson's file (render.ts checks it against the
+        lesson YAML); a line cut short ends in " …".
+      - A Burmese label in a drawing is always a phrase the lesson itself shows
+        (render.ts checks that too).
+    -->
+    <style>
+      :root {
+        --paper: #faf9f5;
+        --ink: #15171c;
+        --dim: #6c7080;
+        --accent: #ffd34e;
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* The frame sits at the top rather than centered vertically: centering can land it
+         on a half pixel, and a screenshot then picks up a line of the page background. */
+      body {
+        margin: 0;
+        min-width: max-content;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 32px 16px;
+        background: #2b2b2e;
+        font-family: var(--sans);
+      }
+
+      #thumb {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        flex: none;
+        overflow: hidden;
+        color: var(--ink);
+        background-color: var(--paper);
+        background-image: radial-gradient(rgb(21 23 28 / 0.07) 1.5px, transparent 1.5px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      .mm {
+        font-family: var(--mm);
+        letter-spacing: 0;
+      }
+
+      .panel {
+        position: absolute;
+        left: 704px;
+        top: 0;
+        width: 576px;
+        height: 720px;
+        background: var(--accent);
+      }
+
+      .series {
+        position: absolute;
+        left: 56px;
+        top: 40px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 31px/1 var(--sans);
+        letter-spacing: -0.01em;
+      }
+
+      .series svg {
+        width: 42px;
+        height: 36px;
+      }
+
+      .lang {
+        position: absolute;
+        right: 48px;
+        top: 34px;
+        padding: 9px 26px 11px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: #fff;
+        font: 700 25px/1.3 var(--mm);
+      }
+
+      /* The left column hangs between the series row and the progress strip: the number
+         at the top; the part, the title and the file line at the bottom. */
+      .left {
+        position: absolute;
+        left: 56px;
+        top: 106px;
+        width: 608px;
+        height: 508px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .num-label {
+        font: 700 18px/1 var(--mono);
+        letter-spacing: 0.24em;
+        color: var(--dim);
+      }
+
+      .num {
+        margin: 12px 0 0 -5px;
+        font: 700 132px/0.8 var(--sans);
+        letter-spacing: -0.045em;
+      }
+
+      .part {
+        display: inline-block;
+        padding: 3px 14px 5px;
+        border-radius: 10px;
+        background: var(--accent);
+        font: 600 21px/1.6 var(--sans);
+        white-space: nowrap;
+      }
+
+      .title {
+        margin-top: 10px;
+        font-weight: 700;
+        font-family: var(--sans);
+        line-height: 1.46;
+        letter-spacing: -0.012em;
+      }
+
+      /* A title breaks only where LESSONS breaks it. */
+      .title .line {
+        display: block;
+        width: max-content;
+        white-space: nowrap;
+      }
+
+      .file {
+        position: relative;
+        margin-top: 34px;
+      }
+
+      .tab {
+        position: absolute;
+        left: 20px;
+        top: -17px;
+        height: 32px;
+        padding: 0 13px 1px;
+        display: flex;
+        align-items: center;
+        border: 3px solid var(--ink);
+        border-radius: 999px;
+        background: var(--accent);
+        font: 700 15px/1 var(--mono);
+        white-space: nowrap;
+      }
+
+      .strip {
+        height: 68px;
+        padding: 8px 24px 0;
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        border-radius: 18px;
+        background: var(--ink);
+        color: #f6f5f1;
+        font: 500 22px/1.7 var(--mono);
+        white-space: nowrap;
+      }
+
+      .strip .s {
+        color: var(--accent);
+      }
+
+      .route {
+        position: absolute;
+        left: 56px;
+        top: 638px;
+        width: 608px;
+        height: 32px;
+      }
+
+      .route rect {
+        cursor: pointer;
+      }
+
+      #glyph {
+        position: absolute;
+        left: 736px;
+        top: 106px;
+        width: 512px;
+        height: 512px;
+        overflow: visible;
+        font-family: var(--sans);
+      }
+
+      #glyph .mm {
+        font-family: var(--mm);
+      }
+
+      #glyph .mono {
+        font-family: var(--mono);
+      }
+
+      .brand {
+        position: absolute;
+        right: 48px;
+        top: 632px;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        font: 700 28px/1 var(--sans);
+        letter-spacing: -0.01em;
+      }
+
+      .brand svg {
+        width: 46px;
+        height: 46px;
+      }
+
+      .hint {
+        color: #b9b9bd;
+        font: 400 14px/1.4 var(--sans);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="thumb">
+      <div class="panel"></div>
+
+      <div class="series">
+        <!-- The course mark: stepping in through a door (forward deployed). -->
+        <svg viewBox="0 0 42 36" aria-hidden="true">
+          <path
+            d="M19,4 H33 a5,5 0 0 1 5,5 V27 a5,5 0 0 1 -5,5 H19"
+            fill="none"
+            stroke="#15171c"
+            stroke-width="4"
+            stroke-linecap="round"
+          />
+          <path
+            d="M4,18 H24 M17,10 l8,8 l-8,8"
+            fill="none"
+            stroke="#15171c"
+            stroke-width="4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        Claude FDE
+      </div>
+
+      <div class="left">
+        <div id="numBlock">
+          <div class="num-label">LESSON</div>
+          <div class="num" id="num">01</div>
+        </div>
+        <div id="titleGroup">
+          <div class="part" id="part"></div>
+          <div class="title" id="title"></div>
+          <div class="file">
+            <div class="tab" id="tab"></div>
+            <div class="strip" id="strip"><span id="line"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <svg class="route" id="route" viewBox="0 0 608 32" aria-label="Lesson in the course"></svg>
+
+      <div class="lang">မြန်မာလို</div>
+
+      <svg id="glyph" viewBox="0 0 480 480" aria-hidden="true"></svg>
+
+      <div class="brand">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient
+              id="g2c"
+              x1="300"
+              y1="312"
+              x2="724"
+              y2="712"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#4DE5D6" />
+              <stop offset="0.5" stop-color="#FFD255" />
+              <stop offset="1" stop-color="#6D57FF" />
+            </linearGradient>
+          </defs>
+          <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+          <polygon
+            points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+            fill="url(#g2c)"
+          />
+        </svg>
+        Next Editor
+      </div>
+    </div>
+
+    <div class="hint">Click a tick on the strip, or press ← / →, to load another lesson.</div>
+
+    <script>
+      // The ten parts of the course, in order (the names the course guide uses), each with
+      // its panel colour. Neighbouring parts sit far apart on the colour wheel.
+      const PARTS = [
+        ["FDE နဲ့ AI ရဲ့ သဘာဝ", "#ffd34e"],
+        ["Builder အတွက် AI fluency", "#b3a4ff"],
+        ["Prompt မရေးခင် ဆုံးဖြတ်ချက် လေးခု", "#45dcc7"],
+        ["Claude Platform", "#ff9fc6"],
+        ["Claude Code အခြေခံ", "#7db8ff"],
+        ["Claude Code ကို လွှတ်ထားနိုင်အောင်", "#c4e85a"],
+        ["Model Context Protocol", "#e6a1f5"],
+        ["Agent Skills", "#74e092"],
+        ["Delivery methodology", "#ffb35c"],
+        ["Enterprise adoption", "#6fd8f2"],
+      ].map(([name, colour]) => ({ name, colour }));
+      window.PARTS = PARTS;
+
+      // One entry per lesson: [number, slug, part, title lines, file, line].
+      // The title lines joined by a space are the lesson's title after "Claude FDE NN: ";
+      // the file is the one the lesson works on and the line is a real line of it
+      // (render.ts checks all three against the lesson's YAML).
+      const LESSONS = [
+        [
+          1,
+          "claude-fde-01-what-is-an-fde",
+          1,
+          ["FDE ဆိုတာ", "ဘာလဲ"],
+          "notebook/01-ai-at-naychi.md",
+          "## AI က ဘာကို မြင်နိုင်လဲ",
+        ],
+        [
+          2,
+          "claude-fde-02-what-ai-means",
+          1,
+          ["AI ဆိုတာ", "ဘာကို ပြောတာလဲ"],
+          "notebook/02-what-ai-is.md",
+          "| ထင်နေတာ | တကယ် |",
+        ],
+        [
+          3,
+          "claude-fde-03-next-token-prediction",
+          1,
+          ["Next token", "prediction"],
+          "notebook/03-what-must-not-vary.md",
+          "# Reply မှာ ဘာက မပြောင်းရဘူးလဲ",
+        ],
+        [
+          4,
+          "claude-fde-04-knowledge",
+          1,
+          ["Model ရဲ့", "knowledge"],
+          "notebook/04-where-truth-lives.md",
+          "# အမှန် ဘယ်မှာ ရှိလဲ",
+        ],
+        [
+          5,
+          "claude-fde-05-working-memory",
+          1,
+          ["Working memory နဲ့", "context window"],
+          "notebook/05-context-for-one-ticket.md",
+          "# Ticket တစ်ခုအတွက် context",
+        ],
+        [
+          6,
+          "claude-fde-06-steerability",
+          1,
+          ["Steerability"],
+          "reply-assistant/prompts/system.md",
+          "<instructions>",
+        ],
+        [
+          7,
+          "claude-fde-07-when-properties-collide",
+          1,
+          ["မထင်မှတ်တဲ့ output ကို", "ခွဲခြားခြင်း"],
+          "notebook/07-diagnosis.md",
+          "| တွေ့ရတာ | သဘာဝ | ပြင်နည်း |",
+        ],
+        [
+          8,
+          "claude-fde-08-4d-and-delegation",
+          2,
+          ["4D framework နဲ့", "Delegation"],
+          "notebook/08-delegation.md",
+          "| အလုပ် | ဘယ်သူ လုပ်မလဲ | ဘာကြောင့်လဲ |",
+        ],
+        [
+          9,
+          "claude-fde-09-description",
+          2,
+          ["Description"],
+          "notebook/09-brief.md",
+          "## ပြီးပြီ ဆိုတာ ဘယ်လို သိမလဲ",
+        ],
+        [
+          10,
+          "claude-fde-10-discernment",
+          2,
+          ["Discernment"],
+          "notebook/10-review-checklist.md",
+          "# Reply assistant ကို ပြင်တိုင်း စစ်ရမယ့် checklist",
+        ],
+        [
+          11,
+          "claude-fde-11-diligence",
+          2,
+          ["Diligence"],
+          "notebook/11-working-agreement.md",
+          "4. customer က AI ရေးတာလားလို့ မေးရင် မှန်မှန် ဖြေတယ်",
+        ],
+        [
+          12,
+          "claude-fde-12-entry-points",
+          3,
+          ["Entry point ကို", "ရွေးချယ်ခြင်း"],
+          "notebook/12-entry-points.md",
+          "| အလုပ် | entry point | ဘာကြောင့် |",
+        ],
+        [
+          13,
+          "claude-fde-13-capability-features",
+          3,
+          ["Capability", "feature များ"],
+          "notebook/13-features.md",
+          "| အလုပ် | feature | တစ်ခါပဲ ပြင်ဆင်ရမှာ |",
+        ],
+        [
+          14,
+          "claude-fde-14-choosing-a-model",
+          3,
+          ["Model ကို", "ရွေးချယ်ခြင်း"],
+          "notebook/14-model-choice.md",
+          "# Model ရွေးချယ်မှု worksheet",
+        ],
+        [
+          15,
+          "claude-fde-15-context-and-memory",
+          3,
+          ["Context နဲ့", "memory"],
+          "notebook/15-continuity.md",
+          "# Session တစ်ခုကနေ နောက်တစ်ခုဆီ ဘာသယ်မလဲ",
+        ],
+        [
+          16,
+          "claude-fde-16-first-api-call",
+          4,
+          ["ပထမဆုံး", "API call"],
+          "reply-assistant/src/first-call.ts",
+          "const message = await client.messages.create({",
+        ],
+        [
+          17,
+          "claude-fde-17-tokens-cost-latency",
+          4,
+          ["Token, cost နဲ့", "latency"],
+          "notebook/17-cost.md",
+          "- 1,800 × $0.0141 ≈ $25.4 / ရက် · 30 ရက် ≈ $762",
+        ],
+        [
+          18,
+          "claude-fde-18-agent-loop",
+          4,
+          ["Agent loop"],
+          "reply-assistant/src/loop.ts",
+          "for (let turn = 0; turn < MAX_TURNS; turn++) {",
+        ],
+        [
+          19,
+          "claude-fde-19-tool-use",
+          4,
+          ["Tool use"],
+          "reply-assistant/src/tools.ts",
+          'name: "check_outage",',
+        ],
+        [
+          20,
+          "claude-fde-20-thinking",
+          4,
+          ["Thinking နဲ့", "effort"],
+          "reply-assistant/src/dispute.ts",
+          'output_config: { effort: "high" },',
+        ],
+        [
+          21,
+          "claude-fde-21-server-tools",
+          4,
+          ["Built-in", "tool များ"],
+          "reply-assistant/src/research.ts",
+          'name: "web_search",',
+        ],
+        [
+          22,
+          "claude-fde-22-skills-and-mcp-on-the-api",
+          4,
+          ["API ပေါ်က", "Skills နဲ့ MCP"],
+          "reply-assistant/src/extend.ts",
+          "mcp_servers: [",
+        ],
+        [
+          23,
+          "claude-fde-23-context-management",
+          4,
+          ["Context", "management"],
+          "reply-assistant/src/kb-audit.ts",
+          'cache_control: { type: "ephemeral" },',
+        ],
+        [
+          24,
+          "claude-fde-24-managed-agents",
+          4,
+          ["Managed", "Agents"],
+          "reply-assistant/managed/kb-audit-agent.ts",
+          "return client.beta.agents.create({",
+        ],
+        [
+          25,
+          "claude-fde-25-what-is-claude-code",
+          5,
+          ["Claude Code", "ဆိုတာ ဘာလဲ"],
+          "notebook/25-first-tasks.md",
+          "## 1. Late fee ကို invoice မှာ ဘယ်လို ပေါင်းလဲ …",
+        ],
+        [
+          26,
+          "claude-fde-26-permissions",
+          5,
+          ["ပထမဆုံး prompt နဲ့", "permission"],
+          "billing-service/.claude/settings.json",
+          '"ask": ["Bash(git push *)"],',
+        ],
+        [
+          27,
+          "claude-fde-27-explore-plan-code-commit",
+          5,
+          ["Explore, plan,", "code, commit"],
+          "notebook/27-four-prompts.md",
+          "## 2. Plan (plan mode)",
+        ],
+        [
+          28,
+          "claude-fde-28-context-in-claude-code",
+          5,
+          ["Claude Code ထဲက", "context"],
+          "notebook/28-context-habits.md",
+          "| ဖြစ်နေတာ | လုပ်မယ့်အရာ | ဘာကြောင့် |",
+        ],
+        [
+          29,
+          "claude-fde-29-claude-md",
+          5,
+          ["CLAUDE.md"],
+          "billing-service/CLAUDE.md",
+          "- Test: `npm test`",
+        ],
+        [
+          30,
+          "claude-fde-30-subagents",
+          5,
+          ["Subagent များ"],
+          "billing-service/.claude/agents/test-runner.md",
+          "name: test-runner",
+        ],
+        [
+          31,
+          "claude-fde-31-hooks",
+          5,
+          ["Hook များ"],
+          "billing-service/.claude/settings.json",
+          '"matcher": "Edit|Write",',
+        ],
+        [
+          32,
+          "claude-fde-32-steering-long-sessions",
+          6,
+          ["Session ရှည်ကို", "ထိန်းကျောင်းခြင်း"],
+          "notebook/32-session-plan.md",
+          "- job တစ်ခု အောင်တိုင်း git commit",
+        ],
+        [
+          33,
+          "claude-fde-33-rules-that-hold",
+          6,
+          ["တကယ် လိုက်နာတဲ့", "စည်းကမ်း"],
+          "notebook/33-rules.md",
+          "| စည်းကမ်း | ဘယ်မှာ | ဘာကြောင့် |",
+        ],
+        [
+          34,
+          "claude-fde-34-scheduled-tasks-and-headless",
+          6,
+          ["Scheduled task နဲ့", "headless mode"],
+          "billing-service/scripts/morning-check.sh",
+          "--max-turns 10 --max-budget-usd 2 \\",
+        ],
+        [
+          35,
+          "claude-fde-35-code-review-and-github",
+          6,
+          ["Code review နဲ့", "GitHub Actions"],
+          "billing-service/.github/workflows/claude-review.yml",
+          "- uses: anthropics/claude-code-action@v1",
+        ],
+        [
+          36,
+          "claude-fde-36-verifying-unsupervised-runs",
+          6,
+          ["လွှတ်ထားတဲ့ အလုပ်ကို", "စစ်ဆေးခြင်း"],
+          "notebook/36-after-the-run.md",
+          "## run ခဲ့တာ (သက်သေ)",
+        ],
+        [
+          37,
+          "claude-fde-37-plugins",
+          6,
+          ["Plugin များ"],
+          "naychi-plugin/.claude-plugin/plugin.json",
+          '"name": "naychi-dev",',
+        ],
+        [
+          38,
+          "claude-fde-38-mcp-architecture",
+          7,
+          ["MCP ဆိုတာ", "ဘာလဲ"],
+          "notebook/38-mcp-map.md",
+          "# ticket-mcp: ဘာ ပေးမလဲ၊ ဘယ်သူ ချိတ်မလဲ",
+        ],
+        [
+          39,
+          "claude-fde-39-mcp-server-tools",
+          7,
+          ["MCP server နဲ့", "tool များ"],
+          "ticket-mcp/server.py",
+          'mcp = MCPServer("ticket-mcp")',
+        ],
+        [
+          40,
+          "claude-fde-40-mcp-resources-and-prompts",
+          7,
+          ["Resource နဲ့", "prompt များ"],
+          "ticket-mcp/server.py",
+          '@mcp.resource("tickets://{ticket_id}/history")',
+        ],
+        [
+          41,
+          "claude-fde-41-mcp-clients",
+          7,
+          ["MCP client များ"],
+          "billing-service/.mcp.json",
+          '"mcpServers": {',
+        ],
+        [
+          42,
+          "claude-fde-42-what-are-skills",
+          8,
+          ["Skill ဆိုတာ", "ဘာလဲ"],
+          "billing-service/.claude/skills/outage-notice/SKILL.md",
+          "name: outage-notice",
+        ],
+        [
+          43,
+          "claude-fde-43-multi-file-skills",
+          8,
+          ["Skill ကို", "ဖွဲ့စည်းတည်ဆောက်ခြင်း"],
+          "billing-service/.claude/skills/report-migration/SKILL.md",
+          "5. Commit only after MATCH. …",
+        ],
+        [
+          44,
+          "claude-fde-44-skills-vs-other-features",
+          8,
+          ["Skill လား၊", "တခြား feature လား"],
+          "notebook/44-which-feature.md",
+          "| လိုအပ်ချက် | Feature | ဘာကြောင့် |",
+        ],
+        [
+          45,
+          "claude-fde-45-sharing-skills",
+          8,
+          ["Skill ကို မျှဝေခြင်းနဲ့", "ပြဿနာကို ရှာဖွေခြင်း"],
+          "notebook/45-skill-troubleshooting.md",
+          "| ဖြစ်နေတာ | ပထမဆုံး စစ်ရမယ့်အရာ |",
+        ],
+        [
+          46,
+          "claude-fde-46-use-case-qualification",
+          9,
+          ["Use case ကို", "စိစစ်ရွေးချယ်ခြင်း"],
+          "notebook/46-use-case-qualification.md",
+          "| Use case | Volume | Complexity | …",
+        ],
+        [
+          47,
+          "claude-fde-47-pilot-design",
+          9,
+          ["Pilot ကို", "design ဆွဲခြင်း"],
+          "notebook/47-pilot-design.md",
+          "## Success criteria (Day 1 မတိုင်ခင် ရေး)",
+        ],
+        [
+          48,
+          "claude-fde-48-baseline-and-roi",
+          9,
+          ["Baseline နဲ့", "ROI"],
+          "notebook/48-roi-scorecard.md",
+          "- ချွေတာ: 40 − 6 = 34 developer-weeks",
+        ],
+        [
+          49,
+          "claude-fde-49-phased-rollout",
+          9,
+          ["အဆင့်လိုက်", "rollout"],
+          "notebook/49-rollout-plan.md",
+          "- wave 1 (Day 1–30): cohort 8 ယောက်",
+        ],
+        [
+          50,
+          "claude-fde-50-champions",
+          9,
+          ["Champion နဲ့", "documentation"],
+          "notebook/50-champion-plan.md",
+          "- office hours: အင်္ဂါ၊ ကြာသပတေး",
+        ],
+        [
+          51,
+          "claude-fde-51-failure-modes",
+          9,
+          ["ကြိုမြင်ထားသင့်တဲ့", "failure mode များ"],
+          "notebook/51-risk-register.md",
+          "| Failure | အစောဆုံး လက္ခဏာ | အခု လုပ်မယ့်အရာ | …",
+        ],
+        [
+          52,
+          "claude-fde-52-thirty-day-activation",
+          9,
+          ["ရက် 30", "activation"],
+          "notebook/52-activation-calendar.md",
+          "## Day 1 မတိုင်ခင်",
+        ],
+        [
+          53,
+          "claude-fde-53-activation-foundations",
+          10,
+          ["Activation:", "team နဲ့ provisioning"],
+          "notebook/53-activation-checklist.md",
+          "## Provisioning · login မဝင်ခင်",
+        ],
+        [
+          54,
+          "claude-fde-54-activation-culture",
+          10,
+          ["Activation:", "culture နဲ့ launch"],
+          "notebook/54-launch-message.md",
+          "Draft ကို support agent က အမြဲ ဖတ်ပြီးမှ ပို့မယ်။",
+        ],
+        [
+          55,
+          "claude-fde-55-acceleration",
+          10,
+          ["Acceleration:", "Center of Excellence"],
+          "notebook/55-coe-charter.md",
+          "## CoE ပိုင်တာ",
+        ],
+        [
+          56,
+          "claude-fde-56-expansion",
+          10,
+          ["Expansion နဲ့", "ရှေ့ဆက်ရမယ့် လမ်း"],
+          "notebook/56-impact-review.md",
+          "## နောက် ဘာလုပ်မလဲ",
+        ],
+      ].map(([number, slug, part, lines, file, line]) => ({
+        number,
+        slug,
+        part,
+        lines,
+        file,
+        line,
+      }));
+      window.LESSONS = LESSONS;
+
+      /* ---------- The drawing DSL: every picture is built from these shapes ---------- */
+
+      const INK_COLOUR = "#15171c";
+      const esc = (text) =>
+        String(text).replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      const n1 = (value) => Math.round(value * 10) / 10;
+      const channels = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      const mix = (hex, base, amount) => {
+        const a = channels(hex);
+        const b = channels(base);
+        return `rgb(${a.map((v, i) => Math.round(v * amount + b[i] * (1 - amount))).join(" ")})`;
+      };
+      // The four tones of a drawing, set from the part's colour before it is drawn:
+      // k ink (the thing in focus), w white (a thing), t a tint and s a shade of the
+      // panel colour, d a quiet line, a the panel colour itself.
+      let INK = {};
+      const setInk = (accent) => {
+        INK = {
+          k: INK_COLOUR,
+          w: "#ffffff",
+          a: accent,
+          t: mix(accent, "#ffffff", 0.42),
+          s: mix(accent, INK_COLOUR, 0.72),
+          d: mix(INK_COLOUR, accent, 0.5),
+        };
+      };
+
+      const MYANMAR = /[က-႟ꧠ-꧿ꩠ-ꩿ]+/g;
+      const hasMyanmar = (text) => /[က-႟ꧠ-꧿ꩠ-ꩿ]/.test(text);
+      // Burmese shapes only when one font holds the whole run, so every Myanmar run is
+      // wrapped: a span in HTML, a tspan in a drawing.
+      const withMyanmar = (text, tag = "span") =>
+        esc(text).replace(MYANMAR, (run) => `<${tag} class="mm">${run}</${tag}>`);
+
+      const strokeOf = (o = {}) =>
+        `stroke="${INK[o.c || "k"]}" stroke-width="${o.sw ?? 4}" stroke-linecap="round" stroke-linejoin="round"` +
+        (o.dash ? ` stroke-dasharray="${o.dash}"` : "");
+      const fillOf = (o = {}) => (o.f === "none" ? "none" : INK[o.f || "w"]);
+      const heads = (o = {}) =>
+        ` marker-end="url(#ah-${o.c || "k"})"` +
+        (o.both ? ` marker-start="url(#ah-${o.c || "k"})"` : "");
+
+      // maxw marks a label that sits inside a shape; cardProblems() checks it fits.
+      const txt = (x, y, text, o = {}) =>
+        `<text x="${n1(x)}" y="${n1(y)}" text-anchor="${o.a || "middle"}" dominant-baseline="central"` +
+        ` font-size="${o.fs || 20}" font-weight="${o.fw || 500}" fill="${INK[o.c || "k"]}"` +
+        (o.mono ? ' class="mono"' : "") +
+        (o.maxw ? ` data-maxw="${o.maxw}"` : "") +
+        `>${withMyanmar(text, "tspan")}</text>`;
+      const labelOf = (cx, cy, width, o) =>
+        o.label
+          ? txt(cx, cy, o.label, {
+              fs: o.fs,
+              fw: o.fw,
+              mono: o.mono,
+              c: o.lc || (o.f === "k" ? "w" : "k"),
+              maxw: width - 16,
+            })
+          : "";
+      const box = (x, y, w, h, o = {}) =>
+        `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${o.r ?? 14}" fill="${fillOf(o)}" ${strokeOf(o)}/>` +
+        labelOf(x + w / 2, y + h / 2, w, o);
+      const circ = (cx, cy, r, o = {}) =>
+        `<circle cx="${n1(cx)}" cy="${n1(cy)}" r="${r}" fill="${fillOf(o)}" ${strokeOf(o)}/>` +
+        labelOf(cx, cy, r * 2, o);
+      const line = (x1, y1, x2, y2, o = {}) =>
+        `<line x1="${n1(x1)}" y1="${n1(y1)}" x2="${n1(x2)}" y2="${n1(y2)}" fill="none" ${strokeOf(o)}/>`;
+      const arr = (x1, y1, x2, y2, o = {}) =>
+        `<line x1="${n1(x1)}" y1="${n1(y1)}" x2="${n1(x2)}" y2="${n1(y2)}" fill="none" ${strokeOf(o)}${heads(o)}/>`;
+      const path = (d, o = {}) =>
+        `<path d="${d}" fill="${fillOf(o)}" ${strokeOf(o)}${o.arrow ? heads(o) : ""}/>`;
+      const polygon = (points, o = {}) =>
+        `<polygon points="${points.map((p) => p.map(n1).join(",")).join(" ")}" fill="${fillOf(o)}" ${strokeOf(o)}/>`;
+      // A person: a head over rounded shoulders, s is the scale.
+      const person = (cx, cy, s = 1, o = {}) =>
+        `<path d="M${n1(cx - 24 * s)},${n1(cy + 30 * s)} a${24 * s},${28 * s} 0 0 1 ${48 * s},0 z" fill="${fillOf(o)}" ${strokeOf(o)}/>` +
+        `<circle cx="${cx}" cy="${n1(cy - 20 * s)}" r="${13 * s}" fill="${fillOf(o)}" ${strokeOf(o)}/>`;
+      // A page with a folded corner and, if asked, a few lines of writing.
+      function doc(x, y, w, h, o = {}) {
+        const fold = o.fold ?? 22;
+        const out = [
+          `<path d="M${x},${y} h${w - fold} l${fold},${fold} v${h - fold} h${-w} z" fill="${fillOf(o)}" ${strokeOf(o)}/>`,
+          `<path d="M${x + w - fold},${y} v${fold} h${fold}" fill="none" ${strokeOf(o)}/>`,
+        ];
+        for (let i = 0; i < (o.lines ?? 0); i++)
+          out.push(
+            line(x + 14, y + 32 + i * 18, x + w - (i % 2 ? 26 : 14), y + 32 + i * 18, {
+              c: "d",
+              sw: 4,
+            }),
+          );
+        return out.join("");
+      }
+      // A database: a drum with its lid drawn.
+      function cyl(x, y, w, h, o = {}) {
+        const ry = Math.min(15, h * 0.15);
+        const side = h - 2 * ry;
+        return (
+          `<path d="M${x},${y + ry} v${side} a${w / 2},${ry} 0 0 0 ${w},0 v${-side}" fill="${fillOf(o)}" ${strokeOf(o)}/>` +
+          `<ellipse cx="${x + w / 2}" cy="${y + ry}" rx="${w / 2}" ry="${ry}" fill="${fillOf(o)}" ${strokeOf(o)}/>` +
+          labelOf(x + w / 2, y + h / 2 + ry * 0.7, w, o)
+        );
+      }
+      // A speech bubble whose tail points down from x = tail.
+      function bubble(x, y, w, h, o = {}) {
+        const r = o.r ?? 24;
+        const d =
+          `M${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h - r}` +
+          ` Q${x + w},${y + h} ${x + w - r},${y + h} H${o.tail + 13} L${o.tail},${y + h + 24} L${o.tail - 13},${y + h}` +
+          ` H${x + r} Q${x},${y + h} ${x},${y + h - r} V${y + r} Q${x},${y} ${x + r},${y} Z`;
+        return `<path d="${d}" fill="${fillOf(o)}" ${strokeOf(o)}/>`;
+      }
+      const tick = (cx, cy, s, o = {}) =>
+        path(
+          `M${n1(cx - s)},${n1(cy)} l${n1(s * 0.7)},${n1(s * 0.75)} l${n1(s * 1.3)},${n1(-s * 1.5)}`,
+          { sw: 5, ...o, f: "none" },
+        );
+      const cross = (cx, cy, s, o = {}) =>
+        line(cx - s, cy - s, cx + s, cy + s, { sw: 5, ...o }) +
+        line(cx - s, cy + s, cx + s, cy - s, { sw: 5, ...o });
+      // A clock face; the two hands are given as angles in degrees from 12 o'clock.
+      function clock(cx, cy, r, o = {}, hands = [0, 120]) {
+        const hand = (deg, len) => {
+          const a = ((deg - 90) * Math.PI) / 180;
+          return line(cx, cy, cx + Math.cos(a) * len, cy + Math.sin(a) * len, { sw: o.sw });
+        };
+        return circ(cx, cy, r, o) + hand(hands[0], r * 0.64) + hand(hands[1], r * 0.44);
+      }
+      const bolt = (cx, cy, s, o = {}) =>
+        polygon(
+          [
+            [cx + 0.22 * s, cy - s],
+            [cx - 0.5 * s, cy + 0.12 * s],
+            [cx - 0.02 * s, cy + 0.12 * s],
+            [cx - 0.22 * s, cy + s],
+            [cx + 0.5 * s, cy - 0.14 * s],
+            [cx + 0.02 * s, cy - 0.14 * s],
+          ],
+          { sw: 0, ...o },
+        );
+      const lock = (cx, cy) =>
+        path(`M${cx - 11},${cy - 6} v-10 a11,11 0 0 1 22,0 v10`, { f: "none" }) +
+        box(cx - 19, cy - 6, 38, 30, { f: "k", r: 7 });
+      // A point on a cubic curve, for placing a dot on a drawn line.
+      const bez = ([p0, p1, p2, p3], t) =>
+        [0, 1].map(
+          (i) =>
+            (1 - t) ** 3 * p0[i] +
+            3 * (1 - t) ** 2 * t * p1[i] +
+            3 * (1 - t) * t ** 2 * p2[i] +
+            t ** 3 * p3[i],
+        );
+      const onInk = (f) => (f === "k" ? "w" : "k");
+
+      /* ---------- One drawing per lesson, on a 480×480 board ---------- */
+
+      const GLYPHS = {
+        // The FDE walks in through the company's door and works with its team.
+        1: () => [
+          path(
+            "M196,230 V124 a28,28 0 0 1 28,-28 H444 a28,28 0 0 1 28,28 V356 a28,28 0 0 1 -28,28 H224 a28,28 0 0 1 -28,-28 V294",
+          ),
+          txt(334, 142, "နေခြည် Fiber", { fs: 26, fw: 700 }),
+          person(268, 266, 0.95, { f: "t" }),
+          person(334, 266, 0.95, { f: "t" }),
+          person(400, 266, 0.95, { f: "t" }),
+          txt(334, 338, "team", { fs: 22 }),
+          person(78, 262, 1.15, { f: "k" }),
+          txt(78, 194, "FDE", { fs: 28, fw: 700 }),
+          arr(122, 262, 224, 262, { sw: 5 }),
+        ],
+        // Three layers shape the model's behaviour; the FDE writes only the top one.
+        2: () => [
+          box(20, 302, 330, 86, { label: "training", fs: 24 }),
+          box(20, 198, 330, 86, { label: "constitution", fs: 24 }),
+          box(20, 94, 330, 86, { f: "k", label: "system prompt", fs: 24, fw: 700 }),
+          lock(412, 345),
+          lock(412, 241),
+          arr(462, 137, 364, 137, { sw: 5 }),
+          txt(424, 104, "FDE", { fs: 24, fw: 700 }),
+        ],
+        // The next word is a pick among weighted candidates.
+        3: () => [
+          box(8, 40, 96, 60, { r: 12 }),
+          line(28, 70, 84, 70, { c: "d", sw: 6 }),
+          box(116, 40, 96, 60, { r: 12 }),
+          line(136, 70, 176, 70, { c: "d", sw: 6 }),
+          box(224, 40, 96, 60, { r: 12 }),
+          line(244, 70, 300, 70, { c: "d", sw: 6 }),
+          box(332, 40, 140, 60, { r: 12, f: "k", label: "?", fs: 32, fw: 700 }),
+          path("M402,104 V152 H76 V192", { f: "none", arrow: 1 }),
+          box(8, 204, 136, 60, { r: 12, f: "t" }),
+          line(28, 234, 112, 234, { c: "d", sw: 6 }),
+          box(164, 212, 134, 44, { r: 8, f: "k" }),
+          txt(312, 234, "0.46", { a: "start", fs: 24, fw: 700 }),
+          box(8, 288, 136, 60, { r: 12, f: "t" }),
+          line(28, 318, 96, 318, { c: "d", sw: 6 }),
+          box(164, 296, 110, 44, { r: 8 }),
+          txt(288, 318, "0.38", { a: "start", fs: 24, fw: 700 }),
+          box(8, 372, 136, 60, { r: 12, f: "t" }),
+          line(28, 402, 120, 402, { c: "d", sw: 6 }),
+          box(164, 380, 46, 44, { r: 8 }),
+          txt(224, 402, "0.16", { a: "start", fs: 24, fw: 700 }),
+        ],
+        // Where the truth lives: in training, in our documents, or only in a live system.
+        4: () => [
+          ...[76, 240, 404].flatMap((x) => [
+            circ(x, 52, 26, { f: "k", label: "?", fs: 28, fw: 700 }),
+            arr(x, 86, x, 126),
+          ]),
+          box(4, 138, 144, 262, { r: 20 }),
+          box(168, 138, 144, 262, { r: 20 }),
+          box(332, 138, 144, 262, { r: 20, f: "k" }),
+          line(50, 264, 102, 264, { sw: 3 }),
+          line(50, 264, 76, 216, { sw: 3 }),
+          line(102, 264, 76, 216, { sw: 3 }),
+          circ(50, 264, 14, { f: "t" }),
+          circ(102, 264, 14, { f: "t" }),
+          circ(76, 216, 14, { f: "t" }),
+          doc(204, 192, 72, 96, { fold: 20, lines: 3, f: "t" }),
+          clock(404, 240, 42, {}, [0, 120]),
+          txt(76, 352, "training", { fs: 21, fw: 600 }),
+          txt(240, 352, "documents", { fs: 21, fw: 600 }),
+          txt(404, 352, "live", { fs: 21, fw: 600, c: "w" }),
+        ],
+        // One ticket's context: what goes into the window and what stays out.
+        5: () => [
+          box(8, 16, 276, 448, { r: 26 }),
+          txt(146, 56, "context window", { fs: 22, fw: 700 }),
+          line(28, 88, 264, 88, { c: "d", dash: "8 8", sw: 3 }),
+          box(28, 370, 236, 72, { f: "k", r: 12, label: "ticket", fs: 24, fw: 700 }),
+          box(28, 286, 236, 72, { f: "t", r: 12, label: "plan", fs: 24 }),
+          box(28, 202, 236, 72, { f: "t", r: 12, label: "NMS", fs: 24 }),
+          box(28, 118, 236, 72, { f: "t", r: 12, label: "article", fs: 24 }),
+          box(326, 158, 146, 64, { f: "none", dash: "8 8", r: 12, label: "340 articles", fs: 19 }),
+          box(326, 274, 146, 64, { f: "none", dash: "8 8", r: 12, label: "other tickets", fs: 19 }),
+          circ(326, 158, 15, { f: "k" }),
+          cross(326, 158, 6, { c: "w", sw: 3 }),
+          circ(326, 274, 15, { f: "k" }),
+          cross(326, 274, 6, { c: "w", sw: 3 }),
+        ],
+        // Three levers steer a model: instruction, example, format.
+        6: () =>
+          [
+            [86, 150, "instruction", "k"],
+            [240, 262, "example", "w"],
+            [394, 198, "format", "w"],
+          ].flatMap(([x, y, name, f]) => [
+            line(x, 60, x, 340, { sw: 8 }),
+            line(x - 22, 60, x + 22, 60, { sw: 5 }),
+            line(x - 22, 340, x + 22, 340, { sw: 5 }),
+            circ(x, y, 32, { f }),
+            txt(x, 396, name, { fs: 23, fw: 600 }),
+          ]),
+        // One odd draft, four possible causes: name the property before fixing.
+        7: () => [
+          ...[64, 176, 288, 400].map((y) => line(150, 240, 246, y, { sw: 3 })),
+          doc(16, 150, 134, 180, { fold: 28 }),
+          txt(78, 250, "!", { fs: 84, fw: 700 }),
+          box(246, 34, 226, 60, { r: 30, label: "next token", fs: 21 }),
+          box(246, 146, 226, 60, { r: 30, f: "k", label: "knowledge", fs: 21, fw: 700 }),
+          box(246, 258, 226, 60, { r: 30, label: "working memory", fs: 21 }),
+          box(246, 370, 226, 60, { r: 30, label: "steerability", fs: 21 }),
+        ],
+        // The four habits of working with AI; this lesson is the first.
+        8: () =>
+          [
+            ["Delegation", 4, 4, "k"],
+            ["Description", 252, 4, "w"],
+            ["Discernment", 4, 252, "w"],
+            ["Diligence", 252, 252, "w"],
+          ].flatMap(([name, x, y, f]) => [
+            box(x, y, 224, 224, { r: 28, f }),
+            txt(x + 112, y + 92, "D", { fs: 104, fw: 700, c: onInk(f) }),
+            txt(x + 112, y + 180, name, { fs: 24, fw: 600, c: onInk(f) }),
+          ]),
+        // A vague request becomes a brief with four headings.
+        9: () => [
+          bubble(4, 196, 168, 84, { tail: 60 }),
+          txt(88, 238, "ပြင်ပေးပါ", { fs: 26, fw: 700 }),
+          arr(184, 238, 236, 238, { sw: 5 }),
+          doc(248, 36, 224, 408, { fold: 34 }),
+          ...[92, 180, 268, 356].flatMap((y) => [
+            line(274, y, 366, y, { sw: 9 }),
+            line(274, y + 28, 444, y + 28, { c: "d", sw: 5 }),
+            line(274, y + 48, 410, y + 48, { c: "d", sw: 5 }),
+          ]),
+        ],
+        // Two ways to look at a result: as code, and as the customer.
+        10: () => [
+          line(188, 234, 226, 272, { sw: 12 }),
+          circ(124, 170, 90, { sw: 6 }),
+          txt(124, 170, "</>", { fs: 50, fw: 700, mono: 1 }),
+          line(420, 234, 458, 272, { sw: 12 }),
+          circ(356, 170, 90, { sw: 6 }),
+          person(356, 178, 1.5, { f: "k" }),
+          txt(124, 320, "code", { fs: 26, fw: 700 }),
+          txt(356, 320, "customer", { fs: 26, fw: 700 }),
+          ...[68, 124, 180, 300, 356, 412].map((x) => tick(x, 394, 13)),
+        ],
+        // A reply's path from draft to customer: a person answers for it.
+        11: () => [
+          box(4, 76, 132, 84, { label: "draft", fs: 24 }),
+          arr(142, 118, 168, 118),
+          box(174, 76, 132, 84, { label: "check", fs: 24 }),
+          arr(312, 118, 338, 118),
+          box(344, 76, 132, 84, { label: "send", fs: 24 }),
+          ...[70, 240, 410].map((x) => line(x, 170, x, 222, { c: "d", dash: "6 8", sw: 3 })),
+          box(32, 236, 76, 60, { f: "t", r: 14, label: "AI", fs: 26, fw: 700 }),
+          person(240, 276, 1.25, { f: "k" }),
+          person(410, 276, 1.25, { f: "k" }),
+          path("M188,336 v18 h274 v-18", { f: "none" }),
+          txt(325, 398, "တာဝန်ယူ", { fs: 28, fw: 700 }),
+        ],
+        // Three doors into Claude: a person in an app, a developer in Claude Code,
+        // a program on the API.
+        12: () =>
+          [
+            [8, "Claude app", "လူ တစ်ယောက်"],
+            [174, "Claude Code", "developer"],
+            [340, "Claude API", "program"],
+          ].flatMap(([y, name, who], i) => [
+            box(4, y, 472, 132, { r: 24 }),
+            box(24, y + 22, 88, 88, { f: "k", r: 18 }),
+            i === 0
+              ? path(
+                  `M48,${y + 42} H88 a6,6 0 0 1 6,6 V${y + 74} a6,6 0 0 1 -6,6 H66 l-10,12 v-12 H48 a6,6 0 0 1 -6,-6 V${y + 48} a6,6 0 0 1 6,-6 z`,
+                  { f: "w", sw: 0 },
+                )
+              : txt(68, y + 66, i === 1 ? ">_" : "{ }", { c: "w", fs: 32, fw: 700, mono: 1 }),
+            txt(136, y + 48, name, { a: "start", fs: 30, fw: 700 }),
+            txt(136, y + 92, who, { a: "start", fs: 22 }),
+          ]),
+        // One recurring job, mapped to the features it needs.
+        13: () => [
+          line(240, 92, 76, 176, { sw: 3 }),
+          line(240, 92, 240, 176, { sw: 3 }),
+          line(240, 92, 404, 176, { sw: 3 }),
+          box(140, 16, 200, 76, { f: "k", r: 18, label: "ticket အဖြေ", fs: 24, fw: 700 }),
+          box(4, 176, 144, 80, { label: "Project", fs: 23, fw: 700 }),
+          box(168, 176, 144, 80, { label: "Skill", fs: 23, fw: 700 }),
+          box(332, 176, 144, 80, { label: "Connector", fs: 23, fw: 700 }),
+          txt(76, 292, "tone guide", { fs: 19 }),
+          txt(240, 292, "လိုင်းကျ အဖြေ", { fs: 19 }),
+          txt(404, 292, "Knowledge base", { fs: 19 }),
+          box(150, 366, 180, 68, { f: "none", dash: "8 8", r: 14, label: "Research", fs: 22 }),
+          circ(330, 366, 15, { f: "k" }),
+          cross(330, 366, 6, { c: "w", sw: 3 }),
+        ],
+        // Model families, from fast and cheap to most capable.
+        14: () => [
+          line(4, 404, 476, 404, { sw: 5 }),
+          box(12, 314, 104, 90),
+          box(130, 244, 104, 160),
+          box(248, 174, 104, 230),
+          box(366, 104, 104, 300, { f: "k" }),
+          txt(64, 440, "Haiku", { fs: 23, fw: 700 }),
+          txt(182, 440, "Sonnet", { fs: 23, fw: 700 }),
+          txt(300, 440, "Opus", { fs: 23, fw: 700 }),
+          txt(418, 440, "Fable", { fs: 23, fw: 700 }),
+          txt(8, 50, "မြန်၊ သက်သာ", { a: "start", fs: 22 }),
+          txt(472, 50, "အစွမ်းအထက်ဆုံး", { a: "end", fs: 22 }),
+          arr(160, 50, 284, 50, { c: "d", sw: 3 }),
+        ],
+        // A chat's context ends with the chat; three shelves carry things to the next one.
+        15: () => [
+          box(4, 60, 196, 360, { r: 24, dash: "10 10" }),
+          txt(102, 100, "chat", { fs: 24, fw: 700 }),
+          box(24, 138, 124, 44, { f: "t", r: 14, sw: 3 }),
+          box(56, 198, 124, 44, { f: "t", r: 14, sw: 3 }),
+          box(24, 258, 124, 44, { f: "t", r: 14, sw: 3 }),
+          box(56, 318, 124, 44, { f: "t", r: 14, sw: 3 }),
+          box(270, 60, 206, 96, { label: "Project", fs: 24, fw: 700 }),
+          box(270, 192, 206, 96, { label: "Instructions", fs: 24, fw: 700 }),
+          box(270, 324, 206, 96, { label: "Memory", fs: 24, fw: 700 }),
+          arr(264, 108, 210, 108, { sw: 5 }),
+          arr(264, 240, 210, 240, { sw: 5 }),
+          arr(264, 372, 210, 372, { sw: 5 }),
+        ],
+        // One call: a request with four parts goes in, a response comes back.
+        16: () => [
+          box(4, 96, 164, 288, { r: 20 }),
+          txt(86, 132, "request", { fs: 22, fw: 700 }),
+          ...["model", "max_tokens", "system", "messages"].map((name, i) =>
+            box(16, 160 + i * 52, 140, 40, { f: "t", r: 10, sw: 3, label: name, fs: 17, mono: 1 }),
+          ),
+          arr(174, 240, 192, 240, { sw: 5 }),
+          circ(240, 240, 42, { f: "k", label: "Claude", fs: 20, fw: 700 }),
+          arr(288, 240, 306, 240, { sw: 5 }),
+          box(312, 148, 164, 184, { r: 20 }),
+          txt(394, 184, "response", { fs: 22, fw: 700 }),
+          ...["content", "stop_reason"].map((name, i) =>
+            box(324, 212 + i * 52, 140, 40, { f: "t", r: 10, sw: 3, label: name, fs: 17, mono: 1 }),
+          ),
+        ],
+        // Where the money goes: many input tokens, fewer output tokens at five times the price.
+        17: () => [
+          txt(120, 40, "input", { fs: 26, fw: 700 }),
+          txt(360, 40, "output", { fs: 26, fw: 700 }),
+          ...[0, 1, 2].flatMap((r) =>
+            [0, 1, 2, 3].map((c) => box(17 + c * 54, 76 + r * 54, 44, 44, { r: 8, f: "t", sw: 3 })),
+          ),
+          ...[0, 1].map((c) => box(311 + c * 54, 130, 44, 44, { r: 8, f: "k", sw: 3 })),
+          box(50, 268, 140, 80, { r: 18, label: "$4", fs: 42, fw: 700 }),
+          box(290, 268, 140, 80, { r: 18, f: "k", label: "$20", fs: 42, fw: 700 }),
+          txt(240, 308, "× 5", { fs: 28, fw: 700 }),
+          txt(240, 404, "per 1M tokens", { fs: 22 }),
+        ],
+        // The agent loop: the model asks for a tool, our code runs it, the result goes back.
+        18: () => [
+          path("M290,138 A124,124 0 0 1 324,342", { f: "none", arrow: 1, sw: 5 }),
+          path("M156,342 A124,124 0 0 1 190,138", { f: "none", arrow: 1, sw: 5 }),
+          circ(240, 120, 54, { f: "k", label: "Claude", fs: 23, fw: 700 }),
+          box(162, 330, 156, 88, { r: 18, label: "code", fs: 26, fw: 700 }),
+          txt(420, 240, "tool use", { fs: 22, fw: 600 }),
+          txt(58, 240, "tool result", { fs: 22, fw: 600 }),
+          arr(286, 86, 356, 52, { sw: 4 }),
+          txt(416, 40, "end turn", { fs: 21 }),
+        ],
+        // A tool's journey: the definition, the model's tool_use, our tool_result.
+        19: () => [
+          ...[
+            [8, "definition", "w", ["name", 84], ["description", 140], ["input_schema", 152]],
+            [174, "tool_use", "k", ["id", 60], ["name", 84], ["input", 84]],
+            [340, "tool_result", "w", ["tool_use_id", 150], ["content", 108]],
+          ].flatMap(([y, title, f, ...chips]) => {
+            let x = 28;
+            return [
+              box(4, y, 472, 132, { r: 22, f }),
+              txt(28, y + 38, title, { a: "start", fs: 24, fw: 700, c: onInk(f), mono: 1 }),
+              ...chips.map(([name, w]) => {
+                const chip = box(x, y + 68, w, 42, {
+                  r: 10,
+                  sw: 3,
+                  f: f === "k" ? "w" : "t",
+                  label: name,
+                  fs: 18,
+                  mono: 1,
+                });
+                x += w + 12;
+                return chip;
+              }),
+            ];
+          }),
+          arr(240, 144, 240, 166, { sw: 5 }),
+          arr(240, 310, 240, 332, { sw: 5 }),
+        ],
+        // Effort: how deeply to think; the billing dispute gets "high".
+        20: () => [
+          ...[
+            ["low", 70, "w"],
+            ["medium", 120, "w"],
+            ["high", 170, "k"],
+            ["xhigh", 220, "w"],
+            ["max", 270, "w"],
+          ].flatMap(([name, h, f], i) => [
+            box(6 + i * 96, 330 - h, 84, h, { f, r: 10 }),
+            txt(48 + i * 96, 304, name, { fs: 18, fw: 600, c: onInk(f), maxw: 76 }),
+          ]),
+          line(4, 332, 476, 332, { sw: 5 }),
+          arr(240, 396, 240, 348, { sw: 5 }),
+          box(126, 400, 228, 60, { r: 30, label: "billing dispute", fs: 22, fw: 600 }),
+        ],
+        // Who runs a tool: our program runs check_outage, Anthropic runs the built-in ones.
+        21: () => [
+          box(4, 30, 226, 420, { r: 24 }),
+          txt(117, 72, "ကိုယ်တို့ program", { fs: 22, fw: 700 }),
+          box(22, 112, 190, 56, { f: "k", r: 12, label: "check_outage", fs: 19, mono: 1 }),
+          arr(117, 178, 117, 240, { sw: 5 }),
+          cyl(57, 252, 120, 124, { f: "t", label: "NMS", fs: 24, fw: 700 }),
+          box(250, 30, 226, 420, { r: 24, f: "k" }),
+          txt(363, 72, "Anthropic", { fs: 22, fw: 700, c: "w" }),
+          ...["web_search", "web_fetch", "code_execution"].map((name, i) =>
+            box(268, 150 + i * 84, 190, 56, { r: 12, label: name, fs: 19, mono: 1 }),
+          ),
+        ],
+        // Three ways to extend an agent from one request: our own tool, a skill,
+        // an MCP server.
+        22: () => [
+          line(240, 100, 240, 190, { sw: 3 }),
+          line(196, 296, 112, 366, { sw: 3 }),
+          line(284, 296, 368, 366, { sw: 3 }),
+          circ(240, 250, 66, { f: "k", label: "agent", fs: 26, fw: 700 }),
+          box(144, 24, 192, 76, { label: "ကိုယ့် tool", fs: 24, fw: 700 }),
+          box(4, 366, 200, 80, { label: "Skill", fs: 24, fw: 700 }),
+          box(276, 366, 200, 80, { label: "MCP server", fs: 24, fw: 700 }),
+        ],
+        // A long history kept in its window: a cached start, old tool results cleared,
+        // a summary.
+        23: () => [
+          path("M6,138 v-18 h468 v18", { f: "none" }),
+          txt(240, 84, "context window", { fs: 24, fw: 700 }),
+          box(4, 158, 150, 184, { f: "k", label: "cache", fs: 26, fw: 700 }),
+          box(165, 158, 150, 184, { f: "none", dash: "10 10", label: "clear", fs: 26, fw: 700 }),
+          box(326, 158, 150, 184, { label: "summary", fs: 26, fw: 700 }),
+          txt(79, 378, "tools + system", { fs: 18 }),
+          txt(240, 378, "tool result အဟောင်း", { fs: 17 }),
+          txt(401, 378, "compaction", { fs: 18 }),
+        ],
+        // A managed agent: Anthropic runs the loop and the sandbox; we send a definition
+        // and read events.
+        24: () => [
+          box(20, 16, 440, 216, { r: 36, f: "k" }),
+          txt(240, 54, "Anthropic", { fs: 23, fw: 700, c: "w" }),
+          path("M186,138 A44,44 0 1 1 142,94", { f: "none", c: "w", sw: 5, arrow: 1 }),
+          txt(142, 138, "loop", { fs: 20, fw: 600, c: "w" }),
+          box(244, 96, 180, 84, { r: 14, label: "sandbox", fs: 24, fw: 700 }),
+          arr(130, 330, 130, 246, { sw: 5 }),
+          txt(148, 288, "definition", { a: "start", fs: 22, fw: 600 }),
+          arr(350, 244, 350, 328, { sw: 5 }),
+          txt(332, 288, "events", { a: "end", fs: 22, fw: 600 }),
+          box(20, 342, 440, 110, { r: 26 }),
+          txt(240, 397, "နေခြည်", { fs: 30, fw: 700 }),
+        ],
+        // A coding agent works in the repository: it gathers context, acts and checks.
+        25: () => [
+          box(40, 12, 400, 226, { r: 22, f: "k" }),
+          ...[70, 94, 118].map((x) => circ(x, 42, 7, { sw: 0 })),
+          txt(70, 112, "$ claude", { a: "start", c: "w", fs: 34, fw: 700, mono: 1 }),
+          line(70, 162, 330, 162, { c: "a", sw: 6 }),
+          line(70, 196, 250, 196, { c: "a", sw: 6 }),
+          box(4, 296, 130, 64, { r: 32, label: "context", fs: 22, fw: 600 }),
+          arr(140, 328, 168, 328),
+          box(175, 296, 130, 64, { r: 32, label: "action", fs: 22, fw: 600 }),
+          arr(311, 328, 339, 328),
+          box(346, 296, 130, 64, { r: 32, f: "k", label: "check", fs: 22, fw: 600 }),
+          path("M411,368 V424 H69 V374", { f: "none", arrow: 1 }),
+        ],
+        // Permission rules: allow, ask, deny.
+        26: () =>
+          [
+            ["allow", "Bash(npm test)", "w", 24],
+            ["ask", "Bash(git push *)", "w", 192],
+            ["deny", "Read(./.env)", "k", 360],
+          ].flatMap(([key, rule, f, y]) => [
+            box(4, y, 472, 96, { r: 22, f }),
+            txt(32, y + 48, key, { a: "start", fs: 30, fw: 700, c: onInk(f), mono: 1 }),
+            box(164, y + 18, 292, 60, {
+              r: 12,
+              sw: 3,
+              f: f === "k" ? "w" : "t",
+              label: rule,
+              fs: 20,
+              mono: 1,
+            }),
+          ]),
+        // One change in four steps, with a check the person makes at each.
+        27: () => [
+          ...["Explore", "Plan", "Code", "Commit"].flatMap((name, i) => [
+            circ(60 + i * 120, 130, 46, {
+              f: i === 3 ? "k" : "w",
+              label: String(i + 1),
+              fs: 40,
+              fw: 700,
+            }),
+            txt(60 + i * 120, 212, name, { fs: 24, fw: 700 }),
+            tick(58 + i * 120, 276, 14, { sw: 6 }),
+          ]),
+          arr(109, 130, 131, 130),
+          arr(229, 130, 251, 130),
+          arr(349, 130, 371, 130),
+          box(130, 356, 220, 64, { r: 32, f: "k", label: "npm test", fs: 24, mono: 1 }),
+        ],
+        // A session's context fills up; compacting keeps a summary and re-reads CLAUDE.md.
+        28: () => [
+          box(16, 16, 160, 448, { r: 22 }),
+          ...["CLAUDE.md", "tools", "prompts", "files", "output"].map((name, i) =>
+            box(30, 392 - i * 70, 132, 58, {
+              r: 10,
+              sw: 3,
+              f: i === 0 ? "k" : "t",
+              label: name,
+              fs: 18,
+            }),
+          ),
+          arr(194, 262, 286, 262, { sw: 5 }),
+          txt(240, 226, "/compact", { fs: 20, fw: 700, mono: 1 }),
+          box(304, 16, 160, 448, { r: 22 }),
+          box(318, 392, 132, 58, { r: 10, sw: 3, f: "k", label: "CLAUDE.md", fs: 18 }),
+          box(318, 322, 132, 58, { r: 10, sw: 3, f: "t", label: "summary", fs: 18 }),
+        ],
+        // CLAUDE.md: a short file of what Claude cannot guess.
+        29: () => [
+          doc(80, 12, 320, 456, { fold: 48 }),
+          txt(112, 76, "CLAUDE.md", { a: "start", fs: 36, fw: 700 }),
+          ...["# Commands", "# Conventions", "# Gotchas"].flatMap((head, i) => [
+            txt(112, 152 + i * 106, head, { a: "start", fs: 24, fw: 700, mono: 1 }),
+            line(112, 190 + i * 106, 356, 190 + i * 106, { c: "d", sw: 5 }),
+            line(112, 214 + i * 106, 300, 214 + i * 106, { c: "d", sw: 5 }),
+          ]),
+        ],
+        // A subagent works in its own context; only a report comes back.
+        30: () => [
+          box(4, 50, 212, 380, { r: 24 }),
+          txt(110, 92, "main session", { fs: 22, fw: 700 }),
+          box(264, 50, 212, 380, { r: 24, f: "k" }),
+          txt(370, 92, "test-runner", { fs: 22, fw: 700, c: "w" }),
+          ...[150, 110, 164, 96, 140, 120].map((w, i) =>
+            line(288, 196 + i * 30, 288 + w, 196 + i * 30, { c: "a", sw: 5 }),
+          ),
+          box(24, 138, 150, 56, { f: "t", r: 12, label: "task", fs: 22 }),
+          arr(180, 166, 256, 166, { sw: 5 }),
+          box(24, 330, 150, 56, { f: "k", r: 12, label: "report", fs: 22, fw: 700 }),
+          arr(258, 358, 184, 358, { sw: 5 }),
+        ],
+        // Hooks fire at fixed points of a turn, whatever the model decides.
+        31: () => [
+          arr(8, 240, 472, 240, { sw: 5 }),
+          box(150, 212, 84, 56, { f: "t", r: 10, label: "tool", fs: 21 }),
+          line(110, 240, 110, 160, { sw: 4 }),
+          box(22, 100, 176, 60, { f: "k", r: 12, label: "PreToolUse", fs: 20, mono: 1 }),
+          circ(110, 240, 10, { f: "k" }),
+          line(274, 240, 274, 320, { sw: 4 }),
+          box(180, 320, 188, 60, { r: 12, label: "PostToolUse", fs: 20, mono: 1 }),
+          circ(274, 240, 10),
+          line(408, 240, 408, 160, { sw: 4 }),
+          box(344, 100, 128, 60, { r: 12, label: "Stop", fs: 20, mono: 1 }),
+          circ(408, 240, 10),
+          txt(110, 292, "block", { fs: 21 }),
+          txt(274, 190, "format", { fs: 21 }),
+          txt(408, 292, "test", { fs: 21 }),
+        ],
+        // A long session: checkpoints along the way, a wrong turn, and a rewind.
+        32: () => [
+          line(16, 330, 250, 330, { sw: 5 }),
+          arr(250, 330, 468, 330, { sw: 5 }),
+          path("M250,330 C310,330 330,190 404,176", { f: "none", dash: "10 10" }),
+          cross(424, 170, 14, { sw: 6 }),
+          path("M400,140 C340,50 230,110 246,296", { f: "none", arrow: 1 }),
+          circ(40, 330, 12),
+          circ(110, 330, 12),
+          circ(180, 330, 12),
+          circ(250, 330, 17, { f: "k" }),
+          txt(286, 50, "rewind", { fs: 26, fw: 700 }),
+          txt(110, 378, "checkpoint", { fs: 22 }),
+        ],
+        // Each rule on the shelf where it will hold: guidance, limit, guarantee.
+        33: () =>
+          [
+            [130, "CLAUDE.md", "လမ်းညွှန်ချက်", "w"],
+            [280, "permission rule", "ကန့်သတ်ချက်", "w"],
+            [430, "hook", "အမြဲ ဖြစ်ရမယ်", "k"],
+          ].flatMap(([y, name, shelf, f]) => [
+            line(4, y, 476, y, { sw: 6 }),
+            box(20, y - 80, 210, 74, { f, label: name, fs: 22, fw: 700 }),
+            txt(258, y - 42, shelf, { a: "start", fs: 24 }),
+          ]),
+        // A prompt with nobody at the keyboard: 07:00, a script, claude -p.
+        34: () => [
+          clock(112, 126, 96, { sw: 5 }, [0, 210]),
+          txt(336, 92, "07:00", { fs: 52, fw: 700 }),
+          arr(336, 136, 336, 238, { sw: 5 }),
+          box(40, 250, 436, 200, { r: 24, f: "k" }),
+          ...[72, 96, 120].map((x) => circ(x, 282, 7, { sw: 0 })),
+          txt(72, 352, "$ claude -p", { a: "start", c: "w", fs: 36, fw: 700, mono: 1 }),
+          line(72, 404, 300, 404, { c: "a", sw: 6 }),
+        ],
+        // Claude in a pull request: a comment asks, the review comes back before the merge.
+        35: () => [
+          line(30, 400, 450, 400, { sw: 5 }),
+          path("M70,400 C120,400 110,268 170,268 H310 C370,268 360,400 410,400", {
+            f: "none",
+            sw: 5,
+          }),
+          circ(70, 400, 15),
+          circ(190, 268, 15),
+          circ(290, 268, 15),
+          circ(410, 400, 17, { f: "k" }),
+          bubble(110, 44, 260, 130, { tail: 290 }),
+          txt(140, 90, "@claude", { a: "start", fs: 30, fw: 700, mono: 1 }),
+          line(140, 134, 330, 134, { c: "d", sw: 6 }),
+        ],
+        // The less a run was watched, the more evidence it needs.
+        36: () => [
+          line(4, 404, 476, 404, { sw: 5 }),
+          box(12, 312, 136, 84, { r: 12, label: "diff", fs: 23, fw: 700 }),
+          box(172, 312, 136, 84, { r: 12, label: "diff", fs: 23, fw: 700 }),
+          box(172, 220, 136, 84, { r: 12, label: "output", fs: 23, fw: 700 }),
+          box(332, 312, 136, 84, { r: 12, label: "diff", fs: 23, fw: 700 }),
+          box(332, 220, 136, 84, { r: 12, label: "output", fs: 23, fw: 700 }),
+          box(332, 128, 136, 84, { r: 12, f: "k", label: "ကျော်ခဲ့တာ", fs: 23, fw: 700 }),
+          txt(80, 440, "watched", { fs: 20 }),
+          txt(240, 440, "report only", { fs: 20 }),
+          txt(400, 440, "overnight", { fs: 20 }),
+          path("M28,262 C100,150 190,110 290,86", {
+            f: "none",
+            c: "d",
+            dash: "8 8",
+            sw: 3,
+            arrow: 1,
+          }),
+        ],
+        // A plugin packs skills, agents, hooks and MCP servers, and ships them to teams.
+        37: () => [
+          ...[52, 164, 276, 388].map((y) => line(128, y + 30, 176, 240, { sw: 3 })),
+          line(312, 240, 340, 126, { sw: 3 }),
+          line(312, 240, 340, 354, { sw: 3 }),
+          ...["skills", "agents", "hooks", "MCP servers"].map((name, i) =>
+            box(4, 52 + i * 112, 124, 60, { r: 12, f: "t", label: name, fs: 18 }),
+          ),
+          box(176, 170, 136, 140, { f: "k", r: 24, label: "naychi-dev", fs: 21, fw: 700 }),
+          box(340, 90, 136, 72, { label: "Billing", fs: 20, fw: 700 }),
+          box(340, 318, 136, 72, { label: "Network Tools", fs: 17, fw: 700 }),
+        ],
+        // MCP: one server per system, and every app connects to it the same way.
+        38: () => [
+          line(156, 100, 196, 226, { sw: 3 }),
+          line(156, 240, 196, 240, { sw: 3 }),
+          line(156, 380, 196, 254, { sw: 3 }),
+          line(312, 226, 350, 140, { sw: 3 }),
+          line(312, 254, 350, 340, { sw: 3 }),
+          box(4, 62, 152, 76, { label: "Reply assistant", fs: 18, fw: 600 }),
+          box(4, 202, 152, 76, { label: "Claude Code", fs: 18, fw: 600 }),
+          box(4, 342, 152, 76, { label: "Claude Desktop", fs: 18, fw: 600 }),
+          box(196, 170, 116, 140, { f: "k", r: 22, label: "ticket-mcp", fs: 18, fw: 700 }),
+          cyl(350, 84, 122, 112, { f: "t", label: "Tickets", fs: 21, fw: 700 }),
+          cyl(350, 284, 122, 112, { f: "t", label: "NMS", fs: 21, fw: 700 }),
+        ],
+        // A Python function on one side, the tool the model sees on the other.
+        39: () => [
+          box(4, 50, 216, 380, { r: 22, f: "k" }),
+          txt(112, 92, "server.py", { fs: 21, fw: 700, c: "w", mono: 1 }),
+          txt(24, 166, "def get_ticket", { a: "start", fs: 19, c: "w", mono: 1 }),
+          txt(24, 256, '"""docstring"""', { a: "start", fs: 19, c: "w", mono: 1 }),
+          txt(24, 346, "ticket_id: str", { a: "start", fs: 19, c: "w", mono: 1 }),
+          arr(228, 166, 256, 166),
+          arr(228, 256, 256, 256),
+          arr(228, 346, 256, 346),
+          box(264, 50, 212, 380, { r: 22 }),
+          txt(370, 92, "tool", { fs: 22, fw: 700 }),
+          ...["name", "description", "inputSchema"].map((name, i) =>
+            box(280, 138 + i * 90, 180, 56, { f: "t", r: 12, sw: 3, label: name, fs: 19, mono: 1 }),
+          ),
+        ],
+        // Three things a server offers, and who decides to use each.
+        40: () =>
+          [
+            ["model", "tool", "k"],
+            ["app", "resource", "w"],
+            ["user", "prompt", "w"],
+          ].flatMap(([who, what, f], i) => [
+            circ(80 + i * 160, 108, 56, { f: "t", label: who, fs: 24, fw: 600 }),
+            arr(80 + i * 160, 174, 80 + i * 160, 262, { sw: 5 }),
+            box(6 + i * 160, 274, 148, 104, { f, r: 18, label: what, fs: 26, fw: 700 }),
+          ]),
+        // A client connects Claude Code to the tickets server over stdio.
+        41: () => [
+          box(4, 96, 216, 232, { r: 24 }),
+          txt(112, 138, "Claude Code", { fs: 24, fw: 700 }),
+          box(40, 196, 140, 68, { f: "t", r: 14, label: "client", fs: 23 }),
+          line(180, 230, 300, 230, { sw: 6 }),
+          box(298, 208, 34, 44, { f: "k", r: 6 }),
+          line(332, 220, 346, 220, { sw: 5 }),
+          line(332, 240, 346, 240, { sw: 5 }),
+          box(350, 150, 126, 160, { f: "k", r: 22, label: "tickets", fs: 23, fw: 700 }),
+          txt(262, 190, "stdio", { fs: 21, fw: 600, mono: 1 }),
+          box(140, 388, 200, 60, { r: 30, label: ".mcp.json", fs: 22, fw: 700, mono: 1 }),
+        ],
+        // Many skill descriptions stay in view; one SKILL.md is opened when the task matches.
+        42: () => [
+          box(4, 100, 204, 72, { f: "k", r: 14, label: "outage-notice", fs: 20, fw: 700 }),
+          box(4, 204, 204, 72, { r: 14, label: "late-fee-check", fs: 20 }),
+          box(4, 308, 204, 72, { r: 14, label: "release-notes", fs: 20 }),
+          arr(216, 136, 258, 136, { sw: 5 }),
+          doc(268, 76, 204, 328, { fold: 36 }),
+          txt(290, 134, "SKILL.md", { a: "start", fs: 26, fw: 700 }),
+          ...[150, 120, 158, 104, 140, 90].map((w, i) =>
+            line(290, 182 + i * 34, 290 + w, 182 + i * 34, { c: "d", sw: 5 }),
+          ),
+        ],
+        // Three levels: the description is always loaded, the body when chosen, the rest
+        // when needed.
+        43: () => [
+          box(4, 16, 472, 448, { r: 30 }),
+          txt(240, 54, "3 · references, scripts", { fs: 22, fw: 600 }),
+          box(40, 92, 400, 336, { r: 26, f: "t" }),
+          txt(240, 130, "2 · SKILL.md", { fs: 22, fw: 600 }),
+          box(76, 168, 328, 224, { r: 22, f: "k" }),
+          txt(240, 280, "1 · name + description", { fs: 22, fw: 700, c: "w" }),
+        ],
+        // Five features, and which one a need calls for.
+        44: () => [
+          line(102, 126, 190, 196, { c: "d", dash: "6 8", sw: 3 }),
+          line(378, 126, 290, 196, { c: "d", dash: "6 8", sw: 3 }),
+          line(102, 354, 190, 284, { c: "d", dash: "6 8", sw: 3 }),
+          line(378, 354, 290, 284, { c: "d", dash: "6 8", sw: 3 }),
+          box(4, 30, 196, 96, { label: "CLAUDE.md", fs: 23, fw: 700 }),
+          box(280, 30, 196, 96, { label: "hook", fs: 23, fw: 700 }),
+          box(142, 192, 196, 96, { f: "k", label: "skill ?", fs: 26, fw: 700 }),
+          box(4, 354, 196, 96, { label: "subagent", fs: 23, fw: 700 }),
+          box(280, 354, 196, 96, { label: "MCP server", fs: 23, fw: 700 }),
+        ],
+        // Three circles of sharing: the project, a plugin for teams, managed for every machine.
+        45: () => [
+          circ(240, 240, 232),
+          txt(240, 50, "managed", { fs: 23, fw: 600 }),
+          circ(240, 272, 166, { f: "t" }),
+          txt(240, 142, "plugin", { fs: 23, fw: 600 }),
+          circ(240, 304, 98, { f: "k", label: "project", fs: 26, fw: 700 }),
+        ],
+        // A use case scored on four criteria; the report migration is a structural gain.
+        46: () => [
+          box(36, 12, 408, 456, { r: 28 }),
+          txt(66, 54, "report job 140", { a: "start", fs: 25, fw: 700 }),
+          ...["Volume", "Complexity", "Measurability", "Readiness"].flatMap((name, i) => [
+            line(60, 92 + i * 74, 420, 92 + i * 74, { c: "d", sw: 3 }),
+            txt(66, 129 + i * 74, name, { a: "start", fs: 24 }),
+            circ(392, 129 + i * 74, 22, { f: "k" }),
+            tick(390, 129 + i * 74, 9, { c: "w", sw: 4 }),
+          ]),
+          box(130, 398, 220, 52, { r: 26, f: "k", label: "structural", fs: 22, fw: 700 }),
+        ],
+        // A pilot: eight of the 24 developers, thirty days, and a decision at the end.
+        47: () => [
+          ...[0, 1, 2].flatMap((r) =>
+            [0, 1, 2, 3, 4, 5, 6, 7].map((c) =>
+              circ(44 + c * 56, 44 + r * 56, 20, { f: r === 0 ? "k" : "w" }),
+            ),
+          ),
+          txt(240, 236, "8 / 24", { fs: 48, fw: 700 }),
+          line(40, 350, 404, 350, { sw: 5 }),
+          circ(40, 350, 13),
+          polygon(
+            [
+              [436, 314],
+              [472, 350],
+              [436, 386],
+              [400, 350],
+            ],
+            { f: "k" },
+          ),
+          txt(436, 350, "?", { fs: 30, fw: 700, c: "w" }),
+          txt(8, 404, "Day 1", { a: "start", fs: 24, fw: 700 }),
+          txt(472, 424, "Day 30", { a: "end", fs: 24, fw: 700 }),
+        ],
+        // The baseline is taken before Day 1; the return is the gap to it.
+        48: () => [
+          line(4, 404, 476, 404, { sw: 5 }),
+          box(40, 84, 150, 320, { label: "40", fs: 64, fw: 700 }),
+          box(232, 356, 150, 48, { f: "k" }),
+          txt(307, 314, "6", { fs: 64, fw: 700 }),
+          line(40, 84, 468, 84, { dash: "10 10", sw: 3 }),
+          txt(470, 52, "baseline", { a: "end", fs: 25, fw: 700 }),
+          arr(436, 98, 436, 346, { both: 1 }),
+          txt(115, 440, "Day 1 မတိုင်ခင်", { fs: 20 }),
+          txt(307, 440, "ရက် 30", { fs: 20 }),
+        ],
+        // From supervised use to delegation, one step at a time.
+        49: () => [
+          box(4, 330, 150, 114),
+          box(165, 222, 150, 222),
+          box(326, 114, 150, 330, { f: "k" }),
+          txt(79, 366, "1", { fs: 40, fw: 700 }),
+          txt(240, 262, "2", { fs: 40, fw: 700 }),
+          txt(401, 156, "3", { fs: 40, fw: 700, c: "w" }),
+          txt(79, 414, "plan", { fs: 20, mono: 1 }),
+          txt(240, 414, "acceptEdits", { fs: 19, mono: 1, maxw: 136 }),
+          txt(401, 414, "auto", { fs: 20, mono: 1, c: "w" }),
+          txt(79, 298, "ကြီးကြပ်", { fs: 24, fw: 700 }),
+          txt(240, 190, "routine", { fs: 24, fw: 700 }),
+          txt(401, 80, "လွှဲအပ်", { fs: 24, fw: 700 }),
+        ],
+        // The champion stands in the middle of the team; the FDE steps out.
+        50: () => [
+          line(86, 100, 158, 166, { sw: 3 }),
+          line(86, 360, 158, 300, { sw: 3 }),
+          line(356, 100, 288, 164, { sw: 3 }),
+          person(60, 80, 1),
+          person(60, 380, 1),
+          person(380, 80, 1),
+          circ(222, 232, 96),
+          person(222, 240, 1.7, { f: "k" }),
+          txt(222, 362, "champion", { fs: 26, fw: 700 }),
+          person(392, 366, 1, { f: "none", dash: "7 7" }),
+          arr(430, 366, 474, 366),
+          txt(392, 430, "FDE", { fs: 23, fw: 700 }),
+        ],
+        // Where each failure first shows on the thirty days.
+        51: () => [
+          arr(8, 320, 472, 320, { sw: 5 }),
+          line(110, 306, 110, 334, { sw: 5 }),
+          txt(110, 366, "Day 1", { fs: 22, fw: 700 }),
+          txt(424, 366, "Day 30", { fs: 22, fw: 700 }),
+          ...[
+            [52, 200, "k"],
+            [176, 130, "w"],
+            [286, 200, "w"],
+            [396, 130, "w"],
+          ].flatMap(([x, y, f]) => [
+            line(x, y + 40, x, 320, { c: "d", dash: "6 8", sw: 3 }),
+            polygon(
+              [
+                [x, y - 44],
+                [x + 48, y + 40],
+                [x - 48, y + 40],
+              ],
+              { f },
+            ),
+            txt(x, y + 10, "!", { fs: 38, fw: 700, c: onInk(f) }),
+            circ(x, 320, 8, { f: "k" }),
+          ]),
+        ],
+        // Thirty days laid out week by week, ending in Day 30.
+        52: () => [
+          box(16, 16, 448, 448, { r: 28 }),
+          path("M16,92 V44 a28,28 0 0 1 28,-28 H436 a28,28 0 0 1 28,28 V92 Z", { f: "k" }),
+          txt(240, 56, "ရက် 30", { fs: 28, fw: 700, c: "w" }),
+          ...[0, 1, 2, 3].flatMap((w) => [
+            txt(44, 146 + w * 84, `ပတ် ${w + 1}`, { a: "start", fs: 23, fw: 700 }),
+            ...[0, 1, 2, 3, 4].map((d) =>
+              box(142 + d * 60, 122 + w * 84, 48, 48, {
+                r: 10,
+                sw: 3,
+                f: w === 3 && d === 4 ? "k" : "t",
+              }),
+            ),
+          ]),
+          tick(404, 398, 10, { c: "w", sw: 4 }),
+        ],
+        // The success team around the roll-out.
+        53: () => {
+          const spots = [
+            ["sponsor", 240, 60],
+            ["owner", 404, 190],
+            ["admin", 344, 400],
+            ["security", 136, 400],
+            ["champion", 76, 190],
+          ];
+          return [
+            ...spots.map(([, x, y]) => line(240, 240, x, y, { sw: 3 })),
+            circ(240, 240, 76, { f: "k", label: "roll out", fs: 26, fw: 700 }),
+            ...spots.map(([name, x, y]) =>
+              box(x - 68, y - 30, 136, 60, { r: 30, label: name, fs: 21, fw: 600 }),
+            ),
+          ];
+        },
+        // The productivity J-curve: a dip first, and the place not to give up.
+        54: () => [
+          line(36, 30, 36, 424, { sw: 5 }),
+          line(36, 424, 468, 424, { sw: 5 }),
+          line(36, 190, 460, 190, { c: "d", dash: "8 8", sw: 3 }),
+          path("M36,190 C110,190 120,330 186,330 C262,330 300,110 452,70", { f: "none", sw: 6 }),
+          circ(186, 330, 13, { f: "k" }),
+          txt(206, 380, "ဒီမှာ လက်မလျှော့ဖို့", { a: "start", fs: 23, fw: 700 }),
+          txt(464, 454, "အချိန်", { a: "end", fs: 21 }),
+        ],
+        // A Center of Excellence: a hub that learns from the departments and teaches them.
+        55: () => [
+          arr(186, 190, 142, 126, { both: 1 }),
+          arr(294, 190, 338, 126, { both: 1 }),
+          arr(186, 290, 142, 354, { both: 1 }),
+          arr(294, 290, 338, 354, { both: 1 }),
+          circ(240, 240, 78, { f: "k", label: "CoE", fs: 40, fw: 700 }),
+          box(4, 44, 164, 72, { label: "Support", fs: 21, fw: 600 }),
+          box(312, 44, 164, 72, { label: "Finance", fs: 21, fw: 600 }),
+          box(4, 364, 164, 72, { label: "Network Tools", fs: 21, fw: 600 }),
+          box(312, 364, 164, 72, { label: "Developer", fs: 21, fw: 600 }),
+        ],
+        // From the storm night to today, and the road goes on.
+        56: () => {
+          const first = [
+            [36, 404],
+            [130, 404],
+            [150, 300],
+            [226, 276],
+          ];
+          const second = [
+            [226, 276],
+            [300, 252],
+            [318, 150],
+            [396, 118],
+          ];
+          const weeks = bez(first, 0.62);
+          const launch = bez(second, 0.55);
+          return [
+            path("M36,404 C130,404 150,300 226,276 C300,252 318,150 396,118", {
+              f: "none",
+              sw: 6,
+            }),
+            path("M396,118 C426,106 448,84 462,48", { f: "none", dash: "10 10", arrow: 1 }),
+            circ(44, 400, 34, { f: "k" }),
+            bolt(44, 400, 20),
+            circ(weeks[0], weeks[1], 11),
+            txt(weeks[0] + 22, weeks[1] + 16, "ပတ် 1–9", { a: "start", fs: 22 }),
+            circ(226, 276, 11),
+            txt(248, 292, "Day 30", { a: "start", fs: 22 }),
+            circ(launch[0], launch[1], 11),
+            txt(launch[0] + 22, launch[1] + 16, "Launch", { a: "start", fs: 22 }),
+            circ(396, 118, 15, { f: "k" }),
+            txt(376, 92, "6 လ", { a: "end", fs: 24, fw: 700 }),
+          ];
+        },
+      };
+      window.GLYPHS = GLYPHS;
+
+      const markers = () =>
+        ["k", "w", "d"]
+          .map(
+            (key) =>
+              `<marker id="ah-${key}" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="15" markerHeight="15"` +
+              ` markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1,1.5 L11,6 L1,10.5 Z" fill="${INK[key]}"/></marker>`,
+          )
+          .join("");
+
+      /* ---------- The frame ---------- */
+
+      const $ = (id) => document.getElementById(id);
+      const COLUMN = 608;
+
+      // The strip: 56 ticks in ten groups, one group per part.
+      const TICK_STEP = 9.4;
+      const PART_GAP = 9;
+      const tickX = LESSONS.map((lesson, i) => i * TICK_STEP + (lesson.part - 1) * PART_GAP);
+
+      function renderRoute(current) {
+        const accent = PARTS[current.part - 1].colour;
+        $("route").innerHTML = LESSONS.map((lesson, i) => {
+          const x = n1(tickX[i]);
+          if (lesson.number === current.number)
+            return `<rect x="${n1(x - 2)}" y="3" width="11" height="26" rx="5.5" fill="${accent}" stroke="${INK_COLOUR}" stroke-width="3" data-lesson="${lesson.number}"/>`;
+          const fill = lesson.number < current.number ? INK_COLOUR : "#d5d3cb";
+          return `<rect x="${x}" y="9" width="7" height="14" rx="3.5" fill="${fill}" data-lesson="${lesson.number}"/>`;
+        }).join("");
+      }
+
+      // The largest title that fits the column and the room under the number.
+      const TITLE_MAX = 92;
+      const TITLE_MIN = 40;
+      function fitTitle() {
+        const title = $("title");
+        const group = $("titleGroup");
+        const tooBig = () =>
+          $("numBlock").offsetHeight + group.offsetHeight + 18 > 508 ||
+          [...title.children].some((lineElement) => lineElement.offsetWidth > COLUMN);
+        let size = TITLE_MAX;
+        title.style.fontSize = `${size}px`;
+        while (size > TITLE_MIN && tooBig()) {
+          size -= 2;
+          title.style.fontSize = `${size}px`;
+        }
+      }
+
+      // The file line: strings and Markdown marks take the part's colour.
+      const LINE_MAX = 22;
+      const LINE_MIN = 17;
+      const lineHtml = (text) =>
+        text
+          .split(/("[^"]*"|'[^']*'|`[^`]*`)/)
+          .map((piece, i) =>
+            i % 2
+              ? `<span class="s">${withMyanmar(piece)}</span>`
+              : withMyanmar(piece)
+                  .replace(/^(#{1,3}|-|\d+\.|\|)(?= )/, '<span class="s">$1</span>')
+                  .replace(/ \|(?= |$)/g, ' <span class="s">|</span>'),
+          )
+          .join("");
+      function fitLine() {
+        const text = $("line");
+        const room = $("strip").clientWidth - 48;
+        let size = LINE_MAX;
+        text.style.fontSize = `${size}px`;
+        while (size > LINE_MIN && text.offsetWidth > room) {
+          size -= 0.5;
+          text.style.fontSize = `${size}px`;
+        }
+      }
+
+      let shown = 1;
+      window.setThumb = ({ lesson }) => {
+        const current = LESSONS.find((entry) => entry.number === lesson);
+        if (!current) throw new Error(`no lesson ${lesson}`);
+        shown = lesson;
+        const part = PARTS[current.part - 1];
+        setInk(part.colour);
+        $("thumb").style.setProperty("--accent", part.colour);
+        $("num").textContent = String(current.number).padStart(2, "0");
+        $("part").innerHTML = `Part ${current.part} · ${withMyanmar(part.name)}`;
+        $("title").innerHTML = current.lines
+          .map((text) => `<span class="line">${withMyanmar(text)}</span>`)
+          .join("");
+        $("tab").textContent = current.file.split("/").slice(-2).join("/");
+        $("line").innerHTML = lineHtml(current.line);
+        $("glyph").innerHTML =
+          `<defs>${markers()}</defs>${GLYPHS[current.number]().flat().join("")}`;
+        renderRoute(current);
+        fitLine();
+        fitTitle();
+      };
+
+      // The Burmese labels of the drawing on screen; render.ts checks that each is a
+      // phrase the lesson itself shows.
+      window.cardLabels = () =>
+        [...$("glyph").querySelectorAll("text")].map((node) => node.textContent).filter(hasMyanmar);
+
+      // The ink of one run of text (a text node or an element holding one): where its
+      // glyphs really start and end, from the baseline of its line box.
+      const meter = document.createElement("canvas").getContext("2d");
+      function inkOf(node) {
+        const style = getComputedStyle(node.nodeType === 1 ? node : node.parentElement);
+        meter.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        const metrics = meter.measureText(node.textContent);
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const baseline = range.getBoundingClientRect().top + metrics.fontBoundingBoxAscent;
+        return {
+          top: baseline - metrics.actualBoundingBoxAscent,
+          bottom: baseline + metrics.actualBoundingBoxDescent,
+        };
+      }
+
+      // What is wrong with the card on screen: a shape or a word outside the drawing's
+      // board, a label wider than the shape it sits in, a title or a file line that does
+      // not fit, or Burmese text cut by the box around it. render.ts fails on any.
+      window.cardProblems = () => {
+        const problems = [];
+        const svg = $("glyph");
+        const frame = svg.getBoundingClientRect();
+        for (const node of svg.querySelectorAll(
+          "rect, circle, ellipse, path, line, polygon, text",
+        )) {
+          if (node.closest("defs")) continue;
+          const b = node.getBoundingClientRect();
+          const scale = 480 / frame.width;
+          const x = (b.left - frame.left) * scale;
+          const y = (b.top - frame.top) * scale;
+          const width = b.width * scale;
+          const height = b.height * scale;
+          const name = node.tagName === "text" ? `"${node.textContent}"` : node.tagName;
+          if (x < -3 || y < -3 || x + width > 483 || y + height > 483)
+            problems.push(
+              `${name} leaves the board (${Math.round(x)},${Math.round(y)} ${Math.round(width)}×${Math.round(height)})`,
+            );
+          const maxw = Number(node.getAttribute("data-maxw"));
+          if (maxw && width > maxw)
+            problems.push(`${name} is ${Math.round(width)} wide in a ${maxw} space`);
+        }
+
+        const title = $("title");
+        if (parseFloat(title.style.fontSize) <= TITLE_MIN)
+          problems.push("the title is at its smallest size");
+        if ($("numBlock").offsetHeight + $("titleGroup").offsetHeight > 508)
+          problems.push("the title group runs into the lesson number");
+        for (const lineElement of title.children)
+          if (lineElement.offsetWidth > COLUMN)
+            problems.push(`the title line "${lineElement.textContent}" is wider than the column`);
+
+        const text = $("line");
+        if (text.offsetWidth > $("strip").clientWidth - 48)
+          problems.push(`the file line "${text.textContent}" does not fit the strip`);
+        if ($("tab").offsetWidth > COLUMN - 40)
+          problems.push("the file tab is wider than the column");
+        if ($("part").offsetWidth > COLUMN)
+          problems.push("the part label is wider than the column");
+
+        // Burmese stacks marks above and below the line, so its ink is measured, not its
+        // line box: nothing may be cut by the strip or spill out of the part label, and the
+        // title's lines may not run into each other, the part label or the file tab.
+        for (const run of $("strip").querySelectorAll(".mm")) {
+          const ink = inkOf(run);
+          const holder = $("strip").getBoundingClientRect();
+          if (ink.top < holder.top || ink.bottom > holder.bottom)
+            problems.push(`Burmese text "${run.textContent}" is cut by the file strip`);
+        }
+        for (const run of $("part").querySelectorAll(".mm")) {
+          const ink = inkOf(run);
+          const holder = $("part").getBoundingClientRect();
+          if (ink.top < holder.top + 1 || ink.bottom > holder.bottom - 1)
+            problems.push(`Burmese text "${run.textContent}" spills out of the part label`);
+        }
+        let floor = $("part").getBoundingClientRect().bottom;
+        for (const lineElement of title.children) {
+          const inks = [...lineElement.childNodes].map(inkOf);
+          const top = Math.min(...inks.map((ink) => ink.top));
+          if (top < floor)
+            problems.push(`the title line "${lineElement.textContent}" runs into what is above it`);
+          floor = Math.max(...inks.map((ink) => ink.bottom));
+        }
+        if (floor > $("tab").getBoundingClientRect().top)
+          problems.push("the title runs into the file tab");
+        return problems;
+      };
+
+      $("route").addEventListener("click", (event) => {
+        const lesson = Number(event.target.getAttribute("data-lesson"));
+        if (lesson) window.setThumb({ lesson });
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowRight" && shown < LESSONS.length)
+          window.setThumb({ lesson: shown + 1 });
+        if (event.key === "ArrowLeft" && shown > 1) window.setThumb({ lesson: shown - 1 });
+      });
+
+      window.setThumb({ lesson: 1 });
+      window.thumbReady = Promise.all(
+        [
+          '700 36px "Google Sans"',
+          '600 36px "Google Sans"',
+          '500 36px "Google Sans"',
+          '500 36px "Google Sans Code"',
+          '700 36px "Google Sans Code"',
+          '700 36px "Noto Sans Myanmar"',
+          '500 36px "Noto Sans Myanmar"',
+        ].map((face) => document.fonts.load(face, "Aa မြန်မာ").catch(() => [])),
+      )
+        .then(() => document.fonts.ready)
+        .then(() => window.setThumb({ lesson: shown }));
+    </script>
+  </body>
+</html>

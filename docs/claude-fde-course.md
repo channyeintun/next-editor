@@ -315,6 +315,26 @@ The lessons landed one commit each (`4a6e6a84` … `2ddd65a3`), with two wording
   `plugin`, `cohort`, `baseline`.
 - Each lesson's `DESIGN.md` in the work folder lists its own pronunciation candidates.
 
+## Thumbnails
+
+`docs/claude-fde-thumbnail.html` renders all 56 cards (`bun docs/claude-fde-thumbnails/render.ts`, PNGs
+in `docs/claude-fde-thumbnails/`, one per lesson, named by the lesson's slug so the studio workflow
+matches them). The course has its own look: a two-tone poster. The paper side carries the words (the
+lesson number, the part, the title, and one real line of the file the lesson works on, under a tab
+with the file's name); the other side is a full-height panel in the part's colour with one drawing in
+ink and white (three locked layers for where behaviour comes from, a loop for the agent loop, a
+J-curve for the launch). Ten parts have ten panel colours, so the gallery is banded by part; the strip
+along the bottom is the course's 56 lessons. Every drawing is original, built from the shapes in the
+template's small drawing DSL. Product names appear as plain text only; no logo or brand mark is drawn.
+
+The renderer checks each card before it writes it (`--check` runs the checks alone): the title lines
+must join to the lesson's title in its YAML; the file must be one the lesson works on and the line a
+real line of it (a line cut short ends in ` …`); a Burmese label in a drawing must be a phrase the
+lesson shows; every shape and word must sit inside the drawing's board and a label must fit its
+shape; the title and the file line must fit, and Burmese text may not be cut or run into its
+neighbours (measured on the glyphs' ink); each PNG's name must match its lesson the way the studio
+workflow matches thumbnails.
+
 ## Working files
 
 Everything used to build the course is outside the public repo, in
