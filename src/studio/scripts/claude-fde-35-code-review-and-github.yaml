@@ -344,7 +344,7 @@ scenes:
       ပြင်ပေးပါတယ်။ fix က background မှာ ပြင်တာမို့ checkpoint တွေထဲ မပါတာကိုတော့ သတိထားပါ။ ဒီ review က CLAUDE.md ကို
       လိုက်နာပါတယ်။
       [[mark:r-2]] ဒုတိယ တစ်ခုက managed Code Review ပါ။ GitHub pull request တိုင်းကို Anthropic ဘက်မှာ agent အများကြီးက
-      review လုပ်ပေးတာပါ။ ပြဿနာ ရှာ၊ တကယ် ဟုတ်မဟုတ် စစ်၊ ပြင်းထန်မှုအလိုက် စီပြီး comment တင်ပါတယ်။ ဒီ lesson ကို
+      review လုပ်ပေးတာပါ။ ပြဿနာကို ရှာဖွေ၊ တကယ် ဟုတ်မဟုတ် စစ်၊ ပြင်းထန်မှုအလိုက် စီပြီး comment တင်ပါတယ်။ ဒီ lesson ကို
       ရေးတဲ့ အချိန်မှာ Team နဲ့ Enterprise plan မှာပဲ ရပြီး၊ GitHub အတွက်ပဲ ဖြစ်ပါတယ်။
       [[mark:r-3]] တတိယ တစ်ခုက code review command ရဲ့ ultra ပုံစံ၊ ultra review ပါ။ reviewer အများကြီးကို cloud sandbox ထဲမှာ run ပြီး ပိုနက်နက် ကြည့်တာပါ။
       research preview အဆင့်ပဲ ရှိသေးပြီး claude.ai နဲ့ login ဝင်ထားဖို့ လိုပါတယ်။
