@@ -14,8 +14,8 @@ Three ideas run through every lesson:
 - deploying the technology is the easier part; changing how people work, and showing in numbers
   whether it really helps, is the job.
 
-The Burmese has **not** been reviewed by Chan yet, apart from one wording he corrected in lesson 01
-(see "Decisions"), and no lesson has been rendered in /studio yet.
+The Burmese has **not** been reviewed by Chan yet, apart from two wordings he corrected (lesson 01
+and the title of lesson 45; see "Decisions"), and no lesson has been rendered in /studio yet.
 
 ## Where the content comes from
 
@@ -169,12 +169,12 @@ doubtful at first and later the champion.
 
 ### Part 8 · Agent Skills
 
-| #   | Script                                   | Title                         | ≈ min |
-| --- | ---------------------------------------- | ----------------------------- | ----- |
-| 42  | `claude-fde-42-what-are-skills`          | Skill ဆိုတာ ဘာလဲ                 | 10.1  |
-| 43  | `claude-fde-43-multi-file-skills`        | Skill ကို ဖွဲ့စည်းတည်ဆောက်ခြင်း        | 9.4   |
-| 44  | `claude-fde-44-skills-vs-other-features` | Skill လား၊ တခြား feature လား  | 9.0   |
-| 45  | `claude-fde-45-sharing-skills`           | Skill ကို မျှဝေခြင်းနဲ့ ပြဿနာရှာခြင်း | 9.0   |
+| #   | Script                                   | Title                             | ≈ min |
+| --- | ---------------------------------------- | --------------------------------- | ----- |
+| 42  | `claude-fde-42-what-are-skills`          | Skill ဆိုတာ ဘာလဲ                     | 10.1  |
+| 43  | `claude-fde-43-multi-file-skills`        | Skill ကို ဖွဲ့စည်းတည်ဆောက်ခြင်း            | 9.4   |
+| 44  | `claude-fde-44-skills-vs-other-features` | Skill လား၊ တခြား feature လား      | 9.0   |
+| 45  | `claude-fde-45-sharing-skills`           | Skill ကို မျှဝေခြင်းနဲ့ ပြဿနာကို ရှာဖွေခြင်း | 9.0   |
 
 ### Part 9 · Delivery methodology
 
@@ -299,6 +299,9 @@ The lessons landed one commit each (`4a6e6a84` … `2ddd65a3`), with two wording
 10. **Pronunciation** (`src/studio/script/lexicon.ts`): `CLAUDE.md` → "Claude M D", `SKILL.md` →
     "skill M D", `4D` → "four D". Slash commands are said as `compact command`; parameters with an
     underscore as separate words (`max tokens`); files other than those two by what they are.
+11. **Troubleshooting is `ပြဿနာကို ရှာဖွေ…`, never `ပြဿနာရှာ…`.** Chan corrected lesson 45's
+    title, which said `ပြဿနာရှာခြင်း`; the same phrase was spoken once in lesson 45 (and named
+    one of its chapters) and once in lesson 35. The glossary and the lint now enforce it.
 
 ## Listening notes for the render
 
