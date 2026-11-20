@@ -2,7 +2,7 @@ schemaVersion: 1
 
 lesson:
   slug: claude-fde-45-sharing-skills
-  title: "Claude FDE 45: Skill ကို မျှဝေခြင်းနဲ့ ပြဿနာရှာခြင်း"
+  title: "Claude FDE 45: Skill ကို မျှဝေခြင်းနဲ့ ပြဿနာကို ရှာဖွေခြင်း"
   locale: my-MM
   workspace:
     lessonType: javascript
@@ -425,7 +425,7 @@ scenes:
   - id: listed
     chapter: ဘယ် skill တွေ ရောက်နေလဲ
     narration: >
-      [[mark:l-open]] ပြဿနာ ရှာတဲ့အခါ ပထမဆုံး လုပ်ရမှာက ဘယ် skill တွေ တကယ် ရောက်နေလဲ ဆိုတာ ကြည့်တာပါ။ ဒီ screen မှာ Billing
+      [[mark:l-open]] ပြဿနာကို ရှာဖွေတဲ့အခါ ပထမဆုံး လုပ်ရမှာက ဘယ် skill တွေ တကယ် ရောက်နေလဲ ဆိုတာ ကြည့်တာပါ။ ဒီ screen မှာ Billing
       repository ထဲမှာ skills command ကို ဖွင့်ထားတာကို ဒီလို မြင်ရပါတယ်။
       [[mark:l-skill]] outage notice skill ကို project skill အနေနဲ့ ပြထားပါတယ်။ project၊ user နဲ့ plugin ကလာတဲ့ skill
       တွေကို ဒီ စာရင်းမှာ ပြတာမို့၊ developer ရဲ့ စက်မှာ ဒီ စာရင်းကို ကြည့်ရင် ဘယ်နေရာက skill လဲ ဆိုတာ ချက်ချင်း
@@ -474,7 +474,7 @@ scenes:
       - { id: point-l-size, type: slide.point, at: { mark: l-size }, target: { x: 0.34, y: 0.765 } }
 
   - id: table
-    chapter: ပြဿနာ ရှာတဲ့ ဇယား
+    chapter: ပြဿနာကို ရှာဖွေတဲ့ ဇယား
     narration: >
       [[mark:d-open]] ဒါဆို Billing နဲ့ Network Tools အတွက် ဖြစ်နေတာ တစ်ခုကို ပထမဆုံး ဘာစစ်ရမလဲ ဆိုတဲ့ ဇယား ရေးကြည့်ရအောင်။
       ပထမ အတန်းက စာရင်းထဲ မမြင်ရတာပါ။ docs အရ skill file တစ်ခုတည်းကို skills folder ထဲ တိုက်ရိုက် ထားရင် load မဖြစ်ပါဘူး။
