@@ -327,6 +327,19 @@ export default ({ mode }: { mode: string }) => {
                 test: /[\\/]node_modules[\\/]@msgpack[\\/]/,
               },
               {
+                // The studio registers every checked-in LessonScript as raw
+                // YAML text (the eager glob in src/studio/plans). Left in the
+                // StudioRoute chunk, that text grows it by every lesson added,
+                // and at 404 lessons the chunk was 27.3 MiB: over the 25 MiB
+                // Cloudflare allows per asset file, so `wrangler deploy`
+                // refused the whole upload. In a group of their own, split
+                // into chunks of about 8 MiB, new lessons add chunks instead
+                // of making one larger. The studio still loads all of them.
+                name: "studio-scripts",
+                test: /[\\/]src[\\/]studio[\\/]scripts[\\/][^\\/]+\.ya?ml(?:\?|$)/,
+                maxSize: 8 * 1024 * 1024,
+              },
+              {
                 // First-party modules the entry loads that lazy routes import
                 // too: the routes' loading skeletons and their parts, route
                 // recovery, analytics. Rolldown gives each distinct set of
