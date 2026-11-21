@@ -1,12 +1,38 @@
 import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vite-plus/test";
 import ArchitecturePage from "./ArchitecturePage";
 
+// The sheet links to the other sheets, so it renders inside a router.
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <ArchitecturePage />
+    </MemoryRouter>,
+  );
+}
+
 describe("ArchitecturePage", () => {
+  it("is the first sheet of the set and links to the webnode sheet", () => {
+    renderPage();
+    const sheets = screen.getByRole("navigation", { name: "Architecture sheets" });
+
+    expect(within(sheets).getByText("01 system architecture")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(sheets).getByRole("link", { name: "02 webnode runtime" })).toHaveAttribute(
+      "href",
+      "/architecture/webnode",
+    );
+    // The title block counts the sheets the navigation lists.
+    expect(screen.getByText("01 / 02")).toBeInTheDocument();
+  });
+
   // The diagram overflows sideways on narrow screens, and Safari does not
   // focus scroll containers on its own: the wrapper must take keyboard focus.
   it("puts the diagram in a named, focusable scroll region", () => {
-    render(<ArchitecturePage />);
+    renderPage();
     const region = screen.getByRole("region", { name: "System architecture diagram" });
 
     expect(region).toHaveAttribute("tabindex", "0");
@@ -14,7 +40,7 @@ describe("ArchitecturePage", () => {
   });
 
   it("exposes the legend and the numbered notes as lists", () => {
-    render(<ArchitecturePage />);
+    renderPage();
     const [legend, notes] = screen.getAllByRole("list");
 
     const legendItems = within(legend).getAllByRole("listitem");
@@ -32,7 +58,7 @@ describe("ArchitecturePage", () => {
   });
 
   it("names the build table and marks each label as its row header", () => {
-    render(<ArchitecturePage />);
+    renderPage();
     const table = screen.getByRole("table", { name: "Build & tooling" });
 
     const rowHeaders = within(table).getAllByRole("rowheader");
@@ -44,7 +70,7 @@ describe("ArchitecturePage", () => {
   });
 
   it("numbers the diagram's tags and the notes 1 to 41 in the same order", () => {
-    const { container } = render(<ArchitecturePage />);
+    const { container } = renderPage();
     const expected = Array.from({ length: 41 }, (_, index) => index + 1);
 
     // Each chip and service box draws its tag as the text after its circle.
@@ -67,7 +93,7 @@ describe("ArchitecturePage", () => {
   });
 
   it("describes Workers KV as the playground result cache only", () => {
-    render(<ArchitecturePage />);
+    renderPage();
     const table = screen.getByRole("table", { name: "Build & tooling" });
     const row = within(table).getByRole("rowheader", { name: "public cache" }).closest("tr");
 

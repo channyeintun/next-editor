@@ -186,6 +186,13 @@ export const router = createBrowserRouter([
     HydrateFallback: RouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
+  // The second sheet of /architecture: how webnode, the Node.js runtime, works.
+  {
+    path: "/architecture/webnode",
+    lazy: lazyRoute(() => import("./components/WebnodeArchitecturePage"), "/architecture/webnode"),
+    HydrateFallback: RouteHydrateFallback,
+    ErrorBoundary: RouteErrorBoundary,
+  },
   // Lesson production studio (docs/agent-lesson-production.md): pick a
   // LessonScript (or import one) and render it into a lesson entirely
   // client-side. Lazy like the other app-heavy routes; rendering needs no
