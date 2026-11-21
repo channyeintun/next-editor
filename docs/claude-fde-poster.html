@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claude FDE poster</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Noto+Sans+Myanmar:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=block"
+    />
+    <!--
+      Claude FDE course (Burmese) poster for social media feeds, 1080×1350 (4:5 portrait).
+      claude-fde-poster.png is a screenshot of #poster at 2× (2160×2700), written by
+      claude-fde-poster-render.ts.
+
+      It does not follow the other course posters (the dark whiteboard with the lessons on it).
+      The course puts the learner in the job, so the poster hands the learner the job's badge:
+      a forward deployed engineer's pass on a lanyard, with the photo and the name left empty
+      for whoever is looking at it. The three stamps are the three kinds of work lesson 01
+      names (understand the model, build into the systems, roll out to the people), and the
+      line under the badge is lesson 01's own definition of the role.
+
+      The numbers are the published playlist's (nexteditor.dev/learn/playlist/
+      claude-forward-deployed-engineer, read 2026-11-21): 56 lessons, 7 h 23 min, ten parts.
+
+      The course is independent, and the poster says so. It uses no Anthropic mark or artwork:
+      the colours and the monogram are Next Editor's.
+    -->
+    <style>
+      :root {
+        --yellow: #ffd255;
+        --yellow-deep: #f4bd2f;
+        --ink: #0b0e14;
+        --panel: #151a26;
+        --rule: #2b3346;
+        --cream: #f1eee6;
+        --dim: #98a1b5;
+        --teal: #4de5d6;
+        --purple: #6d57ff;
+        --purple-deep: #4f3bd6;
+        --display: "Space Grotesk", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Space Grotesk", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-width: max-content;
+        padding: 32px;
+        background: #2b2b2e;
+        font-family: var(--display);
+      }
+
+      #poster {
+        position: relative;
+        width: 1080px;
+        height: 1350px;
+        overflow: hidden;
+        color: var(--ink);
+        background:
+          radial-gradient(900px 700px at 78% 30%, rgb(255 255 255 / 0.34), transparent 70%),
+          var(--yellow);
+      }
+
+      /* Fibre runs across the ground: the running example sells fibre internet. */
+      .fibre {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .fibre path {
+        fill: none;
+        stroke: var(--yellow-deep);
+        stroke-width: 3;
+        stroke-linecap: round;
+      }
+
+      .fibre circle {
+        fill: var(--yellow-deep);
+      }
+
+      /* Top row. */
+      .brand {
+        position: absolute;
+        top: 52px;
+        left: 64px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+
+      .brand svg {
+        width: 50px;
+        height: 50px;
+      }
+
+      /* Left column: what the course is, in numbers. */
+      .facts {
+        position: absolute;
+        top: 176px;
+        left: 64px;
+        width: 300px;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .tag {
+        padding: 5px 16px 7px;
+        border: 2.5px solid var(--ink);
+        border-radius: 999px;
+        font-family: var(--mm);
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1.5;
+      }
+
+      .tag.solid {
+        color: var(--yellow);
+        background: var(--ink);
+      }
+
+      .stat {
+        margin-top: 30px;
+      }
+
+      .stat:first-of-type {
+        margin-top: 44px;
+      }
+
+      .stat b {
+        display: block;
+        font-size: 140px;
+        font-weight: 700;
+        line-height: 0.86;
+        letter-spacing: -0.05em;
+      }
+
+      .stat b sup {
+        margin-left: 4px;
+        font-size: 0.5em;
+        vertical-align: 0.62em;
+        letter-spacing: 0;
+      }
+
+      .stat span {
+        display: block;
+        margin-top: 6px;
+        font-family: var(--mm);
+        font-size: 30px;
+        font-weight: 700;
+        line-height: 1.5;
+      }
+
+      /* The "free" sticker, stuck over the badge's corner. */
+      .sticker {
+        position: absolute;
+        top: 776px;
+        left: 256px;
+        width: 216px;
+        height: 216px;
+        transform: rotate(-12deg);
+        filter: drop-shadow(0 10px 14px rgb(60 36 0 / 0.3));
+      }
+
+      .sticker svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .sticker div {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+      }
+
+      .sticker strong {
+        font-family: var(--mm);
+        font-size: 52px;
+        font-weight: 800;
+        line-height: 1.35;
+      }
+
+      .sticker small {
+        font-family: var(--mono);
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: 0.3em;
+        text-indent: 0.3em;
+      }
+
+      /* The lanyard and what hangs from it. */
+      .lanyard {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1080px;
+        height: 260px;
+      }
+
+      .hang {
+        position: absolute;
+        top: 120px;
+        left: 420px;
+        width: 560px;
+        transform: rotate(-4deg);
+        transform-origin: 50% 24px;
+        filter: drop-shadow(0 34px 38px rgb(70 42 0 / 0.36));
+      }
+
+      .clip {
+        position: relative;
+        z-index: 2;
+        width: 64px;
+        height: 92px;
+        margin: 0 auto -44px;
+      }
+
+      .clip svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .badge {
+        position: relative;
+        padding: 64px 40px 34px;
+        border-radius: 40px;
+        color: var(--cream);
+        background:
+          radial-gradient(520px 320px at 100% 0%, rgb(109 87 255 / 0.3), transparent 70%),
+          radial-gradient(420px 300px at 0% 100%, rgb(77 229 214 / 0.14), transparent 70%),
+          var(--ink);
+        box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.07);
+      }
+
+      /* The punched slot the clip goes through: the ground shows in it. */
+      .badge::before {
+        content: "";
+        position: absolute;
+        top: 22px;
+        left: 50%;
+        width: 96px;
+        height: 22px;
+        border-radius: 11px;
+        background: var(--yellow);
+        box-shadow: inset 0 3px 5px rgb(60 36 0 / 0.5);
+        transform: translateX(-50%);
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        color: var(--dim);
+      }
+
+      .status i {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        margin-right: 10px;
+        border-radius: 50%;
+        background: var(--teal);
+        box-shadow: 0 0 0 5px rgb(77 229 214 / 0.2);
+      }
+
+      .status span:first-child {
+        color: var(--teal);
+      }
+
+      .name {
+        margin: 18px 0 0;
+        font-size: 46px;
+        font-weight: 600;
+        line-height: 1;
+        letter-spacing: -0.02em;
+      }
+
+      .fde {
+        margin: 0 0 0 -8px;
+        font-size: 204px;
+        font-weight: 700;
+        line-height: 0.86;
+        letter-spacing: -0.045em;
+        color: transparent;
+        background: linear-gradient(100deg, var(--teal) 4%, var(--yellow) 48%, #8f7dff 96%);
+        -webkit-background-clip: text;
+        background-clip: text;
+      }
+
+      .role {
+        margin: 8px 0 0;
+        font-size: 27px;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+      }
+
+      .rule {
+        height: 0;
+        margin: 22px 0;
+        border-top: 2px dashed var(--rule);
+      }
+
+      .holder {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 24px;
+      }
+
+      .photo {
+        position: relative;
+        height: 178px;
+        border: 2.5px dashed var(--teal);
+        border-radius: 18px;
+        background: rgb(77 229 214 / 0.06);
+      }
+
+      .photo svg {
+        position: absolute;
+        top: 16px;
+        left: 50%;
+        width: 96px;
+        height: 96px;
+        transform: translateX(-50%);
+      }
+
+      .photo span {
+        position: absolute;
+        right: 0;
+        bottom: 10px;
+        left: 0;
+        font-family: var(--mm);
+        font-size: 21px;
+        font-weight: 700;
+        line-height: 1.5;
+        text-align: center;
+        color: var(--teal);
+      }
+
+      .fields {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-width: 0;
+      }
+
+      .fields dl {
+        margin: 0;
+      }
+
+      .fields dt {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        color: var(--dim);
+      }
+
+      .fields dd {
+        margin: 1px 0 0;
+        font-family: var(--mm);
+        font-size: 21px;
+        font-weight: 600;
+        line-height: 1.5;
+      }
+
+      .fields dd.blank {
+        padding-bottom: 1px;
+        border-bottom: 2px dotted var(--dim);
+        color: var(--yellow);
+      }
+
+      .fields dd.topics {
+        font-family: var(--display);
+        font-size: 18.5px;
+        font-weight: 600;
+        line-height: 1.38;
+      }
+
+      .fields dd.topics em {
+        font-style: normal;
+        color: var(--dim);
+      }
+
+      .stamps {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 22px;
+      }
+
+      .stamp {
+        padding: 5px 0 8px;
+        border: 2px solid currentColor;
+        border-radius: 14px;
+        text-align: center;
+      }
+
+      .stamp b {
+        display: block;
+        font-family: var(--mm);
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1.5;
+      }
+
+      .stamp small {
+        display: block;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        font-weight: 700;
+        letter-spacing: 0.2em;
+        text-indent: 0.2em;
+        opacity: 0.85;
+      }
+
+      .stamp:nth-child(1) {
+        color: var(--teal);
+        transform: rotate(-1.5deg);
+      }
+
+      .stamp:nth-child(2) {
+        color: var(--yellow);
+        transform: rotate(1deg);
+      }
+
+      .stamp:nth-child(3) {
+        color: #a394ff;
+        transform: rotate(-0.5deg);
+      }
+
+      .scan {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-top: 22px;
+      }
+
+      .bars {
+        display: flex;
+        align-items: stretch;
+        height: 46px;
+      }
+
+      .bars i {
+        display: block;
+        background: var(--cream);
+      }
+
+      .scan p {
+        margin: 0;
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.6;
+        letter-spacing: 0.14em;
+        text-align: right;
+        color: var(--dim);
+      }
+
+      .scan p b {
+        color: var(--cream);
+      }
+
+      /* Under the badge: what the role is, and where the course is. */
+      .pitch {
+        position: absolute;
+        right: 64px;
+        bottom: 40px;
+        left: 64px;
+      }
+
+      .pitch .lead {
+        margin: 0;
+        font-family: var(--mm);
+        font-size: 25px;
+        font-weight: 700;
+        line-height: 1.5;
+        color: var(--purple-deep);
+      }
+
+      .pitch h1 {
+        margin: 2px 0 0;
+        font-family: var(--mm);
+        font-size: 49px;
+        font-weight: 800;
+        line-height: 1.42;
+        letter-spacing: -0.005em;
+      }
+
+      .go {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        margin-top: 18px;
+        padding: 12px 26px 13px;
+        border-radius: 20px;
+        color: var(--cream);
+        background: var(--ink);
+      }
+
+      .go strong {
+        flex: none;
+        font-family: var(--mm);
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.5;
+      }
+
+      .go strong::after {
+        content: "→";
+        margin-left: 12px;
+        font-family: var(--display);
+        color: var(--yellow);
+      }
+
+      .go span {
+        font-family: var(--mono);
+        font-size: 16.5px;
+        font-weight: 500;
+        color: var(--yellow);
+        white-space: nowrap;
+      }
+
+      .note {
+        margin: 10px 0 0;
+        font-family: var(--mm);
+        font-size: 15.5px;
+        font-weight: 500;
+        line-height: 1.5;
+        text-align: center;
+        color: rgb(11 14 20 / 0.72);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="poster">
+      <svg class="fibre" viewBox="0 0 1080 1350" aria-hidden="true">
+        <path d="M1100 1010 C 1060 1010, 1050 960, 1050 900" />
+        <path d="M-20 148 C 120 148, 170 110, 300 110" />
+        <path d="M1100 420 C 1040 420, 1030 520, 1000 600 S 1030 800, 1100 820" />
+        <path d="M-20 720 C 30 720, 40 790, 40 860 S 20 960, -20 980" />
+        <circle cx="300" cy="110" r="8" />
+        <circle cx="1050" cy="900" r="8" />
+        <circle cx="1000" cy="600" r="8" />
+        <circle cx="40" cy="860" r="8" />
+      </svg>
+
+      <div class="brand">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient
+              id="g2c"
+              x1="300"
+              y1="312"
+              x2="724"
+              y2="712"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#4DE5D6" />
+              <stop offset="0.5" stop-color="#FFD255" />
+              <stop offset="1" stop-color="#6D57FF" />
+            </linearGradient>
+          </defs>
+          <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+          <polygon
+            points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+            fill="url(#g2c)"
+          />
+        </svg>
+        Next Editor
+      </div>
+
+      <div class="facts">
+        <div class="tags">
+          <span class="tag solid">သင်တန်းသစ်</span>
+          <span class="tag">မြန်မာလို</span>
+        </div>
+        <div class="stat"><b>56</b><span>သင်ခန်းစာ</span></div>
+        <div class="stat">
+          <b>7<sup>+</sup></b
+          ><span>နာရီ</span>
+        </div>
+        <div class="stat"><b>10</b><span>အပိုင်း</span></div>
+      </div>
+
+      <!-- The straps: two runs of one ribbon, meeting at the clip. -->
+      <svg class="lanyard" viewBox="0 0 1080 260" aria-hidden="true">
+        <defs>
+          <path id="strap-left" d="M592 -30 L696 146" />
+          <path id="strap-right" d="M704 146 L828 -30" />
+        </defs>
+        <g fill="none" stroke-linecap="butt">
+          <use href="#strap-right" stroke="#4f3bd6" stroke-width="40" />
+          <use href="#strap-left" stroke="#6d57ff" stroke-width="40" />
+          <use href="#strap-left" stroke="#8f7dff" stroke-width="2" transform="translate(-15 9)" />
+          <use href="#strap-left" stroke="#8f7dff" stroke-width="2" transform="translate(15 -9)" />
+        </g>
+        <text
+          font-family="JetBrains Mono, monospace"
+          font-size="13"
+          font-weight="700"
+          letter-spacing="2.6"
+          fill="#ffffff"
+          fill-opacity="0.9"
+          dominant-baseline="central"
+        >
+          <textPath href="#strap-left" startOffset="42">NEXT EDITOR</textPath>
+        </text>
+      </svg>
+
+      <div class="hang">
+        <div class="clip">
+          <svg viewBox="0 0 64 92" aria-hidden="true">
+            <defs>
+              <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+                <stop stop-color="#f4f5f8" />
+                <stop offset="0.5" stop-color="#a9afbd" />
+                <stop offset="1" stop-color="#dfe2ea" />
+              </linearGradient>
+            </defs>
+            <rect x="8" y="0" width="48" height="40" rx="9" fill="url(#metal)" />
+            <rect x="18" y="12" width="28" height="6" rx="3" fill="#6f7686" />
+            <rect
+              x="20"
+              y="36"
+              width="24"
+              height="50"
+              rx="12"
+              fill="none"
+              stroke="url(#metal)"
+              stroke-width="7"
+            />
+          </svg>
+        </div>
+
+        <article class="badge">
+          <div class="status">
+            <span><i></i>ON DEPLOYMENT</span>
+            <span>PASS · 0056</span>
+          </div>
+          <p class="name">Claude</p>
+          <p class="fde">FDE</p>
+          <p class="role">Forward Deployed Engineer</p>
+
+          <div class="rule"></div>
+
+          <div class="holder">
+            <div class="photo">
+              <svg viewBox="0 0 96 96" aria-hidden="true">
+                <circle cx="48" cy="34" r="19" fill="#4de5d6" fill-opacity="0.5" />
+                <path
+                  d="M10 96 C 10 68, 28 60, 48 60 S 86 68, 86 96 Z"
+                  fill="#4de5d6"
+                  fill-opacity="0.5"
+                />
+              </svg>
+              <span>သင့်ပုံ</span>
+            </div>
+            <div class="fields">
+              <dl>
+                <dt>NAME</dt>
+                <dd class="blank">သင့်နာမည်</dd>
+              </dl>
+              <dl>
+                <dt>DEPLOYED TO</dt>
+                <dd>customer ရဲ့ အဖွဲ့ထဲ</dd>
+              </dl>
+              <dl>
+                <dt>ACCESS</dt>
+                <dd class="topics">
+                  Claude API <em>·</em> Claude Code<br />MCP <em>·</em> Agent Skills
+                </dd>
+              </dl>
+            </div>
+          </div>
+
+          <div class="stamps">
+            <div class="stamp"><b>နားလည်</b><small>MODEL</small></div>
+            <div class="stamp"><b>တည်ဆောက်</b><small>SYSTEMS</small></div>
+            <div class="stamp"><b>ဖြန့်ကျက်</b><small>PEOPLE</small></div>
+          </div>
+
+          <div class="scan">
+            <div class="bars" id="bars"></div>
+            <p><b>56 LESSONS · 7 H 23 MIN</b><br />NEXTEDITOR.DEV</p>
+          </div>
+        </article>
+      </div>
+
+      <div class="sticker">
+        <svg viewBox="0 0 216 216" aria-hidden="true">
+          <polygon id="burst" fill="#6d57ff" />
+        </svg>
+        <div><strong>အခမဲ့</strong><small>FREE</small></div>
+      </div>
+
+      <div class="pitch">
+        <p class="lead">Forward deployed engineer ဆိုတာ</p>
+        <h1>AI ကို တကယ့် အလုပ်ထဲမှာ<br />အသုံးဝင်အောင် တပ်ဆင်ပေးတဲ့ engineer</h1>
+        <div class="go">
+          <strong>အခမဲ့ လေ့လာနိုင်ပါပြီ</strong>
+          <span>nexteditor.dev/learn/playlist/claude-forward-deployed-engineer</span>
+        </div>
+        <p class="note">
+          Anthropic ရဲ့ တရားဝင် course မဟုတ်ပါ။ ရှင်းပြချက်နဲ့ ဥပမာ အားလုံးကို သီးခြား ပြင်ဆင်ထားပါတယ်။
+        </p>
+      </div>
+    </div>
+
+    <script>
+      // The barcode: fixed widths, so every render is the same picture.
+      const widths = "3121413112314121132141213114123121411312141231";
+      const bars = document.getElementById("bars");
+      [...widths].forEach((digit, index) => {
+        const bar = document.createElement("i");
+        bar.style.width = `${Number(digit) * 2}px`;
+        if (index % 2 === 1) bar.style.background = "transparent";
+        bars.append(bar);
+      });
+
+      // The sticker's edge: 20 points round a circle.
+      const points = [];
+      for (let step = 0; step < 40; step += 1) {
+        const radius = step % 2 === 0 ? 108 : 94;
+        const angle = (Math.PI * step) / 20;
+        points.push(
+          `${(108 + radius * Math.cos(angle)).toFixed(2)},${(108 + radius * Math.sin(angle)).toFixed(2)}`,
+        );
+      }
+      document.getElementById("burst").setAttribute("points", points.join(" "));
+
+      window.posterReady = document.fonts.ready;
+    </script>
+  </body>
+</html>

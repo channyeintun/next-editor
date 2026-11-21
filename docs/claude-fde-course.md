@@ -335,6 +335,16 @@ shape; the title and the file line must fit, and Burmese text may not be cut or 
 neighbours (measured on the glyphs' ink); each PNG's name must match its lesson the way the studio
 workflow matches thumbnails.
 
+## Poster
+
+`docs/claude-fde-poster.html` is the course's announcement picture for social media feeds, 1080×1350
+(`bun docs/claude-fde-poster-render.ts` writes `docs/claude-fde-poster.png` at 2×). It follows neither
+the thumbnails nor the other courses' posters: it is a forward deployed engineer's badge on a lanyard,
+with the photo and the name left empty for whoever is looking at it. The three stamps are the three
+kinds of work lesson 01 names, the line under the badge is lesson 01's definition of the role, and the
+numbers are the published playlist's (56 lessons, 7 h 23 min, ten parts). It says the course is not
+Anthropic's official course, and it draws no Anthropic mark.
+
 ## Working files
 
 Everything used to build the course is outside the public repo, in
