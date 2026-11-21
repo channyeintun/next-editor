@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import LandingPage from "./LandingPage";
+import LandingPage, { type LandingPageProps } from "./LandingPage";
 
 const device = vi.hoisted(() => ({ mobile: false }));
 vi.mock("../utils/isMobileBrowser", () => ({ isMobileBrowser: () => device.mobile }));
@@ -107,9 +107,41 @@ describe("LandingPage heading outline", () => {
     levels.slice(1).forEach((level, i) => {
       expect(level).toBeLessThanOrEqual(levels[i] + 1);
     });
-    for (const title of ["Live Coding Studio", "Interactive Slides", "Event-Based Efficiency"]) {
+    for (const title of ["Live Coding Workspace", "Interactive Slides", "Event-Based Efficiency"]) {
       expect(screen.getByRole("heading", { level: 2, name: title })).toBeInTheDocument();
     }
+  });
+});
+
+describe("LandingPage Studio section", () => {
+  it("names Studio once, links to it and to the script guide, and reports the click", () => {
+    const onAnalyticsEvent = vi.fn<NonNullable<LandingPageProps["onAnalyticsEvent"]>>();
+    render(
+      <MemoryRouter>
+        <LandingPage onAnalyticsEvent={onAnalyticsEvent} />
+      </MemoryRouter>,
+    );
+
+    // The /code feature card is no longer a second "Studio".
+    expect(screen.getAllByRole("heading", { name: /studio/i })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 2, name: "Studio" })).toBeInTheDocument();
+
+    const open = screen.getByRole("link", { name: "Open Studio" });
+    expect(open).toHaveAttribute("href", "/studio");
+    fireEvent.click(open);
+    expect(onAnalyticsEvent).toHaveBeenCalledWith("open_studio_clicked", {
+      location: "studio_section",
+    });
+
+    const guide = screen.getByRole("link", { name: "How to write a script" });
+    expect(guide).toHaveAttribute("href", expect.stringContaining("lesson-script-authoring.md"));
+    expect(guide).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("links to Studio from the navbar", () => {
+    renderLandingPage();
+
+    expect(screen.getByRole("link", { name: "Studio" })).toHaveAttribute("href", "/studio");
   });
 });
 

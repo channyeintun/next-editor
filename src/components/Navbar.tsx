@@ -6,7 +6,7 @@ export interface NavbarProps {
   /** Extra controls rendered after "Start creating" (e.g. infra's <AuthMenu />).
    *  Kept as a generic slot so this component has no knowledge of infra. */
   actions?: ReactNode;
-  /** Hides the GitHub link and "Start creating" button, leaving just the logo
+  /** Hides the Studio and GitHub links and the "Start creating" button, leaving just the logo
    *  and `actions` — used on the lessons pages, which fold "Start creating"
    *  into their own menu (see infra's <AuthMenu />) instead. */
   minimal?: boolean;
@@ -31,6 +31,15 @@ const Navbar = ({ actions, minimal = false }: NavbarProps = {}) => {
       <div className="flex items-center gap-2 sm:gap-4">
         {!minimal && (
           <>
+            {/* From sm up: below it the bar is already full, and Studio needs a
+                desktop browser anyway. The landing page's Studio section is the
+                way in on a phone. */}
+            <Link
+              to="/studio"
+              className="hidden sm:inline-flex p-2 text-sm leading-none font-semibold text-slate-300 whitespace-nowrap hover:text-white transition-colors font-telegraf"
+            >
+              Studio
+            </Link>
             <a
               href="https://github.com/channyeintun/next-editor"
               target="_blank"

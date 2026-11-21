@@ -23,10 +23,12 @@ import {
   DEMO_CONTROLS_SIZE_MESSAGE_TYPE,
   DEMO_EMBED_READY_MESSAGE_TYPE,
 } from "../utils/demoEmbedControls";
+import { LESSON_SCRIPT_DOCS_URL } from "../studio/lessonScriptDocs";
 
 export type LandingAnalyticsEvent =
   | "start_creating_clicked"
   | "watch_lessons_clicked"
+  | "open_studio_clicked"
   | "github_star_clicked";
 
 export interface LandingPageProps {
@@ -103,6 +105,14 @@ const USE_CASES = [
     desc: "Record the exact edits and runtime state, share a link. Reviewers replay the full context.",
     color: "#6d57ff",
   },
+] as const;
+
+// What a visitor needs to know before opening Studio: what is free, what needs
+// their own key, and where it runs.
+const STUDIO_FACTS = [
+  "Free English voice",
+  "Burmese voice with your AthanLab key",
+  "Desktop Chrome or Edge",
 ] as const;
 
 function useInView(threshold = 0.1) {
@@ -253,6 +263,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
   const featuresSection = useInView();
   const stacksSection = useInView();
   const useCasesSection = useInView();
+  const studioSection = useInView();
   const architectureSection = useInView();
   const licenseSection = useInView();
   const starSection = useInView();
@@ -568,7 +579,8 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
           >
             {[
               {
-                title: "Live Coding Studio",
+                // Not "Studio": that name belongs to /studio, the section below.
+                title: "Live Coding Workspace",
                 desc: "Edit, run, and preview HTML, CSS, JavaScript, TypeScript, and Node.js projects in one live workspace built for prototyping, teaching, and presenting.",
                 color: "#6D57FF",
                 textColor: "white",
@@ -699,6 +711,54 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                 <p className="text-slate-300 leading-relaxed">{uc.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Studio — the scripted way to make a lesson */}
+      <section
+        ref={studioSection.ref}
+        className={`relative py-24 px-6 text-center transition-opacity duration-1000 motion-reduce:transition-none ${
+          studioSection.inView ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-3xl md:text-5xl font-machina uppercase tracking-tight mb-6">
+            Studio
+          </h2>
+          <p className="text-lg md:text-xl text-slate-300 font-telegraf mb-8 max-w-2xl mx-auto">
+            Write a lesson as a script. Studio speaks the narration, types and runs the code in the
+            editor, and records the lesson in your browser.
+          </p>
+          {/* role="list" stays: Safari drops list semantics under list-style: none. */}
+          <ul role="list" className="flex flex-wrap justify-center gap-3 mb-10">
+            {STUDIO_FACTS.map((fact) => (
+              <li
+                key={fact}
+                className="px-4 py-2 rounded-full border border-slate-700 bg-[#181d24]/90 text-sm font-telegraf text-slate-300"
+              >
+                {fact}
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-col items-center gap-5">
+            <Link
+              to="/studio"
+              onClick={() =>
+                onAnalyticsEvent?.("open_studio_clicked", { location: "studio_section" })
+              }
+              className="inline-flex items-center px-10 py-4 rounded-full bg-white text-slate-950 text-lg font-semibold hover:scale-105 active:scale-95 transition-all shadow-xl"
+            >
+              Open Studio
+            </Link>
+            <a
+              href={LESSON_SCRIPT_DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-slate-300 underline underline-offset-4 transition-colors hover:text-white"
+            >
+              How to write a script
+            </a>
           </div>
         </div>
       </section>

@@ -52,6 +52,7 @@ describe("landing page SSR", () => {
     expect(markup).toContain("Turn real coding sessions into interactive tutorials");
     expect(markup).toContain('href="/code"');
     expect(markup).toContain('href="/learn"');
+    expect(markup).toContain('href="/studio"');
     expect(markup).toContain("Use Cases");
   });
 
