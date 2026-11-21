@@ -1,5 +1,5 @@
-// Renders the learning roadmap poster (the nine Burmese courses, in the order to take
-// them) from learning-roadmap-poster.html, at 2× (2160×2700) so the small course
+// Renders the learning roadmap poster (the Burmese courses, in the order to take them)
+// from learning-roadmap-poster.html, at 2× (2160×2700) so the small course
 // descriptions stay sharp on a phone.
 //
 //   bun docs/learning-roadmap-poster-render.ts      # writes docs/learning-roadmap-poster.png

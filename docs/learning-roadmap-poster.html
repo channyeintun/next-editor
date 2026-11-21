@@ -11,17 +11,20 @@
       href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;700&display=block"
     />
     <!--
-      The learning roadmap for the eleven Burmese courses, 1080×1350 (4:5, the tallest
+      The learning roadmap for the twelve Burmese courses, 1080×1350 (4:5, the tallest
       image a Facebook feed shows whole). Same brand as docs/css-course-poster.html:
       cream page, ink, yellow/purple/teal, Google Sans + Google Sans Code, Burmese in
       Noto Sans Myanmar.
 
       The left rail is the web developer path, in the order to take it; the two dashed
       notes on it are what the courses assume but do not teach (HTML, JavaScript). The
-      right column holds the five courses that need none of the others, ordered by who
-      they are for: Go first (no programming at all), Architect Path last (developers
-      growing into the architect role, marked new). Lesson counts and hours are the
-      published playlists' (337 lessons, about 47 hours, 2026-11-15).
+      right column holds the six courses that need none of the others, ordered by who
+      they are for: Go first (no programming at all), then the two for developers last:
+      Architect Path (growing into the architect role) and Claude FDE (fitting Claude
+      into a company's work, marked new). Six cards fill the column to the foot of the
+      rail, so a seventh needs a new layout, not a tighter one. Lesson counts and hours
+      are the published playlists' (393 lessons, about 54 hours, 2026-11-21); the
+      English Rust Crash Course is not counted.
 
       Render it with `bun docs/learning-roadmap-poster-render.ts` (writes
       docs/learning-roadmap-poster.png).
@@ -302,13 +305,13 @@
       .side {
         display: flex;
         flex-direction: column;
-        gap: 30px;
+        gap: 23px;
         padding-top: 12px;
       }
 
       .side .course {
         position: relative;
-        padding: 26px 18px 10px;
+        padding: 22px 18px 7px;
         box-shadow: 8px 8px 0 var(--ink);
       }
 
@@ -461,9 +464,9 @@
       </div>
 
       <div class="stats">
-        <span class="stat"><b>11</b> courses</span>
-        <span class="stat"><b>337</b> lessons</span>
-        <span class="stat"><b>47+</b> hours</span>
+        <span class="stat"><b>12</b> courses</span>
+        <span class="stat"><b>393</b> lessons</span>
+        <span class="stat"><b>54+</b> hours</span>
       </div>
 
       <div class="map">
@@ -575,11 +578,18 @@
               <div class="what">Ownership ကို အခြေခံကနေ</div>
             </div>
 
-            <div class="course new">
+            <div class="course">
               <span class="who" style="background: var(--purple-lt)">Developer တွေအတွက်</span>
               <span class="count">56 lessons</span>
-              <div class="name">Architect Path<span class="badge">NEW</span></div>
+              <div class="name">Architect Path</div>
               <div class="what">Developer ကနေ architect အထိ</div>
+            </div>
+
+            <div class="course new">
+              <span class="who" style="background: var(--teal)">Claude သုံးမယ့်သူ</span>
+              <span class="count">56 lessons</span>
+              <div class="name">Claude FDE<span class="badge">NEW</span></div>
+              <div class="what">Claude ကို အလုပ်ထဲ တပ်ဆင်နည်း</div>
             </div>
           </div>
         </section>
