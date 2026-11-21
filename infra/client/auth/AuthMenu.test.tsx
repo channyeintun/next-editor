@@ -90,6 +90,14 @@ describe("AuthMenu", () => {
     expect(trigger).toHaveFocus();
   });
 
+  it("links to Studio beside Start creating", () => {
+    openMenu();
+
+    const items = screen.getAllByRole("menuitem").map((item) => item.textContent);
+    expect(items.slice(0, 3)).toEqual(["Start creating", "Studio", "My Library"]);
+    expect(screen.getByRole("menuitem", { name: "Studio" })).toHaveAttribute("href", "/studio");
+  });
+
   it("closes when a link item is chosen", () => {
     openMenu();
 

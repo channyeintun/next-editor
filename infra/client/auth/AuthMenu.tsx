@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { KeyRound, LibraryBig, LogOut, MonitorSmartphone, Plus, ShieldCheck } from "lucide-react";
+import {
+  Clapperboard,
+  KeyRound,
+  LibraryBig,
+  LogOut,
+  MonitorSmartphone,
+  Plus,
+  ShieldCheck,
+} from "lucide-react";
 import { useAuth, useSignOut, useSignOutEverywhere, signInUrl, avatarProxyUrl } from "./useAuth";
 import {
   browserSupportsPasskeys,
@@ -96,6 +104,15 @@ export default function AuthMenu() {
         >
           <Plus className="size-4 text-slate-400" />
           Start creating
+        </Link>
+        <Link
+          to="/studio"
+          role="menuitem"
+          onClick={() => setMenuOpen(false)}
+          className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10"
+        >
+          <Clapperboard className="size-4 text-slate-400" />
+          Studio
         </Link>
         <Link
           to={`/learn/@${user.username}`}
