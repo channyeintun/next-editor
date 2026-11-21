@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI era courses poster</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@500;700&family=Noto+Sans+Myanmar:wght@500;700;800&display=block"
+    />
+    <!--
+      A poster for five of the Burmese courses together: Learn AI, AI Builder Course,
+      Claude FDE, Site Reliability Engineering and Architect Path. 1080×1350 (4:5, the
+      tallest image a Facebook feed shows whole).
+
+      The idea is an iceberg at dusk. Writing code is the tip above the water; the five
+      courses are the mass below it. They run from the one
+      nearest to code (Learn AI, just under the surface) to the one furthest from it
+      (Architect Path, at the foot), but that is depth, not an order to take them in:
+      nothing on the poster numbers them. The moon is the "free" sticker.
+
+      The one-line descriptions are the learning roadmap poster's. Lesson counts and
+      hours are the published playlists' (196 lessons, 26 h 10 min, 2026-11-21).
+
+      Render it with `bun docs/ai-era-courses-poster-render.ts` (writes
+      docs/ai-era-courses-poster.png).
+    -->
+    <style>
+      :root {
+        --ink: #0b0e14;
+        --night: #140d3a;
+        --yellow: #ffd255;
+        --purple: #6d57ff;
+        --lilac: #b3a6ff;
+        --teal: #4de5d6;
+        --coral: #ff8f7e;
+        --ice: #dff3f9;
+        --white: #ffffff;
+        --sans: "Space Grotesk", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "JetBrains Mono", "Noto Sans Myanmar", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Space Grotesk", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        padding: 32px 16px;
+        background: #2b2b2e;
+      }
+
+      #poster {
+        position: relative;
+        width: 1080px;
+        height: 1350px;
+        flex: none;
+        overflow: hidden;
+        color: var(--white);
+        font-family: var(--sans);
+        background: var(--ink);
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      /* ---- above the water ---- */
+
+      .brand {
+        position: absolute;
+        left: 64px;
+        top: 44px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font: 700 26px/1 var(--sans);
+        letter-spacing: -0.01em;
+      }
+
+      .brand svg {
+        width: 44px;
+        height: 44px;
+      }
+
+      .headline {
+        position: absolute;
+        left: 64px;
+        top: 110px;
+        margin: 0;
+        font: 800 58px/1.42 var(--sans);
+        letter-spacing: 0;
+        white-space: nowrap;
+      }
+
+      .headline .latin {
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .headline .tip {
+        color: var(--yellow);
+      }
+
+      .sub {
+        position: absolute;
+        left: 64px;
+        top: 288px;
+        margin: 0;
+        font: 700 30px/1.6 var(--sans);
+        color: rgb(255 255 255 / 0.92);
+        white-space: nowrap;
+      }
+
+      .stats {
+        position: absolute;
+        left: 64px;
+        top: 352px;
+        display: flex;
+        gap: 10px;
+      }
+
+      .stat {
+        padding: 9px 16px 10px;
+        border: 1.5px solid rgb(255 255 255 / 0.28);
+        border-radius: 999px;
+        background: rgb(11 14 20 / 0.55);
+        font: 700 20px/1 var(--mono);
+        white-space: nowrap;
+      }
+
+      .stat b {
+        color: var(--yellow);
+      }
+
+      .stat.mm {
+        padding: 3px 16px 5px;
+        font: 700 20px/1.55 var(--mm);
+      }
+
+      /* The moon is the "free" sticker. */
+      .moon {
+        position: absolute;
+        left: 860px;
+        top: 52px;
+        width: 158px;
+        height: 158px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 36% 32%, #fff6cf 0%, #ffd255 58%, #f0b320 100%);
+        box-shadow:
+          0 0 0 10px rgb(255 210 85 / 0.14),
+          0 0 70px 26px rgb(255 210 85 / 0.3);
+        transform: rotate(-8deg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        color: var(--night);
+      }
+
+      .moon::before,
+      .moon::after {
+        content: "";
+        position: absolute;
+        border-radius: 50%;
+        background: rgb(160 100 0 / 0.13);
+      }
+
+      .moon::before {
+        left: 22px;
+        top: 98px;
+        width: 24px;
+        height: 24px;
+      }
+
+      .moon::after {
+        right: 26px;
+        top: 26px;
+        width: 16px;
+        height: 16px;
+      }
+
+      .moon .mm {
+        font: 800 37px/1.4 var(--mm);
+      }
+
+      .moon .en {
+        font: 700 19px/1 var(--mono);
+        letter-spacing: 0.18em;
+        margin-right: -0.18em;
+      }
+
+      /* What the tip of the iceberg is. */
+      .above {
+        position: absolute;
+        right: 394px;
+        top: 412px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0;
+      }
+
+      .above .what {
+        padding: 2px 16px 4px;
+        border-radius: 999px;
+        background: var(--ink);
+        font: 700 23px/1.6 var(--sans);
+        white-space: nowrap;
+      }
+
+      /* ---- below the water ---- */
+
+      .course {
+        position: absolute;
+        left: 64px;
+        width: 484px;
+        height: 118px;
+        padding: 0 20px 2px 30px;
+        border: 1.5px solid rgb(255 255 255 / 0.2);
+        border-radius: 18px;
+        background: rgb(5 14 28 / 0.62);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .course::before {
+        content: "";
+        position: absolute;
+        left: 11px;
+        top: 16px;
+        bottom: 16px;
+        width: 6px;
+        border-radius: 3px;
+        background: var(--accent);
+      }
+
+      .course .name {
+        font: 700 28px/1.2 var(--sans);
+        letter-spacing: -0.015em;
+        white-space: nowrap;
+      }
+
+      .course .new {
+        display: inline-block;
+        margin-left: 10px;
+        padding: 4px 9px 5px;
+        border-radius: 7px;
+        background: var(--yellow);
+        color: var(--ink);
+        font: 700 15px/1 var(--mono);
+        letter-spacing: 0.08em;
+        vertical-align: 5px;
+      }
+
+      .course .what {
+        font: 700 21px/1.6 var(--sans);
+        color: rgb(255 255 255 / 0.86);
+        white-space: nowrap;
+      }
+
+      .course .meta {
+        margin-top: 3px;
+        font: 700 16px/1.2 var(--mono);
+        color: var(--accent);
+        white-space: nowrap;
+      }
+
+      .course .meta i {
+        font-style: normal;
+        opacity: 0.55;
+        margin: 0 3px;
+      }
+
+      .course .icon {
+        position: absolute;
+        right: 18px;
+        bottom: 15px;
+        width: 30px;
+        height: 30px;
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .cta {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        top: 1196px;
+        height: 78px;
+        padding: 0 28px 0 30px;
+        border-radius: 20px;
+        background: var(--yellow);
+        color: var(--ink);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .cta .say {
+        font: 700 28px/1.6 var(--mm);
+        white-space: nowrap;
+      }
+
+      .cta .arrow {
+        font: 700 28px/1 var(--sans);
+      }
+
+      .cta .url {
+        margin-left: auto;
+        font: 700 25px/1 var(--mono);
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+      }
+
+      .foot {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 30px;
+        text-align: center;
+        font: 500 18px/1 var(--mono);
+        color: rgb(255 255 255 / 0.5);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="poster">
+      <svg class="scene" viewBox="0 0 1080 1350" aria-hidden="true">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="490" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#0f0a2e" />
+            <stop offset="0.45" stop-color="#2c1e8a" />
+            <stop offset="0.68" stop-color="#6d57ff" />
+            <stop offset="0.85" stop-color="#ff8f7e" />
+            <stop offset="0.96" stop-color="#ffc266" />
+            <stop offset="1" stop-color="#ffd255" />
+          </linearGradient>
+          <linearGradient
+            id="water"
+            x1="0"
+            y1="474"
+            x2="0"
+            y2="1350"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop offset="0" stop-color="#1fb9b0" />
+            <stop offset="0.09" stop-color="#108d94" />
+            <stop offset="0.4" stop-color="#0b5270" />
+            <stop offset="0.75" stop-color="#082a45" />
+            <stop offset="1" stop-color="#060f1e" />
+          </linearGradient>
+          <linearGradient id="ray" x1="0" y1="480" x2="0" y2="1180" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#ffffff" stop-opacity="0.1" />
+            <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
+          </linearGradient>
+          <!-- In the iceberg's own coordinates: the waterline is y = 452, its foot y = 1150. -->
+          <linearGradient
+            id="depth"
+            x1="0"
+            y1="452"
+            x2="0"
+            y2="1150"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop offset="0" stop-color="#14a6a6" stop-opacity="0.14" />
+            <stop offset="0.4" stop-color="#0c6482" stop-opacity="0.42" />
+            <stop offset="1" stop-color="#081e3e" stop-opacity="0.78" />
+          </linearGradient>
+          <clipPath id="under">
+            <polygon
+              points="150,452 104,520 78,610 96,700 70,790 110,880 150,960 210,1040 270,1110 310,1150 350,1090 420,1010 470,930 530,850 510,760 552,670 530,580 480,500 446,452"
+            />
+          </clipPath>
+        </defs>
+
+        <rect width="1080" height="490" fill="url(#sky)" />
+        <g id="stars" fill="#ffffff"></g>
+
+        <!-- Far icebergs on the horizon. -->
+        <g fill="#8f7fe8" opacity="0.6">
+          <polygon points="66,482 94,450 116,462 142,434 172,482" />
+          <polygon points="296,482 316,462 338,470 352,482" />
+          <polygon points="1004,482 1026,456 1046,468 1062,482" />
+        </g>
+
+        <path
+          fill="url(#water)"
+          d="M0 480 Q22.5 473 45 480 T90 480 T135 480 T180 480 T225 480 T270 480 T315 480 T360 480 T405 480 T450 480 T495 480 T540 480 T585 480 T630 480 T675 480 T720 480 T765 480 T810 480 T855 480 T900 480 T945 480 T990 480 T1035 480 T1080 480 V1350 H0 Z"
+        />
+
+        <g fill="url(#ray)">
+          <polygon points="110,484 230,484 90,1180 -80,1180" />
+          <polygon points="390,484 470,484 380,1180 250,1180" />
+          <polygon points="900,484 1010,484 1100,1180 930,1180" />
+        </g>
+
+        <!-- The iceberg, drawn facing right and flipped: on the poster it spans x 584 to 1047. -->
+        <g transform="translate(1114 46) scale(-0.96 0.96)" stroke-linejoin="round">
+          <g stroke="#ffffff" stroke-opacity="0.38" stroke-width="1.2">
+            <polygon
+              fill="#bfe3ef"
+              points="150,452 104,520 78,610 96,700 70,790 110,880 150,960 210,1040 270,1110 310,1150 350,1090 420,1010 470,930 530,850 510,760 552,670 530,580 480,500 446,452"
+            />
+            <polygon fill="#f1fcff" points="150,452 300,452 290,560" />
+            <polygon fill="#dcf4fb" points="150,452 290,560 200,640 104,520" />
+            <polygon fill="#c4e8f4" points="104,520 200,640 78,610" />
+            <polygon fill="#cfeaf5" points="300,452 446,452 480,500 290,560" />
+            <polygon fill="#b0d9ea" points="290,560 480,500 530,580 400,650" />
+            <polygon fill="#c9ebf5" points="78,610 200,640 190,830 70,790 96,700" />
+            <polygon fill="#dcf3fa" points="200,640 290,560 400,650 300,760" />
+            <polygon fill="#a3d0e4" points="400,650 530,580 552,670 510,760" />
+            <polygon fill="#b9deec" points="400,650 510,760 410,850 300,760" />
+            <polygon fill="#bfe3ef" points="200,640 300,760 190,830" />
+            <polygon fill="#b6ddeb" points="70,790 190,830 150,960 110,880" />
+            <polygon fill="#c9e9f3" points="190,830 300,760 410,850 300,950" />
+            <polygon fill="#9fcde0" points="410,850 510,760 530,850 470,930" />
+            <polygon fill="#badfec" points="190,830 300,950 210,1040 150,960" />
+            <polygon fill="#a9d4e5" points="410,850 470,930 420,1010 300,950" />
+            <polygon fill="#a2cfe1" points="300,950 420,1010 350,1090 300,1050" />
+            <polygon fill="#b5dcea" points="300,950 300,1050 270,1110 210,1040" />
+            <polygon fill="#a8d3e4" points="300,1050 350,1090 310,1150 270,1110" />
+          </g>
+          <rect
+            x="60"
+            y="452"
+            width="500"
+            height="700"
+            fill="url(#depth)"
+            clip-path="url(#under)"
+          />
+
+          <!-- The tip: lit from the moon's side, in shade on the other. -->
+          <g stroke="#ffffff" stroke-opacity="0.6" stroke-width="1.2">
+            <polygon fill="#ffffff" points="298,282 274,314 250,360 300,372" />
+            <polygon fill="#c3cff5" points="298,282 300,372 346,330 328,326" />
+            <polygon fill="#f1f4ff" points="250,360 214,392 176,452 262,452 300,372" />
+            <polygon fill="#d6dff9" points="300,372 262,452 350,452" />
+            <polygon fill="#a9b8ea" points="300,372 346,330 368,306 372,380 350,452" />
+            <polygon fill="#8e9fdc" points="368,306 392,356 404,400 420,452 350,452 372,380" />
+          </g>
+        </g>
+
+        <!-- The surface, in front of the ice. -->
+        <path
+          fill="none"
+          stroke="#ffffff"
+          stroke-opacity="0.85"
+          stroke-width="3"
+          stroke-linecap="round"
+          d="M0 480 Q22.5 473 45 480 T90 480 T135 480 T180 480 T225 480 T270 480 T315 480 T360 480 T405 480 T450 480 T495 480 T540 480 T585 480 T630 480 T675 480 T720 480 T765 480 T810 480 T855 480 T900 480 T945 480 T990 480 T1035 480 T1080 480"
+        />
+        <path
+          fill="none"
+          stroke="#ffffff"
+          stroke-opacity="0.22"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-dasharray="46 30"
+          d="M14 494 Q36.5 488 59 494 T104 494 T149 494 T194 494 T239 494 T284 494 T329 494 T374 494 T419 494 T464 494 T509 494 T554 494 T599 494 T644 494 T689 494 T734 494 T779 494 T824 494 T869 494 T914 494 T959 494 T1004 494 T1049 494 T1094 494"
+        />
+
+        <g fill="none" stroke="#ffffff" stroke-opacity="0.4" stroke-width="1.5">
+          <circle cx="1052" cy="742" r="6" />
+          <circle cx="1040" cy="706" r="3.5" />
+          <circle cx="1058" cy="676" r="2.5" />
+          <circle cx="930" cy="1128" r="5" />
+          <circle cx="946" cy="1096" r="3" />
+          <circle cx="600" cy="1120" r="4" />
+          <circle cx="612" cy="1090" r="2.5" />
+        </g>
+
+        <!-- From the tip's label, and from each course, to its place on the ice. -->
+        <g fill="none" stroke="#ffffff" stroke-opacity="0.75" stroke-width="1.5">
+          <path d="M690 436 H744" />
+          <path d="M548 569 H652" />
+          <path d="M548 701 H616" />
+          <path d="M548 833 H638" />
+          <path d="M548 965 H706" />
+          <path d="M548 1097 H812" />
+        </g>
+        <g stroke="#ffffff" stroke-width="2.5">
+          <circle cx="750" cy="436" r="6.5" fill="#0b0e14" />
+          <circle cx="658" cy="569" r="6.5" fill="#4de5d6" />
+          <circle cx="622" cy="701" r="6.5" fill="#ffd255" />
+          <circle cx="644" cy="833" r="6.5" fill="#ff8f7e" />
+          <circle cx="712" cy="965" r="6.5" fill="#b3a6ff" />
+          <circle cx="818" cy="1097" r="6.5" fill="#dff3f9" />
+        </g>
+      </svg>
+
+      <div class="brand">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient
+              id="g2c"
+              x1="300"
+              y1="312"
+              x2="724"
+              y2="712"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#4DE5D6" />
+              <stop offset="0.5" stop-color="#FFD255" />
+              <stop offset="1" stop-color="#6D57FF" />
+            </linearGradient>
+          </defs>
+          <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+          <polygon
+            points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+            fill="url(#g2c)"
+          />
+        </svg>
+        Next Editor
+      </div>
+
+      <h1 class="headline">
+        <span class="latin">Code</span> ရေးတာက<br />
+        ရေခဲတောင်ရဲ့ <span class="tip">ထိပ်ဖျားလေး</span>ပါ
+      </h1>
+
+      <p class="sub">ရေအောက်က အပိုင်းအတွက် course 5 ခု</p>
+
+      <div class="stats">
+        <span class="stat"><b>196</b> lessons</span>
+        <span class="stat"><b>26+</b> hours</span>
+        <span class="stat mm">မြန်မာလို</span>
+      </div>
+
+      <div class="moon" aria-label="Free">
+        <span class="mm">အခမဲ့</span>
+        <span class="en">FREE</span>
+      </div>
+
+      <div class="above">
+        <span class="what">Code ရေးတာ</span>
+      </div>
+
+      <div class="course" style="top: 510px; --accent: var(--teal)">
+        <div class="name">Learn AI</div>
+        <div class="what">Website ထဲ AI feature ထည့်မယ်</div>
+        <div class="meta">20 lessons<i>·</i>2h 36m</div>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z" />
+          <path d="M18.5 15.5v5M16 18h5" />
+        </svg>
+      </div>
+
+      <div class="course" style="top: 642px; --accent: var(--yellow)">
+        <div class="name">AI Builder Course</div>
+        <div class="what">AI agent နဲ့ product ဆောက်နည်း</div>
+        <div class="meta">32 lessons<i>·</i>4h 05m</div>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3.5 13h7.5v7.5H3.5zM13 13h7.5v7.5H13zM8.25 3.5h7.5V11h-7.5z" />
+        </svg>
+      </div>
+
+      <div class="course" style="top: 774px; --accent: var(--coral)">
+        <div class="name">Claude FDE<span class="new">NEW</span></div>
+        <div class="what">Claude ကို အလုပ်ထဲ တပ်ဆင်နည်း</div>
+        <div class="meta">56 lessons<i>·</i>7h 23m</div>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4" />
+        </svg>
+      </div>
+
+      <div class="course" style="top: 906px; --accent: var(--lilac)">
+        <div class="name">Site Reliability Engineering</div>
+        <div class="what">Production ကို စိတ်ချရအောင်</div>
+        <div class="meta">32 lessons<i>·</i>4h 42m</div>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M2.5 12h4.5l2.5-6.5 4 13 2.5-6.5h5.5" />
+        </svg>
+      </div>
+
+      <div class="course" style="top: 1038px; --accent: var(--ice)">
+        <div class="name">Architect Path</div>
+        <div class="what">Developer ကနေ architect အထိ</div>
+        <div class="meta">56 lessons<i>·</i>7h 22m</div>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3l9 4.5-9 4.5-9-4.5zM3 12l9 4.5 9-4.5M3 16.5L12 21l9-4.5" />
+        </svg>
+      </div>
+
+      <div class="cta">
+        <span class="say">အခမဲ့ လေ့လာနိုင်ပါပြီ</span>
+        <span class="arrow">→</span>
+        <span class="url">nexteditor.dev/learn/@channyeintun</span>
+      </div>
+
+      <div class="foot">open source · github.com/channyeintun/next-editor</div>
+    </div>
+
+    <script>
+      // The stars: seeded, so every render draws the same ones; none behind the moon.
+      (function () {
+        let seed = 20261121;
+        const next = () => {
+          seed = (seed + 0x6d2b79f5) | 0;
+          let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+        const stars = document.getElementById("stars");
+        for (let i = 0; i < 90; i++) {
+          const x = next() * 1080;
+          const y = next() * next() * 330;
+          const r = 0.7 + next() * 1.3;
+          const opacity = (0.25 + next() * 0.6) * (1 - y / 420);
+          if (Math.hypot(x - 939, y - 131) < 120) continue;
+          const star = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          star.setAttribute("cx", x.toFixed(1));
+          star.setAttribute("cy", y.toFixed(1));
+          star.setAttribute("r", r.toFixed(2));
+          star.setAttribute("opacity", opacity.toFixed(2));
+          stars.appendChild(star);
+        }
+      })();
+      window.posterReady = document.fonts.ready;
+    </script>
+  </body>
+</html>
