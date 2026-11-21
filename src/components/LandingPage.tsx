@@ -778,12 +778,20 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
             Curious about what's under the hood? Explore the technical architecture behind Next
             Editor — from event-based recording to the runtime sandbox.
           </p>
-          <Link
-            to="/architecture"
-            className="inline-flex items-center gap-2 px-10 py-4 rounded-full border-2 border-pinata-cyan text-pinata-cyan text-lg font-semibold hover:bg-pinata-cyan hover:text-slate-950 hover:scale-105 active:scale-95 transition-all"
-          >
-            View Architecture
-          </Link>
+          <div className="flex flex-col items-center gap-5">
+            <Link
+              to="/architecture"
+              className="inline-flex items-center gap-2 px-10 py-4 rounded-full border-2 border-pinata-cyan text-pinata-cyan text-lg font-semibold hover:bg-pinata-cyan hover:text-slate-950 hover:scale-105 active:scale-95 transition-all"
+            >
+              View Architecture
+            </Link>
+            <Link
+              to="/architecture/webnode"
+              className="text-sm text-slate-300 underline underline-offset-4 transition-colors hover:text-white"
+            >
+              How the in-browser Node.js runtime works
+            </Link>
+          </div>
         </div>
       </section>
 

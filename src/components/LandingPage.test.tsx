@@ -143,6 +143,18 @@ describe("LandingPage Studio section", () => {
 
     expect(screen.getByRole("link", { name: "Studio" })).toHaveAttribute("href", "/studio");
   });
+
+  it("links to both architecture sheets from How It Works", () => {
+    renderLandingPage();
+
+    expect(screen.getByRole("link", { name: "View Architecture" })).toHaveAttribute(
+      "href",
+      "/architecture",
+    );
+    expect(
+      screen.getByRole("link", { name: "How the in-browser Node.js runtime works" }),
+    ).toHaveAttribute("href", "/architecture/webnode");
+  });
 });
 
 describe("LandingPage framework rotation", () => {
