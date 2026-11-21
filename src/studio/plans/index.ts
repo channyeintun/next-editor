@@ -1,4 +1,5 @@
 import YAML from "yaml";
+import type { StudioNarrationLanguage } from "../narrationLanguage";
 import { parseLessonScript, type LessonScript } from "../script/schema";
 
 /**
@@ -73,4 +74,17 @@ export function mergeStudioSources(
   ]);
 }
 
+/** The lesson Studio opens on when the URL names none. Burmese, like most of the courses. */
 export const DEFAULT_STUDIO_PLAN_SLUG = "rust-borrow";
+
+/**
+ * The same for the English voice, which is what a first visit has: Start render
+ * refuses a script the selected voice cannot speak, so the Burmese default
+ * would open Studio on a disabled button. The shortest English lesson, to keep
+ * a first render quick.
+ */
+export const DEFAULT_ENGLISH_STUDIO_PLAN_SLUG = "go-error-values";
+
+export function defaultStudioPlanSlugFor(language: StudioNarrationLanguage): string {
+  return language === "en" ? DEFAULT_ENGLISH_STUDIO_PLAN_SLUG : DEFAULT_STUDIO_PLAN_SLUG;
+}

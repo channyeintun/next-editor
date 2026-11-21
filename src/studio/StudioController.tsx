@@ -49,7 +49,7 @@ import {
   runExposedForSelection,
   sourceRevisionOf,
 } from "./runSelection";
-import { DEFAULT_STUDIO_PLAN_SLUG, mergeStudioSources, parseLessonScriptYaml } from "./plans";
+import { defaultStudioPlanSlugFor, mergeStudioSources, parseLessonScriptYaml } from "./plans";
 import type { ActionReceipt, StudioCheckResult } from "./report";
 import { CheckList, ReceiptList, RepeatabilityVerdict } from "./StudioRunResults";
 import type { StudioWindowHandle } from "./studioWindowHandle";
@@ -82,6 +82,7 @@ import {
 } from "./narrationLanguage";
 import AthanLabPanel from "./AthanLabPanel";
 import NarratorVoicePanel, { type NarratorVoiceTask } from "./NarratorVoicePanel";
+import StudioIntro from "./StudioIntro";
 import StudioWorkflowPanel from "./workflow/StudioWorkflowPanel";
 import { useStudioWorkflow } from "./workflow/useStudioWorkflow";
 import type { LessonRenderAttempt, StudioWorkflowDeps } from "./workflow/workflowRunner";
@@ -275,7 +276,14 @@ export default function StudioController() {
     nodeRuntimeMetadataRef.current = nodeRuntimeMetadata;
   }, [nodeRuntimeActions, nodeRuntimeMetadata]);
 
-  const planSlug = searchParams.get("plan") ?? DEFAULT_STUDIO_PLAN_SLUG;
+  // The lesson a visit without `?plan=` opens on: one the stored voice can
+  // speak, so a first visit (English voice) does not start on a script Start
+  // render refuses. Fixed at mount: choosing another voice later must not swap
+  // the lesson under the user.
+  const [defaultPlanSlug] = useState(() =>
+    defaultStudioPlanSlugFor(narrationLanguageOf(readStoredNarrationProvider())),
+  );
+  const planSlug = searchParams.get("plan") ?? defaultPlanSlug;
   // Parse both documented values (fixture | live) explicitly; an unrecognized
   // value is surfaced below rather than silently coerced to the plan default,
   // which could otherwise force a live-default plan onto the real service even
@@ -1088,6 +1096,7 @@ export default function StudioController() {
           aria-labelledby="studio-tab-render"
           hidden={consoleTab !== "render"}
         >
+          <StudioIntro />
           <div className="mt-2 flex items-center gap-2">
             <select
               value={planSlug}

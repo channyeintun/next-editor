@@ -6,7 +6,13 @@ import { resolveAnchorOffset } from "../async";
 import { defaultRuntimeModeOf } from "../plan";
 import { compileWithEstimatedNarration, estimateByTokens } from "../script/estimatedCompile";
 import { RECORDING_BUFFER_MS } from "../script/schedule";
-import { DEFAULT_STUDIO_PLAN_SLUG, STUDIO_SOURCES, mergeStudioSources } from "./index";
+import { validateNarrationLanguage } from "../narrationLanguage";
+import {
+  DEFAULT_STUDIO_PLAN_SLUG,
+  STUDIO_SOURCES,
+  defaultStudioPlanSlugFor,
+  mergeStudioSources,
+} from "./index";
 
 // Three of these tests parse (and one compiles) every checked-in script — 256
 // of them, growing with each course. Each sweep takes ~2.5 s on its own but
@@ -44,6 +50,16 @@ describe("studio lesson registry", { timeout: 30_000 }, () => {
     const shadowed = mergeStudioSources({ [DEFAULT_STUDIO_PLAN_SLUG]: importedYaml });
     expect(Object.keys(shadowed)).toEqual(Object.keys(STUDIO_SOURCES));
     expect(shadowed[DEFAULT_STUDIO_PLAN_SLUG].load().lesson.title).toBe("Imported edit");
+  });
+
+  // Start render refuses a script the selected voice cannot speak, so a default
+  // in the wrong language opens Studio on a disabled button.
+  it("opens each narration language on a lesson in that language", () => {
+    expect(defaultStudioPlanSlugFor("my")).toBe(DEFAULT_STUDIO_PLAN_SLUG);
+    for (const language of ["en", "my"] as const) {
+      const lesson = STUDIO_SOURCES[defaultStudioPlanSlugFor(language)].load();
+      expect(validateNarrationLanguage(lesson.lesson.locale, language)).toBeNull();
+    }
   });
 
   it("never registers critic sidecars as lessons", () => {

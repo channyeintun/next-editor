@@ -20,6 +20,8 @@ const studio = vi.hoisted(() => ({
   builtVoiceProfile: undefined as VoiceProfile | undefined,
   /** The workflow's narration pass, one call per lesson. */
   narrateAhead: vi.fn<typeof synthesizeNarrationAhead>(),
+  /** The lesson a Burmese voice opens on; the English one unless a test says otherwise. */
+  burmeseDefaultSlug: "english-script",
 }));
 
 vi.mock("react-router", () => ({
@@ -138,7 +140,8 @@ vi.mock("./plans", () => {
     },
   };
   return {
-    DEFAULT_STUDIO_PLAN_SLUG: "english-script",
+    defaultStudioPlanSlugFor: (language: string) =>
+      language === "my" ? studio.burmeseDefaultSlug : "english-script",
     mergeStudioSources: () => sources,
     parseLessonScriptYaml: () => {
       throw new Error("unused");
@@ -315,6 +318,34 @@ describe("StudioController status messages", () => {
     expect(toggle).toHaveAccessibleName("Studio render console");
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(lessonSelect).toBeVisible();
+  });
+
+  it("says what Studio does and links to the script guide", () => {
+    renderController();
+
+    expect(screen.getByText(/Studio narrates it, performs it in this editor/)).toBeVisible();
+    const guide = screen.getByRole("link", { name: "How to write a script" });
+    expect(guide).toHaveAttribute("href", expect.stringContaining("lesson-script-authoring.md"));
+    expect(guide).toHaveAttribute("target", "_blank");
+    expect(guide).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("opens on a lesson the stored voice can speak when the URL names none", () => {
+    studio.burmeseDefaultSlug = "burmese-script";
+    try {
+      // A first visit has the English voice, which cannot speak the Burmese default.
+      const firstVisit = renderController();
+      const lesson = () => screen.getByRole("combobox", { name: "Lesson to render" });
+      expect(lesson()).toHaveValue("english-script");
+      expect(startButton()).toBeEnabled();
+      firstVisit.unmount();
+
+      localStorage.setItem("next-editor:studio:narration-provider", "athanlab");
+      renderController();
+      expect(lesson()).toHaveValue("burmese-script");
+    } finally {
+      studio.burmeseDefaultSlug = "english-script";
+    }
   });
 
   it("describes the disabled Start button with its reason, without announcing the reason", () => {
