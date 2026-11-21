@@ -247,7 +247,7 @@ bun run dev:all     # both
   register `<origin>/api/auth/google/callback` on your OAuth client. Passkeys work on `localhost`
   once `PUBLIC_URL` is a localhost origin too.
 - Streamed sample lesson: http://localhost:5173/code?url=/lessons/introduction/introduction.ne
-- Other routes: `/learn`, `/studio`, and `/architecture` (the system diagram).
+- Other routes: `/learn`, `/studio`, `/architecture` (the system diagram), and `/architecture/webnode` (how the in-browser Node.js runtime works, with animated flows).
 
 ### Checks
 
