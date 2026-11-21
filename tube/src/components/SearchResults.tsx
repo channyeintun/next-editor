@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { LoaderCircle } from "lucide-react";
 import LangText from "@app/components/LangText";
 import { avatarProxyUrl, type SearchResults as SearchResultsData } from "@next-editor/infra";
+import { useWindowScrollMemory } from "../hooks/useScrollMemory";
 import { busyFadeClass, RESULTS_ENTER_CLASS } from "../lib/busyFade";
 import LessonCard from "./LessonCard";
 import PlaylistSummaryCard from "./PlaylistSummaryCard";
@@ -46,6 +47,9 @@ export default function SearchResults({
   onRetry,
   more,
 }: SearchResultsProps) {
+  // Back from a result puts the page where it was left. LessonGrid mounts the
+  // results only with their answer, every lesson page loaded so far included.
+  useWindowScrollMemory("search");
   const lessonGridRef = useRef<HTMLDivElement>(null);
   // Set by Show more lessons to the index of the first lesson it will add.
   // When they arrive, focus moves to that lesson: the reader goes on from

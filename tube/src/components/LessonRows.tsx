@@ -1,5 +1,6 @@
 import { useLayoutEffect, useState } from "react";
-import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { useWindowVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
+import { useScrollMemory } from "../hooks/useScrollMemory";
 import { observeFirstRowThumbnails } from "../lib/firstRowThumbnails";
 import type { Lesson } from "../types";
 import LessonCard from "./LessonCard";
@@ -36,13 +37,24 @@ export default function LessonRows({
     return () => window.removeEventListener("resize", update);
   }, [listNode]);
 
+  // Back to this history entry puts the page where it was left. The rows come
+  // back with the heights they measured there, so the offset is over the same
+  // cards, not over whichever ones the 320 px estimate would put under it, and
+  // the first rows rendered are the ones at the offset instead of the top ones.
+  const { restored, remember } = useScrollMemory<VirtualItem[]>("gallery");
+
   // oxlint-disable-next-line react/incompatible-library -- opted out above with "use no memo"
   const virtualizer = useWindowVirtualizer({
     count: rows.length,
     estimateSize: () => 320,
     overscan: 3,
     scrollMargin,
+    ...(restored && {
+      initialOffset: restored.offset,
+      initialMeasurementsCache: restored.layout,
+    }),
   });
+  useLayoutEffect(() => () => remember(virtualizer.takeSnapshot()), [remember, virtualizer]);
 
   return (
     <div ref={setListNode}>

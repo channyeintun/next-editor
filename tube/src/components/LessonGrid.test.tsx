@@ -35,14 +35,19 @@ vi.mock("../lib/firstRowThumbnails", () => ({
   settleWithoutFirstRow: firstRow.settleWithout,
   whenFirstRowThumbnailsSettled: () => new Promise<void>(() => {}),
 }));
-// The real window virtualizer, recording the scrollMargin of every render.
+// The real window virtualizer, recording the scrollMargin of every render, and
+// the options of the latest one.
 const scrollMargins = vi.hoisted(() => [] as (number | undefined)[]);
+const virtualizerOptions = vi.hoisted(
+  () => ({}) as { latest?: { initialOffset?: unknown; initialMeasurementsCache?: unknown } },
+);
 vi.mock("@tanstack/react-virtual", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-virtual")>();
   return {
     ...actual,
     useWindowVirtualizer: ((options) => {
       scrollMargins.push(options.scrollMargin);
+      virtualizerOptions.latest = options;
       return actual.useWindowVirtualizer(options);
     }) satisfies typeof actual.useWindowVirtualizer,
   };
@@ -380,6 +385,40 @@ describe("LessonGrid virtual list offset", () => {
 
     expect(screen.getByText("Intro")).toBeInTheDocument();
     expect(scrollMargins.at(-1)).toBe(240);
+  });
+});
+
+describe("LessonGrid scroll restoration", () => {
+  it("comes back to a history entry at the offset and the row heights it was left with", () => {
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(264);
+    gallery = galleryState({
+      data: { pages: [{ lessons: [{ slug: "intro", title: "Intro" }], nextPage: null }] },
+    });
+    // The same history entry twice: left for a lesson, then come back to.
+    const entry = [{ pathname: "/learn", key: "left-for-a-lesson" }];
+    const first = render(
+      <MemoryRouter initialEntries={entry}>
+        <LessonGrid />
+      </MemoryRouter>,
+    );
+    expect(virtualizerOptions.latest).not.toHaveProperty("initialOffset");
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(1840);
+    act(() => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+    first.unmount();
+
+    render(
+      <MemoryRouter initialEntries={entry}>
+        <LessonGrid />
+      </MemoryRouter>,
+    );
+
+    expect(virtualizerOptions.latest?.initialOffset).toBe(1840);
+    // The one row, at the height it measured, not the 320 px estimate.
+    expect(virtualizerOptions.latest?.initialMeasurementsCache).toEqual([
+      expect.objectContaining({ index: 0, size: 264 }),
+    ]);
   });
 });
 
