@@ -260,6 +260,75 @@ The scripts: `prepare.js`, the worker that carries the rewriter, is 1.49 MB
 and is loaded only when a large module has no entry yet; `process.js` and
 `kernel.js` are unchanged in size.
 
+## 9. Where a first preview's time and memory go (2026-11-23)
+
+A survey, not a change: nothing in this section is in the tree. Code: head
+`713a5fb2` (webnode as deployed, last changed in `57ceff4a`), with timers
+added for the runs and removed after them. They timed, in each process, its
+start, the loader's rewrite of each module, the compile of each module's
+wrapper and each WebAssembly compile. One run a row, a fresh profile, unless
+it says otherwise.
+
+| Target                                | First preview | Until the dev server's first line | Rewrite in its process | Large modules' entries | Wrapper compiles |
+| ------------------------------------- | ------------- | --------------------------------- | ---------------------- | ---------------------- | ---------------- |
+| `css-course-01-basics`                | 0.85 s        | 162 ms                            | 29 ms, 12 files        | 152 ms                 | 22 ms            |
+| `testing-course-02-first-vitest-test` | 1.4 s         | 163 ms                            | 95 ms, 79 files        | 187 ms                 | 36 ms            |
+| `typescript-course-07-functions`      | 1.7 s         | 165 ms                            | 261 ms, 18 files       | 157 ms                 | 83 ms            |
+| `starter:htmlCss`                     | 0.9 s         | 163 ms                            | 62 ms, 59 files        | 134 ms                 | 27 ms            |
+| `starter:react`                       | 2.8 s         | 180 ms                            | 309 ms, 732 files      | 244 ms                 | 111 ms           |
+
+- **Until the dev server's first line** is four process starts in a row:
+  `sh -lc pnpm dev`, `pnpm dev`, `sh -c vite …`, then `node`. A process takes
+  36 to 40 ms to start: 24 ms until the script's first statement (the worker,
+  and the browser compiling the 1.5 MB script, which it does again for every
+  worker), 12 ms for the script's own start, 1 ms until it is told what to run.
+- **Rewrite** is the loader's work on each module in JavaScript. In the React
+  starter 214 of the 309 ms are sucrase on 434 ES modules (4.1 MB); the thread
+  that renders on the server spends 116 to 140 ms more on 239 files.
+- **`typescript.js` (9.1 MB) is rewritten twice** in every lesson that loads
+  TypeScript: 156 ms and 69 ms. A CommonJS file an ES module imports is
+  prepared once to learn that it is CommonJS, and that result is dropped
+  before the file is loaded. One pass over it is 56 ms finding module syntax,
+  75 ms compiling the whole file to learn that it has no top-level `await`,
+  and 41 ms looking for `eval`.
+- **Large modules' entries** is a first visit: 27 ms for the page's first
+  answer, about 70 ms to start the worker that makes them, 28 ms a megabyte to
+  rewrite. A later visit takes 17 ms.
+- **WebAssembly compiles cost nothing to speak of**: esbuild's module (Go,
+  11.7 MB) 10 ms, rolldown's (12.1 MB) 17 ms, lightningcss's (15.8 MB) 16 ms.
+  The browser compiles a function when it is first called.
+
+**What a worker costs**, twenty idle ones in a page, each: 2.5 MB with an
+empty script, 6.4 MB with the process script loaded and not run, 13.3 MB with
+it run. The 6.9 MB of running it is spread over the whole script: no one
+module stands out.
+
+**Threads.** rolldown starts 3 threads for the HTML/CSS starter and 12 for
+the React one, as it needs them. Each takes about 40 ms to start and 27 ms to
+rewrite the same three ES modules again. Twelve idle threads of the napi
+runtime's worker script took the page from 149 to 362 MB: 17.8 MB a thread,
+before a thread rewrites anything.
+
+**`node_modules` in the filesystem.** React starter: 124.1 MB in 8,445 files,
+of which 47.5 MB (38%) had been read once the preview was up; a second
+rolldown binding of 12.7 MB is installed and never read. TypeScript lesson:
+43.9 MB, 27.0 MB read. Vite 5 lesson: 19.5 MB, 14.9 MB read.
+
+**Two changes tried, three runs each, the two versions in turn:**
+
+| Change                                                     | Target                           | Before                   | After               |
+| ---------------------------------------------------------- | -------------------------------- | ------------------------ | ------------------- |
+| The dev command and its script started without their shell | `css-course-01-basics`           | preview 841, 851, 880 ms | 764, 771, 800 ms    |
+|                                                            |                                  | end 324, 326, 327 MB     | 298, 302, 305 MB    |
+| A CommonJS file an ES module imports is prepared once      | `typescript-course-07-functions` | rewrite 265, 272, 283 ms | 195, 203, 211 ms    |
+|                                                            |                                  | preview 1569, 1581, 1652 | 1460, 1502, 1557 ms |
+
+The second was measured in a kept profile (installs from the browser's cache).
+
+**Tried, with no effect:** `UV_THREADPOOL_SIZE`, `TOKIO_WORKER_THREADS`,
+`RAYON_NUM_THREADS` and `ROLLDOWN_MAX_BLOCKING_THREADS` set to 1 leave the
+React starter at 11 to 13 threads.
+
 ## Measuring again
 
 ```bash
