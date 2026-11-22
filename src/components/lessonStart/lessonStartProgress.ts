@@ -100,6 +100,8 @@ export interface StartIndicatorInputs {
   warmingUp: boolean;
   /** A lesson is loaded and waits at its start for Play. */
   idleAtStart: boolean;
+  /** The lesson plays, held for its narration or not. */
+  playing: boolean;
   /** The lesson plays, but is held until its narration has sound. */
   held: boolean;
   /** The narration player's latest word on the wait, if it has said anything. */
@@ -288,9 +290,12 @@ function nextStartIndicator(
   // The loaded lesson was taken on (autoplay, or Play while its narration loaded ahead)
   // and nothing held it: it has no narration, or its sound was there at once. The
   // lesson plays, so its border closes too.
+  // Only if it plays: a border left open by a seek away from the start, or by a take that
+  // begins, fades as it stands.
   const tookOn =
-    prev.mode === "warming" ||
-    (prev.mode === "lesson" && prev.narrationFrom > 0 && prev.value === prev.narrationFrom);
+    inputs.playing &&
+    (prev.mode === "warming" ||
+      (prev.mode === "lesson" && prev.narrationFrom > 0 && prev.value === prev.narrationFrom));
   const closes = tookOn || (waited && inputs.narration?.stage === "flowing");
   return {
     mode: "hidden",

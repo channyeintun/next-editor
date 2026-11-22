@@ -14,6 +14,7 @@ const NOTHING: StartIndicatorInputs = {
   autoplayPending: false,
   warmingUp: false,
   idleAtStart: false,
+  playing: false,
   held: false,
   narration: null,
 };
@@ -255,10 +256,22 @@ describe("advanceStartIndicator", () => {
         { lessonLoading: true, warmingUp: true },
         { idleAtStart: true, warmingUp: true, narration: warming(2, 0.4, 5) },
         // Playing, and nothing holds it.
-        {},
+        { playing: true },
       ]);
 
       expect(states.at(-1)).toMatchObject({ mode: "hidden", value: 1, drift: 1 });
+    });
+
+    it("fades with its border open when the viewer leaves the start instead of playing", () => {
+      const [, waiting, left] = run([
+        { lessonLoading: true, warmingUp: true },
+        { idleAtStart: true, warmingUp: true, narration: warming(0, 0, 1) },
+        // Scrubbed away from the start: nothing plays, and nothing was waited for.
+        { warmingUp: true, narration: warming(0, 0, 2) },
+      ]);
+
+      expect(left).toMatchObject({ mode: "hidden", value: waiting!.value, solid: false });
+      expect(left!.value).toBeLessThan(1);
     });
 
     it("closes into the play button for a lesson with no narration to load", () => {
@@ -322,7 +335,7 @@ describe("advanceStartIndicator", () => {
       const [fetching, , playing] = run([
         { lessonLoading: true, autoplayPending: true },
         { idleAtStart: true, autoplayPending: true },
-        {},
+        { playing: true },
       ]);
 
       expect(playing).toMatchObject({ mode: "hidden", value: 1, drift: 1 });
@@ -454,7 +467,10 @@ describe("advanceStartIndicator", () => {
       { idleAtStart: true, warmingUp: true, narration: warming(0, 0, 2) },
       { idleAtStart: true, warmingUp: true, narration: warming(2, 0.3, 4) },
       { idleAtStart: true, narration: WARMED },
-      { held: true, narration: loading(1) },
+      { lessonLoading: true, warmingUp: true },
+      { idleAtStart: true, warmingUp: true, narration: warming(0, 0, 2) },
+      { playing: true, narration: WARMED },
+      { playing: true, held: true, narration: loading(1) },
       { held: true, narration: loading(1, 0, 4) },
       { held: true, narration: loading(2, 0.3, 5) },
       { narration: FLOWING },

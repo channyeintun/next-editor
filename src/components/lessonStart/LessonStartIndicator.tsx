@@ -128,6 +128,7 @@ export default function LessonStartIndicator({
     autoplayPending,
     warmingUp,
     idleAtStart,
+    playing: isPlaying,
     held: isPlaying && isBuffering,
     narration,
   });
