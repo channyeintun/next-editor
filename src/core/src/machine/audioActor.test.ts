@@ -579,12 +579,15 @@ describe("audioPlaybackActor", () => {
     preload = "";
     /** HAVE_ENOUGH_DATA unless a test starves the element. */
     readyState = 4;
+    /** NETWORK_EMPTY (0) to NETWORK_NO_SOURCE (3); 2 is NETWORK_LOADING. */
+    networkState = 0;
     /** The loaded ranges, in seconds, as `[start, end]` pairs. */
     bufferedRanges: Array<[number, number]> = [];
     error: { code: number } | null = null;
     onloadedmetadata: (() => void) | null = null;
     onloadeddata: (() => void) | null = null;
     onprogress: (() => void) | null = null;
+    onsuspend: (() => void) | null = null;
     oncanplay: (() => void) | null = null;
     ondurationchange: (() => void) | null = null;
     onplaying: (() => void) | null = null;
@@ -1404,6 +1407,206 @@ describe("audioPlaybackActor", () => {
         await settle();
 
         expect(facts.map((fact) => fact.stage)).toEqual(["loading", "abandoned"]);
+      });
+    });
+
+    describe("warmed up before PLAY", () => {
+      const WARM = { type: "WARM" } as const;
+      const listenToLoad = (player: ReturnType<typeof observePlayback>["player"]) => {
+        const facts: NarrationLoadFacts[] = [];
+        player.on("NARRATION_LOAD", ({ type: _type, ...fact }) => facts.push(fact));
+        return facts;
+      };
+
+      it("loads the start of the narration when asked, with nobody waiting for it", () => {
+        const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+
+        player.send(WARM);
+        // Its metadata, which brings the first sound with it: not the whole file.
+        expect(audio.preload).toBe("metadata");
+        expect(audio.loadCalls).toBe(1);
+        expect(facts).toEqual([
+          { stage: "warming", readyState: 0, bufferedAheadSeconds: 0, dataArrivals: 0 },
+        ]);
+
+        audio.onprogress?.();
+        audio.onprogress?.();
+        audio.readyState = 1;
+        audio.onloadedmetadata?.();
+        audio.readyState = 4;
+        audio.bufferedRanges = [[0, 8]];
+        audio.oncanplay?.();
+        expect(facts.slice(1)).toEqual([
+          { stage: "warming", readyState: 0, bufferedAheadSeconds: 0, dataArrivals: 1 },
+          { stage: "warming", readyState: 0, bufferedAheadSeconds: 0, dataArrivals: 2 },
+          { stage: "warming", readyState: 1, bufferedAheadSeconds: 0, dataArrivals: 2 },
+          { stage: "warmed", readyState: 4, bufferedAheadSeconds: 8, dataArrivals: 2 },
+        ]);
+
+        // It is warmed up: what loads from here on is nobody's wait.
+        audio.onprogress?.();
+        audio.onsuspend?.();
+        expect(facts).toHaveLength(5);
+        // The lesson was never held for it, and it was never asked to play.
+        expect(reported).toEqual([]);
+        expect(audio.playCalls).toBe(0);
+      });
+
+      it("does not load twice where lifting preload has already started the load", () => {
+        const { player } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+        // A browser that put the load off until asked starts it as `preload` is lifted.
+        Object.defineProperty(audio, "preload", {
+          configurable: true,
+          get: () => "metadata",
+          set: () => {
+            audio.networkState = 2;
+          },
+        });
+
+        player.send(WARM);
+
+        expect(audio.loadCalls).toBe(0);
+        expect(facts.map((fact) => fact.stage)).toEqual(["warming"]);
+      });
+
+      it("has sound at once when PLAY follows", () => {
+        const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+        const audio = MockAudio.instances[0]!;
+        player.send(WARM);
+        audio.readyState = 4;
+        audio.oncanplay?.();
+
+        player.send({ type: "PLAY" });
+
+        expect(audio.playCalls).toBe(1);
+        // Nothing to load again and nothing to wait for.
+        expect(audio.loadCalls).toBe(1);
+        expect(reported).toEqual([]);
+      });
+
+      it("is done when the browser stops loading by itself", () => {
+        const { player } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+        player.send(WARM);
+
+        // A phone loads nothing it was not asked to play.
+        audio.onsuspend?.();
+
+        expect(facts.map((fact) => fact.stage)).toEqual(["warming", "warmed"]);
+      });
+
+      it("leaves a failed warm-up for the first PLAY, with every reload still to spend", () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+        player.send(WARM);
+
+        audio.error = { code: 4 };
+        audio.onerror?.();
+        vi.advanceTimersByTime(60_000);
+        // Nobody waits for it: no reload, no report, and the warm-up is over.
+        expect(audio.loadCalls).toBe(1);
+        expect(reported).toEqual([]);
+        expect(facts.map((fact) => fact.stage)).toEqual(["warming", "warmed"]);
+
+        // PLAY loads it again, and the lesson waits for it as for any narration.
+        player.send({ type: "PLAY" });
+        expect(audio.loadCalls).toBe(2);
+        expect(reported).toEqual([STALLED]);
+
+        // Every reload is still there to spend.
+        for (const [delayMs, loads] of [
+          [1000, 3],
+          [2000, 4],
+          [4000, 5],
+        ] as const) {
+          audio.error = { code: 4 };
+          audio.onerror?.();
+          vi.advanceTimersByTime(delayMs);
+          expect(audio.loadCalls).toBe(loads);
+        }
+      });
+
+      it("lets a PLAY that overtakes the warm-up wait on the same download", () => {
+        const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+        player.send(WARM);
+        audio.onprogress?.();
+        audio.onprogress?.();
+        audio.onprogress?.();
+
+        player.send({ type: "PLAY" });
+
+        expect(reported).toEqual([STALLED]);
+        // Not loaded again, and what has arrived so far still counts.
+        expect(audio.loadCalls).toBe(1);
+        expect(facts.at(-1)).toEqual({
+          stage: "loading",
+          readyState: 0,
+          bufferedAheadSeconds: 0,
+          dataArrivals: 3,
+        });
+        audio.onprogress?.();
+        expect(facts.at(-1)).toMatchObject({ stage: "loading", dataArrivals: 4 });
+
+        // It is a wait now: the browser pausing its download does not end it.
+        audio.onsuspend?.();
+        expect(facts.at(-1)?.stage).toBe("loading");
+      });
+
+      it("is asked once, and not once the narration has been played", () => {
+        const { player } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+
+        player.send(WARM);
+        player.send(WARM);
+        expect(audio.loadCalls).toBe(1);
+
+        const played = observePlayback({ audioUrl: NARRATION_URL });
+        const playedFacts = listenToLoad(played.player);
+        const playedAudio = MockAudio.instances[1]!;
+        played.player.send({ type: "PLAY" });
+        played.player.send({ type: "PAUSE" });
+        played.player.send(WARM);
+        expect(playedAudio.loadCalls).toBe(0);
+        expect(playedFacts).toEqual([]);
+        expect(facts.map((fact) => fact.stage)).toEqual(["warming"]);
+      });
+
+      it("has nothing to fetch for a narration that is in memory", () => {
+        const { player } = observePlayback();
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+
+        player.send(WARM);
+
+        expect(audio.loadCalls).toBe(0);
+        expect(audio.preload).toBe("");
+        expect(facts.map((fact) => fact.stage)).toEqual(["warmed"]);
+      });
+
+      it("warms up a narration found elsewhere from its new place", () => {
+        const { player } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+        player.send(WARM);
+        audio.readyState = 4;
+        audio.oncanplay?.();
+
+        const movedUrl = "https://cdn.example.com/renamed.ogg";
+        player.send({ type: "SET_SOURCE", audioUrl: movedUrl });
+
+        expect(audio.src).toBe(movedUrl);
+        expect(audio.preload).toBe("metadata");
+        expect(facts.map((fact) => fact.stage)).toEqual(["warming", "warmed", "warming"]);
       });
     });
 

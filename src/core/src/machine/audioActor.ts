@@ -1,3 +1,4 @@
+import type { ActorRefFrom } from "xstate";
 import { fromTypedCallback } from "./fromTypedCallback";
 import { openMicrophone } from "./microphone";
 import {
@@ -32,6 +33,20 @@ const AUDIO_EXACT_SYNC_EPSILON_MS = 50;
 
 /** `HTMLMediaElement.HAVE_FUTURE_DATA`: enough data to play on from the current position. */
 const HAVE_FUTURE_DATA = 3;
+
+/** `HTMLMediaElement.NETWORK_LOADING`: the element is downloading its source. */
+const NETWORK_LOADING = 2;
+
+/**
+ * How much of a streamed narration a warm-up asks the browser for before the first PLAY:
+ * its metadata. The browser reads the file's header and its end (to learn the length),
+ * then stops. In Chrome the header's request has by then brought the first seconds of
+ * sound with it, so Play has sound at once for a fraction of the file: about 140 KB of
+ * a 1.8 MB narration, measured. `auto` gives the same press, and downloads the rest of
+ * the file whether or not the lesson is ever played. A browser that keeps no sound from
+ * a metadata load fetches the first of it on Play, over a connection that is open.
+ */
+const WARM_UP_PRELOAD = "metadata";
 
 /**
  * How far past the playhead a buffered range may start and still count as the one being
@@ -97,6 +112,11 @@ export type AudioPlaybackEvent =
    * AUDIO_PLAYBACK_STALLED). The element keeps loading; PLAY counts on from here.
    */
   | { type: "HOLD" }
+  /**
+   * Load the start of the narration now, before anyone plays it, so that Play has sound
+   * at once (see `warmNarration`). Asked once per player; ignored once it has played.
+   */
+  | { type: "WARM" }
   /** The recording's narration is now this one. Ignored when it is what already plays. */
   | ({ type: "SET_SOURCE" } & AudioPlaybackSource);
 
@@ -121,22 +141,29 @@ export type AudioPlaybackEmit =
   | { type: "AUDIO_PLAYBACK_RESUMED" };
 
 /**
- * How a wait for the narration is going, for whoever draws it. The player only reports
+ * How the narration's loading is going, for whoever draws it. The player only reports
  * what its element says; what share of the wait each step stands for is the drawer's.
  */
 export interface NarrationLoadFacts {
   /**
-   * `loading` while the lesson waits for sound. The wait ends `flowing` when the sound
-   * it waited for plays, and `abandoned` when it ends without it: the narration could
-   * not be loaded, the browser refused to play it, or it has no sound at this moment.
+   * Before the first PLAY, when the player was asked to warm up: `warming` while the
+   * start of the narration loads with nobody waiting for it, then `warmed` once it has
+   * got as far as it will before PLAY (it can play, or the browser loads no more
+   * unasked, or the load failed and PLAY will try again).
+   *
+   * While the lesson plays: `loading` while it waits for sound. The wait ends `flowing`
+   * when the sound it waited for plays, and `abandoned` when it ends without it: the
+   * narration could not be loaded, the browser refused to play it, or it has no sound
+   * at this moment.
    */
-  stage: "loading" | "flowing" | "abandoned";
+  stage: "warming" | "warmed" | "loading" | "flowing" | "abandoned";
   /** The element's `readyState`, 0 (nothing) to 4 (enough to play through). */
   readyState: number;
   /** Seconds of sound loaded from the playhead on. */
   bufferedAheadSeconds: number;
   /**
-   * How many times the element has said data arrived (`progress`) since this wait began.
+   * How many times the element has said data arrived (`progress`) since this warm-up or
+   * wait began (a wait that takes over a running warm-up counts on from it).
    * It is the only sign of life before the first `readyState` step, which a narration
    * on a slow connection takes seconds to reach: the browser reads the file's header
    * and its end before it knows the length. It says the download moves, not how far.
@@ -145,9 +172,10 @@ export interface NarrationLoadFacts {
 }
 
 /**
- * Emitted (`.on("NARRATION_LOAD")`) from the start of each wait to its end, so the
- * parent machine has nothing to store or forward: it holds the lesson on STALLED and
- * RESUMED alone. The end of a wait is emitted before RESUMED is sent.
+ * Emitted (`.on("NARRATION_LOAD")`) through a warm-up and from the start of each wait
+ * to its end, so the parent machine has nothing to store or forward: it holds the
+ * lesson on STALLED and RESUMED alone. The end of a wait is emitted before RESUMED is
+ * sent.
  */
 export type NarrationLoadEmitted = { type: "NARRATION_LOAD" } & NarrationLoadFacts;
 
@@ -336,6 +364,11 @@ const resolveAudioSource = ({ audioUrl, blob }: AudioPlaybackSource): LoadedAudi
  * the sound instead of running on without it; a take ignores both and nothing changes
  * for it. How each wait is going is emitted beside that (NARRATION_LOAD), for whoever
  * draws it: the parent hears nothing of it.
+ *
+ * Warming up: a streamed narration loads nothing until PLAY, unless the player is asked
+ * to warm up (WARM). Then the start of it loads ahead, so that Play has sound at once,
+ * and how that goes is emitted the same way. A warm-up holds nothing and reloads
+ * nothing: one that fails is left for the first PLAY, which has every reload to spend.
  */
 export const audioPlaybackActor = fromTypedCallback<
   AudioPlaybackEvent,
@@ -346,8 +379,13 @@ export const audioPlaybackActor = fromTypedCallback<
   let disposed = false;
   const startOffsetMs = normalizeNonNegativeTime(input.startOffsetMs ?? 0);
   let requestedPlay = false;
+  // The narration has been asked to play at least once: from then on it loads as it plays.
+  let playedOnce = false;
   // The parent stopped its timeline to wait for the narration (HOLD), until the next PLAY.
   let held = false;
+  // Warming up (WARM): asked for, and running, which is loading with nobody waiting.
+  let warmRequested = false;
+  let warming = false;
   // Timeline position last reported by the machine, and when it was reported.
   let lastKnownTimelineMs = normalizeNonNegativeTime(input.startPositionMs);
   let lastKnownAtPerf = performance.now();
@@ -385,8 +423,9 @@ export const audioPlaybackActor = fromTypedCallback<
     releaseObjectUrl();
     loadedSource = source;
     streamed = source.url !== undefined && !/^blob:/i.test(source.url);
-    // Nothing plays the narration before PLAY, and a download started earlier only
-    // shares the connection with the code editor's chunk. PLAY lifts this.
+    // Nothing plays the narration before PLAY, and a download started by itself would
+    // share the connection with the code editor's chunk. A warm-up (WARM, which the app
+    // sends once that chunk is in) or PLAY lifts this.
     if (streamed && !requestedPlay) audio.preload = "none";
     if (source.url !== undefined) {
       audio.src = source.url;
@@ -450,8 +489,10 @@ export const audioPlaybackActor = fromTypedCallback<
     return 0;
   };
 
-  // `progress` events the element has raised in the wait that is running.
+  // `progress` events the element has raised in the warm-up or wait that is running.
   let dataArrivals = 0;
+  // PLAY came while a warm-up ran: the wait that follows is the same download.
+  let warmUpBecomesWait = false;
   const emitNarrationLoad = (stage: NarrationLoadFacts["stage"]) => {
     emit({
       type: "NARRATION_LOAD",
@@ -473,23 +514,35 @@ export const audioPlaybackActor = fromTypedCallback<
     const starved = isStarved();
     if (starved === reportedStarved) return;
     reportedStarved = starved;
-    if (starved) dataArrivals = 0;
+    if (starved && !warmUpBecomesWait) dataArrivals = 0;
     // The facts first: whoever draws the wait knows how it ended before the hold does.
     emitNarrationLoad(starved ? "loading" : isSoundFlowing() ? "flowing" : "abandoned");
     sendBack({ type: starved ? "AUDIO_PLAYBACK_STALLED" : "AUDIO_PLAYBACK_RESUMED" });
   };
 
-  // Each step the element takes toward sound while the lesson waits for it.
+  // Each step the element takes toward sound while the lesson waits for it, or while
+  // it is warmed up.
   const reportLoadStep = () => {
-    if (disposed || !reportedStarved) return;
-    emitNarrationLoad("loading");
+    if (disposed) return;
+    if (reportedStarved) emitNarrationLoad("loading");
+    else if (warming) emitNarrationLoad("warming");
   };
   audio.onloadedmetadata = reportLoadStep;
   audio.onloadeddata = reportLoadStep;
   audio.onprogress = () => {
-    if (reportedStarved) dataArrivals++;
+    if (reportedStarved || warming) dataArrivals++;
     reportLoadStep();
   };
+
+  // The warm-up has got as far as it will before PLAY: the narration can play from
+  // here, or the browser has stopped loading on its own account (a phone loads nothing
+  // it was not asked to play), or the load failed.
+  const settleWarmUp = () => {
+    if (disposed || !warming) return;
+    warming = false;
+    emitNarrationLoad("warmed");
+  };
+  audio.onsuspend = settleWarmUp;
 
   audio.onwaiting = reportStarvation;
   audio.onpause = reportStarvation;
@@ -528,6 +581,7 @@ export const audioPlaybackActor = fromTypedCallback<
   audio.oncanplay = () => {
     reportDuration();
     reportStarvation();
+    settleWarmUp();
   };
   audio.ondurationchange = reportDuration;
 
@@ -567,8 +621,33 @@ export const audioPlaybackActor = fromTypedCallback<
     if (requestedPlay && !audio.ended) playAudio();
   };
 
+  /**
+   * Loads the start of the narration with nobody waiting for it. One in memory has
+   * nothing to fetch and plays as soon as it is asked to.
+   */
+  const beginWarmUp = () => {
+    if (!streamed) {
+      warming = false;
+      emitNarrationLoad("warmed");
+      return;
+    }
+    warming = true;
+    dataArrivals = 0;
+    audio.preload = WARM_UP_PRELOAD;
+    // Lifting `preload` starts the load in a browser that had put it off until asked.
+    // One that has not started by now is told to.
+    if (audio.networkState !== NETWORK_LOADING) reloadSource();
+    emitNarrationLoad("warming");
+  };
+
   audio.onerror = () => {
     if (disposed) return;
+    // Only warmed up so far: nobody waits for it, so it is not loaded again now. The
+    // first PLAY does that, with every reload still to spend.
+    if (streamed && !playedOnce) {
+      settleWarmUp();
+      return;
+    }
     const retryDelayMs = streamed ? AUDIO_SOURCE_RETRY_DELAYS_MS[failedLoads] : undefined;
     if (retryDelayMs === undefined) {
       sendBack({ type: "AUDIO_PLAYBACK_ERROR", error: "Audio playback error" });
@@ -597,7 +676,11 @@ export const audioPlaybackActor = fromTypedCallback<
         setKnownTimelineTime(currentTargetMs());
         const startsPlayback = !requestedPlay;
         requestedPlay = true;
+        playedOnce = true;
         held = false;
+        // A warm-up still running becomes the wait itself: the same download, waited for.
+        warmUpBecomesWait = warming;
+        warming = false;
         // A narration that was given up on gets another try when the viewer plays again:
         // one load, not the whole series (`failedLoads` stays spent until sound flows), so
         // a narration that can never be loaded costs each Play one failed request and no
@@ -617,8 +700,16 @@ export const audioPlaybackActor = fromTypedCallback<
         // the autoplay policy blocked leaves it false, so those resumes still happen.
         if (!audio.ended) playAudio();
         reportStarvation();
+        // Overtaken with sound already there: the warm-up is over without a wait.
+        if (warmUpBecomesWait && !reportedStarved) emitNarrationLoad("warmed");
+        warmUpBecomesWait = false;
         break;
       }
+      case "WARM":
+        if (warmRequested) break;
+        warmRequested = true;
+        if (!playedOnce) beginWarmUp();
+        break;
       case "PAUSE":
         // Freeze extrapolation at the current target before clearing the flag.
         setKnownTimelineTime(currentTargetMs());
@@ -669,6 +760,8 @@ export const audioPlaybackActor = fromTypedCallback<
         // A new `src` starts the element over: put it back where the timeline is.
         loadSource(source);
         audio.currentTime = targetSeconds();
+        // A narration that was to be warmed up is warmed up from where it is now.
+        if (warmRequested && !playedOnce) beginWarmUp();
         // Not once the audio has ended: see PLAY.
         if (requestedPlay && !audio.ended) playAudio();
         reportStarvation();
@@ -689,3 +782,14 @@ export const audioPlaybackActor = fromTypedCallback<
     releaseObjectUrl();
   };
 });
+
+/**
+ * Asks a lesson's narration player to load the start of its narration before anyone
+ * plays it, so that Play has sound at once. The caller decides when (the editor is on
+ * screen, the viewer has not asked to save data); the player decides what there is to
+ * load, never spends its reloads on it, and reports it as NARRATION_LOAD facts
+ * (`warming`, then `warmed`).
+ */
+export function warmNarration(player: ActorRefFrom<typeof audioPlaybackActor>): void {
+  if (player.getSnapshot().status === "active") player.send({ type: "WARM" });
+}
