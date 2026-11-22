@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { useWorkspaceActions } from "../hooks/useWorkspace";
 import type { WorkspaceActions } from "../stores/workspaceActions";
 
-// Monaco and the rest of the workspace are not under test here; the loading
-// overlay and its status region live in Editor's own layout.
+// Monaco and the rest of the workspace are not under test here; the load's
+// status region and its indicator live in Editor's own layout.
 vi.mock("./CodeEditor", () => ({ default: () => null }));
 
 // The placeholder player bar is aria-hidden, so it is found by a test id.
@@ -88,18 +88,23 @@ describe("Editor recording-load status", () => {
     expect(status).toBeEmptyDOMElement();
   });
 
-  it("keeps the visible spinner and text out of the accessibility tree while loading", async () => {
+  it("shows the load as the play triangle's border, out of the accessibility tree", async () => {
     renderEditor();
     await screen.findByRole("status");
 
     act(() => loader.setIsLoading?.(true));
 
-    // Only the persistent region is exposed: no second status from the spinner,
-    // and the visible copy is not read twice.
-    const status = screen.getByRole("status");
-    const visibleCopy = screen.getAllByText("Loading recording…").filter((node) => node !== status);
-    expect(visibleCopy).toHaveLength(1);
-    expect(visibleCopy[0]).toHaveAttribute("aria-hidden", "true");
+    // Only the persistent region says it: there is no visible copy to be read twice.
+    expect(screen.getAllByText("Loading recording…")).toEqual([screen.getByRole("status")]);
+    // What a sighted viewer gets is progress to look at, not yet a button to press.
+    const indicator = document.querySelector(".lesson-start");
+    expect(indicator).toHaveAttribute("data-shown");
+    expect(indicator).toHaveAttribute("aria-hidden", "true");
+    expect(screen.queryByRole("button", { name: "Play recording" })).not.toBeInTheDocument();
+
+    act(() => loader.setIsLoading?.(false));
+
+    expect(indicator).not.toHaveAttribute("data-shown");
   });
 });
 

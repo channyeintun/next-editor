@@ -71,7 +71,7 @@ export function useAutoplayOnLoad({
     // play() drives the replay machine, not a media element, so the browser's
     // autoplay policy can't block it — starting an audio-bearing recording with a
     // still-suspended AudioContext (cold load, no user gesture yet) would replay
-    // the visuals silently. Skip instead and leave FloatingPlayButton as the entry
+    // the visuals silently. Skip instead and leave the play button as the entry
     // point. The playlist auto-advance override is exempt: it's only ever set by an
     // in-session navigation, after a play gesture already unlocked the context.
     const hasAudio = Boolean(currentRecording.audioBlob || currentRecording.audioUrl);

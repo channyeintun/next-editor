@@ -1,0 +1,289 @@
+import { describe, expect, it } from "vite-plus/test";
+import type { NarrationLoadFacts } from "../../core/src/machine/audioActor";
+import {
+  advanceStartIndicator,
+  INITIAL_START_INDICATOR,
+  LESSON_SHARE,
+  narrationProgress,
+  type StartIndicatorInputs,
+  type StartIndicatorState,
+} from "./lessonStartProgress";
+
+const NOTHING: StartIndicatorInputs = {
+  lessonLoading: false,
+  autoplayPending: false,
+  idleAtStart: false,
+  held: false,
+  narration: null,
+};
+
+const loading = (
+  readyState: number,
+  bufferedAheadSeconds = 0,
+  dataArrivals = 0,
+): NarrationLoadFacts => ({ stage: "loading", readyState, bufferedAheadSeconds, dataArrivals });
+const FLOWING: NarrationLoadFacts = {
+  stage: "flowing",
+  readyState: 4,
+  bufferedAheadSeconds: 3,
+  dataArrivals: 6,
+};
+const ABANDONED: NarrationLoadFacts = {
+  stage: "abandoned",
+  readyState: 0,
+  bufferedAheadSeconds: 0,
+  dataArrivals: 0,
+};
+
+/** Runs the indicator through a lesson's moments, each given as what differs from "nothing". */
+const run = (
+  steps: Array<Partial<StartIndicatorInputs>>,
+  from: StartIndicatorState = INITIAL_START_INDICATOR,
+) => {
+  const states: StartIndicatorState[] = [];
+  let state = from;
+  for (const step of steps) {
+    state = advanceStartIndicator(state, { ...NOTHING, ...step });
+    states.push(state);
+  }
+  return states;
+};
+
+describe("narrationProgress", () => {
+  it("counts each real step the element takes toward sound", () => {
+    expect(narrationProgress(null)).toBe(0);
+    expect(narrationProgress(loading(0))).toBe(0);
+    expect(narrationProgress(loading(1))).toBe(0.75);
+    expect(narrationProgress(loading(2))).toBe(0.85);
+    expect(narrationProgress(loading(2, 0.5))).toBeCloseTo(0.9);
+  });
+
+  it("moves with each arrival of data before a step, and stays short of the step", () => {
+    const arrivals = [0, 1, 2, 5, 20, 500].map((count) => narrationProgress(loading(0, 0, count)));
+
+    expect(arrivals[0]).toBe(0);
+    for (let index = 1; index < arrivals.length; index++) {
+      expect(arrivals[index]).toBeGreaterThan(arrivals[index - 1]!);
+    }
+    // However much arrives, knowing the file's length takes the element saying so.
+    expect(arrivals.at(-1)).toBeLessThan(0.75);
+    expect(narrationProgress(loading(1, 0, 500))).toBeLessThan(0.85);
+  });
+
+  it("is short of the end however much has loaded, until sound plays", () => {
+    expect(narrationProgress(loading(4, 600, 900))).toBe(0.95);
+    expect(narrationProgress(FLOWING)).toBe(1);
+    expect(narrationProgress(ABANDONED)).toBe(0);
+  });
+
+  it("counts a wait from what was still missing when it began", () => {
+    // A hold mid-lesson: the length is known, the sound at the new place is not.
+    expect(narrationProgress(loading(1), 1)).toBe(0);
+    expect(narrationProgress(loading(1, 0, 3), 1)).toBeGreaterThan(0);
+    expect(narrationProgress(loading(2), 1)).toBe(0.8);
+    // The download fell behind the playhead: only what follows it is missing.
+    expect(narrationProgress(loading(2), 2)).toBe(0);
+    expect(narrationProgress(loading(2, 1), 2)).toBe(0.9);
+    for (const start of [0, 1, 2] as const) {
+      expect(narrationProgress(FLOWING, start)).toBe(1);
+    }
+  });
+});
+
+describe("advanceStartIndicator", () => {
+  it("traces the lesson's file and closes into the play button once it has loaded", () => {
+    const [fetching, stillFetching, loaded] = run([
+      { lessonLoading: true },
+      { lessonLoading: true },
+      { idleAtStart: true },
+    ]);
+
+    expect(fetching).toMatchObject({ mode: "lesson", value: 0, solid: false, shape: "button" });
+    // It drifts toward the end while it waits, and never gets there by itself.
+    expect(fetching!.drift).toBeGreaterThan(0);
+    expect(fetching!.drift).toBeLessThan(1);
+    expect(stillFetching).toBe(fetching);
+
+    // The same trace closes: the border is not drawn again for the button.
+    expect(loaded).toMatchObject({ mode: "ready", value: 1, drift: 1, solid: true });
+    expect(loaded!.trace).toBe(fetching!.trace);
+  });
+
+  it("starts a border of its own for each load", () => {
+    const [first, , second] = run([
+      { lessonLoading: true },
+      { idleAtStart: true },
+      { lessonLoading: true },
+    ]);
+
+    expect(second).toMatchObject({ mode: "lesson", value: 0, solid: false });
+    expect(second!.trace).toBe(first!.trace + 1);
+  });
+
+  it("answers Play on the play button with a border for the narration", () => {
+    const [, , pressed, arriving, metadata, sound, buffered] = run([
+      { lessonLoading: true },
+      { idleAtStart: true },
+      { held: true, narration: loading(0) },
+      { held: true, narration: loading(0, 0, 3) },
+      { held: true, narration: loading(1, 0, 3) },
+      { held: true, narration: loading(2, 0, 3) },
+      { held: true, narration: loading(2, 1, 4) },
+    ]);
+
+    // A new border, from the start point, on the button that was pressed.
+    expect(pressed).toMatchObject({ mode: "starting", value: 0, solid: false, shape: "button" });
+    expect(pressed!.drift).toBeGreaterThan(0);
+    expect(arriving!.value).toBeGreaterThan(0);
+    expect(arriving!.value).toBeLessThan(0.75);
+    expect(metadata!.value).toBeGreaterThanOrEqual(0.75);
+    expect([sound!.value, buffered!.value]).toEqual([0.85, 0.95]);
+    for (const state of [pressed, arriving, metadata, sound, buffered]) {
+      expect(state!.trace).toBe(pressed!.trace);
+      // Loaded sound is not played sound: the border stays open.
+      expect(state!.value).toBeLessThan(1);
+      expect(state!.drift).toBeGreaterThanOrEqual(state!.value);
+      expect(state!.drift).toBeLessThan(1);
+    }
+  });
+
+  it("closes the border when the sound it waited for plays", () => {
+    const states = run([
+      { idleAtStart: true },
+      { held: true, narration: loading(0) },
+      { narration: FLOWING },
+    ]);
+
+    expect(states.at(-1)).toMatchObject({ mode: "hidden", value: 1, shape: "button" });
+  });
+
+  it("leaves the border open when the wait ends without sound", () => {
+    const pressed = run([
+      { idleAtStart: true },
+      { held: true, narration: loading(0) },
+      { held: true, narration: loading(1) },
+    ]).at(-1)!;
+
+    // The narration could not be loaded, and the lesson plays on without it.
+    const [givenUp] = run([{ narration: ABANDONED }], pressed);
+    expect(givenUp).toMatchObject({ mode: "hidden", value: 0.75 });
+
+    // The viewer paused instead of waiting: back to the play button, filled.
+    const [paused] = run([{ idleAtStart: true, narration: loading(1) }], pressed);
+    expect(paused).toMatchObject({ mode: "ready", value: 1, solid: true });
+    expect(paused!.trace).toBe(pressed.trace + 1);
+  });
+
+  it("never runs the border backward when the element steps back", () => {
+    const states = run([
+      { idleAtStart: true },
+      { held: true, narration: loading(0) },
+      { held: true, narration: loading(2, 0.6) },
+      // A reload after a failed download starts the element over.
+      { held: true, narration: loading(0) },
+      { held: true, narration: loading(1) },
+    ]);
+
+    const [, , ahead, reloading, again] = states;
+    expect(ahead!.value).toBeCloseTo(0.91);
+    expect(reloading!.value).toBe(ahead!.value);
+    expect(again!.value).toBe(ahead!.value);
+    expect(again!.trace).toBe(ahead!.trace);
+  });
+
+  describe("with autoplay", () => {
+    it("carries one border from the lesson's file on into the narration", () => {
+      const [fetching, loaded, started, metadata, playing] = run([
+        { lessonLoading: true, autoplayPending: true },
+        { idleAtStart: true, autoplayPending: true },
+        { held: true, narration: loading(0) },
+        { held: true, narration: loading(1) },
+        { narration: FLOWING },
+      ]);
+
+      // The file has the first part of the border, and stops where its part ends.
+      expect(fetching!.drift).toBeLessThan(LESSON_SHARE);
+      expect(loaded).toMatchObject({ mode: "lesson", value: LESSON_SHARE, solid: false });
+      expect(started).toMatchObject({ mode: "starting", value: LESSON_SHARE });
+      expect(metadata!.value).toBeCloseTo(LESSON_SHARE + (1 - LESSON_SHARE) * 0.75);
+      expect(playing).toMatchObject({ mode: "hidden", value: 1 });
+      for (const state of [loaded, started, metadata, playing]) {
+        expect(state!.trace).toBe(fetching!.trace);
+      }
+    });
+
+    it("closes into the play button when autoplay leaves the lesson for a press", () => {
+      const [fetching, , left] = run([
+        { lessonLoading: true, autoplayPending: true },
+        { idleAtStart: true, autoplayPending: true },
+        { idleAtStart: true },
+      ]);
+
+      expect(left).toMatchObject({ mode: "ready", value: 1, solid: true });
+      expect(left!.trace).toBe(fetching!.trace);
+    });
+  });
+
+  describe("for a hold mid-lesson", () => {
+    it("draws a small mark from the start point, whatever the element already has", () => {
+      // The narration's length is known long since: the wait is for the sound alone.
+      const [held, sound, playing] = run([
+        { held: true, narration: loading(1) },
+        { held: true, narration: loading(2, 0.5) },
+        { narration: FLOWING },
+      ]);
+
+      expect(held).toMatchObject({ mode: "holding", shape: "mark", value: 0, solid: false });
+      expect(sound!.value).toBeGreaterThan(0);
+      expect(sound!.value).toBeLessThan(1);
+      expect(playing).toMatchObject({ mode: "hidden", shape: "mark", value: 1 });
+    });
+
+    it("is a new border for each hold", () => {
+      const [first, , second] = run([
+        { held: true, narration: loading(1) },
+        { narration: FLOWING },
+        { held: true, narration: loading(1) },
+      ]);
+
+      expect(second).toMatchObject({ mode: "holding", value: 0 });
+      expect(second!.trace).toBe(first!.trace + 1);
+    });
+
+    it("shows the play button filled when the viewer seeks back to the start", () => {
+      const states = run([
+        { held: true, narration: loading(1) },
+        { narration: FLOWING },
+        { idleAtStart: true },
+      ]);
+
+      expect(states.at(-1)).toMatchObject({
+        mode: "ready",
+        shape: "button",
+        value: 1,
+        solid: true,
+      });
+    });
+  });
+
+  it("hands back the same state while nothing changes", () => {
+    const moments: Array<Partial<StartIndicatorInputs>> = [
+      {},
+      { lessonLoading: true },
+      { lessonLoading: true, autoplayPending: true },
+      { idleAtStart: true, autoplayPending: true },
+      { idleAtStart: true },
+      { held: true, narration: loading(1) },
+      { held: true, narration: loading(1, 0, 4) },
+      { held: true, narration: loading(2, 0.3, 5) },
+      { narration: FLOWING },
+      { narration: ABANDONED },
+    ];
+    let state = INITIAL_START_INDICATOR;
+    for (const moment of moments) {
+      state = advanceStartIndicator(state, { ...NOTHING, ...moment });
+      // A caller stores every new object, so a second pass must not make another.
+      expect(advanceStartIndicator(state, { ...NOTHING, ...moment })).toBe(state);
+    }
+  });
+});

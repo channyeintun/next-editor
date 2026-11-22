@@ -169,8 +169,10 @@ prefix and let later prefixes fill in **without any re-seek or visible jump**.
   connection. The player reports it (`AUDIO_PLAYBACK_STALLED`, then `AUDIO_PLAYBACK_RESUMED`)
   and `playing` moves between its `running` and `buffering` substates: while buffering, the
   timeline is paused and nothing replays, so the lesson never runs on without its sound. The
-  timeline stays the clock. `PlaybackBufferingIndicator` shows the wait once it has lasted half
-  a second. A download that fails is loaded again a few times (after 1 s, 2 s and 4 s) before
+  timeline stays the clock. The player also emits how the wait is going (`NARRATION_LOAD`: its
+  element's `readyState` and the sound loaded past the playhead, then whether the wait ended
+  with sound), which `LessonStartIndicator` draws as a border traced round the play triangle:
+  at once after Play, and for a hold later in the lesson once it has lasted half a second. A download that fails is loaded again a few times (after 1 s, 2 s and 4 s) before
   the lesson plays on without narration; after that each new `PLAY` tries it once more, and
   the full series is back once sound has flowed again. The hold also works in a hidden tab,
   where the narration plays on but no frame is drawn: the timeline stops where its clock is

@@ -18,8 +18,7 @@ import { useAutoplayOnLoad } from "../hooks/useAutoplayOnLoad";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
-import FloatingPlayButton from "./FloatingPlayButton";
-import PlaybackBufferingIndicator from "./PlaybackBufferingIndicator";
+import LessonStartIndicator from "./lessonStart/LessonStartIndicator";
 import { NextEditorProvider } from "../contexts/NextEditorProvider.tsx";
 import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleContext";
 import { SlidesStoreProvider } from "../contexts/SlidesStoreContext";
@@ -40,7 +39,6 @@ import { isReadOnlyView } from "../utils/embed";
 import CameraOverlay from "./CameraOverlay";
 import CaptionsOverlay from "./CaptionsOverlay";
 import CursorComponent from "./Cursor.tsx";
-import LoadingSpinner from "./LoadingSpinner.tsx";
 import EditorShellSkeleton, { EditorPlayerBarSkeleton } from "./EditorShellSkeleton.tsx";
 import RecordingLoadError from "./RecordingLoadError.tsx";
 import RecordingDraftRecovery from "./RecordingDraftRecovery";
@@ -260,22 +258,16 @@ function EditorLayout({
 
         {/* Announces the load to screen readers, including one a Retry or a drop
             starts. Mounted before the load begins rather than with it: a status
-            region inserted already filled is often not announced. The overlay
-            below is the visual copy and stays hidden from assistive technology. */}
+            region inserted already filled is often not announced. What a sighted
+            viewer gets is the border traced round the play triangle
+            (LessonStartIndicator), which is hidden from assistive technology. */}
         <p role="status" className="sr-only">
           {recordingLoading ? "Loading recording…" : ""}
         </p>
 
-        {/* Loading / error overlays live inside the (relative) editor surface so they
-            center on the editor region in both viewport and `fill` layouts. */}
-        {recordingLoading ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3">
-            <LoadingSpinner label={null} />
-            <p aria-hidden="true" className="text-sm text-slate-300">
-              Loading recording…
-            </p>
-          </div>
-        ) : loadError ? (
+        {/* The error panel lives inside the (relative) editor surface so it centers
+            on the editor region in both viewport and `fill` layouts. */}
+        {recordingLoading ? null : loadError ? (
           // Dismiss is always offered, so a link that keeps failing never leaves the panel
           // covering the whole editor; Retry sits beside it unless the load was a dropped
           // file, which can't be re-fetched.
@@ -308,8 +300,11 @@ function EditorLayout({
 
       <DragDropOverlay isDragging={isDragging} />
 
-      {!recordingLoading && !loadError ? <FloatingPlayButton /> : null}
-      <PlaybackBufferingIndicator />
+      <LessonStartIndicator
+        lessonLoading={recordingLoading}
+        loadFailed={Boolean(loadError)}
+        autoplayWanted={readOnly && (autoplay || autoplayOverride)}
+      />
 
       {postRecordingTarget && !collaboration?.provider && renderPostRecordingModal
         ? renderPostRecordingModal({
