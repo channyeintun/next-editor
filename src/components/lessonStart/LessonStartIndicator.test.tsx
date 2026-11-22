@@ -12,6 +12,10 @@ const lesson = vi.hoisted(() => ({
   readying: false,
   atStart: true,
   narration: null as NarrationLoadFacts | null,
+  /** The lesson's narration player: anything stands in for it, since both hooks are mocked. */
+  hasNarrationPlayer: false,
+  /** Whether the start of the narration is loaded ahead of Play (not for a viewer who saves data). */
+  warmUpWanted: false,
   play: vi.fn<() => void>(),
 }));
 
@@ -34,7 +38,11 @@ vi.mock("../../contexts/NextEditorActorContext", () => ({
 }));
 
 vi.mock("./useIsAtLessonStart", () => ({ useIsAtLessonStart: () => lesson.atStart }));
-vi.mock("./useNarrationLoad", () => ({ useNarrationLoad: () => lesson.narration }));
+vi.mock("./useNarrationLoad", () => ({
+  useNarrationLoad: () => lesson.narration,
+  useNarrationPlayer: () => (lesson.hasNarrationPlayer ? {} : undefined),
+}));
+vi.mock("./useNarrationWarmUp", () => ({ useNarrationWarmUp: () => lesson.warmUpWanted }));
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -46,6 +54,8 @@ beforeEach(() => {
     readying: false,
     atStart: true,
     narration: null,
+    hasNarrationPlayer: false,
+    warmUpWanted: false,
   });
   lesson.play.mockClear();
 });
@@ -266,6 +276,90 @@ describe("LessonStartIndicator", () => {
 
       wait(500);
       expect(indicator()).toHaveAttribute("data-shape", "mark");
+    });
+  });
+
+  describe("with the narration loaded ahead of Play", () => {
+    const warming = (readyState: number, dataArrivals = 0): NarrationLoadFacts => ({
+      stage: "warming",
+      readyState,
+      bufferedAheadSeconds: 0,
+      dataArrivals,
+    });
+    const WARMED: NarrationLoadFacts = {
+      stage: "warmed",
+      readyState: 4,
+      bufferedAheadSeconds: 8,
+      dataArrivals: 4,
+    };
+
+    it("goes on tracing after the lesson has loaded, and fills once Play has sound to give", () => {
+      lesson.warmUpWanted = true;
+      const { rerender } = render(element({ lessonLoading: true }));
+
+      // Loaded: it can be played, but its border is still open while the narration loads.
+      Object.assign(lesson, { recordingId: "lesson-1", hasNarrationPlayer: true });
+      rerender(element());
+      expect(playButton()).not.toBeNull();
+      expect(isFilled()).toBe(false);
+      expect(traced()).toBe(0.3);
+
+      lesson.narration = warming(0, 3);
+      rerender(element());
+      expect(traced()).toBeGreaterThan(0.3);
+      lesson.narration = warming(1, 3);
+      rerender(element());
+      expect(traced()).toBeGreaterThan(0.8);
+      expect(isFilled()).toBe(false);
+
+      lesson.narration = WARMED;
+      rerender(element());
+      expect(traced()).toBe(1);
+      expect(isFilled()).toBe(true);
+      // Nothing was waited for, so nothing is announced.
+      wait(5_000);
+      expect(announced()).toBe("");
+    });
+
+    it("can be pressed early, and follows the same border to sound", () => {
+      lesson.warmUpWanted = true;
+      const { rerender } = render(element({ lessonLoading: true }));
+      Object.assign(lesson, {
+        recordingId: "lesson-1",
+        hasNarrationPlayer: true,
+        narration: warming(0, 3),
+      });
+      rerender(element());
+      const before = traced();
+
+      fireEvent.click(playButton()!);
+      expect(lesson.play).toHaveBeenCalledTimes(1);
+      Object.assign(lesson, {
+        isPlaying: true,
+        isBuffering: true,
+        narration: { ...warming(0, 3), stage: "loading" },
+      });
+      rerender(element());
+
+      expect(isShown()).toBe(true);
+      expect(playButton()).toBeNull();
+      expect(traced()).toBe(before);
+
+      Object.assign(lesson, { isBuffering: false, atStart: false, narration: FLOWING });
+      rerender(element());
+      expect(traced()).toBe(1);
+      expect(isShown()).toBe(false);
+    });
+
+    it("fills at once for a lesson that has no narration to load", () => {
+      lesson.warmUpWanted = true;
+      const { rerender } = render(element({ lessonLoading: true }));
+
+      lesson.recordingId = "lesson-1";
+      rerender(element());
+
+      expect(traced()).toBe(1);
+      expect(isFilled()).toBe(true);
     });
   });
 

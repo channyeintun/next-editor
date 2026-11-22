@@ -51,8 +51,9 @@ const ARRIVALS_REACH = 0.9;
 const BUFFERED_SECONDS = 1;
 
 /**
- * The lesson file's share of a trace that autoplay carries on into the narration. The
- * file is small and the narration is what a slow connection waits for.
+ * The lesson file's share of a trace that goes on into the narration: one that is
+ * loaded ahead of Play, or that autoplay plays. The file is small and the narration is
+ * what a slow connection waits for.
  */
 export const LESSON_SHARE = 0.3;
 
@@ -64,11 +65,13 @@ const DRIFT_REACH = 0.9;
 
 export interface StartIndicatorState {
   /**
-   * `lesson`: a lesson is being fetched and readied. `ready`: it waits at its start for
-   * Play. `starting`: Play was given and the narration is on its way. `holding`: the
-   * lesson is held for its narration somewhere past its start. `hidden`: none of these.
+   * `lesson`: a lesson is being fetched and readied. `warming`: it has loaded and can be
+   * played, and the start of its narration is still loading ahead of Play. `ready`: it
+   * waits at its start for Play, with nothing more to load first. `starting`: Play was
+   * given and the narration is on its way. `holding`: the lesson is held for its
+   * narration somewhere past its start. `hidden`: none of these.
    */
-  mode: "hidden" | "lesson" | "ready" | "starting" | "holding";
+  mode: "hidden" | "lesson" | "warming" | "ready" | "starting" | "holding";
   /** Counts the traces: a new number is a new border, drawn from its start point again. */
   trace: number;
   /** How much of the border is traced, 0 to 1. It never falls within one trace. */
@@ -90,6 +93,11 @@ export interface StartIndicatorInputs {
   lessonLoading: boolean;
   /** Autoplay may still start this lesson by itself once it has loaded. */
   autoplayPending: boolean;
+  /**
+   * The start of the narration is loaded ahead of Play: it is loading now, or it will
+   * once the lesson that is being fetched has loaded.
+   */
+  warmingUp: boolean;
   /** A lesson is loaded and waits at its start for Play. */
   idleAtStart: boolean;
   /** The lesson plays, but is held until its narration has sound. */
@@ -181,7 +189,7 @@ function nextStartIndicator(
   inputs: StartIndicatorInputs,
 ): StartIndicatorState {
   if (inputs.lessonLoading) {
-    const span = inputs.autoplayPending ? LESSON_SHARE : 1;
+    const span = inputs.autoplayPending || inputs.warmingUp ? LESSON_SHARE : 1;
     // A load that follows one already shown as loaded (a retry, the next lesson) starts over.
     const continues = prev.mode === "lesson" && prev.value === 0;
     return {
@@ -197,15 +205,33 @@ function nextStartIndicator(
   }
 
   if (inputs.idleAtStart) {
+    // Loaded, and the start of its narration loads ahead of Play: the same trace goes
+    // on into it, on a triangle that can already be pressed.
+    if (inputs.warmingUp && prev.mode === "warming") {
+      return traceNarration(prev, inputs.narration);
+    }
+    if (inputs.warmingUp && prev.mode === "lesson" && prev.narrationFrom > 0) {
+      return traceNarration(
+        {
+          ...prev,
+          mode: "warming",
+          value: prev.narrationFrom,
+          drift: prev.narrationFrom,
+          narrationStart: levelOf(inputs.narration),
+        },
+        inputs.narration,
+      );
+    }
     // Loaded, and autoplay is about to take it on: its share is done, the trace is not.
     if (inputs.autoplayPending && prev.mode === "lesson" && prev.narrationFrom > 0) {
       return { ...prev, value: prev.narrationFrom, drift: prev.narrationFrom };
     }
+    const opening = prev.mode === "lesson" || prev.mode === "warming";
     return {
       mode: "ready",
       // The lesson's own trace closes into the filled triangle; any other way here
       // (a pause, a seek back to the start) shows it filled at once.
-      trace: prev.mode === "lesson" || prev.mode === "ready" ? prev.trace : prev.trace + 1,
+      trace: opening || prev.mode === "ready" ? prev.trace : prev.trace + 1,
       value: 1,
       drift: 1,
       shape: "button",
@@ -219,6 +245,11 @@ function nextStartIndicator(
     const { narration } = inputs;
     if (prev.mode === "starting" || prev.mode === "holding") {
       return traceNarration(prev, narration);
+    }
+    // Play came while the narration was still loading ahead: the same download, and
+    // the same trace, now waited for.
+    if (prev.mode === "warming") {
+      return traceNarration({ ...prev, mode: "starting" }, narration);
     }
     // Autoplay took the loaded lesson on: the same trace goes on into the narration.
     if (prev.mode === "lesson" && prev.narrationFrom > 0) {
@@ -254,10 +285,12 @@ function nextStartIndicator(
   // Nothing to wait for. A wait that ended with sound closes its border as it fades;
   // one that ended without it (a pause, a narration given up on) fades as it stands.
   const waited = prev.mode === "starting" || prev.mode === "holding";
-  // Autoplay took the loaded lesson on and nothing held it: it has no narration, or its
-  // sound was there at once. The lesson plays, so its border closes too.
+  // The loaded lesson was taken on (autoplay, or Play while its narration loaded ahead)
+  // and nothing held it: it has no narration, or its sound was there at once. The
+  // lesson plays, so its border closes too.
   const tookOn =
-    prev.mode === "lesson" && prev.narrationFrom > 0 && prev.value === prev.narrationFrom;
+    prev.mode === "warming" ||
+    (prev.mode === "lesson" && prev.narrationFrom > 0 && prev.value === prev.narrationFrom);
   const closes = tookOn || (waited && inputs.narration?.stage === "flowing");
   return {
     mode: "hidden",

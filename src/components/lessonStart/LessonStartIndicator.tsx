@@ -8,7 +8,8 @@ import {
 import ProgressTriangle from "./ProgressTriangle";
 import { advanceStartIndicator, INITIAL_START_INDICATOR } from "./lessonStartProgress";
 import { useIsAtLessonStart } from "./useIsAtLessonStart";
-import { useNarrationLoad } from "./useNarrationLoad";
+import { useNarrationLoad, useNarrationPlayer } from "./useNarrationLoad";
+import { useNarrationWarmUp } from "./useNarrationWarmUp";
 import "./lessonStart.css";
 
 /**
@@ -74,10 +75,12 @@ function useAutoplayPending(
 /**
  * The one thing a lesson shows while it gets ready: the play triangle in the middle of
  * it, with a border that is traced from its tip round to its tip again. The border
- * follows the lesson's file while it loads and closes into the filled triangle, which
- * is the play button. After Play it follows the narration until there is sound, on the
- * same triangle. A hold later in the lesson (a slow connection, a seek) is the same
- * trace on a small mark.
+ * follows the lesson's file while it loads, then the start of the narration, which is
+ * loaded ahead of Play, and closes into the filled triangle: the lesson is ready and
+ * Play has sound at once. The triangle can be pressed as soon as the lesson has loaded;
+ * pressed early, or where nothing is loaded ahead (a viewer who saves data), it goes on
+ * following the narration until there is sound. A hold later in the lesson (a slow
+ * connection, a seek) is the same trace on a small mark.
  *
  * The live region stays mounted and only its text changes: a screen reader announces
  * what a live region comes to say, and often says nothing for one inserted already
@@ -100,12 +103,21 @@ export default function LessonStartIndicator({
   const readying = NextEditorActorContext.useSelector((state) => state.matches("loading"));
   const isBuffering = useIsBuffering();
   const atStart = useIsAtLessonStart();
-  const narration = useNarrationLoad();
+  const narrationPlayer = useNarrationPlayer();
+  const narration = useNarrationLoad(narrationPlayer);
+  const warmUpWanted = useNarrationWarmUp(narrationPlayer);
 
   const loading = !loadFailed && (lessonLoading || readying);
   const autoplayPending = useAutoplayPending(autoplayWanted, loading, recordingId);
   const idleAtStart =
     !loading && !loadFailed && recordingId !== null && !isPlaying && !isRecording && atStart;
+  // The start of the narration loads ahead of Play. While the lesson's file loads that
+  // is still to come; once the lesson has a narration player it lasts until the player
+  // says it is warmed up (it has said nothing yet while it waits for the editor's chunk).
+  const warmingUp =
+    warmUpWanted &&
+    (loading ||
+      (narrationPlayer !== undefined && (narration === null || narration.stage === "warming")));
 
   // What is shown depends on what was shown before (a press on the play button is
   // answered on that button, a border never runs backward), so it is kept as state and
@@ -114,6 +126,7 @@ export default function LessonStartIndicator({
   const next = advanceStartIndicator(indicator, {
     lessonLoading: loading,
     autoplayPending,
+    warmingUp,
     idleAtStart,
     held: isPlaying && isBuffering,
     narration,

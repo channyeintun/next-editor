@@ -160,7 +160,12 @@ prefix and let later prefixes fill in **without any re-seek or visible jump**.
   (`audioFile`/`audioUrl`, `cameraFile`/`cameraUrl`) and start offsets, so no prefix decode
   produces media bytes. Neither file is downloaded by the loader. The narration is streamed by
   the player (`audioPlaybackActor`, an `<audio>` element on `audioUrl`), which exists from the
-  first load and fetches nothing before the first `PLAY`; the camera plays from `cameraUrl` in a
+  first load and fetches nothing by itself before the first `PLAY`. Once the code editor's chunk
+  is in, the app asks it to warm up (`warmNarration`, sent by `useNarrationWarmUp`): the player
+  loads the narration's metadata, which in Chrome brings the first seconds of sound with it
+  (about 140 KB of a 1.8 MB file), so Play has sound at once. A viewer who asked the browser to
+  save data gets no warm-up. A warm-up holds nothing and reloads nothing: one that fails is left
+  for the first `PLAY`. The camera plays from `cameraUrl` in a
   native `<video>` that range-streams it, with `CameraOverlay` deriving video time from
   `timeline.currentTime - cameraStartOffsetMs`. Once the `.ne` has loaded, the URL loader only
   checks, with a `HEAD` probe, where each file really lives when the media may have been renamed
@@ -172,12 +177,14 @@ prefix and let later prefixes fill in **without any re-seek or visible jump**.
   timeline stays the clock. The player also emits how the wait is going (`NARRATION_LOAD`: its
   element's `readyState` and the sound loaded past the playhead, then whether the wait ended
   with sound), which `LessonStartIndicator` draws as a border traced round the play triangle:
-  at once after Play, and for a hold later in the lesson once it has lasted half a second. A download that fails is loaded again a few times (after 1 s, 2 s and 4 s) before
+  through the warm-up before Play (the border closes into the filled play button once the
+  narration can play), at once after a Play that came before that, and for a hold later in
+  the lesson once it has lasted half a second. A download that fails is loaded again a few times (after 1 s, 2 s and 4 s) before
   the lesson plays on without narration; after that each new `PLAY` tries it once more, and
   the full series is back once sound has flowed again. The hold also works in a hidden tab,
   where the narration plays on but no frame is drawn: the timeline stops where its clock is
   (`HOLD`), not at the last drawn frame.
-- **The narration's bytes are fetched only when something needs the file**: the edit panel's
+- **The whole narration is fetched only when something needs the file**: the edit panel's
   waveform, caption generation, an export or an upload (`loadRecordingNarration` /
   `withNarrationInMemory` in `recordingSiblingMedia.ts`).
 - **Captions load out of band.** Inline `captions` arrive with the SCR3 metadata prefix; sibling

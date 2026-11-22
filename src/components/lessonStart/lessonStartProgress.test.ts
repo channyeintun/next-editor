@@ -12,6 +12,7 @@ import {
 const NOTHING: StartIndicatorInputs = {
   lessonLoading: false,
   autoplayPending: false,
+  warmingUp: false,
   idleAtStart: false,
   held: false,
   narration: null,
@@ -27,6 +28,17 @@ const FLOWING: NarrationLoadFacts = {
   readyState: 4,
   bufferedAheadSeconds: 3,
   dataArrivals: 6,
+};
+const warming = (
+  readyState: number,
+  bufferedAheadSeconds = 0,
+  dataArrivals = 0,
+): NarrationLoadFacts => ({ stage: "warming", readyState, bufferedAheadSeconds, dataArrivals });
+const WARMED: NarrationLoadFacts = {
+  stage: "warmed",
+  readyState: 4,
+  bufferedAheadSeconds: 8,
+  dataArrivals: 4,
 };
 const ABANDONED: NarrationLoadFacts = {
   stage: "abandoned",
@@ -193,6 +205,97 @@ describe("advanceStartIndicator", () => {
     expect(again!.trace).toBe(ahead!.trace);
   });
 
+  describe("with the narration loaded ahead of Play", () => {
+    it("carries one border from the lesson's file through the narration into the play button", () => {
+      const [fetching, loaded, arriving, metadata, ready] = run([
+        { lessonLoading: true, warmingUp: true },
+        // Loaded, and the narration's player has not said anything yet.
+        { idleAtStart: true, warmingUp: true },
+        { idleAtStart: true, warmingUp: true, narration: warming(0, 0, 3) },
+        { idleAtStart: true, warmingUp: true, narration: warming(1, 0, 3) },
+        { idleAtStart: true, narration: WARMED },
+      ]);
+
+      // The file has the first part of the border, and stops where its part ends.
+      expect(fetching!.drift).toBeLessThan(LESSON_SHARE);
+      expect(loaded).toMatchObject({ mode: "warming", value: LESSON_SHARE, solid: false });
+      expect(arriving!.value).toBeGreaterThan(LESSON_SHARE);
+      expect(metadata!.value).toBeGreaterThanOrEqual(LESSON_SHARE + (1 - LESSON_SHARE) * 0.75);
+      // However much has loaded, it is the player's word that closes the border.
+      expect(metadata!.value).toBeLessThan(1);
+      expect(ready).toMatchObject({ mode: "ready", value: 1, solid: true });
+      for (const state of [loaded, arriving, metadata, ready]) {
+        expect(state!.trace).toBe(fetching!.trace);
+        expect(state!.shape).toBe("button");
+      }
+    });
+
+    it("goes on with the same border when Play is pressed before it has loaded", () => {
+      const [fetching, , early, pressed, further, playing] = run([
+        { lessonLoading: true, warmingUp: true },
+        { idleAtStart: true, warmingUp: true },
+        { idleAtStart: true, warmingUp: true, narration: warming(0, 0, 3) },
+        // The same download, now waited for: what had arrived still counts.
+        { held: true, narration: loading(0, 0, 3) },
+        { held: true, narration: loading(1, 0, 4) },
+        { narration: FLOWING },
+      ]);
+
+      expect(pressed).toMatchObject({ mode: "starting", value: early!.value });
+      expect(pressed!.drift).toBeGreaterThanOrEqual(early!.drift);
+      expect(further!.value).toBeGreaterThan(pressed!.value);
+      expect(playing).toMatchObject({ mode: "hidden", value: 1 });
+      for (const state of [pressed, further, playing]) {
+        expect(state!.trace).toBe(fetching!.trace);
+      }
+    });
+
+    it("closes the border when Play has sound though the warm-up was not done", () => {
+      const states = run([
+        { lessonLoading: true, warmingUp: true },
+        { idleAtStart: true, warmingUp: true, narration: warming(2, 0.4, 5) },
+        // Playing, and nothing holds it.
+        {},
+      ]);
+
+      expect(states.at(-1)).toMatchObject({ mode: "hidden", value: 1, drift: 1 });
+    });
+
+    it("closes into the play button for a lesson with no narration to load", () => {
+      const [fetching, loaded] = run([
+        { lessonLoading: true, warmingUp: true },
+        { idleAtStart: true },
+      ]);
+
+      expect(loaded).toMatchObject({ mode: "ready", value: 1, solid: true });
+      expect(loaded!.trace).toBe(fetching!.trace);
+    });
+
+    it("shows the play button filled when the viewer leaves the start and comes back", () => {
+      const states = run([
+        { lessonLoading: true, warmingUp: true },
+        { idleAtStart: true, warmingUp: true, narration: warming(0, 0, 1) },
+        // Scrubbed away from the start, and back, while the narration still loads.
+        { warmingUp: true, narration: warming(0, 0, 2) },
+        { idleAtStart: true, warmingUp: true, narration: warming(0, 0, 3) },
+      ]);
+
+      expect(states.at(-1)).toMatchObject({ mode: "ready", value: 1, solid: true });
+    });
+
+    it("keeps to one border when autoplay takes the lesson on meanwhile", () => {
+      const [fetching, loaded, started] = run([
+        { lessonLoading: true, warmingUp: true, autoplayPending: true },
+        { idleAtStart: true, warmingUp: true, autoplayPending: true },
+        { held: true, narration: loading(0) },
+      ]);
+
+      expect(loaded).toMatchObject({ mode: "warming", value: LESSON_SHARE });
+      expect(started).toMatchObject({ mode: "starting", value: LESSON_SHARE });
+      expect(started!.trace).toBe(fetching!.trace);
+    });
+  });
+
   describe("with autoplay", () => {
     it("carries one border from the lesson's file on into the narration", () => {
       const [fetching, loaded, started, metadata, playing] = run([
@@ -346,6 +449,11 @@ describe("advanceStartIndicator", () => {
       { lessonLoading: true, autoplayPending: true },
       { idleAtStart: true, autoplayPending: true },
       { idleAtStart: true },
+      { lessonLoading: true, warmingUp: true },
+      { idleAtStart: true, warmingUp: true },
+      { idleAtStart: true, warmingUp: true, narration: warming(0, 0, 2) },
+      { idleAtStart: true, warmingUp: true, narration: warming(2, 0.3, 4) },
+      { idleAtStart: true, narration: WARMED },
       { held: true, narration: loading(1) },
       { held: true, narration: loading(1, 0, 4) },
       { held: true, narration: loading(2, 0.3, 5) },
