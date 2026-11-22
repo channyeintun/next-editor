@@ -34,6 +34,12 @@ const AUDIO_EXACT_SYNC_EPSILON_MS = 50;
 const HAVE_FUTURE_DATA = 3;
 
 /**
+ * How far past the playhead a buffered range may start and still count as the one being
+ * played: a seek lands a few milliseconds inside the range it asked for, or before it.
+ */
+const BUFFERED_RANGE_SLACK_SECONDS = 0.1;
+
+/**
  * How long a streamed narration waits before each reload after its element fails, one
  * entry per attempt. A weak connection drops a download partway, and an element that
  * failed stays silent for the rest of the lesson unless it is loaded again. Once these
@@ -113,6 +119,37 @@ export type AudioPlaybackEmit =
   | { type: "AUDIO_PLAYBACK_STALLED" }
   /** No longer stalled: sound is flowing, or the narration ended or was given up on. */
   | { type: "AUDIO_PLAYBACK_RESUMED" };
+
+/**
+ * How a wait for the narration is going, for whoever draws it. The player only reports
+ * what its element says; what share of the wait each step stands for is the drawer's.
+ */
+export interface NarrationLoadFacts {
+  /**
+   * `loading` while the lesson waits for sound. The wait ends `flowing` when the sound
+   * it waited for plays, and `abandoned` when it ends without it: the narration could
+   * not be loaded, the browser refused to play it, or it has no sound at this moment.
+   */
+  stage: "loading" | "flowing" | "abandoned";
+  /** The element's `readyState`, 0 (nothing) to 4 (enough to play through). */
+  readyState: number;
+  /** Seconds of sound loaded from the playhead on. */
+  bufferedAheadSeconds: number;
+  /**
+   * How many times the element has said data arrived (`progress`) since this wait began.
+   * It is the only sign of life before the first `readyState` step, which a narration
+   * on a slow connection takes seconds to reach: the browser reads the file's header
+   * and its end before it knows the length. It says the download moves, not how far.
+   */
+  dataArrivals: number;
+}
+
+/**
+ * Emitted (`.on("NARRATION_LOAD")`) from the start of each wait to its end, so the
+ * parent machine has nothing to store or forward: it holds the lesson on STALLED and
+ * RESUMED alone. The end of a wait is emitted before RESUMED is sent.
+ */
+export type NarrationLoadEmitted = { type: "NARRATION_LOAD" } & NarrationLoadFacts;
 
 // ============================================================================
 // Audio Recording Actor
@@ -297,13 +334,15 @@ const resolveAudioSource = ({ audioUrl, blob }: AudioPlaybackSource): LoadedAudi
  * says so (AUDIO_PLAYBACK_STALLED, then AUDIO_PLAYBACK_RESUMED) and leaves the answer
  * to its parent. A replay stops its timeline and sends HOLD, so the lesson waits for
  * the sound instead of running on without it; a take ignores both and nothing changes
- * for it.
+ * for it. How each wait is going is emitted beside that (NARRATION_LOAD), for whoever
+ * draws it: the parent hears nothing of it.
  */
 export const audioPlaybackActor = fromTypedCallback<
   AudioPlaybackEvent,
   AudioPlaybackInput,
-  AudioPlaybackEmit
->(({ sendBack, receive, input }) => {
+  AudioPlaybackEmit,
+  NarrationLoadEmitted
+>(({ sendBack, receive, emit, input }) => {
   let disposed = false;
   const startOffsetMs = normalizeNonNegativeTime(input.startOffsetMs ?? 0);
   let requestedPlay = false;
@@ -396,13 +435,60 @@ export const audioPlaybackActor = fromTypedCallback<
     return !audio.paused && !audio.ended && !audio.error && audio.readyState < HAVE_FUTURE_DATA;
   };
 
+  /** Seconds of sound loaded from the playhead on: the range it is in, or one just ahead. */
+  const bufferedAheadSeconds = () => {
+    const { buffered, currentTime } = audio;
+    for (let index = 0; index < buffered.length; index++) {
+      const end = buffered.end(index);
+      if (
+        buffered.start(index) <= currentTime + BUFFERED_RANGE_SLACK_SECONDS &&
+        end > currentTime
+      ) {
+        return end - currentTime;
+      }
+    }
+    return 0;
+  };
+
+  // `progress` events the element has raised in the wait that is running.
+  let dataArrivals = 0;
+  const emitNarrationLoad = (stage: NarrationLoadFacts["stage"]) => {
+    emit({
+      type: "NARRATION_LOAD",
+      stage,
+      readyState: audio.readyState,
+      bufferedAheadSeconds: bufferedAheadSeconds(),
+      dataArrivals,
+    });
+  };
+
+  // Whether the sound the lesson waited for is playing. A wait also ends when there is
+  // nothing left to wait for: an element that failed for good, was refused, or has ended.
+  const isSoundFlowing = () =>
+    !audio.paused && !audio.ended && !audio.error && audio.readyState >= HAVE_FUTURE_DATA;
+
   let reportedStarved = false;
   const reportStarvation = () => {
     if (disposed) return;
     const starved = isStarved();
     if (starved === reportedStarved) return;
     reportedStarved = starved;
+    if (starved) dataArrivals = 0;
+    // The facts first: whoever draws the wait knows how it ended before the hold does.
+    emitNarrationLoad(starved ? "loading" : isSoundFlowing() ? "flowing" : "abandoned");
     sendBack({ type: starved ? "AUDIO_PLAYBACK_STALLED" : "AUDIO_PLAYBACK_RESUMED" });
+  };
+
+  // Each step the element takes toward sound while the lesson waits for it.
+  const reportLoadStep = () => {
+    if (disposed || !reportedStarved) return;
+    emitNarrationLoad("loading");
+  };
+  audio.onloadedmetadata = reportLoadStep;
+  audio.onloadeddata = reportLoadStep;
+  audio.onprogress = () => {
+    if (reportedStarved) dataArrivals++;
+    reportLoadStep();
   };
 
   audio.onwaiting = reportStarvation;

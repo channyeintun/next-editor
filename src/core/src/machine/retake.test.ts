@@ -7,6 +7,7 @@ import type {
   AudioRecordingEmit,
   AudioRecordingEvent,
   AudioRecordingInput,
+  NarrationLoadEmitted,
 } from "./audioActor";
 import { fromTypedCallback } from "./fromTypedCallback";
 import { pinClocks, RecordingEditor, startTake, takeMachine } from "./testing/takeFixtures";
@@ -665,11 +666,14 @@ describe("retaking with recorders", () => {
     const received: AudioPlaybackEvent[] = [];
     const machine = takeMachine.provide({
       actors: {
-        audioPlayback: fromTypedCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
-          ({ receive }) => {
-            receive((event) => received.push(event));
-          },
-        ),
+        audioPlayback: fromTypedCallback<
+          AudioPlaybackEvent,
+          AudioPlaybackInput,
+          AudioPlaybackEmit,
+          NarrationLoadEmitted
+        >(({ receive }) => {
+          receive((event) => received.push(event));
+        }),
       },
     });
     const actor = createActor(machine, { input: { editorRef: { current: null } } }).start();

@@ -9,6 +9,7 @@ import type {
   AudioRecordingEmit,
   AudioRecordingEvent,
   AudioRecordingInput,
+  NarrationLoadEmitted,
 } from "./audioActor";
 import type {
   CameraRecordingEmit,
@@ -338,13 +339,16 @@ describe("editorMachine actor lifecycle", () => {
     const audioPlayerEvents: AudioPlaybackEvent["type"][] = [];
     const machine = editorMachine.provide({
       actors: {
-        audioPlayback: fromTypedCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
-          ({ receive }) => {
-            receive((event) => {
-              audioPlayerEvents.push(event.type);
-            });
-          },
-        ),
+        audioPlayback: fromTypedCallback<
+          AudioPlaybackEvent,
+          AudioPlaybackInput,
+          AudioPlaybackEmit,
+          NarrationLoadEmitted
+        >(({ receive }) => {
+          receive((event) => {
+            audioPlayerEvents.push(event.type);
+          });
+        }),
       },
     });
     const actor = createActor(machine, {
@@ -820,12 +824,15 @@ describe("editorMachine actor lifecycle", () => {
     const disposeCamera = vi.fn<() => void>();
     const machine = editorMachine.provide({
       actors: {
-        audioPlayback: fromTypedCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
-          ({ sendBack }) => {
-            failAudio = () =>
-              sendBack({ type: "AUDIO_PLAYBACK_ERROR", error: "selected audio failed" });
-          },
-        ),
+        audioPlayback: fromTypedCallback<
+          AudioPlaybackEvent,
+          AudioPlaybackInput,
+          AudioPlaybackEmit,
+          NarrationLoadEmitted
+        >(({ sendBack }) => {
+          failAudio = () =>
+            sendBack({ type: "AUDIO_PLAYBACK_ERROR", error: "selected audio failed" });
+        }),
         cameraRecording: fromTypedCallback<
           CameraRecordingEvent,
           CameraRecordingInput,
@@ -2926,9 +2933,12 @@ describe("editorMachine stoppingRecording join", () => {
         };
       }),
       // Selected-file audio, and playback of a take that has it, spawn an HTMLAudioElement.
-      audioPlayback: fromTypedCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
-        () => {},
-      ),
+      audioPlayback: fromTypedCallback<
+        AudioPlaybackEvent,
+        AudioPlaybackInput,
+        AudioPlaybackEmit,
+        NarrationLoadEmitted
+      >(() => {}),
     },
   });
 
@@ -3070,7 +3080,8 @@ describe("editorMachine stoppingRecording join", () => {
           audioPlayback: fromTypedCallback<
             AudioPlaybackEvent,
             AudioPlaybackInput,
-            AudioPlaybackEmit
+            AudioPlaybackEmit,
+            NarrationLoadEmitted
           >(({ receive, sendBack }) => {
             endNarration = () => sendBack({ type: "AUDIO_PLAYBACK_FINISHED" });
             receive((event) => {

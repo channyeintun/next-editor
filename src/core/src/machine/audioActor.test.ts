@@ -6,6 +6,8 @@ import {
   type AudioPlaybackEmit,
   type AudioPlaybackEvent,
   type AudioPlaybackInput,
+  type NarrationLoadEmitted,
+  type NarrationLoadFacts,
 } from "./audioActor";
 import { editorMachine } from "./editorMachine";
 import { fromTypedCallback } from "./fromTypedCallback";
@@ -335,9 +337,12 @@ describe("audioRecordingActor lifecycle", () => {
     // Playback of a take with narration spawns an audio player, which jsdom cannot run.
     const recorderMachine = editorMachine.provide({
       actors: {
-        audioPlayback: fromTypedCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
-          () => {},
-        ),
+        audioPlayback: fromTypedCallback<
+          AudioPlaybackEvent,
+          AudioPlaybackInput,
+          AudioPlaybackEmit,
+          NarrationLoadEmitted
+        >(() => {}),
       },
     });
 
@@ -574,7 +579,12 @@ describe("audioPlaybackActor", () => {
     preload = "";
     /** HAVE_ENOUGH_DATA unless a test starves the element. */
     readyState = 4;
+    /** The loaded ranges, in seconds, as `[start, end]` pairs. */
+    bufferedRanges: Array<[number, number]> = [];
     error: { code: number } | null = null;
+    onloadedmetadata: (() => void) | null = null;
+    onloadeddata: (() => void) | null = null;
+    onprogress: (() => void) | null = null;
     oncanplay: (() => void) | null = null;
     ondurationchange: (() => void) | null = null;
     onplaying: (() => void) | null = null;
@@ -593,6 +603,15 @@ describe("audioPlaybackActor", () => {
 
     get ended() {
       return Number.isFinite(this.duration) && this.currentTime >= this.duration;
+    }
+
+    get buffered() {
+      const ranges = this.bufferedRanges;
+      return {
+        length: ranges.length,
+        start: (index: number) => ranges[index]![0],
+        end: (index: number) => ranges[index]![1],
+      };
     }
 
     play() {
@@ -1228,6 +1247,164 @@ describe("audioPlaybackActor", () => {
       audio.readyState = 4;
       audio.ontimeupdate?.();
       expect(reported).toEqual([STALLED, RESUMED, STALLED, RESUMED]);
+    });
+
+    describe("tells whoever draws the wait how it is going", () => {
+      const listenToLoad = (player: ReturnType<typeof observePlayback>["player"]) => {
+        const facts: NarrationLoadFacts[] = [];
+        player.on("NARRATION_LOAD", ({ type: _type, ...fact }) => facts.push(fact));
+        return facts;
+      };
+
+      it("emits each step the element takes, from the start of the wait to sound", () => {
+        const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+        audio.readyState = 0;
+
+        // Loading before anyone waits for it is not a wait.
+        audio.onprogress?.();
+        expect(facts).toEqual([]);
+
+        player.send({ type: "PLAY" });
+        expect(facts).toEqual([
+          { stage: "loading", readyState: 0, bufferedAheadSeconds: 0, dataArrivals: 0 },
+        ]);
+
+        // Data arrives for a while before the element knows anything about the file.
+        audio.onprogress?.();
+        audio.onprogress?.();
+        audio.readyState = 1;
+        audio.onloadedmetadata?.();
+        audio.readyState = 2;
+        audio.bufferedRanges = [[0, 0.4]];
+        audio.onloadeddata?.();
+        audio.bufferedRanges = [[0, 1.5]];
+        audio.onprogress?.();
+        expect(facts.slice(1)).toEqual([
+          { stage: "loading", readyState: 0, bufferedAheadSeconds: 0, dataArrivals: 1 },
+          { stage: "loading", readyState: 0, bufferedAheadSeconds: 0, dataArrivals: 2 },
+          { stage: "loading", readyState: 1, bufferedAheadSeconds: 0, dataArrivals: 2 },
+          { stage: "loading", readyState: 2, bufferedAheadSeconds: 0.4, dataArrivals: 2 },
+          { stage: "loading", readyState: 2, bufferedAheadSeconds: 1.5, dataArrivals: 3 },
+        ]);
+
+        audio.readyState = 4;
+        audio.onplaying?.();
+        expect(facts.at(-1)).toEqual({
+          stage: "flowing",
+          readyState: 4,
+          bufferedAheadSeconds: 1.5,
+          dataArrivals: 3,
+        });
+        // The steps are for the drawer alone: the parent heard the stall and its end.
+        expect(reported).toEqual([STALLED, RESUMED]);
+
+        // Sound is flowing: what loads from here on is no wait.
+        audio.onprogress?.();
+        expect(facts).toHaveLength(7);
+
+        // The next wait counts its own arrivals.
+        audio.readyState = 1;
+        audio.onwaiting?.();
+        audio.onprogress?.();
+        expect(facts.slice(7).map((fact) => fact.dataArrivals)).toEqual([0, 1]);
+      });
+
+      it("says how the wait ended before the parent ends the hold", () => {
+        const order: string[] = [];
+        const parent = createActor(
+          setup({
+            types: { events: {} as AudioPlaybackEmit },
+            actors: { player: audioPlaybackActor },
+          }).createMachine({
+            invoke: {
+              id: "player",
+              src: "player",
+              input: { audioUrl: NARRATION_URL, volume: 1, playbackRate: 1, startPositionMs: 0 },
+            },
+            on: {
+              AUDIO_PLAYBACK_STALLED: { actions: () => order.push("STALLED") },
+              AUDIO_PLAYBACK_RESUMED: { actions: () => order.push("RESUMED") },
+            },
+          }),
+        ).start();
+        spawnedActors.push(parent);
+        const player = parent.getSnapshot().children.player!;
+        player.on("NARRATION_LOAD", ({ stage }) => order.push(stage));
+        const audio = MockAudio.instances[0]!;
+        audio.readyState = 0;
+
+        player.send({ type: "PLAY" });
+        audio.readyState = 4;
+        audio.onplaying?.();
+
+        expect(order).toEqual(["loading", "STALLED", "flowing", "RESUMED"]);
+      });
+
+      it("counts the sound loaded from the playhead on, not what lies behind or far ahead", () => {
+        const { player } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+        audio.readyState = 1;
+        player.send({ type: "PLAY" });
+        player.send({ type: "SEEK", timeMs: 60_000 });
+
+        audio.bufferedRanges = [
+          [0, 12],
+          [90, 120],
+        ];
+        audio.onprogress?.();
+        expect(facts.at(-1)?.bufferedAheadSeconds).toBe(0);
+
+        // The range a seek asked for starts a moment after the playhead.
+        audio.bufferedRanges = [
+          [0, 12],
+          [60.05, 62],
+        ];
+        audio.onprogress?.();
+        // The playhead is where the timeline has run on to since the seek: a moment past 60 s.
+        expect(facts.at(-1)?.bufferedAheadSeconds).toBeCloseTo(2, 3);
+      });
+
+      it("ends a wait it gave up on as abandoned, never as flowing", () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        const { player } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+        player.send({ type: "PLAY" });
+
+        for (const delayMs of [1000, 2000, 4000]) {
+          audio.error = { code: 4 };
+          audio.onerror?.();
+          vi.advanceTimersByTime(delayMs);
+        }
+        audio.error = { code: 4 };
+        audio.onerror?.();
+
+        expect(facts.map((fact) => fact.stage)).toEqual(["loading", "abandoned"]);
+      });
+
+      it("ends the wait of a refused play() as abandoned", async () => {
+        MockAudio.playRejection = new DOMException("play() not allowed", "NotAllowedError");
+        const { player } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+        audio.readyState = 0;
+        // A real element is no longer paused once play() is called, refused or not...
+        audio.play = function refusedPlay(this: typeof audio) {
+          this.paused = false;
+          return Promise.reject(MockAudio.playRejection).finally(() => {
+            // ...and is paused again by the time the refusal is reported.
+            this.paused = true;
+          });
+        };
+
+        player.send({ type: "PLAY" });
+        await settle();
+
+        expect(facts.map((fact) => fact.stage)).toEqual(["loading", "abandoned"]);
+      });
     });
 
     it("reports a stall only while it is asked to play", () => {

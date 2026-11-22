@@ -9,6 +9,7 @@ import type {
   AudioRecordingEmit,
   AudioRecordingEvent,
   AudioRecordingInput,
+  NarrationLoadEmitted,
 } from "./audioActor";
 import type {
   CameraRecordingEmit,
@@ -225,11 +226,14 @@ describe("pausing a take's recorders", () => {
     const received: AudioPlaybackEvent["type"][] = [];
     const machine = takeMachine.provide({
       actors: {
-        audioPlayback: fromTypedCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
-          ({ receive }) => {
-            receive((event) => received.push(event.type));
-          },
-        ),
+        audioPlayback: fromTypedCallback<
+          AudioPlaybackEvent,
+          AudioPlaybackInput,
+          AudioPlaybackEmit,
+          NarrationLoadEmitted
+        >(({ receive }) => {
+          receive((event) => received.push(event.type));
+        }),
       },
     });
     const actor = createActor(machine, { input: { editorRef: { current: null } } }).start();
