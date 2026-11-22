@@ -359,6 +359,12 @@ visits). Each cell is the median, with the three runs after it.
 - The change to the loader's rewrite (transform.ts) gives the kept entries of
   large modules a new version: a browser that had them makes them once more.
 
+Deployed the same day as Worker version `76770d4d`, runtime build `mwsg5h5b`,
+head `0ebf55b2`. `editor-check.ts` passed on a local Worker serving that
+`dist/` before the deploy and on https://nexteditor.dev after it: there, the
+first preview after 49.5 s (install included), 7 entries (4.6 MB) kept a
+minute on, and the second visit asked for 7 of 7.
+
 ## Measuring again
 
 ```bash
