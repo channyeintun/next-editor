@@ -101,10 +101,13 @@ describe("Editor recording-load status", () => {
     expect(indicator).toHaveAttribute("data-shown");
     expect(indicator).toHaveAttribute("aria-hidden", "true");
     expect(screen.queryByRole("button", { name: "Play recording" })).not.toBeInTheDocument();
+    // The editor underneath still holds what was there before the load: clicks stop above it.
+    expect(screen.getByTestId("lesson-loading-cover")).toHaveAttribute("aria-hidden", "true");
 
     act(() => loader.setIsLoading?.(false));
 
     expect(indicator).not.toHaveAttribute("data-shown");
+    expect(screen.queryByTestId("lesson-loading-cover")).not.toBeInTheDocument();
   });
 });
 

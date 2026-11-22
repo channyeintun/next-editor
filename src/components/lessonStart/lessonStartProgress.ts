@@ -126,49 +126,53 @@ export function narrationProgress(
   if (facts.stage === "flowing") return 1;
   const [metadata, soundAtPlayhead, buffered] = STEP_ENDS[start];
   const level = levelOf(facts);
+  const arrived = ARRIVALS_REACH * (1 - (1 - ARRIVAL_SHARE) ** Math.max(facts.dataArrivals, 0));
   if (level === 2) {
+    // Sound is loading: what has loaded past the playhead counts, and so does each
+    // arrival of data, which is how the element says more of it has come.
     const filled = Math.min(Math.max(facts.bufferedAheadSeconds, 0) / BUFFERED_SECONDS, 1);
-    return soundAtPlayhead + (buffered - soundAtPlayhead) * filled;
+    return soundAtPlayhead + (buffered - soundAtPlayhead) * Math.max(filled, arrived);
   }
   const from = level === 0 ? 0 : metadata;
   const to = level === 0 ? metadata : soundAtPlayhead;
-  const arrived = 1 - (1 - ARRIVAL_SHARE) ** Math.max(facts.dataArrivals, 0);
-  return from + (to - from) * ARRIVALS_REACH * arrived;
+  return from + (to - from) * arrived;
 }
 
 /**
- * Where a narration wait may drift to: most of the way to what its next real sign
- * would bring, one more arrival of data or, once sound loads, a full buffer.
+ * Where a narration wait may drift to: most of the way to what one more arrival of
+ * data would bring. Every sign of life the element gives is such an arrival or a step
+ * past it, so the next real value is never short of where the drift was heading.
  */
 function narrationDrift(facts: NarrationLoadFacts | null, start: NarrationLevel): number {
   const now = narrationProgress(facts, start);
   if (facts?.stage === "flowing") return now;
-  const next =
-    levelOf(facts) === 2
-      ? STEP_ENDS[start][2]
-      : narrationProgress(
-          {
-            stage: "loading",
-            readyState: facts?.readyState ?? 0,
-            bufferedAheadSeconds: 0,
-            dataArrivals: (facts?.dataArrivals ?? 0) + 1,
-          },
-          start,
-        );
+  const next = narrationProgress(
+    {
+      stage: "loading",
+      readyState: facts?.readyState ?? 0,
+      bufferedAheadSeconds: facts?.bufferedAheadSeconds ?? 0,
+      dataArrivals: (facts?.dataArrivals ?? 0) + 1,
+    },
+    start,
+  );
   return now + (next - now) * DRIFT_REACH;
 }
 
 /**
- * Draws the narration's progress in its own part of the trace. It only grows: a seek
- * or a reload that takes the element a step back never unwinds the border.
+ * Draws the narration's progress in its own part of the trace. Neither the value nor
+ * the drift ever falls: a seek or a reload that takes the element a step back never
+ * unwinds the border. A step the drift has already been heading past is not drawn
+ * either, since the border may stand beyond it and would run back to it: it goes on
+ * drifting until a step takes it further.
  */
 function traceNarration(
   state: StartIndicatorState,
   facts: NarrationLoadFacts | null,
 ): StartIndicatorState {
   const place = (progress: number) => state.narrationFrom + (1 - state.narrationFrom) * progress;
-  const value = Math.max(state.value, place(narrationProgress(facts, state.narrationStart)));
-  const drift = Math.max(value, place(narrationDrift(facts, state.narrationStart)));
+  const reached = place(narrationProgress(facts, state.narrationStart));
+  const value = reached > state.drift ? reached : state.value;
+  const drift = Math.max(state.drift, value, place(narrationDrift(facts, state.narrationStart)));
   return { ...state, value, drift };
 }
 
@@ -222,7 +226,8 @@ function nextStartIndicator(
         {
           ...prev,
           mode: "starting",
-          value: Math.max(prev.value, prev.narrationFrom),
+          value: prev.narrationFrom,
+          drift: prev.narrationFrom,
           narrationStart: levelOf(narration),
         },
         narration,
@@ -249,13 +254,17 @@ function nextStartIndicator(
   // Nothing to wait for. A wait that ended with sound closes its border as it fades;
   // one that ended without it (a pause, a narration given up on) fades as it stands.
   const waited = prev.mode === "starting" || prev.mode === "holding";
-  const closes = waited && inputs.narration?.stage === "flowing";
-  const value = closes ? 1 : prev.value;
+  // Autoplay took the loaded lesson on and nothing held it: it has no narration, or its
+  // sound was there at once. The lesson plays, so its border closes too.
+  const tookOn =
+    prev.mode === "lesson" && prev.narrationFrom > 0 && prev.value === prev.narrationFrom;
+  const closes = tookOn || (waited && inputs.narration?.stage === "flowing");
   return {
     mode: "hidden",
     trace: prev.trace,
-    value,
-    drift: value,
+    value: closes ? 1 : prev.value,
+    // Not back to the value: a border that had drifted on would run back as it fades.
+    drift: closes ? 1 : prev.drift,
     shape: prev.shape,
     solid: prev.solid,
     narrationFrom: 0,

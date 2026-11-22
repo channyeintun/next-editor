@@ -219,7 +219,7 @@ function EditorLayout({
         {/* CodeEditor statically pulls in Monaco, so its chunk is by far the
             heaviest thing on the critical path. The skeleton stands in for it
             while that chunk loads, so the shell, the player bar, and the
-            "Loading recording…" overlay paint immediately instead of the
+            lesson's loading indicator paint immediately instead of the
             whole UI popping in at once when Monaco lands. The boundary keeps
             the same skeleton for anything inside CodeEditor that suspends. */}
         <Suspense fallback={<EditorShellSkeleton breadcrumb={breadcrumb} fill />}>
@@ -265,9 +265,17 @@ function EditorLayout({
           {recordingLoading ? "Loading recording…" : ""}
         </p>
 
-        {/* The error panel lives inside the (relative) editor surface so it centers
-            on the editor region in both viewport and `fill` layouts. */}
-        {recordingLoading ? null : loadError ? (
+        {/* While a lesson loads the editor still holds what was there before it: clicks
+            stop here, above it, and the indicator shows the progress. The error panel
+            lives inside the (relative) editor surface so it centers on the editor
+            region in both viewport and `fill` layouts. */}
+        {recordingLoading ? (
+          <div
+            aria-hidden="true"
+            data-testid="lesson-loading-cover"
+            className="absolute inset-0 z-10"
+          />
+        ) : loadError ? (
           // Dismiss is always offered, so a link that keeps failing never leaves the panel
           // covering the whole editor; Retry sits beside it unless the load was a dropped
           // file, which can't be re-fetched.

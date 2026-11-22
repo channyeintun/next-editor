@@ -137,7 +137,9 @@ describe("advanceStartIndicator", () => {
     expect(arriving!.value).toBeGreaterThan(0);
     expect(arriving!.value).toBeLessThan(0.75);
     expect(metadata!.value).toBeGreaterThanOrEqual(0.75);
-    expect([sound!.value, buffered!.value]).toEqual([0.85, 0.95]);
+    expect(sound!.value).toBeGreaterThanOrEqual(0.85);
+    expect(sound!.value).toBeLessThan(0.95);
+    expect(buffered!.value).toBe(0.95);
     for (const state of [pressed, arriving, metadata, sound, buffered]) {
       expect(state!.trace).toBe(pressed!.trace);
       // Loaded sound is not played sound: the border stays open.
@@ -212,6 +214,18 @@ describe("advanceStartIndicator", () => {
       }
     });
 
+    it("closes the border when autoplay starts a lesson that nothing holds", () => {
+      // No narration, or one whose sound was there at once: the lesson simply plays.
+      const [fetching, , playing] = run([
+        { lessonLoading: true, autoplayPending: true },
+        { idleAtStart: true, autoplayPending: true },
+        {},
+      ]);
+
+      expect(playing).toMatchObject({ mode: "hidden", value: 1, drift: 1 });
+      expect(playing!.trace).toBe(fetching!.trace);
+    });
+
     it("closes into the play button when autoplay leaves the lesson for a press", () => {
       const [fetching, , left] = run([
         { lessonLoading: true, autoplayPending: true },
@@ -263,6 +277,65 @@ describe("advanceStartIndicator", () => {
         value: 1,
         solid: true,
       });
+    });
+  });
+
+  describe("what is painted", () => {
+    // The border drifts on from its value toward `drift` between real steps, so where
+    // it stands on screen is anywhere between the two.
+    it("drifts toward what one more arrival of data would bring, and no further", () => {
+      const starts = [loading(0), loading(0, 0, 4), loading(1, 0, 4), loading(2, 0.2, 5)];
+      for (const facts of starts) {
+        const [, waiting] = run([{ idleAtStart: true }, { held: true, narration: facts }]);
+        const [oneMore] = run(
+          [{ held: true, narration: { ...facts, dataArrivals: facts.dataArrivals + 1 } }],
+          waiting,
+        );
+
+        expect(waiting!.drift).toBeGreaterThan(waiting!.value);
+        // The next sign of life lands at or past where the drift was heading.
+        expect(oneMore!.value).toBeGreaterThanOrEqual(waiting!.drift);
+      }
+    });
+
+    it("does not draw a step the drift has already headed past", () => {
+      // The download fell behind mid-lesson: sound at the playhead, none after it.
+      const [waiting, short, further] = run([
+        { held: true, narration: loading(2, 0, 3) },
+        // More is buffered, but less than the border may already show.
+        { held: true, narration: loading(2, 0.45, 3) },
+        { held: true, narration: loading(2, 0.7, 4) },
+      ]);
+
+      expect(waiting!.drift).toBeGreaterThan(waiting!.value);
+      expect(short!.value).toBe(waiting!.value);
+      expect(short!.drift).toBeGreaterThanOrEqual(waiting!.drift);
+      expect(further!.value).toBeGreaterThan(short!.drift);
+    });
+
+    it("never lowers where the border is heading when the element steps back", () => {
+      const [, , ahead, reloading] = run([
+        { idleAtStart: true },
+        { held: true, narration: loading(0) },
+        { held: true, narration: loading(1, 0, 6) },
+        // A reload after a failed download starts the element over.
+        { held: true, narration: loading(0) },
+      ]);
+
+      expect(reloading!.value).toBe(ahead!.value);
+      expect(reloading!.drift).toBe(ahead!.drift);
+    });
+
+    it("keeps where the border was heading while a wait without sound fades", () => {
+      const [, , waiting, givenUp] = run([
+        { idleAtStart: true },
+        { held: true, narration: loading(0) },
+        { held: true, narration: loading(0, 0, 2) },
+        { narration: ABANDONED },
+      ]);
+
+      expect(givenUp).toMatchObject({ mode: "hidden", value: waiting!.value });
+      expect(givenUp!.drift).toBe(waiting!.drift);
     });
   });
 

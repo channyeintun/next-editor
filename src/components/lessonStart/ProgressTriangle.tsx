@@ -73,7 +73,7 @@ export default function ProgressTriangle({
         pathLength={100}
         className="lesson-start__trace"
         data-drifting={drifting || undefined}
-        data-empty={(value <= 0 && !drifting) || undefined}
+        data-empty={value <= 0 || undefined}
       />
     </svg>
   );

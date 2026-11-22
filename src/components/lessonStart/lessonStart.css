@@ -118,8 +118,9 @@
   transition: stroke-dashoffset 20s cubic-bezier(0.08, 0.72, 0.16, 1);
 }
 
-/* A round cap alone would show as a dot at the start point of an empty border. */
-.lesson-start__trace[data-empty] {
+/* A round cap alone would show as a dot at the start point of an empty border, until
+   the border starts to drift from there. */
+.lesson-start__trace[data-empty]:not([data-drifting]) {
   stroke-opacity: 0;
 }
 
@@ -128,5 +129,10 @@
 @media (prefers-reduced-motion: reduce) {
   .lesson-start__trace[data-drifting] {
     stroke-dashoffset: calc(100px - var(--trace-value) * 100px);
+  }
+
+  /* ...so an empty border stays empty, cap dot included. */
+  .lesson-start__trace[data-empty][data-drifting] {
+    stroke-opacity: 0;
   }
 }
