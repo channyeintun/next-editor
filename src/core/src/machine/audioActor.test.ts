@@ -579,14 +579,13 @@ describe("audioPlaybackActor", () => {
     preload = "";
     /** HAVE_ENOUGH_DATA unless a test starves the element. */
     readyState = 4;
-    /** NETWORK_EMPTY (0) to NETWORK_NO_SOURCE (3); 2 is NETWORK_LOADING. */
-    networkState = 0;
     /** The loaded ranges, in seconds, as `[start, end]` pairs. */
     bufferedRanges: Array<[number, number]> = [];
     error: { code: number } | null = null;
     onloadedmetadata: (() => void) | null = null;
     onloadeddata: (() => void) | null = null;
     onprogress: (() => void) | null = null;
+    onloadstart: (() => void) | null = null;
     onsuspend: (() => void) | null = null;
     oncanplay: (() => void) | null = null;
     ondurationchange: (() => void) | null = null;
@@ -599,6 +598,8 @@ describe("audioPlaybackActor", () => {
     playCalls = 0;
     pauseCalls = 0;
     loadCalls = 0;
+    /** What `preload` was each time load() was called. */
+    preloadAtLoad: string[] = [];
 
     constructor() {
       MockAudio.instances.push(this);
@@ -638,6 +639,7 @@ describe("audioPlaybackActor", () => {
     /** Like a real element, load() starts over: no error, no data, paused, at the start. */
     load() {
       this.loadCalls++;
+      this.preloadAtLoad.push(this.preload);
       this.error = null;
       this.readyState = 0;
       this.paused = true;
@@ -1454,23 +1456,32 @@ describe("audioPlaybackActor", () => {
         expect(audio.playCalls).toBe(0);
       });
 
-      it("does not load twice where lifting preload has already started the load", () => {
+      it("starts the load over before it lifts preload, so nothing is fetched twice", () => {
         const { player } = observePlayback({ audioUrl: NARRATION_URL });
-        const facts = listenToLoad(player);
         const audio = MockAudio.instances[0]!;
-        // A browser that put the load off until asked starts it as `preload` is lifted.
-        Object.defineProperty(audio, "preload", {
-          configurable: true,
-          get: () => "metadata",
-          set: () => {
-            audio.networkState = 2;
-          },
-        });
 
         player.send(WARM);
 
-        expect(audio.loadCalls).toBe(0);
+        // Lifting it first would start the load the browser had put off, and starting
+        // over would then throw that request away for a second one.
+        expect(audio.preloadAtLoad).toEqual(["none"]);
+        expect(audio.preload).toBe("metadata");
+      });
+
+      it("is not ended by what the put-off load still had to say", () => {
+        const { player } = observePlayback({ audioUrl: NARRATION_URL });
+        const facts = listenToLoad(player);
+        const audio = MockAudio.instances[0]!;
+        player.send(WARM);
+
+        // The `suspend` of the load the browser had put off, arriving late.
+        audio.onsuspend?.();
         expect(facts.map((fact) => fact.stage)).toEqual(["warming"]);
+
+        // The warm-up's own load begins, and its `suspend` is the real one.
+        audio.onloadstart?.();
+        audio.onsuspend?.();
+        expect(facts.map((fact) => fact.stage)).toEqual(["warming", "warmed"]);
       });
 
       it("has sound at once when PLAY follows", () => {
@@ -1495,6 +1506,7 @@ describe("audioPlaybackActor", () => {
         player.send(WARM);
 
         // A phone loads nothing it was not asked to play.
+        audio.onloadstart?.();
         audio.onsuspend?.();
 
         expect(facts.map((fact) => fact.stage)).toEqual(["warming", "warmed"]);

@@ -34,9 +34,6 @@ const AUDIO_EXACT_SYNC_EPSILON_MS = 50;
 /** `HTMLMediaElement.HAVE_FUTURE_DATA`: enough data to play on from the current position. */
 const HAVE_FUTURE_DATA = 3;
 
-/** `HTMLMediaElement.NETWORK_LOADING`: the element is downloading its source. */
-const NETWORK_LOADING = 2;
-
 /**
  * How much of a streamed narration a warm-up asks the browser for before the first PLAY:
  * its metadata. The browser reads the file's header and its end (to learn the length),
@@ -386,6 +383,9 @@ export const audioPlaybackActor = fromTypedCallback<
   // Warming up (WARM): asked for, and running, which is loading with nobody waiting.
   let warmRequested = false;
   let warming = false;
+  // The warm-up's own load has begun (`loadstart`): what the element says from here on
+  // is about that load, not about the one it had put off before.
+  let warmLoadStarted = false;
   // Timeline position last reported by the machine, and when it was reported.
   let lastKnownTimelineMs = normalizeNonNegativeTime(input.startPositionMs);
   let lastKnownAtPerf = performance.now();
@@ -542,7 +542,14 @@ export const audioPlaybackActor = fromTypedCallback<
     warming = false;
     emitNarrationLoad("warmed");
   };
-  audio.onsuspend = settleWarmUp;
+  audio.onloadstart = () => {
+    if (warming) warmLoadStarted = true;
+  };
+  // A browser also says `suspend` when it puts a load off until it is asked for, which
+  // is how every streamed narration starts out: only the warm-up's own load counts.
+  audio.onsuspend = () => {
+    if (warmLoadStarted) settleWarmUp();
+  };
 
   audio.onwaiting = reportStarvation;
   audio.onpause = reportStarvation;
@@ -632,11 +639,14 @@ export const audioPlaybackActor = fromTypedCallback<
       return;
     }
     warming = true;
+    warmLoadStarted = false;
     dataArrivals = 0;
+    // Start the load over, then lift `preload`, which the element reads when the load
+    // begins. In that order nothing is fetched twice (lifting it first starts the load
+    // that was put off, and starting over then drops it), and what the put-off load had
+    // still to say (its `suspend`) is dropped with it.
+    reloadSource();
     audio.preload = WARM_UP_PRELOAD;
-    // Lifting `preload` starts the load in a browser that had put it off until asked.
-    // One that has not started by now is told to.
-    if (audio.networkState !== NETWORK_LOADING) reloadSource();
     emitNarrationLoad("warming");
   };
 
