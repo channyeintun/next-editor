@@ -329,6 +329,36 @@ The second was measured in a kept profile (installs from the browser's cache).
 `RAYON_NUM_THREADS` and `ROLLDOWN_MAX_BLOCKING_THREADS` set to 1 leave the
 React starter at 11 to 13 threads.
 
+## 10. The two changes of 2026-11-23
+
+What section 9 found, done: a CommonJS file is prepared and compiled once
+(`73deb77d`), and a program is started without the shell that would only
+start it (`7b69e73a`). Measured on the code before both (`6ff80d1b`) and
+after both, the two in turn, three runs each, a fresh profile each run (first
+visits). Each cell is the median, with the three runs after it.
+
+| Target                           |        | Preview ms              | End MB                  | Peak MB                 |
+| -------------------------------- | ------ | ----------------------- | ----------------------- | ----------------------- |
+| `css-course-01-basics`           | before | 820 (780, 820, 917)     | 324 (323, 324, 329)     | 519 (518, 519, 530)     |
+|                                  | after  | 738 (678, 738, 748)     | 292 (292, 292, 293)     | 473 (462, 473, 477)     |
+| `typescript-course-07-functions` | before | 1647 (1638, 1647, 1701) | 482 (446, 482, 487)     | 630 (591, 630, 631)     |
+|                                  | after  | 1416 (1378, 1416, 1642) | 419 (409, 419, 427)     | 532 (522, 532, 562)     |
+| `starter:react`                  | before | 2878 (one run)          | 1093                    | 1137                    |
+|                                  | after  | 2624 (2615, 2624, 2675) | 1114 (1094, 1114, 1120) | 1152 (1130, 1152, 1158) |
+
+- The React starter's memory did not move: two more runs of the old code
+  that morning ended at 1152 and 1231 MB (section 9's runs, with the timers),
+  so the old code's three are 1093, 1152 and 1231.
+- A dev server is now three processes where it was five: `pnpm dev`, the
+  server, and what the server starts (esbuild's service under Vite 5 and 7).
+- Before these went out: the unit tests (159 files, 4,837 tests), the
+  conformance cases on the minified build (75 of 76, and the 76th,
+  `npm-lost-reader.cjs`, with pnpm 9 first on the PATH), the twelve scenarios
+  of `gate.sh` on the minified build, and `editor-check.ts` on a local Worker
+  serving `dist/` (both visits).
+- The change to the loader's rewrite (transform.ts) gives the kept entries of
+  large modules a new version: a browser that had them makes them once more.
+
 ## Measuring again
 
 ```bash
