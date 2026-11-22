@@ -61,6 +61,7 @@ import { addJob, addOwnJob, announceEndedJobs, inheritJobs, newJobList, newJobTa
 import type { Job, JobList, JobTable } from "./jobs";
 import { ShellSyntaxError } from "./lexer";
 import { literalText, parse } from "./parser";
+import { isPlainWord } from "./plainWords";
 import { shellQuote } from "./quote";
 import {
   declareEverySignalHandled,
@@ -517,22 +518,44 @@ export function deferInterrupt(process: ProcessState): boolean {
   return true;
 }
 
-/** True for source text that is one simple command, run in the foreground. */
-function isLoneSimpleCommand(source: string): boolean {
+/** The command of source text that is one simple command, run in the foreground; else null. */
+function loneSimpleCommand(source: string): SimpleCommand | null {
   let program: Program;
   try {
     program = parse(source);
   } catch {
-    return false;
+    return null;
   }
   const only = program.items.length === 1 ? program.items[0] : null;
   if (!only || only.background || only.andOr.rest.length > 0) {
-    return false;
+    return null;
   }
   const pipeline = only.andOr.first;
-  return (
-    !pipeline.negated && pipeline.commands.length === 1 && pipeline.commands[0].type === "simple"
-  );
+  const command = pipeline.commands.length === 1 ? pipeline.commands[0] : null;
+  return !pipeline.negated && command?.type === "simple" ? command : null;
+}
+
+/**
+ * The program `sh -c source` starts and then only stands for
+ * (`runCommandString`): its name and arguments. Null when the shell does
+ * anything more with the line: it is not one plain command (plainWords.ts),
+ * or its first word is the shell's own to run. A shell that starts with
+ * `-c` has no function or alias yet.
+ */
+export function loneProgram(source: string): string[] | null {
+  const command = loneSimpleCommand(source);
+  if (command === null || command.assignments.length > 0 || command.redirects.length > 0) {
+    return null;
+  }
+  const argv: string[] = [];
+  for (const word of command.words) {
+    const text = literalText(word);
+    if (text === null || !isPlainWord(text)) {
+      return null;
+    }
+    argv.push(text);
+  }
+  return argv.length === 0 || BUILTINS[argv[0]] || COMMANDS[argv[0]] ? null : argv;
 }
 
 /** A shell builtin: runs in the shell itself and may change its state. */
@@ -1001,7 +1024,7 @@ export class Shell {
    */
   async runCommandString(source: string): Promise<number> {
     this.lastExit = null;
-    const lone = isLoneSimpleCommand(source);
+    const lone = loneSimpleCommand(source) !== null;
     this.replaced = lone;
     let status: number;
     try {

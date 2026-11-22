@@ -486,7 +486,7 @@ export class Kernel {
       terminal,
       pageOwned: true,
       resolved,
-      env,
+      env: resolved.env ?? env,
       cwd,
       umask: DEFAULT_UMASK,
       ipc: null,
@@ -1864,7 +1864,8 @@ export class Kernel {
       handoff?.port?.close();
       throw error;
     }
-    if (request.argv0 && resolved.program !== "shell") {
+    // Not for a program started in a shell's place: the name was the shell's.
+    if (request.argv0 && resolved.program !== "shell" && resolved.env === undefined) {
       resolved.argv[0] = request.argv0;
     }
 
@@ -1945,7 +1946,7 @@ export class Kernel {
       terminal: process.terminal,
       pageOwned: false,
       resolved,
-      env: request.env,
+      env: resolved.env ?? request.env,
       cwd: request.cwd,
       // A copy of the parent's as it is now, as fork(2) gives a child.
       umask: request.umask ?? readUmask(process.umask),

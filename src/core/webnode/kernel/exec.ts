@@ -4,6 +4,8 @@
 // small marker files in /bin so `which node` and PATH lookups find them.
 import { createSystemError, errnoCodeOf, type ErrnoCode } from "../errors";
 import { DEFAULT_PATH } from "../process/platform";
+import { initialEnvironment } from "../process/programs/shell/environment";
+import { plainWords } from "../process/programs/shell/plainWords";
 import { tsxArguments } from "../process/programs/watchOptions";
 import type { ProgramName } from "../protocol";
 import type { PermissionedVfs, VfsApi } from "./vfs/types";
@@ -13,12 +15,24 @@ export interface ResolvedExec {
   program: ProgramName;
   argv: string[];
   execArgv: string[];
+  /**
+   * The environment the program starts with, where it is not the one the
+   * command was given: a program started in the place of the shell that
+   * would only have started it (`programOfShell`) gets that shell's.
+   */
+  env?: Record<string, string>;
 }
 
 const MARKER = "#!webnode ";
 
 const SHELL_NAMES = ["sh", "bash", "zsh", "jsh", "dash"];
 const PACKAGE_MANAGER_NAMES = ["npm", "npx", "pnpm", "pnpx", "yarn"];
+/**
+ * The commands that are the runtime's own programs. None is a word the shell
+ * runs itself (a builtin, a command of its own, a reserved word), which
+ * `programOfShell` relies on and exec.test.ts holds.
+ */
+export const PROGRAM_NAMES: readonly string[] = ["node", "tsx", ...PACKAGE_MANAGER_NAMES];
 
 /** Commands the shell implements itself, reachable from `child_process` too. */
 const SHELL_COMMAND_NAMES = [
@@ -257,6 +271,54 @@ export function resolveExec(
   env: Record<string, string>,
   cwd: string,
   changesDirectory = true,
+): ResolvedExec {
+  const resolved = resolveCommand(vfs, command, args, env, cwd, changesDirectory);
+  return (resolved.program === "shell" && programOfShell(vfs, resolved.argv, env, cwd)) || resolved;
+}
+
+/**
+ * The program a shell started as `argv` would only start, in that shell's
+ * place: `sh -c 'pnpm dev'` is `pnpm dev`, as bash makes it by exec'ing the
+ * lone command of `-c`. The shell would stand for the program and end as it
+ * ends (process/programs/shell/plainWords.ts), in a process of its own for as
+ * long as the program runs; the editor starts every command of a lesson this
+ * way. Only for a line of plain words whose first is one of the runtime's
+ * own programs: the kernel has no shell to ask what any other word is to it.
+ * The program gets the environment the shell would have started with, and is
+ * found on that environment's PATH, as the shell would find it. Null for any
+ * other shell, and where the program cannot be started: the shell then runs,
+ * and reports it.
+ */
+function programOfShell(
+  vfs: PermissionedVfs,
+  argv: string[],
+  env: Record<string, string>,
+  cwd: string,
+): ResolvedExec | null {
+  if (argv.length !== 3 || (argv[1] !== "-c" && argv[1] !== "-lc")) {
+    return null;
+  }
+  const words = plainWords(argv[2]);
+  if (words === null || !PROGRAM_NAMES.includes(words[0])) {
+    return null;
+  }
+  const started = initialEnvironment(env, cwd);
+  try {
+    // The shell's child stays in the shell's directory: nothing to check there.
+    const program = resolveCommand(vfs, words[0], words.slice(1), started, cwd, false);
+    return program.program === "shell" ? null : { ...program, env: started };
+  } catch {
+    return null;
+  }
+}
+
+function resolveCommand(
+  vfs: PermissionedVfs,
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+  cwd: string,
+  changesDirectory: boolean,
 ): ResolvedExec {
   if (changesDirectory) {
     checkWorkingDirectory(vfs, cwd, command);

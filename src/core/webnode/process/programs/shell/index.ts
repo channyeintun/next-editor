@@ -4,11 +4,11 @@
 // script file, standard input or the interactive loop.
 import { errnoCodeOf } from "../../../errors";
 import { signalExitStatus } from "../../../signals";
-import { DEFAULT_PATH, HOME_DIR, SHELL_PATH, USERNAME } from "../../platform";
 import { runtime } from "../../runtime";
 import { applySetFlag } from "./builtins";
 import { baseName, errorText } from "./commands/util";
 import { ExitSignal } from "./context";
+import { initialEnvironment } from "./environment";
 import { runInteractive } from "./interactive";
 import { newProcessState, receiveSignal, settleSignal, Shell } from "./interpreter";
 import { outliveShell } from "./jobs";
@@ -126,19 +126,6 @@ class VersionRequest extends Error {
   constructor(name: string) {
     super(name);
   }
-}
-
-/** The environment a new shell starts with: the process's, plus PWD, HOME, PATH, SHELL, USER, SHLVL. */
-function initialEnvironment(env: Record<string, string>, cwd: string): Record<string, string> {
-  const next = { ...env };
-  next.PWD = cwd;
-  next.HOME ??= HOME_DIR;
-  next.PATH ??= DEFAULT_PATH;
-  next.SHELL ??= SHELL_PATH;
-  next.USER ??= USERNAME;
-  const level = Number(next.SHLVL ?? "0");
-  next.SHLVL = String(Number.isFinite(level) ? level + 1 : 1);
-  return next;
 }
 
 /** Runs the shell with `argv` (`["sh", "-c", "…"]`, `["jsh"]`, …) and returns its exit status. */

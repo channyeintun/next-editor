@@ -278,3 +278,14 @@ function compareVersions(a: string, b: string): number {
   }
   return 0;
 }
+
+/**
+ * The command line a tool started: the text of `sh -c`, or the words of a
+ * program it started itself (a script that only starts one program is not
+ * given a shell: scripts.ts, `startForeground`).
+ */
+export function scriptLine(request: { command: string; args: string[] }): string {
+  return request.command === "sh" && request.args[0] === "-c"
+    ? request.args[1]
+    : [request.command, ...request.args].join(" ");
+}

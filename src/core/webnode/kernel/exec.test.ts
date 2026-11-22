@@ -5,9 +5,12 @@
 // the environment has none, as libuv does; and a file runs only as execve
 // would run it.
 import { describe, expect, it } from "vitest";
+import { BUILTINS } from "../process/programs/shell/builtins";
 import { COMMANDS } from "../process/programs/shell/commands";
+import { initialEnvironment } from "../process/programs/shell/environment";
+import { isReservedWord } from "../process/programs/shell/parser";
 import { TSX_WATCH_OPTION, tsxArguments } from "../process/programs/watchOptions";
-import { installBuiltinCommands, resolveExec } from "./exec";
+import { installBuiltinCommands, PROGRAM_NAMES, resolveExec } from "./exec";
 import { Vfs } from "./vfs/vfs";
 import { O_CREAT, O_TRUNC, O_WRONLY } from "./vfs/types";
 
@@ -222,5 +225,107 @@ describe("permissions", () => {
     expect(resolveExec(vfs, "node", ["-v"], {}, `${APP}/bin`, false).program).toBe("node");
     vfs.chmod(APP, 0o755, true);
     expect(resolveExec(vfs, "node", ["-v"], {}, `${APP}/bin`).program).toBe("node");
+  });
+});
+
+describe("a shell that would only start one of the runtime's programs", () => {
+  const env = { PATH: `${APP}/node_modules/.bin:/bin`, HOME: "/home", TERM: "xterm" };
+
+  function withCommands(): Vfs {
+    const vfs = new Vfs();
+    installBuiltinCommands(vfs);
+    vfs.mkdir(APP, true, 0o755);
+    return vfs;
+  }
+
+  it("is that program, with the environment the shell would have started with", () => {
+    const vfs = withCommands();
+    for (const option of ["-c", "-lc"]) {
+      for (const shell of ["sh", "bash", "jsh"]) {
+        expect(resolveExec(vfs, shell, [option, "pnpm dev"], env, APP)).toEqual({
+          program: "npm",
+          argv: ["pnpm", "dev"],
+          execArgv: [],
+          env: initialEnvironment(env, APP),
+        });
+      }
+    }
+    expect(resolveExec(vfs, "sh", ["-c", "node server.js --port=3000"], env, APP)).toMatchObject({
+      program: "node",
+      argv: ["node", "server.js", "--port=3000"],
+    });
+    expect(resolveExec(vfs, "sh", ["-lc", "npx vite --host 0.0.0.0"], env, APP)).toMatchObject({
+      program: "npm",
+      argv: ["npx", "vite", "--host", "0.0.0.0"],
+    });
+    expect(resolveExec(vfs, "sh", ["-c", "tsx watch server.ts"], env, APP)).toMatchObject({
+      program: "node",
+      argv: ["node", ...tsxArguments(["watch", "server.ts"])],
+    });
+    // A program started as itself keeps the environment it was given.
+    expect(resolveExec(vfs, "pnpm", ["dev"], env, APP).env).toBeUndefined();
+  });
+
+  it("stays a shell for any other line, option or program", () => {
+    const vfs = withCommands();
+    const lines = [
+      "pnpm install && pnpm dev",
+      "NODE_ENV=production pnpm dev",
+      "pnpm dev > out.log",
+      "pnpm 'dev'",
+      "pnpm $SCRIPT",
+      "pnpm  dev",
+      " pnpm dev",
+      "vite",
+      "echo pnpm",
+      "exit 3",
+      "",
+    ];
+    expect(lines.map((line) => resolveExec(vfs, "sh", ["-c", line], env, APP))).toEqual(
+      lines.map((line) => ({ program: "shell", argv: ["sh", "-c", line], execArgv: [] })),
+    );
+    for (const args of [
+      ["-xc", "pnpm dev"],
+      ["-ec", "pnpm dev"],
+      ["-c", "pnpm dev", "name"],
+      ["-c"],
+      ["pnpm dev"],
+      [],
+    ]) {
+      expect(resolveExec(vfs, "sh", args, env, APP).program).toBe("shell");
+    }
+  });
+
+  it("finds the program where the shell would, and leaves one it cannot start to the shell", () => {
+    const vfs = withCommands();
+    // A pnpm the project installed is the one a shell finds first on this PATH.
+    vfs.mkdir(`${APP}/node_modules/.bin`, true, 0o755);
+    vfs.writeFile(
+      `${APP}/node_modules/.bin/pnpm`,
+      new TextEncoder().encode("#!/usr/bin/env node\n"),
+      O_WRONLY | O_CREAT | O_TRUNC,
+      0o755,
+    );
+    expect(resolveExec(vfs, "sh", ["-c", "pnpm dev"], env, APP)).toMatchObject({
+      program: "node",
+      argv: ["node", `${APP}/node_modules/.bin/pnpm`, "dev"],
+    });
+    // With no PATH the shell searches the default one, and so the program is found there.
+    expect(resolveExec(vfs, "sh", ["-c", "pnpm dev"], {}, APP)).toMatchObject({
+      program: "npm",
+      env: { PATH: initialEnvironment({}, APP).PATH },
+    });
+    // Nothing of that name on the PATH: the shell runs, and says so.
+    expect(resolveExec(vfs, "/bin/sh", ["-c", "pnpm dev"], { PATH: "/nowhere" }, APP)).toEqual({
+      program: "shell",
+      argv: ["sh", "-c", "pnpm dev"],
+      execArgv: [],
+    });
+  });
+
+  it("names no word the shell runs itself", () => {
+    expect(
+      PROGRAM_NAMES.filter((name) => name in BUILTINS || name in COMMANDS || isReservedWord(name)),
+    ).toEqual([]);
   });
 });

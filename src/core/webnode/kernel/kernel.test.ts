@@ -3477,3 +3477,40 @@ describe("the file mode creation mask", () => {
     expect(readUmask(spawnFrom(h, thread).worker.init.umask)).toBe(0o077);
   });
 });
+
+describe("a command started in a shell that would only start it", () => {
+  it("is started without the shell when the page asks for one of the runtime's programs", () => {
+    const h = boot();
+    const pid = h.kernel.spawnFromPage("sh", ["-lc", "pnpm dev"], { env: { FORCE_COLOR: "1" } });
+    expect(h.workers).toHaveLength(1);
+    const { init } = h.worker(pid);
+    expect(init.program).toBe("npm");
+    expect(init.argv).toEqual(["pnpm", "dev"]);
+    // What the shell would have set as it started, on what the page gave.
+    expect(init.env).toMatchObject({ FORCE_COLOR: "1", PWD: h.cwd, SHLVL: "1", SHELL: "/bin/jsh" });
+  });
+
+  it("is started in the shell when the shell has to read the line", () => {
+    const h = boot();
+    const { init } = h.worker(
+      h.kernel.spawnFromPage("sh", ["-lc", "pnpm install && pnpm dev"], {}),
+    );
+    expect(init.program).toBe("shell");
+    expect(init.argv).toEqual(["sh", "-lc", "pnpm install && pnpm dev"]);
+    expect(init.env.SHLVL).toBeUndefined();
+  });
+
+  it("keeps its own name when a process starts it by the shell's", () => {
+    const h = boot();
+    const parent = h.worker(h.kernel.spawnFromPage("node", ["parent.js"], {}));
+    // As `child_process` starts a command line: `/bin/sh -c`, named `/bin/sh`.
+    const child = spawnFrom(h, parent, ["pipe", "pipe", "pipe"], {
+      command: "/bin/sh",
+      args: ["-c", "node child.js"],
+      argv0: "/bin/sh",
+    });
+    expect(child.worker.init.program).toBe("node");
+    expect(child.worker.init.argv).toEqual(["node", "child.js"]);
+    expect(child.worker.init.env.SHLVL).toBe("1");
+  });
+});

@@ -1,12 +1,13 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createSystemError } from "../../../errors";
 import { O_CREAT, O_TRUNC, O_WRONLY } from "../../../kernel/vfs/types";
 import { setRuntime } from "../../runtime";
 import type { SpawnRequest } from "../../runtime";
 import { createFakeRuntime } from "../../testing/fakeRuntime";
 import type { FakeChildIo, FakeRuntime } from "../../testing/fakeRuntime";
 import { runPackageManager } from "./index";
-import { createFakeRegistry } from "./testkit";
+import { createFakeRegistry, scriptLine } from "./testkit";
 import type { FakePackage } from "./testkit";
 
 const PACKAGES: FakePackage[] = [
@@ -203,12 +204,13 @@ describe("run", () => {
     scripts: { dev: "vite", predev: "echo pre", postdev: "echo post", fail: "exit 3" },
   };
 
-  it("runs a script through sh with the lifecycle environment and pnpm's header", async () => {
+  it("runs a script with the lifecycle environment and pnpm's header", async () => {
     const { rt, pm, spawned } = await setup({ ...manifest, scripts: { dev: "vite" } });
     expect(await pm("pnpm", "dev", "--port", "3000")).toBe(0);
     expect(spawned).toHaveLength(1);
     const [request] = spawned;
-    expect([request.command, ...request.args]).toEqual(["sh", "-c", "vite --port 3000"]);
+    // `sh -c 'vite --port 3000'` would only start vite: it is started without the shell.
+    expect([request.command, ...request.args]).toEqual(["vite", "--port", "3000"]);
     expect(request.stdio).toEqual(["inherit", "inherit", "inherit"]);
     expect(request.cwd).toBe("/project");
     expect(request.env).toMatchObject({
@@ -232,10 +234,57 @@ describe("run", () => {
     expect(rt.stdout()).toBe("\n> app@1.2.3 dev /project\n> vite --port 3000\n\n");
   });
 
+  it("gives a program it starts itself the environment a shell would have started with", async () => {
+    const { pm, spawned } = await setup({ ...manifest, scripts: { dev: "vite" } });
+    await pm("pnpm", "dev");
+    expect(spawned[0].env).toMatchObject({
+      PWD: "/project",
+      SHLVL: "1",
+      SHELL: "/bin/jsh",
+      USER: "user",
+      HOME: "/home",
+    });
+  });
+
+  it("leaves a line the shell has to read, or a word the shell runs itself, to the shell", async () => {
+    const lines = [
+      "vite && echo done",
+      "NODE_ENV=production vite",
+      "vite > out.log",
+      "vite 'a b'",
+      "vite $PORT",
+      "vite src/*.js",
+      "echo done",
+      "cd src",
+      "exit 3",
+    ];
+    for (const line of lines) {
+      const { pm, spawned } = await setup({ ...manifest, scripts: { dev: line } });
+      await pm("npm", "run", "dev");
+      expect([spawned[0].command, ...spawned[0].args]).toEqual(["sh", "-c", line]);
+      expect(spawned[0].env.SHLVL).toBeUndefined();
+    }
+  });
+
+  it("leaves a program that cannot be started to the shell, which says why", async () => {
+    const { rt, pm, spawned } = await setup({ ...manifest, scripts: { dev: "vite --host" } });
+    const spawn = rt.processes.spawn;
+    rt.processes.spawn = (request) => {
+      if (request.command === "vite") {
+        throw createSystemError("ENOENT", "spawn", "vite");
+      }
+      return spawn(request);
+    };
+    expect(await pm("pnpm", "dev")).toBe(0);
+    expect(spawned.map((request) => [request.command, ...request.args])).toEqual([
+      ["sh", "-c", "vite --host"],
+    ]);
+  });
+
   it("runs pre and post scripts for every tool", async () => {
     const npm = await setup(manifest);
     await npm.pm("npm", "run", "dev");
-    expect(npm.spawned.map((request) => request.args[1])).toEqual([
+    expect(npm.spawned.map((request) => scriptLine(request))).toEqual([
       "echo pre",
       "vite",
       "echo post",
@@ -243,7 +292,7 @@ describe("run", () => {
     expect(npm.rt.stdout()).toContain("\n> app@1.2.3 dev\n> vite\n\n");
     const yarn = await setup(manifest);
     await yarn.pm("yarn", "dev");
-    expect(yarn.spawned.map((request) => request.args[1])).toEqual([
+    expect(yarn.spawned.map((request) => scriptLine(request))).toEqual([
       "echo pre",
       "vite",
       "echo post",
@@ -259,7 +308,7 @@ describe("run", () => {
     ]) {
       const other = await setup(manifest);
       await other.pm(...argv);
-      expect(other.spawned.map((request) => request.args[1])).toEqual([
+      expect(other.spawned.map((request) => scriptLine(request))).toEqual([
         "echo pre",
         "vite",
         "echo post",
@@ -270,7 +319,7 @@ describe("run", () => {
   it("returns the script's exit status with the tool's failure line", async () => {
     // pnpm 9.12.1 and yarn 1.22.19; npm says nothing (below).
     const exits = (request: SpawnRequest) =>
-      request.args[1] === "exit 3" ? 3 : request.args[1] === "jest" ? 2 : 0;
+      scriptLine(request) === "exit 3" ? 3 : scriptLine(request) === "jest" ? 2 : 0;
     const pnpm = await setup({ ...manifest, scripts: { fail: "exit 3", test: "jest" } }, exits);
     expect(await pnpm.pm("pnpm", "fail")).toBe(3);
     expect(pnpm.rt.stderr()).toBe(" ELIFECYCLE  Command failed with exit code 3.\n");
@@ -290,7 +339,7 @@ describe("run", () => {
     // non-zero exit (3, or the 130 of a script that handled Ctrl+C) is
     // passed on without a word.
     const { rt, pm } = await setup(manifest, (request) =>
-      request.args[1] === "exit 3" ? 3 : request.args[1] === "vite" ? 130 : 0,
+      scriptLine(request) === "exit 3" ? 3 : scriptLine(request) === "vite" ? 130 : 0,
     );
     expect(await pm("npm", "run", "fail")).toBe(3);
     expect(await pm("npm", "run", "dev")).toBe(130);
@@ -309,7 +358,7 @@ describe("a command that a signal ends", () => {
   };
   /** A command that runs until a signal ends it; `echo …` hooks end at once. */
   const untilSignalled = (request: SpawnRequest) =>
-    request.args[1]?.startsWith("echo ") ? 0 : new Promise<number>(() => {});
+    scriptLine(request).startsWith("echo ") ? 0 : new Promise<number>(() => {});
   /** Lets the tool get as far as waiting for its command. */
   const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
   /** The pid the fake runtime gave the tool's `n`th child: it counts up from the tool's own. */
@@ -340,7 +389,7 @@ describe("a command that a signal ends", () => {
       expect(await run).toBe(status);
       expect(rt.exitCode).toBe(status);
       expect(rt.stderr()).toBe("");
-      expect(spawned.map((request) => request.args[1])).toEqual(["echo pre", "vite"]);
+      expect(spawned.map((request) => scriptLine(request))).toEqual(["echo pre", "vite"]);
     }
     // A script that died of a signal npm was never sent.
     const { rt, pm } = await setup({ scripts: { dev: "vite" } }, untilSignalled);
@@ -430,7 +479,11 @@ describe("a command that a signal ends", () => {
     expect(await run).toBe(0);
     expect(rt.exitCode).toBeNull();
     expect(rt.stderr()).toBe("");
-    expect(spawned.map((request) => request.args[1])).toEqual(["echo pre", "vite", "echo post"]);
+    expect(spawned.map((request) => scriptLine(request))).toEqual([
+      "echo pre",
+      "vite",
+      "echo post",
+    ]);
   });
 
   it("pnpm reports a script any other signal ended, and dies of that signal", async () => {
@@ -443,7 +496,7 @@ describe("a command that a signal ends", () => {
     expect(await run).toBe(143);
     expect(rt.exitCode).toBe(143);
     expect(rt.stderr()).toBe(" ELIFECYCLE  Command failed.\n");
-    expect(spawned.map((request) => request.args[1])).toEqual(["echo pre", "vite"]);
+    expect(spawned.map((request) => scriptLine(request))).toEqual(["echo pre", "vite"]);
     // `pnpm run sigkill`: SIGKILL ends pnpm before it has said anything.
     const killed = await setup({ scripts: { dev: "vite" } }, untilSignalled);
     const first = killed.pm("pnpm", "dev");
@@ -539,7 +592,7 @@ describe("output whose reader has gone", () => {
     let child = "running";
     const run = npm.pm("npm", "run", "dev").then((status) => ({ status, child }));
     expect(await run).toEqual({ status: 1, child: "running" });
-    expect(npm.spawned.map((request) => request.args[1])).toEqual(["vite"]);
+    expect(npm.spawned.map((request) => scriptLine(request))).toEqual(["vite"]);
     expect(npm.rt.stderr()).toBe("");
     child = "ended";
     finish(0);
@@ -553,11 +606,11 @@ describe("output whose reader has gone", () => {
     const hooked = await setup({ ...manifest, scripts: { predev: "echo pre", dev: "vite" } });
     hooked.rt.closeReader(1);
     expect(await hooked.pm("npm", "run", "dev")).toBe(1);
-    expect(hooked.spawned.map((request) => request.args[1])).toEqual(["echo pre"]);
+    expect(hooked.spawned.map((request) => scriptLine(request))).toEqual(["echo pre"]);
     const yarn = await setup(manifest);
     yarn.rt.closeReader(1);
     expect(await yarn.pm("yarn", "run", "dev")).toBe(0);
-    expect(yarn.spawned.map((request) => request.args[1])).toEqual(["vite"]);
+    expect(yarn.spawned.map((request) => scriptLine(request))).toEqual(["vite"]);
   });
 
   it("lets pnpm survive its first lost write and die of the next", async () => {
@@ -569,13 +622,13 @@ describe("output whose reader has gone", () => {
     const lone = await setup(manifest);
     lone.rt.closeReader(1);
     expect(await lone.pm("pnpm", "run", "dev")).toBe(0);
-    expect(lone.spawned.map((request) => request.args[1])).toEqual(["vite"]);
+    expect(lone.spawned.map((request) => scriptLine(request))).toEqual(["vite"]);
     expect(lone.rt.stderr()).toBe("");
     const scripts = { predev: "echo pre", dev: "vite", postdev: "echo post" };
     const hooked = await setup({ ...manifest, scripts });
     hooked.rt.closeReader(1);
     expect(await hooked.pm("pnpm", "run", "dev")).toBe(1);
-    expect(hooked.spawned.map((request) => request.args[1])).toEqual(["echo pre"]);
+    expect(hooked.spawned.map((request) => scriptLine(request))).toEqual(["echo pre"]);
     expect(hooked.rt.stderr()).toBe(
       [
         "node:events:496",
@@ -598,19 +651,19 @@ describe("output whose reader has gone", () => {
     );
     let reader: FakeRuntime | null = null;
     const firstHeader = await setup({ ...manifest, scripts }, (request) => {
-      if (request.args[1] === "echo pre") {
+      if (scriptLine(request) === "echo pre") {
         reader?.closeReader(1);
       }
       return 0;
     });
     reader = firstHeader.rt;
     expect(await firstHeader.pm("pnpm", "run", "dev")).toBe(1);
-    expect(firstHeader.spawned.map((request) => request.args[1])).toEqual(["echo pre", "vite"]);
+    expect(firstHeader.spawned.map((request) => scriptLine(request))).toEqual(["echo pre", "vite"]);
     // A post script alone: the script runs, and pnpm dies before its post script.
     const post = await setup({ ...manifest, scripts: { dev: "vite", postdev: "echo post" } });
     post.rt.closeReader(1);
     expect(await post.pm("pnpm", "run", "dev")).toBe(1);
-    expect(post.spawned.map((request) => request.args[1])).toEqual(["vite"]);
+    expect(post.spawned.map((request) => scriptLine(request))).toEqual(["vite"]);
   });
 
   it("has had all of a script's header once it has its first line", async () => {
@@ -670,7 +723,7 @@ describe("npm at log level silent", () => {
       Object.assign(rt.env, env);
       expect(await pm(...argv)).toBe(0);
       expect(rt.stdout()).toBe("");
-      expect(spawned.map((request) => request.args[1])).toEqual(["echo pre", "vite"]);
+      expect(spawned.map((request) => scriptLine(request))).toEqual(["echo pre", "vite"]);
       expect(spawned[1].env.npm_config_loglevel).toBe("silent");
     }
     // npm 11.20: `npm run --loglevel warn env` prints the header and the
@@ -688,7 +741,9 @@ describe("npm at log level silent", () => {
     // npm 11.20, 5 of 5: `npm run -s quiet | true` (quiet exits 4) gives 4,
     // `npm run --silent append | true` gives 0.
     for (const { argv, env } of silentRuns) {
-      const { rt, pm } = await setup(manifest, (request) => (request.args[1] === "vite" ? 4 : 0));
+      const { rt, pm } = await setup(manifest, (request) =>
+        scriptLine(request) === "vite" ? 4 : 0,
+      );
       Object.assign(rt.env, env);
       rt.closeReader(1);
       expect(await pm(...argv)).toBe(4);

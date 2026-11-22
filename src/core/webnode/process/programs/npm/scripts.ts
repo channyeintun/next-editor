@@ -7,7 +7,9 @@
 import { exitStatusNumber } from "../../../signals";
 import { EXEC_PATH, NODE_VERSION, ARCH, PLATFORM, DEFAULT_PATH } from "../../platform";
 import { runtime } from "../../runtime";
-import type { ExitStatus, ProcessRuntime } from "../../runtime";
+import type { ChildHandle, ExitStatus, ProcessRuntime } from "../../runtime";
+import { initialEnvironment } from "../shell/environment";
+import { loneProgram } from "../shell/interpreter";
 import { PmError } from "./errors";
 import { TOOL_VERSIONS, formatDuration } from "./output";
 import type { Reporter, Tool } from "./output";
@@ -133,6 +135,39 @@ export function handleSignals(): void {
   });
 }
 
+/**
+ * Starts `command` with inherited stdio. `sh -c` of a line that only starts
+ * one program (`loneProgram`) is that program started, with the environment
+ * the shell would have given it: the shell would do nothing but stand for it,
+ * as a process of its own for as long as the program runs. A program that
+ * cannot be started is left to the shell, which says why in its own words.
+ */
+function startForeground(
+  command: string,
+  args: string[],
+  cwd: string,
+  env: Record<string, string>,
+): ChildHandle {
+  const rt = runtime();
+  const stdio: ["inherit", "inherit", "inherit"] = ["inherit", "inherit", "inherit"];
+  const program =
+    command === "sh" && args.length === 2 && args[0] === "-c" ? loneProgram(args[1]) : null;
+  if (program !== null) {
+    try {
+      return rt.processes.spawn({
+        command: program[0],
+        args: program.slice(1),
+        cwd,
+        env: initialEnvironment(env, cwd),
+        stdio,
+      });
+    } catch {
+      // Not found, or not to be run: the shell's to report.
+    }
+  }
+  return rt.processes.spawn({ command, args, cwd, env, stdio });
+}
+
 /** Spawns `command` with inherited stdio, passing `tool`'s signals on to it; resolves with how it ended. */
 function spawnForeground(
   tool: Tool,
@@ -143,13 +178,7 @@ function spawnForeground(
 ): Promise<ExitStatus> {
   const rt = runtime();
   handleSignals();
-  const child = rt.processes.spawn({
-    command,
-    args,
-    cwd,
-    env,
-    stdio: ["inherit", "inherit", "inherit"],
-  });
+  const child = startForeground(command, args, cwd, env);
   foreground = { pid: child.pid, tool };
   rt.ref();
   return new Promise((resolve) => {

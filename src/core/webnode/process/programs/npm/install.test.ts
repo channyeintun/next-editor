@@ -10,7 +10,7 @@ import { Reporter, createRuntimeSink } from "./output";
 import type { Tool } from "./output";
 import { createRegistryClient } from "./registry";
 import type { TarballCache } from "./registry";
-import { createFakeRegistry } from "./testkit";
+import { createFakeRegistry, scriptLine } from "./testkit";
 import type { FakePackage } from "./testkit";
 
 const PACKAGES: FakePackage[] = [
@@ -282,16 +282,17 @@ describe("install", () => {
     expect(second.rt.stdout()).toMatch(/reused 1, downloaded 0, added 1/);
   });
 
-  it("runs the root project's lifecycle scripts through the shell", async () => {
+  it("runs the root project's lifecycle scripts, as a shell runs them", async () => {
     const { run, spawned } = await setup({
       name: "app",
       dependencies: { react: "19.0.0" },
       scripts: { postinstall: "echo done", prepare: "husky" },
     });
     await run();
+    // `echo` is the shell's own; `husky` is a program, started without a shell.
     expect(spawned.map((request) => [request.command, ...request.args])).toEqual([
       ["sh", "-c", "echo done"],
-      ["sh", "-c", "husky"],
+      ["husky"],
     ]);
     expect(spawned[0].env.npm_lifecycle_event).toBe("postinstall");
   });
@@ -323,7 +324,7 @@ describe("install", () => {
     spawned.length = 0;
     const result = await run();
     expect(result.upToDate).toBe(true);
-    expect(spawned.map((request) => request.args[1])).toEqual(["echo pre", "echo post"]);
+    expect(spawned.map((request) => scriptLine(request))).toEqual(["echo pre", "echo post"]);
   });
 
   it("reports a failed root script as the tool does, and ends without its summary", async () => {
@@ -332,13 +333,13 @@ describe("install", () => {
     // when it installs and when nothing changed. pnpm 9.12.1 prints
     // " ELIFECYCLE  Command failed with exit code 7." and no "Done in".
     const scripts = { preinstall: "echo PRE", postinstall: "exit 7", prepare: "echo PREPARE" };
-    const status = (request: SpawnRequest) => (request.args[1] === "exit 7" ? 7 : 0);
+    const status = (request: SpawnRequest) => (scriptLine(request) === "exit 7" ? 7 : 0);
     const npm = await setup({ name: "inst", version: "1.0.0", scripts }, { status });
     for (const upToDate of [false, true]) {
       const printed = { out: npm.rt.stdout().length, err: npm.rt.stderr().length };
       const result = await npm.run({ tool: "npm" });
       expect(result).toMatchObject({ status: 7, upToDate });
-      expect(npm.spawned.map((request) => request.args[1])).toEqual(["echo PRE", "exit 7"]);
+      expect(npm.spawned.map((request) => scriptLine(request))).toEqual(["echo PRE", "exit 7"]);
       expect(npm.rt.stdout().slice(printed.out)).toBe(
         "\n> inst@1.0.0 preinstall\n> echo PRE\n\n\n> inst@1.0.0 postinstall\n> exit 7\n\n",
       );
@@ -383,13 +384,13 @@ describe("install", () => {
   it("runs preinstall before resolving, and stops when it fails", async () => {
     const { rt, run, fake, spawned } = await setup(
       { dependencies: { react: "19.0.0" }, scripts: { preinstall: "exit 3", postinstall: "x" } },
-      { status: (request) => (request.args[1] === "exit 3" ? 3 : 0) },
+      { status: (request) => (scriptLine(request) === "exit 3" ? 3 : 0) },
     );
     const result = await run();
     expect(result.status).toBe(3);
     expect(fake.requests).toEqual([]);
     expect(rt.fs.exists("/project/node_modules")).toBe(false);
-    expect(spawned.map((request) => request.args[1])).toEqual(["exit 3"]);
+    expect(spawned.map((request) => scriptLine(request))).toEqual(["exit 3"]);
   });
 
   it("ignores state-file locations outside node_modules instead of deleting them", async () => {

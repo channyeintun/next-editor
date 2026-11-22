@@ -178,6 +178,25 @@ preview iframe                on a PREVIEW ORIGIN, <session>-<port>.<host>. Its
   the Rust rewriter as built and of the packages the rewrite calls
   (build/webnodeBundle.ts), so a deploy that changes none of them keeps what
   browsers hold.
+- **A shell that would only start one program is not started.** `sh -c` of
+  one plain command (words with nothing in them a shell reads: no quoting,
+  expansion, redirection or operator) whose first word is a program does
+  nothing but start that program and stand for it: the shell ends as the
+  program ends, of its signal too, as bash does by exec'ing the lone command
+  of `-c`. That shell is a process of its own for as long as the program
+  runs: a worker that takes some 37 ms to start and holds 12 MB. A lesson's
+  dev server was started through two of them: the editor runs each command
+  as `sh -lc <command>`, and a package manager runs a script as
+  `sh -c <script>`. Now the program is started in the shell's place, with the
+  environment the shell would have started with
+  (process/programs/shell/environment.ts). The package manager does it for a
+  script, asking the shell's own rule which lines those are (`loneProgram`
+  in process/programs/shell/interpreter.ts knows the words the shell runs
+  itself); a program that cannot be started is left to the shell, which says
+  why. The kernel does it for any `sh -c` or `sh -lc` whose first word is
+  one of the runtime's own programs (`node`, `tsx`, `npm`, `npx`, `pnpm`,
+  `pnpx`, `yarn`; kernel/exec.ts): it has no shell to ask about any other
+  word. Every other line starts a shell, as before.
 - **Native binaries are swapped at install time** the way WebContainer does it:
   `esbuild` → `esbuild-wasm`, `rollup` → `@rollup/wasm-node`, at the same
   version, and a platform family's `wasm32-wasi` member in place of its native
