@@ -224,6 +224,25 @@ function nextStartIndicator(
         inputs.narration,
       );
     }
+    // The lesson was there before its loading could be drawn (a lesson fetched ahead
+    // loads in a few milliseconds), or the viewer came back to the start: the narration
+    // still loads ahead, on a border of its own. Not once the triangle shows filled,
+    // which is not taken back.
+    if (inputs.warmingUp && prev.mode !== "ready" && prev.mode !== "lesson") {
+      return traceNarration(
+        {
+          mode: "warming",
+          trace: prev.trace + 1,
+          value: 0,
+          drift: 0,
+          shape: "button",
+          solid: false,
+          narrationFrom: 0,
+          narrationStart: levelOf(inputs.narration),
+        },
+        inputs.narration,
+      );
+    }
     // Loaded, and autoplay is about to take it on: its share is done, the trace is not.
     if (inputs.autoplayPending && prev.mode === "lesson" && prev.narrationFrom > 0) {
       return { ...prev, value: prev.narrationFrom, drift: prev.narrationFrom };

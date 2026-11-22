@@ -351,6 +351,31 @@ describe("LessonStartIndicator", () => {
       expect(isShown()).toBe(false);
     });
 
+    it("is not filled for a lesson that loaded before its loading could show", () => {
+      // A lesson fetched ahead is there at once: no loading was ever drawn for it.
+      Object.assign(lesson, {
+        warmUpWanted: true,
+        recordingId: "lesson-1",
+        hasNarrationPlayer: true,
+      });
+      const { rerender } = render(element());
+
+      // It can be played, but its narration has yet to load: the border is open.
+      expect(playButton()).not.toBeNull();
+      expect(isFilled()).toBe(false);
+      expect(traced()).toBe(0);
+
+      lesson.narration = warming(0, 3);
+      rerender(element());
+      expect(traced()).toBeGreaterThan(0);
+      expect(isFilled()).toBe(false);
+
+      lesson.narration = WARMED;
+      rerender(element());
+      expect(traced()).toBe(1);
+      expect(isFilled()).toBe(true);
+    });
+
     it("fills at once for a lesson that has no narration to load", () => {
       lesson.warmUpWanted = true;
       const { rerender } = render(element({ lessonLoading: true }));

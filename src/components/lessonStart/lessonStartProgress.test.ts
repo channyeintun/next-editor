@@ -284,16 +284,54 @@ describe("advanceStartIndicator", () => {
       expect(loaded!.trace).toBe(fetching!.trace);
     });
 
-    it("shows the play button filled when the viewer leaves the start and comes back", () => {
-      const states = run([
+    it("goes on showing the narration loading when the viewer leaves the start and comes back", () => {
+      const [, , left, back, ready] = run([
         { lessonLoading: true, warmingUp: true },
         { idleAtStart: true, warmingUp: true, narration: warming(0, 0, 1) },
         // Scrubbed away from the start, and back, while the narration still loads.
         { warmingUp: true, narration: warming(0, 0, 2) },
         { idleAtStart: true, warmingUp: true, narration: warming(0, 0, 3) },
+        { idleAtStart: true, narration: WARMED },
       ]);
 
-      expect(states.at(-1)).toMatchObject({ mode: "ready", value: 1, solid: true });
+      // Not filled: Play would still have to wait. A border of its own, for the narration.
+      expect(back).toMatchObject({ mode: "warming", solid: false, shape: "button" });
+      expect(back!.trace).toBe(left!.trace + 1);
+      expect(back!.value).toBeGreaterThan(0);
+      expect(back!.value).toBeLessThan(1);
+      expect(ready).toMatchObject({ mode: "ready", value: 1, solid: true });
+      expect(ready!.trace).toBe(back!.trace);
+    });
+
+    it("draws the narration loading for a lesson that was there before its loading showed", () => {
+      // A lesson fetched ahead loads in a few milliseconds: the first thing drawn is a
+      // lesson that can be played, whose narration has not been asked to load yet.
+      const [loaded, asked, arriving, ready] = run([
+        { idleAtStart: true, warmingUp: true },
+        { idleAtStart: true, warmingUp: true, narration: warming(0) },
+        { idleAtStart: true, warmingUp: true, narration: warming(0, 0, 3) },
+        { idleAtStart: true, narration: WARMED },
+      ]);
+
+      // Not the filled triangle: Play would have nothing to give yet.
+      expect(loaded).toMatchObject({ mode: "warming", value: 0, solid: false, shape: "button" });
+      expect(loaded!.drift).toBeGreaterThan(0);
+      expect(asked!.trace).toBe(loaded!.trace);
+      expect(arriving!.value).toBeGreaterThan(0);
+      expect(ready).toMatchObject({ mode: "ready", value: 1, solid: true });
+      expect(ready!.trace).toBe(loaded!.trace);
+    });
+
+    it("does not take the filled triangle back when a narration is warmed up again", () => {
+      const [, , ready, again] = run([
+        { lessonLoading: true, warmingUp: true },
+        { idleAtStart: true, warmingUp: true, narration: warming(1, 0, 3) },
+        { idleAtStart: true, narration: WARMED },
+        // The narration was found under another name and is warmed up from there.
+        { idleAtStart: true, warmingUp: true, narration: warming(0) },
+      ]);
+
+      expect(again).toBe(ready);
     });
 
     it("keeps to one border when autoplay takes the lesson on meanwhile", () => {
