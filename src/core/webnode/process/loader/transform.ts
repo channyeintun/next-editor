@@ -842,9 +842,18 @@ function commonJsFromModule(source: string, filename: string, strict: boolean): 
  * not compile as a script (a CommonJS wrapper body) but does as an async
  * function body, so its top level awaits. Node 22's module detection retries
  * such a file as ESM; a script that merely says `return` stays CommonJS.
+ *
+ * `runsAsScript`, where the caller has one, compiles the code as the caller
+ * will run it and answers whether it did. Most files that say `await` say it
+ * inside a function and are scripts: asked first, the caller has then
+ * compiled such a file once, for running, instead of once here and again to
+ * run it.
  */
-function needsTopLevelAwait(code: string): boolean {
+function needsTopLevelAwait(code: string, runsAsScript?: () => boolean): boolean {
   if (!/\bawait\b/.test(code)) {
+    return false;
+  }
+  if (runsAsScript?.()) {
     return false;
   }
   try {
@@ -944,12 +953,18 @@ function hoistedExport(exported: string, local: string): string {
  * module's text with everything else already rewritten, and answers the code.
  * What it throws ends the preparation (the worker that makes large modules'
  * entries passes one, loader/rewriter).
+ *
+ * `compilesAsScript` is for a caller that runs the code it gets: given the
+ * CommonJS code of a file whose syntax has to decide (`needsTopLevelAwait`),
+ * it compiles that code as it will run it, keeps what it compiled, and
+ * answers whether it compiled.
  */
 export function prepareSource(
   source: string,
   filename: string,
   format: "esm" | "cjs" | null,
   rewriteImports?: (text: string) => string,
+  compilesAsScript?: (code: string) => boolean,
 ): PreparedSource {
   const original = withoutPreamble(source);
   let text = stripTypes(original, filename);
@@ -987,8 +1002,11 @@ export function prepareSource(
     }
   }
 
-  const isModule =
-    hasModuleSyntax || format === "esm" || (format === null && needsTopLevelAwait(text));
+  // A file of no named format and without module syntax is a script, unless
+  // it awaits at its top level: decided below, on the code it becomes. Such
+  // a file has no `import` or `export` for the steps between to rewrite.
+  const isModule = hasModuleSyntax || format === "esm";
+  const asWritten = text;
 
   // Rewrites of `import(`, `import.meta` and string export names.
   const edits: Edit[] = [];
@@ -1105,9 +1123,16 @@ export function prepareSource(
   }
 
   if (!isModule) {
+    const code = text;
+    if (
+      format === null &&
+      needsTopLevelAwait(asWritten, compilesAsScript && (() => compilesAsScript(code)))
+    ) {
+      return prepareSource(source, filename, "esm", rewriteImports);
+    }
     return {
       format: "cjs",
-      code: text,
+      code,
       specifiers: [],
       prologue: "",
       exportNames: null,

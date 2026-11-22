@@ -145,10 +145,51 @@ function compileFunction(
 
 type FileFormat = "esm" | "cjs" | "json" | "addon";
 
+/** A CommonJS file's code compiled into its wrapper function (`COMMONJS_PARAMETERS`). */
+type CommonJsWrapper = (...args: unknown[]) => unknown;
+
+/**
+ * `source` prepared for a caller that runs it. `wrapper` is the code of a
+ * CommonJS file compiled, where telling a script from a module that awaits at
+ * its top level took compiling it (transform.ts, `needsTopLevelAwait`): the
+ * file is then compiled once, and `runCommonJs` runs that.
+ */
+function prepareToRun(
+  source: string,
+  filename: string,
+  format: "esm" | "cjs" | null,
+): { prepared: PreparedSource; wrapper: CommonJsWrapper | null } {
+  const compiled: { wrapper: CommonJsWrapper | null } = { wrapper: null };
+  const prepared = prepareSource(source, filename, format, undefined, (code) => {
+    try {
+      compiled.wrapper = compileFunction(code, COMMONJS_PARAMETERS, filename, false);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) {
+        throw error;
+      }
+    }
+    return compiled.wrapper !== null;
+  });
+  return { prepared, wrapper: prepared.format === "cjs" ? compiled.wrapper : null };
+}
+
+/**
+ * A CommonJS file as `classify` prepared it, for the load that runs it: the
+ * text it read, the format it told `prepareSource`, and what came back.
+ */
+interface ClassifiedScript {
+  source: string;
+  format: "cjs" | null;
+  prepared: PreparedSource;
+  wrapper: CommonJsWrapper | null;
+}
+
 interface Classified {
   format: FileFormat;
   /** The source as read to decide the format, for the caller to run; null when the name decided. */
   prepared: PreparedSource | null;
+  /** For a file that is CommonJS by its syntax: what `loadClassified` hands to its load. */
+  script: ClassifiedScript | null;
 }
 
 /**
@@ -157,16 +198,45 @@ interface Classified {
  */
 function classify(filename: string): Classified {
   if (filename.endsWith(".node")) {
-    return { format: "addon", prepared: null };
+    return { format: "addon", prepared: null, script: null };
   }
   const named = formatByName(filename);
   if (named === "json" || named === "esm") {
-    return { format: named, prepared: null };
+    return { format: named, prepared: null, script: null };
   }
   // A CommonJS-named or unmarked file is an ES module when it uses the syntax.
-  const prepared = prepareSource(readText(filename), filename, named);
-  return { format: prepared.format, prepared };
+  const source = readText(filename);
+  const { prepared, wrapper } = prepareToRun(source, filename, named);
+  return {
+    format: prepared.format,
+    prepared,
+    script: prepared.format === "cjs" ? { source, format: named, prepared, wrapper } : null,
+  };
 }
+
+/**
+ * The CommonJS file `classify` prepared for an `import` or as the program's
+ * entry, while the `Module._load` that runs it is under way. That load reads
+ * the file again, as any `require()` does, and `_compile` prepares what it is
+ * given: where that is the very text and format `classify` prepared, it takes
+ * this instead, so the file is prepared once, not twice (TypeScript's
+ * compiler is 9 MB). Whatever compiles first takes it away, so nothing a
+ * load starts, and no extension handler of the program's own, finds it.
+ */
+let classified: { filename: string; script: ClassifiedScript } | null = null;
+
+/** Runs `load`, which loads CommonJS file `filename`, with what `classify` prepared of it at hand. */
+function loadClassified<T>(filename: string, script: ClassifiedScript | null, load: () => T): T {
+  classified = script === null ? null : { filename, script };
+  try {
+    return load();
+  } finally {
+    classified = null;
+  }
+}
+
+/** The files a dependency holds a `ClassifiedScript` of until it loads them: one holder a file. */
+const heldScripts = new Set<string>();
 
 // ---------------------------------------------------------------------------
 // Namespaces
@@ -284,9 +354,14 @@ const COMMONJS_PARAMETERS = [
   EXPORTS_BINDING,
 ];
 
-/** Runs compiled CommonJS `code` for `module`. */
-function runCommonJs(module: Module, code: string, filename: string): unknown {
-  const run = compileFunction(code, COMMONJS_PARAMETERS, filename, false);
+/** Runs compiled CommonJS `code` for `module`; `wrapper` is that code compiled already, where it was. */
+function runCommonJs(
+  module: Module,
+  code: string,
+  filename: string,
+  wrapper: CommonJsWrapper | null = null,
+): unknown {
+  const run = wrapper ?? compileFunction(code, COMMONJS_PARAMETERS, filename, false);
   const require = makeRequire(module);
   return run.call(
     module.exports,
@@ -547,19 +622,22 @@ export class Module {
   }
 
   _compile(content: string, filename: string): unknown {
+    const handed =
+      classified !== null && classified.filename === filename ? classified.script : null;
+    classified = null;
     const named = formatByName(filename);
     // A TypeScript or JSX file takes its format from its package, as tsx does;
     // a JavaScript file's syntax still decides.
-    const prepared = prepareSource(
-      content,
-      filename,
-      named === "esm" || (named === "cjs" && isCompiledFile(filename)) ? named : null,
-    );
+    const format = named === "esm" || (named === "cjs" && isCompiledFile(filename)) ? named : null;
+    const { prepared, wrapper } =
+      handed !== null && handed.format === format && handed.source === content
+        ? handed
+        : prepareToRun(content, filename, format);
     if (prepared.format === "esm") {
       this.exports = requireEsmSource(filename, prepared);
       return undefined;
     }
-    return runCommonJs(this, prepared.code, filename);
+    return runCommonJs(this, prepared.code, filename, wrapper);
   }
 }
 
@@ -724,13 +802,17 @@ function esmRecord(filename: string, query: string, prepared?: PreparedSource): 
   return record;
 }
 
-function loadNonEsm(filename: string, format: FileFormat): Namespace {
+function loadNonEsm(
+  filename: string,
+  format: FileFormat,
+  script: ClassifiedScript | null = null,
+): Namespace {
   if (format === "json") {
     const module = Module._cache[filename];
     const exported = module ? module.exports : Module._load(filename, null, false);
     return namespaceOfExports(() => exported);
   }
-  const exported = Module._load(filename, null, false);
+  const exported = loadClassified(filename, script, () => Module._load(filename, null, false));
   // A module may delete itself from require.cache while it loads.
   const module = Module._cache[filename] as Module | undefined;
   return module ? namespaceOfModule(module) : namespaceOfExports(() => exported);
@@ -750,11 +832,30 @@ function dependencyFor(specifier: string, parent: string, mode: ResolveMode): De
   if (known) {
     return { kind: "esm", record: known };
   }
-  const { format, prepared } = classify(filename);
+  const { format, prepared, script } = classify(filename);
   if (format === "esm") {
     return { kind: "esm", record: esmRecord(filename, query, prepared ?? undefined) };
   }
-  return { kind: "other", load: () => loadNonEsm(filename, format), loaded: null };
+  // Kept until this dependency loads the file, which is when its importer
+  // runs. A file many modules import is held once, not once an importer, and
+  // one that is loaded already is not held at all: its text can be megabytes.
+  let held =
+    script !== null && !(filename in Module._cache) && !heldScripts.has(filename) ? script : null;
+  if (held !== null) {
+    heldScripts.add(filename);
+  }
+  return {
+    kind: "other",
+    load: () => {
+      const mine = held;
+      if (mine !== null) {
+        held = null;
+        heldScripts.delete(filename);
+      }
+      return loadNonEsm(filename, format, mine);
+    },
+    loaded: null,
+  };
 }
 
 /**
@@ -1101,11 +1202,11 @@ export async function importModule(specifier: string, parent: string): Promise<N
 export function runEntry(filename: string): void | Promise<unknown> {
   // Before its source is read: an entry that does not parse is watched too.
   host.report?.(formatByName(filename) === "esm" ? "import" : "require", filename);
-  const { format, prepared } = classify(filename);
+  const { format, prepared, script } = classify(filename);
   if (format === "esm") {
     return evaluateEntry(esmRecord(filename, "", prepared ?? undefined));
   }
-  Module._load(filename, null, true);
+  loadClassified(filename, script, () => Module._load(filename, null, true));
   return undefined;
 }
 
