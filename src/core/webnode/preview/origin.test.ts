@@ -1,6 +1,13 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { createSessionId, isSessionId, parsePreviewOrigin, previewUrl } from "./origin";
+import {
+  createSessionId,
+  isRuntimeHostname,
+  isSessionId,
+  isWebnodeHostname,
+  parsePreviewOrigin,
+  previewUrl,
+} from "./origin";
 import type { PreviewBase } from "./origin";
 
 const DEV: PreviewBase = { protocol: "http:", host: "localhost:5173" };
@@ -84,5 +91,24 @@ describe("preview origins", () => {
     for (const value of ["", "short", "k3j2h1x9abc", "K3J2H1X9AB", "k3j2h1x9a-", "k3j2h1x9a.b"]) {
       expect(isSessionId(value)).toBe(false);
     }
+  });
+});
+
+describe("isRuntimeHostname", () => {
+  it("takes the base as isWebnodeHostname does: a hostname, no port", () => {
+    expect(isRuntimeHostname("runtime.localhost", "localhost")).toBe(true);
+    expect(isRuntimeHostname("Runtime.Preview.Example.dev", "preview.example.dev")).toBe(true);
+    expect(isRuntimeHostname("runtime.preview.example.dev", "Preview.Example.dev")).toBe(true);
+    expect(isWebnodeHostname("runtime.localhost", "localhost")).toBe(true);
+  });
+
+  it("is the runtime host only, not a preview host or another name", () => {
+    expect(isRuntimeHostname("k3j2h1x9ab-5173.localhost", "localhost")).toBe(false);
+    expect(isWebnodeHostname("k3j2h1x9ab-5173.localhost", "localhost")).toBe(true);
+    expect(isRuntimeHostname("localhost", "localhost")).toBe(false);
+    expect(isRuntimeHostname("runtime.localhost.evil.example", "localhost")).toBe(false);
+    expect(isRuntimeHostname("x.runtime.localhost", "localhost")).toBe(false);
+    expect(isRuntimeHostname("runtimes.localhost", "localhost")).toBe(false);
+    expect(isRuntimeHostname("runtime.other.dev", "preview.example.dev")).toBe(false);
   });
 });

@@ -3,7 +3,9 @@
 // the app: a preview host gets the connect page and its service worker, the
 // runtime host gets the frame that runs the kernel and its worker scripts.
 import { STALE_BUILD_MESSAGE, versionedPath } from "../buildId";
+import { DEPS_OBJECT_PATH_PREFIX, depsObjectIdOfPath } from "../depsObjects";
 import { createPreviewConnectHtml, EDITOR_ORIGIN_GLOBAL } from "./connectPage";
+import { isRuntimeHostname } from "./origin";
 import { PREVIEW_SERVICE_WORKER_PATH } from "./protocol";
 
 /** A response for the host to send as is. */
@@ -82,6 +84,34 @@ export const PREVIEW_CLEAR_PATH = "/__webnode__/clear";
  * of failing on an HTML "script".
  */
 const DOCUMENT_DESTINATIONS = new Set(["document", "iframe", "frame", "embed", "object"]);
+
+/** What a host does with a request for a prepared install object (depsObjects.ts). */
+export type DepsObjectDecision = { status: 200; id: string } | { status: 404 } | { status: 405 };
+
+/**
+ * The decision for a request under the deps object prefix, or null when the
+ * path is not under it and the host goes on as before. Hosts ask this before
+ * anything else, so such a path never gets a page or the destination rule's
+ * 404. Only the runtime host serves objects, since only its processes install;
+ * a query string is refused so one object has one URL. Bytes are the host's.
+ * `base` is the hostname the hosts hang under, as `isWebnodeHostname` takes it.
+ */
+export function depsObjectRequest(
+  request: { method: string; hostname: string; pathname: string; search: string },
+  base: string,
+): DepsObjectDecision | null {
+  if (!request.pathname.startsWith(DEPS_OBJECT_PATH_PREFIX)) {
+    return null;
+  }
+  if (request.method.toUpperCase() !== "GET") {
+    return { status: 405 };
+  }
+  const id = depsObjectIdOfPath(request.pathname);
+  if (id === null || request.search !== "" || !isRuntimeHostname(request.hostname, base)) {
+    return { status: 404 };
+  }
+  return { status: 200, id };
+}
 
 /**
  * The host's answer for a request to `pathname` on a preview or runtime host.

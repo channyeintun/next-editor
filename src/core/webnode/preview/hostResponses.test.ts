@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { createPreviewConnectHtml } from "./connectPage";
+import { depsObjectPath } from "../depsObjects";
 import {
+  depsObjectRequest,
   PREVIEW_CLEAR_PATH,
   RUNTIME_FRAME_PATH,
   STALE_BUILD_MESSAGE,
@@ -385,5 +387,61 @@ describe("createPreviewConnectHtml", () => {
       expect(elements.msg.textContent).toBe("This browser cannot show the preview.");
       expect(posted).toEqual([]);
     });
+  });
+});
+
+describe("depsObjectRequest", () => {
+  const ID = "0123456789abcdef".repeat(4);
+  const get = (overrides: Partial<Parameters<typeof depsObjectRequest>[0]> = {}) => ({
+    method: "GET",
+    hostname: "runtime.localhost",
+    pathname: depsObjectPath(ID),
+    search: "",
+    ...overrides,
+  });
+
+  it("serves an object on the runtime host", () => {
+    expect(depsObjectRequest(get(), "localhost")).toEqual({ status: 200, id: ID });
+    expect(
+      depsObjectRequest(
+        get({ method: "get", hostname: "Runtime.Preview.Example.dev" }),
+        "preview.example.dev",
+      ),
+    ).toEqual({ status: 200, id: ID });
+  });
+
+  it("leaves every other path to the host", () => {
+    expect(depsObjectRequest(get({ pathname: "/" }), "localhost")).toBeNull();
+    expect(depsObjectRequest(get({ pathname: "/__webnode__/process.js" }), "localhost")).toBeNull();
+    expect(depsObjectRequest(get({ pathname: "/__webnode__/deps" }), "localhost")).toBeNull();
+  });
+
+  it("refuses a method other than GET", () => {
+    for (const method of ["HEAD", "POST", "PUT", "DELETE", "OPTIONS"]) {
+      expect(depsObjectRequest(get({ method }), "localhost")).toEqual({ status: 405 });
+    }
+    expect(
+      depsObjectRequest(get({ method: "POST", pathname: "/__webnode__/deps/x" }), "localhost"),
+    ).toEqual({ status: 405 });
+  });
+
+  it("has nothing for another host, a query or a path that is not an id", () => {
+    const missing = { status: 404 };
+    expect(depsObjectRequest(get({ hostname: "k3j2h1x9ab-5173.localhost" }), "localhost")).toEqual(
+      missing,
+    );
+    expect(depsObjectRequest(get({ hostname: "localhost" }), "localhost")).toEqual(missing);
+    expect(depsObjectRequest(get({ hostname: "runtime.other.dev" }), "localhost")).toEqual(missing);
+    expect(depsObjectRequest(get({ search: "?v=1" }), "localhost")).toEqual(missing);
+    for (const pathname of [
+      "/__webnode__/deps/",
+      `/__webnode__/deps/${ID.toUpperCase()}`,
+      `/__webnode__/deps/${ID}.br`,
+      `/__webnode__/deps/${ID}/`,
+      `/__webnode__/deps/${ID.slice(1)}`,
+      "/__webnode__/deps/index.html",
+    ]) {
+      expect(depsObjectRequest(get({ pathname }), "localhost")).toEqual(missing);
+    }
   });
 });

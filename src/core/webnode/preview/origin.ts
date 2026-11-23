@@ -94,6 +94,14 @@ export function isWebnodeHostname(hostname: string, baseHostname: string): boole
   return label === RUNTIME_LABEL || LABEL.test(label);
 }
 
+/**
+ * Whether `hostname` (no port) is the runtime host under `baseHostname`, the
+ * one host that serves what only the kernel and its processes fetch.
+ */
+export function isRuntimeHostname(hostname: string, baseHostname: string): boolean {
+  return hostname.toLowerCase() === `${RUNTIME_LABEL}.${baseHostname.toLowerCase()}`;
+}
+
 /** A fresh random session id: lowercase letters and digits. */
 export function createSessionId(): string {
   let id = "";

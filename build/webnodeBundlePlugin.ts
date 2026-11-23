@@ -2,7 +2,12 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Plugin } from "vite";
 import { BUILD_PARAMETER } from "../src/core/webnode/buildId";
-import { webnodeHostAsset, webnodeHostResponse } from "../src/core/webnode/preview/hostResponses";
+import { DEPS_OBJECT_REFUSAL_HEADERS } from "../src/core/webnode/depsObjects";
+import {
+  depsObjectRequest,
+  webnodeHostAsset,
+  webnodeHostResponse,
+} from "../src/core/webnode/preview/hostResponses";
 import { isWebnodeHostname } from "../src/core/webnode/preview/origin";
 import { buildWebnodeBundles, WEBNODE_BUILD_MANIFEST, WEBNODE_BUNDLE_FILES } from "./webnodeBundle";
 
@@ -88,6 +93,17 @@ export function webnodeBundlePlugin(): Plugin {
 
         const url = new URL(request.url ?? "/", "http://internal");
         const pathname = url.pathname;
+        // A dev server has no prepared installs: every object is missing, so
+        // the installer takes each package from the registry.
+        const objectRequest = depsObjectRequest(
+          { method: request.method ?? "GET", hostname, pathname, search: url.search },
+          "localhost",
+        );
+        if (objectRequest) {
+          response.writeHead(objectRequest.status === 405 ? 405 : 404, DEPS_OBJECT_REFUSAL_HEADERS);
+          response.end();
+          return;
+        }
         ensureDevBuild()
           .then(() => {
             const asset = webnodeHostAsset(pathname);
