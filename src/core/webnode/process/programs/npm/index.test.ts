@@ -6,8 +6,15 @@ import { setRuntime } from "../../runtime";
 import type { SpawnRequest } from "../../runtime";
 import { createFakeRuntime } from "../../testing/fakeRuntime";
 import type { FakeChildIo, FakeRuntime } from "../../testing/fakeRuntime";
+import { depsObjectPath } from "../../../depsObjects";
 import { runPackageManager } from "./index";
-import { createFakeRegistry, scriptLine } from "./testkit";
+import { LOCK_VERSION, manifestHash } from "./install";
+import { integrityOf } from "./integrity";
+import { PLAN_VERSION, encodePlan } from "./plan";
+import { depsObjectIdOf } from "./prepared";
+import { DEFAULT_REGISTRY } from "./registry";
+import { gunzip } from "./tar";
+import { createFakeRegistry, packTarball, scriptLine } from "./testkit";
 import type { FakePackage } from "./testkit";
 
 const PACKAGES: FakePackage[] = [
@@ -35,6 +42,10 @@ const PACKAGES: FakePackage[] = [
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+
+// The plan index, filled by the tests that install from a plan.
+const plans = vi.hoisted(() => ({}) as Record<string, string>);
+vi.mock("./plans.generated", () => ({ DEPENDENCY_PLANS: plans }));
 
 interface Setup {
   rt: FakeRuntime;
@@ -947,5 +958,95 @@ describe("other commands", () => {
     );
     expect(await pm("pnpm", "-C", "/other", "install")).toBe(0);
     expect(rt.fs.exists("/other/node_modules/react/package.json")).toBe(true);
+  });
+});
+
+describe("prepared installs", () => {
+  const RUNTIME = "https://runtime.test";
+  const MANIFEST = { name: "app", dependencies: { react: "19.0.0" } };
+
+  /**
+   * A runtime on the default registry, whose index has a plan for MANIFEST:
+   * the fetch answers the runtime host's objects and passes the rest to the
+   * fake registry.
+   */
+  async function planned(env: Record<string, string> = {}) {
+    const made = await setup(MANIFEST);
+    made.rt.env.npm_config_registry = "";
+    Object.assign(made.rt.env, env);
+    const tgz = packTarball({ name: "react", version: "19.0.0" });
+    const tar = await gunzip(tgz);
+    const archive = await depsObjectIdOf(tar);
+    const hash = await manifestHash(MANIFEST, DEFAULT_REGISTRY);
+    const plan = encodePlan({
+      planVersion: PLAN_VERSION,
+      lockfileVersion: LOCK_VERSION,
+      manifestHash: hash,
+      packages: {
+        "react@19.0.0": {
+          name: "react",
+          version: "19.0.0",
+          tarball: `${made.fake.url}/react/-/react-19.0.0.tgz`,
+          integrity: await integrityOf(tgz),
+          archive,
+          size: tar.length,
+        },
+      },
+      layout: [["node_modules/react", "react@19.0.0"]],
+      root: { react: "react@19.0.0" },
+      warnings: [],
+    });
+    const planId = await depsObjectIdOf(plan);
+    plans[hash] = planId;
+    const objects = new Map([
+      [planId, plan],
+      [archive, tar],
+    ]);
+    const objectRequests: string[] = [];
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      if (url.startsWith(RUNTIME)) {
+        objectRequests.push(url);
+        const bytes = objects.get(url.slice(`${RUNTIME}${depsObjectPath("")}`.length));
+        return new Response(bytes ? bytes.slice().buffer : "", { status: bytes ? 200 : 404 });
+      }
+      return made.fake.fetch(url.replace(DEFAULT_REGISTRY, made.fake.url), init);
+    });
+    return { ...made, objectRequests };
+  }
+
+  afterEach(() => {
+    for (const hash of Object.keys(plans)) {
+      delete plans[hash];
+    }
+  });
+
+  it("installs from the plan on the runtime's origin with the default registry", async () => {
+    const made = await planned();
+    vi.stubGlobal("location", { origin: RUNTIME });
+    expect(await made.pm("pnpm", "install")).toBe(0);
+    expect(made.objectRequests).toHaveLength(2);
+    expect(made.fake.requests).toEqual([]);
+    expect(made.rt.fs.exists("/project/node_modules/react/package.json")).toBe(true);
+  });
+
+  it("asks for no object when switched off, on another registry, or with no origin", async () => {
+    const cases: [string, Record<string, string>, unknown][] = [
+      ["WEBNODE_DEPS=0", { WEBNODE_DEPS: "0" }, { origin: RUNTIME }],
+      ["another registry", { npm_config_registry: "https://registry.test" }, { origin: RUNTIME }],
+      ["no origin", {}, undefined],
+      ["an origin that is not http(s)", {}, { origin: "null" }],
+    ];
+    for (const [what, env, location] of cases) {
+      const made = await planned(env);
+      vi.stubGlobal("location", location);
+      const status = await made.pm("pnpm", "install");
+      expect({ what, status, objectRequests: made.objectRequests }).toEqual({
+        what,
+        status: 0,
+        objectRequests: [],
+      });
+      expect(made.fake.requests.length).toBeGreaterThan(0);
+      vi.unstubAllGlobals();
+    }
   });
 });

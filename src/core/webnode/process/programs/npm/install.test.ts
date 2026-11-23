@@ -1,16 +1,23 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { depsObjectPath } from "../../../depsObjects";
 import { O_CREAT, O_TRUNC, O_WRONLY } from "../../../kernel/vfs/types";
 import { setRuntime } from "../../runtime";
 import type { SpawnRequest } from "../../runtime";
 import { createFakeRuntime } from "../../testing/fakeRuntime";
 import type { FakeRuntime } from "../../testing/fakeRuntime";
 import { LOCK_NAME, STAGING_NAME, install } from "./install";
+import type { InstallOptions, RegistryResolution } from "./install";
 import { Reporter, createRuntimeSink } from "./output";
 import type { Tool } from "./output";
+import { encodePlan, planOf } from "./plan";
+import type { DependencyPlan, PackageArchive } from "./plan";
+import { createPreparedInstalls, depsObjectIdOf } from "./prepared";
+import type { PreparedInstalls } from "./prepared";
 import { createRegistryClient } from "./registry";
-import type { TarballCache } from "./registry";
-import { createFakeRegistry, scriptLine } from "./testkit";
+import type { FetchLike, TarballCache } from "./registry";
+import { gunzip, parseTar } from "./tar";
+import { createFakeRegistry, scriptLine, writeTar } from "./testkit";
 import type { FakePackage } from "./testkit";
 
 const PACKAGES: FakePackage[] = [
@@ -56,6 +63,8 @@ interface Setup {
     tool?: Tool;
     cache?: TarballCache;
     force?: boolean;
+    prepared?: InstallOptions["prepared"];
+    onRegistryResolution?: (resolution: RegistryResolution) => void;
   }) => ReturnType<typeof install>;
   fake: Awaited<ReturnType<typeof createFakeRegistry>>;
   read: (path: string) => string;
@@ -92,13 +101,15 @@ async function setup(
     fake,
     writeManifest,
     read: (path) => decoder.decode(rt.fs.readFile(path)),
-    run: async ({ tool = "pnpm", cache, force } = {}) => {
+    run: async ({ tool = "pnpm", cache, force, prepared, onRegistryResolution } = {}) => {
       const registry = createRegistryClient({ fetch: fake.fetch, registry: fake.url, cache });
       const result = await install({
         projectDir: "/project",
         registry,
         reporter: new Reporter(tool, createRuntimeSink()),
         force,
+        prepared,
+        onRegistryResolution,
       });
       return result;
     },
@@ -563,5 +574,377 @@ describe("install: modes", () => {
     // `rm -rf node_modules` as the user runs it.
     rt.fs.rm("/project/node_modules", true, false);
     expect(rt.fs.exists("/project/node_modules")).toBe(false);
+  });
+});
+
+describe("install: from a plan", () => {
+  const RUNTIME = "https://runtime.test";
+  /** react 18 nests under both x and z (one key, two locations); vite has a bin. */
+  const EXTRA: FakePackage[] = [
+    { name: "react", version: "18.3.1", files: { "index.js": "module.exports = 18;" } },
+    { name: "x", version: "1.0.0", dependencies: { react: "18.3.1" } },
+    {
+      name: "z",
+      version: "1.0.0",
+      dependencies: { react: "18.3.1" },
+      optionalDependencies: { "not-published": "1.0.0" },
+    },
+  ];
+  const MANIFEST = {
+    name: "app",
+    dependencies: { ...APP.dependencies, x: "1.0.0", z: "1.0.0" },
+    devDependencies: APP.devDependencies,
+    // Not applied, so the installer warns about it on every install.
+    overrides: { "a>b": "1.0.0" },
+  };
+
+  async function fresh(manifest: Record<string, unknown> = MANIFEST): Promise<Setup> {
+    const made = await setup(manifest);
+    for (const pkg of EXTRA) {
+      await made.fake.add(pkg);
+    }
+    return made;
+  }
+
+  type Entry = { kind: string; mode: number; data?: string; target?: string };
+
+  /** Everything under the project: every path's kind, mode, bytes and link target. */
+  function tree(rt: FakeRuntime): Record<string, Entry> {
+    const entries: Record<string, Entry> = {};
+    const walk = (dir: string) => {
+      for (const entry of rt.fs.readdir(dir)) {
+        const path = `${dir}/${entry.name}`;
+        const mode = rt.fs.stat(path, false).mode & 0o7777;
+        if (entry.type === "dir") {
+          entries[path] = { kind: "dir", mode };
+          walk(path);
+        } else if (entry.type === "symlink") {
+          entries[path] = { kind: "symlink", mode, target: rt.fs.readlink(path) };
+        } else {
+          entries[path] = { kind: entry.type, mode, data: decoder.decode(rt.fs.readFile(path)) };
+        }
+      }
+    };
+    walk("/project");
+    return entries;
+  }
+
+  interface Prepared {
+    /** What the registry install wrote, and printed. */
+    tree: Record<string, Entry>;
+    stdout: string;
+    stderr: string;
+    resolution: RegistryResolution;
+    plan: DependencyPlan;
+    planId: string;
+    hash: string;
+    /** The objects the runtime host serves: id → bytes. */
+    objects: Map<string, Uint8Array>;
+    /** Each package's registry tarball URL, by key. */
+    tarballs: Map<string, string>;
+  }
+
+  /** Installs `manifest` from the registry and makes its plan and archives from what it fetched. */
+  async function prepare(
+    options: { tool?: Tool; manifest?: Record<string, unknown> } = {},
+  ): Promise<Prepared> {
+    const made = await fresh(options.manifest);
+    let resolution: RegistryResolution | undefined;
+    await made.run({ tool: options.tool, onRegistryResolution: (found) => (resolution = found) });
+    const objects = new Map<string, Uint8Array>();
+    const archives = new Map<string, PackageArchive>();
+    const tarballs = new Map<string, string>();
+    for (const [key, pkg] of resolution!.resolved.nodes) {
+      const response = await made.fake.fetch(pkg.dist.tarball);
+      const tar = await gunzip(new Uint8Array(await response.arrayBuffer()));
+      const id = await depsObjectIdOf(tar);
+      objects.set(id, tar);
+      archives.set(key, { id, size: tar.length });
+      tarballs.set(key, pkg.dist.tarball);
+    }
+    const hash = JSON.parse(made.read(`/project/node_modules/${LOCK_NAME}`)).manifestHash;
+    const plan = planOf({
+      manifestHash: hash,
+      resolved: resolution!.resolved,
+      archives,
+      warnings: resolution!.warnings,
+    });
+    const bytes = encodePlan(plan);
+    const planId = await depsObjectIdOf(bytes);
+    objects.set(planId, bytes);
+    return {
+      tree: tree(made.rt),
+      stdout: made.rt.stdout(),
+      stderr: made.rt.stderr(),
+      resolution: resolution!,
+      plan,
+      planId,
+      hash,
+      objects,
+      tarballs,
+    };
+  }
+
+  /** A runtime host that serves `objects`, and the URLs asked of it. */
+  function objectHost(objects: Map<string, Uint8Array>): { fetch: FetchLike; requests: string[] } {
+    const requests: string[] = [];
+    return {
+      requests,
+      fetch: async (url) => {
+        requests.push(url);
+        const bytes = objects.get(url.slice(`${RUNTIME}${depsObjectPath("")}`.length));
+        return bytes
+          ? new Response(bytes.slice().buffer, { status: 200 })
+          : new Response("", { status: 404 });
+      },
+    };
+  }
+
+  function preparedFor(
+    made: Prepared,
+    host: { fetch: FetchLike },
+    options: { index?: Record<string, string>; cache?: TarballCache } = {},
+  ): PreparedInstalls {
+    return createPreparedInstalls({
+      fetch: host.fetch,
+      origin: RUNTIME,
+      index: options.index ?? { [made.hash]: made.planId },
+      cache: options.cache,
+      retryDelayMs: 0,
+    });
+  }
+
+  function memoryCache() {
+    const store = new Map<string, Uint8Array>();
+    const deleted: string[] = [];
+    const cache: TarballCache = {
+      match: async (url) => {
+        const bytes = store.get(url);
+        return bytes ? new Response(bytes.slice().buffer) : undefined;
+      },
+      put: async (url, response) => {
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        store.set(url, bytes);
+      },
+      delete: async (url) => {
+        deleted.push(url);
+        return store.delete(url);
+      },
+    };
+    return { store, deleted, cache };
+  }
+
+  it("writes exactly what a registry install of the same versions writes, asking the registry nothing", async () => {
+    const made = await prepare();
+    expect(made.resolution.skippedOptional.map((skipped) => skipped.error.code)).toEqual(["E404"]);
+    // The fixture has what the comparison needs.
+    expect(made.tree["/project/node_modules/x/node_modules/react/index.js"].data).toBe(
+      "module.exports = 18;",
+    );
+    expect(made.tree["/project/node_modules/z/node_modules/react/index.js"].data).toBe(
+      "module.exports = 18;",
+    );
+    expect(made.tree["/project/node_modules/.bin/vite"]).toMatchObject({ kind: "symlink" });
+
+    const host = objectHost(made.objects);
+    const second = await fresh();
+    expect((await second.run({ prepared: preparedFor(made, host) })).status).toBe(0);
+    expect(tree(second.rt)).toEqual(made.tree);
+    expect(second.fake.requests).toEqual([]);
+    expect(host.requests).toHaveLength(made.objects.size);
+  });
+
+  it("fetches from the registry only the tarball of an archive it cannot have", async () => {
+    const made = await prepare();
+    const missing = made.plan.packages["vite@5.4.21"].archive;
+    const broken = made.plan.packages["react@18.3.1"].archive;
+    const objects = new Map(made.objects);
+    objects.delete(missing);
+    objects.set(broken, encoder.encode("not the tar"));
+    const second = await fresh();
+    expect((await second.run({ prepared: preparedFor(made, objectHost(objects)) })).status).toBe(0);
+    expect(tree(second.rt)).toEqual(made.tree);
+    expect([...second.fake.requests].sort()).toEqual(
+      [made.tarballs.get("react@18.3.1"), made.tarballs.get("vite@5.4.21")].sort(),
+    );
+  });
+
+  it("installs from the registry when there is no plan to use", async () => {
+    const made = await prepare();
+    const encoded = async (change: (plan: Record<string, any>) => void) => {
+      const plan = JSON.parse(JSON.stringify(made.plan)) as Record<string, any>;
+      change(plan);
+      const bytes = encoder.encode(JSON.stringify(plan));
+      const id = await depsObjectIdOf(bytes);
+      return { id, bytes };
+    };
+    const firstKey = made.plan.layout[0][1];
+    const cases: [
+      string,
+      () => Promise<{ index: Record<string, string>; objects?: Map<string, Uint8Array> }>,
+    ][] = [
+      ["no row in the index", async () => ({ index: {} })],
+      [
+        "a plan object that does not hash to its id",
+        async () => ({
+          index: { [made.hash]: made.planId },
+          objects: new Map([...made.objects, [made.planId, encoder.encode("{}")]]),
+        }),
+      ],
+    ];
+    const broken: [string, (plan: Record<string, any>) => void][] = [
+      ["another plan version", (plan) => (plan.planVersion = 2)],
+      ["another state-file version", (plan) => (plan.lockfileVersion = 2)],
+      ["another manifest", (plan) => (plan.manifestHash = "0".repeat(64))],
+      ["a location outside node_modules", (plan) => (plan.layout[0][0] = "node_modules/../src")],
+      ["a location twice", (plan) => plan.layout.push([...plan.layout[0]])],
+      ["a layout key it does not describe", (plan) => (plan.layout[0][1] = "nope@1.0.0")],
+      ["a root key it does not describe", (plan) => (plan.root.react = "nope@1.0.0")],
+      ["an archive that is not an id", (plan) => (plan.packages[firstKey].archive = "x")],
+      ["a size that is not a count", (plan) => (plan.packages[firstKey].size = -1)],
+      [
+        "a tarball not over https",
+        (plan) => (plan.packages[firstKey].tarball = "http://registry.test/a.tgz"),
+      ],
+    ];
+    for (const [what, change] of broken) {
+      cases.push([
+        what,
+        async () => {
+          const { id, bytes } = await encoded(change);
+          return {
+            index: { [made.hash]: id },
+            objects: new Map([...made.objects, [id, bytes]]),
+          };
+        },
+      ]);
+    }
+    for (const [what, make] of cases) {
+      const { index, objects } = await make();
+      const host = objectHost(objects ?? made.objects);
+      const second = await fresh();
+      const { status } = await second.run({ prepared: preparedFor(made, host, { index }) });
+      // Named, so a failure says which case it was. No archive is asked for
+      // without a plan, and the registry is asked for metadata.
+      expect({
+        what,
+        status,
+        same: JSON.stringify(tree(second.rt)) === JSON.stringify(made.tree),
+        resolved: second.fake.requests.some((url) => !url.endsWith(".tgz")),
+        objectRequests: host.requests.length <= 1,
+      }).toEqual({ what, status: 0, same: true, resolved: true, objectRequests: true });
+    }
+  });
+
+  it("uses no plan on update", async () => {
+    const made = await prepare();
+    const host = objectHost(made.objects);
+    const second = await fresh();
+    await second.run();
+    const before = second.fake.requests.length;
+    const result = await second.run({ prepared: preparedFor(made, host), force: true });
+    expect(result.upToDate).toBe(false);
+    expect(host.requests).toEqual([]);
+    expect(second.fake.requests.length).toBeGreaterThan(before);
+    expect(tree(second.rt)).toEqual(made.tree);
+  });
+
+  it("drops an object planted in Cache Storage and never uses it", async () => {
+    const made = await prepare();
+    const memory = memoryCache();
+    const id = made.plan.packages["react@19.0.0"].archive;
+    const url = `${RUNTIME}${depsObjectPath(id)}`;
+    // A tar that reads well, with other contents.
+    memory.store.set(url, writeTar([{ path: "package/index.js", data: "planted" }]));
+    expect(parseTar(memory.store.get(url)!)).toHaveLength(1);
+    const host = objectHost(made.objects);
+    const second = await fresh();
+    await second.run({ prepared: preparedFor(made, host, { cache: memory.cache }) });
+    expect(tree(second.rt)).toEqual(made.tree);
+    expect(memory.deleted).toEqual([url]);
+    expect(host.requests).toContain(url);
+    expect(memory.store.get(url)).toEqual(made.objects.get(id));
+  });
+
+  it("makes no request at all on a later visit, and counts every package as reused", async () => {
+    const made = await prepare();
+    const memory = memoryCache();
+    const host = objectHost(made.objects);
+    const first = await fresh();
+    await first.run({ prepared: preparedFor(made, host, { cache: memory.cache }) });
+    // The install waited for the store before it returned.
+    expect(memory.store.size).toBe(made.objects.size);
+    const requests = host.requests.length;
+    const second = await fresh();
+    await second.run({ prepared: preparedFor(made, host, { cache: memory.cache }) });
+    expect(host.requests.length).toBe(requests);
+    expect(second.fake.requests).toEqual([]);
+    expect(tree(second.rt)).toEqual(made.tree);
+    const count = Object.keys(made.plan.packages).length;
+    expect(count).toBeGreaterThan(10);
+    expect(second.rt.stdout()).toMatch(
+      new RegExp(
+        `^Progress: resolved ${count}, reused ${count}, downloaded 0, added \\d+, done$`,
+        "m",
+      ),
+    );
+  });
+
+  it("prints what a registry install prints, in every tool's voice", async () => {
+    // Elapsed times and the reused/downloaded split are the only differences allowed.
+    const normalize = (text: string) =>
+      text
+        .replace(/\d+(\.\d+)?m?s\b/g, "<time>")
+        .replace(/reused \d+, downloaded \d+/g, "reused <n>, downloaded <n>");
+    for (const tool of ["pnpm", "npm", "yarn", "bun"] as const) {
+      const made = await prepare({ tool });
+      expect(made.resolution.warnings).toHaveLength(1);
+      expect(made.plan.warnings).toEqual(made.resolution.warnings);
+      expect(made.stderr).toContain("not-published");
+      expect(made.stderr).toContain('"a>b"');
+      const second = await fresh();
+      await second.run({ tool, prepared: preparedFor(made, objectHost(made.objects)) });
+      expect({ tool, requests: second.fake.requests }).toEqual({ tool, requests: [] });
+      expect({ tool, stdout: normalize(second.rt.stdout()), stderr: second.rt.stderr() }).toEqual({
+        tool,
+        stdout: normalize(made.stdout),
+        stderr: made.stderr,
+      });
+    }
+  });
+
+  it("adds to a node_modules that already has packages as a registry install does", async () => {
+    const made = await prepare();
+    const before = { dependencies: { react: "19.0.0", x: "1.0.0" } };
+    // The same steps from the registry alone.
+    const expected = await fresh(before);
+    await expected.run();
+    expected.writeManifest(MANIFEST);
+    await expected.run();
+    const want = tree(expected.rt);
+
+    const host = objectHost(made.objects);
+    const second = await fresh(before);
+    await second.run();
+    const registryRequests = second.fake.requests.length;
+    second.writeManifest(MANIFEST);
+    const result = await second.run({ prepared: preparedFor(made, host) });
+    expect(result.upToDate).toBe(false);
+    expect(tree(second.rt)).toEqual(want);
+    expect(second.fake.requests.length).toBe(registryRequests);
+    // Packages already on disk at the same version are not fetched again.
+    const asked = new Set(host.requests);
+    const kept = ["react@19.0.0", "x@1.0.0", "react@18.3.1"];
+    expect(
+      kept.filter((key) =>
+        asked.has(`${RUNTIME}${depsObjectPath(made.plan.packages[key].archive)}`),
+      ),
+    ).toEqual([]);
+    expect(
+      asked.has(`${RUNTIME}${depsObjectPath(made.plan.packages["vite@5.4.21"].archive)}`),
+    ).toBe(true);
+    // And a later install with nothing changed is up to date.
+    expect((await second.run({ prepared: preparedFor(made, host) })).upToDate).toBe(true);
   });
 });

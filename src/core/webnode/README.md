@@ -26,7 +26,8 @@ command, then its run command, and shows a preview or a program's output.
 Nothing else is typed into a lesson's runtime.
 
 - **Package manager:** `pnpm install` and `pnpm dev` (a package script), from
-  the npm registry, without a lockfile.
+  the npm registry, without a lockfile. An install whose manifest has a
+  prepared plan comes from that plan instead (under "How it is built").
 - **Lessons** (284, in 18 dependency setups):
   - the Vite 5.4 dev server, alone or with TypeScript 6, esbuild, React 19,
     Tailwind 4 (`@tailwindcss/vite`), `dom-accessibility-api`, `tabbable`,
@@ -198,6 +199,35 @@ preview iframe                on a PREVIEW ORIGIN, <session>-<port>.<host>. Its
   one of the runtime's own programs (`node`, `tsx`, `npm`, `npx`, `pnpm`,
   `pnpx`, `yarn`; kernel/exec.ts): it has no shell to ask about any other
   word. Every other line starts a shell, as before.
+- **An install can come from a prepared plan.** On a first visit the time of
+  an install is the network: a chain of metadata requests, then gzip tarballs
+  eight at a time. So for each manifest the lessons and starters use,
+  `bun scripts/webnode-deps.ts` runs this installer once ahead of time and
+  keeps what it gave as objects: a plan (which packages, where each goes, the
+  warnings resolving printed; process/programs/npm/plan.ts) and, for each
+  package, its archive (the tarball gunzipped, stored with Brotli, shared by
+  every plan that uses that package). The runtime host serves an object at
+  `/__webnode__/deps/<id>` with `Content-Encoding: br`, so the process gets
+  the decoded bytes; the names, paths and headers are depsObjects.ts.
+  An object's id is the SHA-256 of its decoded bytes, and the process checks
+  every object against its id, from the network or from Cache Storage
+  (`webnode-deps-objects-v1`, where a lesson's code could plant one). A plan's
+  id comes from process/programs/npm/plans.generated.ts, part of the bundle,
+  and archive ids come from the plan, so an object is trusted as far as the
+  deployed bundle is. The installer then places, links and records exactly as
+  it does after a registry install (process/programs/npm/prepared.ts, the step
+  in install.ts). Whatever fails falls back: a manifest with no row, a plan
+  that fails its check or is made for another state-file version, `update`,
+  another registry, or `WEBNODE_DEPS=0` resolves from the registry; an archive
+  that cannot be had brings that one package's registry tarball, checked as
+  always. A plan is a snapshot of the registry on the day it was built: a
+  learner who edits package.json resolves from the registry again, and
+  versions that moved since then are installed anew (packages already on disk
+  at the same version are kept). After a change to what the installer
+  resolves or places (resolve.ts, hoist.ts, substitutions.ts) the plans are
+  built again. A new manifest installs from the registry until its plan is
+  built and deployed. Cache Storage holds decoded tars, about four times the
+  size of the gzip tarballs it held before (120 MB for the React starter).
 - **Native binaries are swapped at install time** the way WebContainer does it:
   `esbuild` → `esbuild-wasm`, `rollup` → `@rollup/wasm-node`, at the same
   version, and a platform family's `wasm32-wasi` member in place of its native
@@ -216,6 +246,7 @@ directory; the files marked _hub_ only wire.
 | `signals.ts`                       | signal numbers, what a signal does to a process that does not handle it, and the exit status of a process a signal ended (the kernel's and the shell's one rule)                                                                                                                                                                                                                                  |
 | `umask.ts`                         | the file mode creation mask: its default (022), the bits a mask keeps, and the word of shared memory a process's mask lives in                                                                                                                                                                                                                                                                    |
 | `buildId.ts`                       | the id of the build a script belongs to                                                                                                                                                                                                                                                                                                                                                           |
+| `depsObjects.ts`                   | the prepared objects an install reads (plans and archives): their ids, the path the runtime host serves them at, their bucket key and their headers                                                                                                                                                                                                                                               |
 | `protocol.ts`                      | every message that crosses a thread                                                                                                                                                                                                                                                                                                                                                               |
 | `byteChannel.ts`                   | a connection between two threads (a socket's bytes, the preview gateway's) and its flow control                                                                                                                                                                                                                                                                                                   |
 | `api.ts`                           | the page-facing API (shaped like WebContainer's)                                                                                                                                                                                                                                                                                                                                                  |
@@ -242,7 +273,7 @@ directory; the files marked _hub_ only wire.
 | `process/node/threadStdio.ts`      | the standard streams a Worker keeps (`stdout: true` …), both ends                                                                                                                                                                                                                                                                                                                                 |
 | `process/node/stringWidth.ts`      | the terminal columns a string takes, as Node counts them                                                                                                                                                                                                                                                                                                                                          |
 | `process/programs/shell/`          | `sh` / `jsh` and the built-in commands                                                                                                                                                                                                                                                                                                                                                            |
-| `process/programs/npm/`            | `npm` / `pnpm` / `yarn` / `npx`: the installer and script runner                                                                                                                                                                                                                                                                                                                                  |
+| `process/programs/npm/`            | `npm` / `pnpm` / `yarn` / `npx`: the installer and script runner; a plan's format and checks (plan.ts), the plans and archives a process fetches and keeps (prepared.ts), the index of plans (plans.generated.ts, written by `scripts/webnode-deps.ts`)                                                                                                                                           |
 | `process/programs/node.ts`         | the `node` command line                                                                                                                                                                                                                                                                                                                                                                           |
 | `process/programs/rejections.ts`   | what `node` does with a rejection nobody handled: the `--unhandled-rejections` modes and their warnings                                                                                                                                                                                                                                                                                           |
 | `process/programs/watch.ts`        | watch mode: the `node --watch` and `tsx watch` supervisors, and what a child reports                                                                                                                                                                                                                                                                                                              |

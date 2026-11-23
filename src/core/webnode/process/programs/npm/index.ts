@@ -24,6 +24,9 @@ import type { Manifest } from "./manifest";
 import { Reporter, TOOL_VERSIONS, createRuntimeSink } from "./output";
 import type { Tool } from "./output";
 import { basename, join, resolvePath } from "./paths";
+import { DEPENDENCY_PLANS } from "./plans.generated";
+import { createPreparedInstalls, openDepsObjectCache, preparedInstallsWanted } from "./prepared";
+import type { PreparedInstalls } from "./prepared";
 import { DEFAULT_REGISTRY, createRegistryClient, openTarballCache } from "./registry";
 import type { RegistryClient } from "./registry";
 import { parseSpec, pickVersion } from "./resolve";
@@ -44,6 +47,8 @@ interface Session {
   reporter: Reporter;
   cwd: string;
   registry: () => Promise<RegistryClient>;
+  /** The prepared installs, or undefined where they are not used (prepared.ts). */
+  prepared: () => Promise<PreparedInstalls | undefined>;
 }
 
 /** The registry URL: `--registry`, else `npm_config_registry` / `NPM_CONFIG_REGISTRY`, else npmjs. */
@@ -77,6 +82,9 @@ export async function runPackageManager(argv: string[]): Promise<number> {
   const invocation = parseArgs(argv);
   const reporter = new Reporter(invocation.tool, sink, loglevel(invocation, rt.env));
   let client: RegistryClient | null = null;
+  let prepared: Promise<PreparedInstalls | undefined> | null = null;
+  // A worker on the runtime's origin has one; a Node test run has none.
+  const origin = (globalThis as { location?: { origin?: string } }).location?.origin;
   const session: Session = {
     invocation,
     reporter,
@@ -91,6 +99,16 @@ export async function runPackageManager(argv: string[]): Promise<number> {
       }
       return client;
     },
+    prepared: () =>
+      (prepared ??= (async () =>
+        preparedInstallsWanted({ origin, registry: registryUrl(invocation, rt.env), env: rt.env })
+          ? createPreparedInstalls({
+              fetch: (url, init) => fetch(url, init),
+              origin: origin!,
+              index: DEPENDENCY_PLANS,
+              cache: await openDepsObjectCache(),
+            })
+          : undefined)()),
   };
   try {
     return await dispatch(session, invocation.command);
@@ -139,6 +157,7 @@ async function runInstall(session: Session, dir: string, force = false): Promise
     registry: await session.registry(),
     reporter: session.reporter,
     force,
+    prepared: await session.prepared(),
   });
   return result.status;
 }

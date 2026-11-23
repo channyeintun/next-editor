@@ -59,6 +59,19 @@ export interface ResolveOptions {
   /** Runs once per newly resolved node, as soon as its version is known. */
   onResolved?: (node: ResolvedNode) => void;
   warn?: (message: string) => void;
+  /**
+   * Runs for each optional dependency left out because resolving it failed,
+   * with the error itself: whoever keeps a resolution for later tells a
+   * package the registry does not have from a request that failed.
+   */
+  onSkippedOptional?: (skipped: SkippedOptional) => void;
+}
+
+/** An optional dependency left out of the graph, and why. */
+export interface SkippedOptional {
+  name: string;
+  spec: string;
+  error: PmError;
 }
 
 /** A dependency spec, split into the registry package it names and a range or tag. */
@@ -401,6 +414,7 @@ export async function resolveDependencies(options: ResolveOptions): Promise<Reso
       selection = await select(edge);
     } catch (error) {
       if (underOptional && isPmError(error)) {
+        options.onSkippedOptional?.({ name: edge.name, spec: edge.spec, error });
         warn(`Skipping optional dependency ${edge.name}@${edge.spec}: ${error.message}`);
         return;
       }

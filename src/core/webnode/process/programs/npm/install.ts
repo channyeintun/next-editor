@@ -3,7 +3,9 @@
 // project's lifecycle scripts, and node_modules/.webnode-lock.json. Tarballs
 // download as soon as their version is known (into a staging directory) and
 // move into place once the layout is fixed; packages already installed at the
-// same version are kept or moved, not fetched again.
+// same version are kept or moved, not fetched again. When the manifest has a
+// prepared plan (plan.ts, prepared.ts), the layout and each package's tar come
+// from it instead of the registry; everything after that is the same code.
 import { runtime } from "../../runtime";
 import type { FsBackend } from "../../runtime";
 import { O_CREAT, O_TRUNC, O_WRONLY } from "../../../kernel/vfs/types";
@@ -17,9 +19,12 @@ import { readManifest, rootDependencies } from "./manifest";
 import type { Manifest } from "./manifest";
 import type { Counts, DirectDependency, Reporter } from "./output";
 import { dirname, join } from "./paths";
+import { packageOfNode, resolvedFromGraph, resolvedFromPlan } from "./plan";
+import type { ResolvedInstall, ResolvedPackage } from "./plan";
+import type { PreparedInstalls } from "./prepared";
 import type { RegistryClient } from "./registry";
 import { readOverrides, resolveDependencies } from "./resolve";
-import type { ResolvedNode } from "./resolve";
+import type { SkippedOptional } from "./resolve";
 import { runLifecycle } from "./scripts";
 import { coveredBySubstitution } from "./substitutions";
 import { gunzip, parseTar } from "./tar";
@@ -28,7 +33,7 @@ import type { TarEntry } from "./tar";
 /** The state file the installer keeps in node_modules (never a lockfile in the project). */
 export const LOCK_NAME = ".webnode-lock.json";
 export const STAGING_NAME = ".webnode-staging";
-const LOCK_VERSION = 1;
+export const LOCK_VERSION = 1;
 /** The root project's install lifecycle, in the order npm runs it. */
 const ROOT_SCRIPTS = ["preinstall", "install", "postinstall", "prepare"];
 
@@ -62,8 +67,25 @@ export interface InstallOptions {
   /**
    * Resolve again even when the state file matches the manifest (`update`):
    * ranges are re-read from the registry, so newer matching versions land.
+   * No plan is used then.
    */
   force?: boolean;
+  /** Plans and archives prepared ahead of time, used in place of the registry when they fit. */
+  prepared?: PreparedInstalls;
+  /**
+   * Called when an install resolved from the registry has its layout, with
+   * what a plan of it needs: the plan builder's way in.
+   */
+  onRegistryResolution?: (resolution: RegistryResolution) => void;
+}
+
+/** What a registry install resolved, for making a plan of it. */
+export interface RegistryResolution {
+  resolved: ResolvedInstall;
+  /** The warnings resolving printed, in order (not the ones about overrides). */
+  warnings: string[];
+  /** The optional dependencies left out, each with the error that left it out. */
+  skippedOptional: SkippedOptional[];
 }
 
 export interface InstallResult {
@@ -276,8 +298,9 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
   /** Set when resolving fails: a download still in flight then extracts nothing. */
   let abandoned = false;
 
-  const fetchPackage = async (node: ResolvedNode): Promise<Manifest> => {
-    const { tarball, integrity, shasum } = node.manifest.dist;
+  /** A package's tarball from the registry, checked and counted. */
+  const fetchTarball = async (node: ResolvedPackage): Promise<Uint8Array> => {
+    const { tarball, integrity, shasum } = node.dist;
     // The tarball cache is shared by every runtime session in the browser, so
     // cached bytes are checked exactly like downloaded ones; a version with
     // nothing to check against is never read from or written to the cache.
@@ -309,9 +332,23 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
       }
     }
     progress();
+    return fetched.bytes;
+  };
+
+  /**
+   * A package's files, into staging: from its archive when it has one that
+   * can be had, else from the registry tarball, for this package alone.
+   */
+  const fetchPackage = async (node: ResolvedPackage): Promise<Manifest> => {
+    const archived = node.archive ? await options.prepared?.archive(node.archive) : null;
+    if (archived) {
+      counts[archived.cached ? "reused" : "downloaded"]++;
+      progress();
+    }
+    const tarball = archived ? null : await fetchTarball(node);
     let entries: TarEntry[];
     try {
-      entries = parseTar(await gunzip(fetched.bytes));
+      entries = parseTar(archived ? archived.bytes : await gunzip(tarball!));
     } catch (error) {
       if (error instanceof PmError) {
         throw error;
@@ -336,31 +373,58 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
     }
   };
 
+  const onResolved = (node: ResolvedPackage) => {
+    counts.resolved++;
+    if (onDisk.has(node.key)) {
+      counts.reused++;
+    } else {
+      const pending = fetchPackage(node);
+      pending.catch((error: unknown) => failures.push(error));
+      downloads.set(node.key, pending);
+    }
+    progress();
+  };
+
+  // Asked for only here: an install that is up to date, or whose preinstall
+  // failed, makes no request for a plan.
+  const plan = options.prepared && !options.force ? await options.prepared.plan(hash) : null;
   let layout: Layout;
-  let graph: Awaited<ReturnType<typeof resolveDependencies>>;
+  let graph: ResolvedInstall;
   try {
-    graph = await resolveDependencies({
-      registry,
-      dependencies: directs,
-      overrides: readOverrides(manifest, (message) => reporter.warn(message)),
-      warn: (message) => reporter.warn(message),
-      onResolved: (node) => {
-        counts.resolved++;
-        if (onDisk.has(node.key)) {
-          counts.reused++;
-        } else {
-          const pending = fetchPackage(node);
-          pending.catch((error: unknown) => failures.push(error));
-          downloads.set(node.key, pending);
-        }
-        progress();
-      },
-    });
-    if (!quiet) {
-      reporter.step(2);
+    const overrides = readOverrides(manifest, (message) => reporter.warn(message));
+    if (plan) {
+      for (const warning of plan.warnings) {
+        reporter.warn(warning);
+      }
+      graph = resolvedFromPlan(plan);
+      for (const node of graph.nodes.values()) {
+        onResolved(node);
+      }
+      if (!quiet) {
+        reporter.step(2);
+      }
+    } else {
+      const warnings: string[] = [];
+      const skippedOptional: SkippedOptional[] = [];
+      const resolution = await resolveDependencies({
+        registry,
+        dependencies: directs,
+        overrides,
+        warn: (message) => {
+          warnings.push(message);
+          reporter.warn(message);
+        },
+        onSkippedOptional: (skipped) => skippedOptional.push(skipped),
+        onResolved: (node) => onResolved(packageOfNode(node)),
+      });
+      if (!quiet) {
+        reporter.step(2);
+      }
+      graph = resolvedFromGraph(resolution, hoist(resolution));
+      options.onRegistryResolution?.({ resolved: graph, warnings, skippedOptional });
     }
 
-    layout = hoist(graph);
+    layout = graph.layout;
     for (const location of layout.keys()) {
       if (!isPackageLocation(location)) {
         throw new PmError("EOTHER", `Refusing to install outside node_modules: ${location}`);
@@ -522,7 +586,7 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
       name: node.name,
       ...(node.source !== node.name ? { source: node.source } : {}),
       version: node.version,
-      ...(node.manifest.dist.integrity ? { integrity: node.manifest.dist.integrity } : {}),
+      ...(node.dist.integrity ? { integrity: node.dist.integrity } : {}),
     };
   }
   // A project with no dependencies has no node_modules until now.
@@ -545,6 +609,7 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
   // The process may end as soon as the install returns, and a store still
   // under way would be lost with it.
   await Promise.all(remembering);
+  await options.prepared?.stored();
 
   const status = await runRootScripts(ROOT_SCRIPTS.slice(1));
 

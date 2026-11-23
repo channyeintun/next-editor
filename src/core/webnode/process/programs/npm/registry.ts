@@ -70,17 +70,21 @@ export interface RegistryClient {
   forget(url: string): Promise<void>;
 }
 
-export interface RegistryOptions {
+/** How a failed request is tried again. */
+export interface RetryOptions {
+  /** Extra attempts after a failed request (network error or 5xx). */
+  retries?: number;
+  /** The wait before the first retry, in milliseconds; it doubles for each one after. */
+  retryDelayMs?: number;
+}
+
+export interface RegistryOptions extends RetryOptions {
   fetch: FetchLike;
   /** Base URL, e.g. `https://registry.npmjs.org`. */
   registry: string;
   cache?: TarballCache | null;
   packumentConcurrency?: number;
   tarballConcurrency?: number;
-  /** Extra attempts after a failed request (network error or 5xx). */
-  retries?: number;
-  /** The wait before the first retry, in milliseconds; it doubles for each one after. */
-  retryDelayMs?: number;
   /** How long a packument or version request may wait for headers or the next bytes (ms). */
   packumentTimeoutMs?: number;
   /** The same for a tarball (ms). */
@@ -103,7 +107,10 @@ const RETRY_DELAY_MS = 300;
  * finished). pnpm waits 60 s for a request and npm 5 minutes.
  */
 const PACKUMENT_TIMEOUT_MS = 120_000;
-const TARBALL_TIMEOUT_MS = 300_000;
+export const TARBALL_TIMEOUT_MS = 300_000;
+
+/** How many tarballs download at once. */
+export const TARBALL_CONCURRENCY = 8;
 
 /** The registry used when the environment names none. */
 export const DEFAULT_REGISTRY = "https://registry.npmjs.org";
@@ -144,31 +151,28 @@ export function createLimiter(limit: number): <T>(task: () => Promise<T>) => Pro
     });
 }
 
-/** Creates a registry client. */
-export function createRegistryClient(options: RegistryOptions): RegistryClient {
-  const registry = options.registry.replace(/\/+$/, "");
+/**
+ * GETs a URL and reads its whole body: `what` names it in a 404's message, and
+ * `timeoutMs` is how long it may wait for headers or the next bytes. Throws
+ * `PmError("E404")` at once on a 404, and `PmError("EFETCH")` once the retries
+ * are spent.
+ */
+export type BodyRequest = (
+  url: string,
+  init: RequestInit,
+  what: string,
+  timeoutMs: number,
+) => Promise<Uint8Array>;
+
+/**
+ * The request every download of the installer makes. One attempt is the
+ * request and the body together, so a connection that drops mid-body is
+ * retried like one that fails outright.
+ */
+export function createBodyRequest(fetch: FetchLike, options: RetryOptions = {}): BodyRequest {
   const retries = options.retries ?? 2;
   const retryDelayMs = options.retryDelayMs ?? RETRY_DELAY_MS;
-  const packumentLimit = createLimiter(options.packumentConcurrency ?? 16);
-  const tarballLimit = createLimiter(options.tarballConcurrency ?? 8);
-  const packuments = new Map<string, Promise<Packument>>();
-  const versions = new Map<string, Promise<PackageVersion | null>>();
-  const cache = options.cache ?? null;
-
-  const packumentTimeoutMs = options.packumentTimeoutMs ?? PACKUMENT_TIMEOUT_MS;
-  const tarballTimeoutMs = options.tarballTimeoutMs ?? TARBALL_TIMEOUT_MS;
-
-  /**
-   * GETs `url` and reads its whole body. One attempt is the request and the
-   * body together, so a connection that drops mid-body is retried like one
-   * that fails outright.
-   */
-  async function request(
-    url: string,
-    init: RequestInit,
-    what: string,
-    timeoutMs: number,
-  ): Promise<Uint8Array> {
+  return async (url, init, what, timeoutMs) => {
     let lastError: unknown = null;
     for (let attempt = 0; attempt <= retries; attempt++) {
       if (attempt > 0 && retryDelayMs > 0) {
@@ -183,7 +187,7 @@ export function createRegistryClient(options: RegistryOptions): RegistryClient {
       };
       restartTimer();
       try {
-        const response = await options.fetch(url, { ...init, signal: controller.signal });
+        const response = await fetch(url, { ...init, signal: controller.signal });
         if (response.status === 404) {
           throw new PmError("E404", `GET ${url}: Not Found - 404`, [
             `${what} is not in this registry.`,
@@ -215,7 +219,22 @@ export function createRegistryClient(options: RegistryOptions): RegistryClient {
     }
     const reason = lastError instanceof Error ? lastError.message : String(lastError);
     throw new PmError("EFETCH", `GET ${url}: request failed (${reason})`);
-  }
+  };
+}
+
+/** Creates a registry client. */
+export function createRegistryClient(options: RegistryOptions): RegistryClient {
+  const registry = options.registry.replace(/\/+$/, "");
+  const packumentLimit = createLimiter(options.packumentConcurrency ?? 16);
+  const tarballLimit = createLimiter(options.tarballConcurrency ?? TARBALL_CONCURRENCY);
+  const packuments = new Map<string, Promise<Packument>>();
+  const versions = new Map<string, Promise<PackageVersion | null>>();
+  const cache = options.cache ?? null;
+
+  const packumentTimeoutMs = options.packumentTimeoutMs ?? PACKUMENT_TIMEOUT_MS;
+  const tarballTimeoutMs = options.tarballTimeoutMs ?? TARBALL_TIMEOUT_MS;
+
+  const request = createBodyRequest((url, init) => options.fetch(url, init), options);
 
   function packument(name: string): Promise<Packument> {
     let pending = packuments.get(name);
@@ -410,13 +429,18 @@ export function pickVersionFields(document: PackageVersion): PackageVersion {
 }
 
 /** Opens the tarball cache when the environment has Cache Storage, else null. */
-export async function openTarballCache(): Promise<TarballCache | null> {
+export function openTarballCache(): Promise<TarballCache | null> {
+  return openCache(TARBALL_CACHE_NAME);
+}
+
+/** Opens the Cache Storage cache `name` when the environment has Cache Storage, else null. */
+export async function openCache(name: string): Promise<TarballCache | null> {
   const storage = (globalThis as { caches?: CacheStorage }).caches;
   if (!storage) {
     return null;
   }
   try {
-    const cache = await storage.open(TARBALL_CACHE_NAME);
+    const cache = await storage.open(name);
     return {
       match: (url) => cache.match(url),
       put: (url, response) => cache.put(url, response),
