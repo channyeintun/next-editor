@@ -4,6 +4,15 @@
 // (Chrome: after 30 s), and the worker's port goes with it. The tab has to go
 // on working then: with the editor's own preview frame open, and with it
 // closed. No install: the server is node:http.
+//
+// The tab finds the preview's worker only where the browser lets it share the
+// framed preview's storage. Playwright turns third-party storage partitioning
+// off, so the harness's own page passes. Against a local Worker
+// (WEBNODE_HARNESS_TARGET=http://localhost:…) the harness's own
+// --disable-features replaces Playwright's list, partitioning is on as in a
+// visitor's Chrome, and every *.localhost is a site of its own: the tab shows
+// the connect page there, as it does from a dev server. A deployment's
+// preview hosts are on the editor's site, where the tab works either way.
 import type { HarnessApi } from "../webnode-harness";
 
 const SERVER = `import { createServer } from "node:http";
@@ -47,7 +56,12 @@ export default async function (api: HarnessApi) {
   ]);
   await tab.waitForLoadState();
   const heading = () => tab.textContent("h1", { timeout: 10000 }).catch(() => null);
-  api.check("the tab shows the page", (await heading()) === "Preview tab");
+  const shown = await heading();
+  api.check(
+    "the tab shows the page",
+    shown === "Preview tab",
+    `at ${tab.url()} it shows ${JSON.stringify(shown ?? (await tab.title().catch(() => "")))}`,
+  );
   api.check(
     "the tab has no window above it and no opener",
     await tab.evaluate(() => window.parent === window && window.opener === null),
