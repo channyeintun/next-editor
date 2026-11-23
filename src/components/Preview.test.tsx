@@ -2,12 +2,13 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import Preview from "./Preview";
 import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
+import type { PreviewTabTarget } from "./preview/runtimePreview";
 
 const previewState = vi.hoisted(() => ({
   isOpen: false,
   activeMode: "browser" as "browser" | "api",
   showModeToggle: false,
-  previewTabUrl: null as string | null,
+  previewTab: { url: null, reason: "no-live-preview" } as PreviewTabTarget,
   handleResizeStep: vi.fn<(direction: 1 | -1) => void>(),
 }));
 
@@ -38,7 +39,7 @@ vi.mock("./preview/usePreviewController", () => ({
       disablePointerEvents: false,
       previewAddressLabel: "localhost",
       previewAddressTitle: "localhost",
-      previewTabUrl: previewState.previewTabUrl,
+      previewTab: previewState.previewTab,
       activeMode: previewState.activeMode,
       showModeToggle: previewState.showModeToggle,
       isRuntimeReady: false,
@@ -66,7 +67,7 @@ afterEach(() => {
   previewState.isOpen = false;
   previewState.activeMode = "browser";
   previewState.showModeToggle = false;
-  previewState.previewTabUrl = null;
+  previewState.previewTab = { url: null, reason: "no-live-preview" };
   previewState.handleResizeStep.mockClear();
 });
 
@@ -134,13 +135,13 @@ describe("Preview", () => {
 
   it("links the live preview to a browser tab of its own, with no handle on the editor", () => {
     previewState.isOpen = true;
-    previewState.previewTabUrl = "http://k3j2h1x9ab-5173.localhost:5173/todos?done=1";
+    previewState.previewTab = { url: "https://k3j2h1x9ab-5173.editor.test/todos?done=1" };
     render(<Preview />);
 
     const link = screen.getByRole("link", { name: "Open preview in a new tab" });
     // A real link: the browser never takes it for a popup, and a middle click,
     // a modified click and "Copy link address" all work.
-    expect(link).toHaveAttribute("href", "http://k3j2h1x9ab-5173.localhost:5173/todos?done=1");
+    expect(link).toHaveAttribute("href", "https://k3j2h1x9ab-5173.editor.test/todos?done=1");
     expect(link).toHaveAttribute("target", "_blank");
     // The page a lesson serves must not reach the editor's window or its address.
     expect(link.getAttribute("rel")?.split(" ")).toEqual(
@@ -158,6 +159,18 @@ describe("Preview", () => {
     // No address: it takes no focus and opens nothing.
     expect(link).not.toHaveAttribute("href");
     expect(link).not.toHaveAttribute("target");
+    expect(link.title).toContain("when the live preview is running");
+  });
+
+  it("says why the link is disabled where the browser would keep the tab apart", () => {
+    previewState.isOpen = true;
+    previewState.previewTab = { url: null, reason: "separate-site" };
+    render(<Preview />);
+
+    const link = screen.getByRole("link", { name: "Open preview in a new tab" });
+    expect(link).toHaveAttribute("aria-disabled", "true");
+    expect(link).not.toHaveAttribute("href");
+    expect(link.title).toContain("keeps a preview tab apart from the editor");
   });
 
   it("makes the runtime frame inert while the opaque API client covers it", async () => {

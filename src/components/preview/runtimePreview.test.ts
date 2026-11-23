@@ -2,8 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   applyRouteToRuntimePreviewLocation,
   createRuntimePreviewLocationFromUrl,
-  getPreviewTabUrl,
+  getPreviewTabTarget,
   normalizePreviewRoute,
+  previewTabSharesEditorSite,
   runtimePreviewSrcNeedsReset,
 } from "./runtimePreview";
 
@@ -83,26 +84,72 @@ describe("createRuntimePreviewLocationFromUrl", () => {
   });
 });
 
-describe("getPreviewTabUrl", () => {
-  const location = createRuntimePreviewLocationFromUrl(RUNTIME_URL, 3000);
+describe("getPreviewTabTarget", () => {
+  // The deployment's shape: the preview's host is a subdomain of the editor's.
+  const EDITOR_HOST = "editor.test";
+  const PREVIEW_URL = "https://k3j2h1x9ab-5173.editor.test";
+  const location = createRuntimePreviewLocationFromUrl(PREVIEW_URL, 5173);
 
   it("is the live preview's address, at the route it shows", () => {
-    expect(getPreviewTabUrl(location, true)).toBe(`${RUNTIME_URL}/`);
+    expect(getPreviewTabTarget(location, true, EDITOR_HOST)).toEqual({ url: `${PREVIEW_URL}/` });
     expect(
-      getPreviewTabUrl(applyRouteToRuntimePreviewLocation(location, "/todos?done=1#top"), true),
-    ).toBe(`${RUNTIME_URL}/todos?done=1#top`);
+      getPreviewTabTarget(
+        applyRouteToRuntimePreviewLocation(location, "/todos?done=1#top"),
+        true,
+        EDITOR_HOST,
+      ),
+    ).toEqual({ url: `${PREVIEW_URL}/todos?done=1#top` });
   });
 
-  it("is null while no live runtime answers at the address", () => {
+  it("has no address while no live runtime answers there", () => {
     // A replay, or a recorded snapshot's address: its runtime session is gone.
-    expect(getPreviewTabUrl(location, false)).toBeNull();
-    expect(getPreviewTabUrl(null, true)).toBeNull();
+    const none = { url: null, reason: "no-live-preview" };
+    expect(getPreviewTabTarget(location, false, EDITOR_HOST)).toEqual(none);
+    expect(getPreviewTabTarget(null, true, EDITOR_HOST)).toEqual(none);
+    // An unparsable preview URL is kept as is for the address bar's label.
+    expect(
+      getPreviewTabTarget(
+        createRuntimePreviewLocationFromUrl("not a url", 3000),
+        true,
+        EDITOR_HOST,
+      ),
+    ).toEqual(none);
   });
 
-  it("is null for an address a tab cannot load", () => {
-    // An unparsable preview URL is kept as is for the address bar's label.
-    expect(getPreviewTabUrl(createRuntimePreviewLocationFromUrl("not a url", 3000), true)).toBe(
-      null,
+  it("has no address where the browser would keep the tab apart from the editor's frame", () => {
+    // A dev server: every *.localhost is a site of its own, so the tab would
+    // find no service worker and show the "not connected" page.
+    const dev = createRuntimePreviewLocationFromUrl("http://k3j2h1x9ab-5173.localhost:5173", 5173);
+    expect(getPreviewTabTarget(dev, true, "localhost")).toEqual({
+      url: null,
+      reason: "separate-site",
+    });
+  });
+});
+
+describe("previewTabSharesEditorSite", () => {
+  it("holds for a preview on a subdomain of the editor's host", () => {
+    expect(
+      previewTabSharesEditorSite("https://abcdefghij-4173.nexteditor.dev/", "nexteditor.dev"),
+    ).toBe(true);
+    expect(
+      previewTabSharesEditorSite("https://ABCDEFGHIJ-4173.NextEditor.dev/a", "nexteditor.DEV"),
+    ).toBe(true);
+  });
+
+  it("does not hold for a host with no domain of its own, or for another site", () => {
+    expect(previewTabSharesEditorSite("http://abcdefghij-5173.localhost:5173/", "localhost")).toBe(
+      false,
     );
+    expect(previewTabSharesEditorSite("http://abcdefghij-5173.127.0.0.1/", "127.0.0.1")).toBe(
+      false,
+    );
+    expect(previewTabSharesEditorSite("http://abcdefghij-5173.localhost/", "[::1]")).toBe(false);
+    expect(previewTabSharesEditorSite("https://abcdefghij-4173.other.dev/", "nexteditor.dev")).toBe(
+      false,
+    );
+    // Not a subdomain: only the same suffix.
+    expect(previewTabSharesEditorSite("https://evilnexteditor.dev/", "nexteditor.dev")).toBe(false);
+    expect(previewTabSharesEditorSite("not a url", "nexteditor.dev")).toBe(false);
   });
 });

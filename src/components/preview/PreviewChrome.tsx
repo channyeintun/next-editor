@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { PreviewActiveMode, PreviewPanelMode, PreviewSize } from "../../types/slides";
 import { isCustomPreviewSize } from "./previewSizeUtils";
+import type { PreviewTabTarget } from "./runtimePreview";
 import HoverRing from "../hoverRing/HoverRing";
 
 const PREVIEW_MENU_ITEM_CLASS =
@@ -56,8 +57,8 @@ interface PreviewChromeProps {
   onTransitionComplete: () => void;
   previewAddressLabel: string;
   previewAddressTitle: string;
-  /** Where a browser tab of its own can load the live preview; null while there is none. */
-  previewTabUrl: string | null;
+  /** Where a browser tab of its own can load the live preview, or why it cannot. */
+  previewTab: PreviewTabTarget;
   activeMode?: PreviewActiveMode;
   showModeToggle?: boolean;
   onModeChange?: (mode: PreviewActiveMode) => void;
@@ -100,7 +101,7 @@ interface PreviewToolbarProps {
   mode: PreviewPanelMode;
   previewAddressLabel: string;
   previewAddressTitle: string;
-  previewTabUrl: string | null;
+  previewTab: PreviewTabTarget;
   onClose: () => void;
   onFloat: () => void;
   onDock: () => void;
@@ -278,6 +279,13 @@ function PreviewWindowMenu({
 }
 
 const PREVIEW_TAB_LINK_LABEL = "Open preview in a new tab";
+/** Why the link leads nowhere, for its tooltip. */
+const PREVIEW_TAB_UNAVAILABLE: Record<Extract<PreviewTabTarget, { url: null }>["reason"], string> =
+  {
+    "no-live-preview": "when the live preview is running",
+    "separate-site":
+      "not at this address: the browser keeps a preview tab apart from the editor here",
+  };
 const PREVIEW_TAB_LINK_CLASS =
   "inline-flex size-6.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors";
 
@@ -291,17 +299,18 @@ const PREVIEW_TAB_LINK_CLASS =
  * the page a lesson serves must not be able to navigate the editor's tab away.
  * `noreferrer` keeps the editor's address out of the page's `document.referrer`.
  *
- * With no live preview to open, the control keeps its place and reads as a
- * disabled link (no `href`, so it takes no focus and no click).
+ * With nothing to open, the control keeps its place and reads as a disabled
+ * link (no `href`, so it takes no focus and no click), and its tooltip says why.
  */
-function PreviewTabLink({ url }: { url: string | null }) {
+function PreviewTabLink({ target }: { target: PreviewTabTarget }) {
+  const { url } = target;
   if (url === null) {
     return (
       <a
         role="link"
         aria-disabled="true"
         aria-label={PREVIEW_TAB_LINK_LABEL}
-        title="Open preview in a new tab (when the live preview is running)"
+        title={`${PREVIEW_TAB_LINK_LABEL} (${PREVIEW_TAB_UNAVAILABLE[target.reason]})`}
         className={`${PREVIEW_TAB_LINK_CLASS} cursor-not-allowed opacity-40`}
       >
         <ExternalLink size={16} />
@@ -328,7 +337,7 @@ function PreviewToolbar({
   mode,
   previewAddressLabel,
   previewAddressTitle,
-  previewTabUrl,
+  previewTab,
   onClose,
   onFloat,
   onDock,
@@ -452,7 +461,7 @@ function PreviewToolbar({
             </span>
           </div>
 
-          <PreviewTabLink url={previewTabUrl} />
+          <PreviewTabLink target={previewTab} />
 
           <button
             type="button"
@@ -540,7 +549,7 @@ export function PreviewChrome({
   onTransitionComplete,
   previewAddressLabel,
   previewAddressTitle,
-  previewTabUrl,
+  previewTab,
   activeMode,
   showModeToggle,
   onModeChange,
@@ -551,7 +560,7 @@ export function PreviewChrome({
         mode={mode}
         previewAddressLabel={previewAddressLabel}
         previewAddressTitle={previewAddressTitle}
-        previewTabUrl={previewTabUrl}
+        previewTab={previewTab}
         onClose={onClose}
         onFloat={onFloat}
         onDock={onDock}

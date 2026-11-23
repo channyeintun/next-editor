@@ -118,25 +118,61 @@ export function applyRouteToRuntimePreviewLocation(
   }
 }
 
+/** Where the preview toolbar's new-tab link leads, or why it leads nowhere. */
+export type PreviewTabTarget =
+  | { url: string }
+  | { url: null; reason: "no-live-preview" | "separate-site" };
+
 /**
- * The address a browser tab of its own can load the preview at, or null when
- * there is none to offer. Only the live runtime answers at its address: a
- * replay shows a recorded DOM, and a recorded address belongs to a runtime
- * session that is gone.
+ * Whether a browser tab of its own at `previewUrl` reaches the same preview as
+ * the editor's frame. The preview is served by a service worker the framed
+ * page registered, and a browser keys a framed page's storage by the site of
+ * the page it is framed in. So the tab finds that worker only when the preview
+ * is on the editor's own site: its host a subdomain of the editor's. A host
+ * with no domain of its own never qualifies: `localhost` (every `*.localhost`
+ * is a site of its own) or an IP address. There the tab would show the preview
+ * origin's "not connected" page instead.
  */
-export function getPreviewTabUrl(
-  location: RuntimePreviewLocation | null,
-  isLive: boolean,
-): string | null {
-  if (!isLive || !location) {
-    return null;
+export function previewTabSharesEditorSite(previewUrl: string, editorHostname: string): boolean {
+  const editorHost = editorHostname.toLowerCase();
+  const hasOwnDomain =
+    editorHost.includes(".") && !editorHost.includes(":") && !/^[\d.]+$/.test(editorHost);
+  if (!hasOwnDomain) {
+    return false;
   }
 
   try {
-    return isHttpUrl(new URL(location.href)) ? location.href : null;
+    return new URL(previewUrl).hostname.toLowerCase().endsWith(`.${editorHost}`);
   } catch {
-    return null;
+    return false;
   }
+}
+
+/**
+ * Where a browser tab of its own can load the preview. Only the live runtime
+ * answers at its address: a replay shows a recorded DOM, and a recorded
+ * address belongs to a runtime session that is gone.
+ */
+export function getPreviewTabTarget(
+  location: RuntimePreviewLocation | null,
+  isLive: boolean,
+  editorHostname: string,
+): PreviewTabTarget {
+  if (!isLive || !location) {
+    return { url: null, reason: "no-live-preview" };
+  }
+
+  try {
+    if (!isHttpUrl(new URL(location.href))) {
+      return { url: null, reason: "no-live-preview" };
+    }
+  } catch {
+    return { url: null, reason: "no-live-preview" };
+  }
+
+  return previewTabSharesEditorSite(location.href, editorHostname)
+    ? { url: location.href }
+    : { url: null, reason: "separate-site" };
 }
 
 /**
