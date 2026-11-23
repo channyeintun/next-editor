@@ -57,6 +57,7 @@ import {
   createRuntimePreviewLocationFromUrl,
   createRuntimePreviewPlaceholder,
   formatPreviewAddressLabel,
+  getPreviewTabUrl,
   getRuntimePreviewState,
   normalizePreviewRoute,
   refreshRuntimePreview,
@@ -79,6 +80,8 @@ export interface PreviewController {
   disablePointerEvents: boolean;
   previewAddressLabel: string;
   previewAddressTitle: string;
+  /** Where a browser tab of its own can load the live preview; null while there is none. */
+  previewTabUrl: string | null;
   activeMode: PreviewActiveMode;
   showModeToggle: boolean;
   isRuntimeReady: boolean;
@@ -938,6 +941,7 @@ export function usePreviewController(): PreviewController {
     label: formatPreviewAddressLabel(previewAddressLocation),
     title: previewAddressLocation?.href ?? effectiveRuntimePreviewUrl ?? "Preview",
   };
+  const previewTabUrl = getPreviewTabUrl(previewAddressLocation, isLiveRuntimePreviewActive);
 
   const resize = usePreviewResize({
     containerRef,
@@ -1033,6 +1037,7 @@ export function usePreviewController(): PreviewController {
     disablePointerEvents: isTransitioning || resize.isResizing,
     previewAddressLabel: previewAddress.label,
     previewAddressTitle: previewAddress.title,
+    previewTabUrl,
     activeMode,
     showModeToggle,
     isRuntimeReady,

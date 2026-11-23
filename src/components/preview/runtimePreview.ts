@@ -119,6 +119,27 @@ export function applyRouteToRuntimePreviewLocation(
 }
 
 /**
+ * The address a browser tab of its own can load the preview at, or null when
+ * there is none to offer. Only the live runtime answers at its address: a
+ * replay shows a recorded DOM, and a recorded address belongs to a runtime
+ * session that is gone.
+ */
+export function getPreviewTabUrl(
+  location: RuntimePreviewLocation | null,
+  isLive: boolean,
+): string | null {
+  if (!isLive || !location) {
+    return null;
+  }
+
+  try {
+    return isHttpUrl(new URL(location.href)) ? location.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Whether the live runtime iframe must be (re)pointed at the runtime preview URL.
  *
  * Compares the `src` *attribute* — the exact string a previous run assigned — and

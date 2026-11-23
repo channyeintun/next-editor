@@ -7,6 +7,7 @@ const previewState = vi.hoisted(() => ({
   isOpen: false,
   activeMode: "browser" as "browser" | "api",
   showModeToggle: false,
+  previewTabUrl: null as string | null,
   handleResizeStep: vi.fn<(direction: 1 | -1) => void>(),
 }));
 
@@ -37,6 +38,7 @@ vi.mock("./preview/usePreviewController", () => ({
       disablePointerEvents: false,
       previewAddressLabel: "localhost",
       previewAddressTitle: "localhost",
+      previewTabUrl: previewState.previewTabUrl,
       activeMode: previewState.activeMode,
       showModeToggle: previewState.showModeToggle,
       isRuntimeReady: false,
@@ -64,6 +66,7 @@ afterEach(() => {
   previewState.isOpen = false;
   previewState.activeMode = "browser";
   previewState.showModeToggle = false;
+  previewState.previewTabUrl = null;
   previewState.handleResizeStep.mockClear();
 });
 
@@ -127,6 +130,34 @@ describe("Preview", () => {
     expect(items[0]).toHaveFocus();
     // Moving between items leaves the menu open.
     expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  it("links the live preview to a browser tab of its own, with no handle on the editor", () => {
+    previewState.isOpen = true;
+    previewState.previewTabUrl = "http://k3j2h1x9ab-5173.localhost:5173/todos?done=1";
+    render(<Preview />);
+
+    const link = screen.getByRole("link", { name: "Open preview in a new tab" });
+    // A real link: the browser never takes it for a popup, and a middle click,
+    // a modified click and "Copy link address" all work.
+    expect(link).toHaveAttribute("href", "http://k3j2h1x9ab-5173.localhost:5173/todos?done=1");
+    expect(link).toHaveAttribute("target", "_blank");
+    // The page a lesson serves must not reach the editor's window or its address.
+    expect(link.getAttribute("rel")?.split(" ")).toEqual(
+      expect.arrayContaining(["noopener", "noreferrer"]),
+    );
+    expect(link).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("keeps the new-tab link in place, disabled, while there is no live preview", () => {
+    previewState.isOpen = true;
+    render(<Preview />);
+
+    const link = screen.getByRole("link", { name: "Open preview in a new tab" });
+    expect(link).toHaveAttribute("aria-disabled", "true");
+    // No address: it takes no focus and opens nothing.
+    expect(link).not.toHaveAttribute("href");
+    expect(link).not.toHaveAttribute("target");
   });
 
   it("makes the runtime frame inert while the opaque API client covers it", async () => {

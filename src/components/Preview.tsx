@@ -70,6 +70,7 @@ function Preview() {
       onTransitionComplete={controller.handleTransitionComplete}
       previewAddressLabel={controller.previewAddressLabel}
       previewAddressTitle={controller.previewAddressTitle}
+      previewTabUrl={controller.previewTabUrl}
       activeMode={controller.activeMode}
       showModeToggle={controller.showModeToggle}
       onModeChange={controller.setActiveMode}

@@ -14,6 +14,7 @@ import {
   Maximize2,
   Minimize2,
   EllipsisVertical,
+  ExternalLink,
   PanelRight,
   PictureInPicture2,
   RefreshCw,
@@ -55,6 +56,8 @@ interface PreviewChromeProps {
   onTransitionComplete: () => void;
   previewAddressLabel: string;
   previewAddressTitle: string;
+  /** Where a browser tab of its own can load the live preview; null while there is none. */
+  previewTabUrl: string | null;
   activeMode?: PreviewActiveMode;
   showModeToggle?: boolean;
   onModeChange?: (mode: PreviewActiveMode) => void;
@@ -97,6 +100,7 @@ interface PreviewToolbarProps {
   mode: PreviewPanelMode;
   previewAddressLabel: string;
   previewAddressTitle: string;
+  previewTabUrl: string | null;
   onClose: () => void;
   onFloat: () => void;
   onDock: () => void;
@@ -273,10 +277,58 @@ function PreviewWindowMenu({
   );
 }
 
+const PREVIEW_TAB_LINK_LABEL = "Open preview in a new tab";
+const PREVIEW_TAB_LINK_CLASS =
+  "inline-flex size-6.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors";
+
+/**
+ * Opens the live preview in a browser tab of its own. A real link, not a
+ * `window.open` call: the browser never takes it for a popup, and the link's own
+ * gestures work (a middle click, a modified click, "Copy link address").
+ *
+ * The tab gets no handle on the editor's window. The editor's
+ * Cross-Origin-Opener-Policy already cuts it, and `noopener` says so here too:
+ * the page a lesson serves must not be able to navigate the editor's tab away.
+ * `noreferrer` keeps the editor's address out of the page's `document.referrer`.
+ *
+ * With no live preview to open, the control keeps its place and reads as a
+ * disabled link (no `href`, so it takes no focus and no click).
+ */
+function PreviewTabLink({ url }: { url: string | null }) {
+  if (url === null) {
+    return (
+      <a
+        role="link"
+        aria-disabled="true"
+        aria-label={PREVIEW_TAB_LINK_LABEL}
+        title="Open preview in a new tab (when the live preview is running)"
+        className={`${PREVIEW_TAB_LINK_CLASS} cursor-not-allowed opacity-40`}
+      >
+        <ExternalLink size={16} />
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={PREVIEW_TAB_LINK_LABEL}
+      title={PREVIEW_TAB_LINK_LABEL}
+      className={`${PREVIEW_TAB_LINK_CLASS} hover:bg-slate-700 hover:text-white`}
+    >
+      <ExternalLink size={16} />
+      <HoverRing />
+    </a>
+  );
+}
+
 function PreviewToolbar({
   mode,
   previewAddressLabel,
   previewAddressTitle,
+  previewTabUrl,
   onClose,
   onFloat,
   onDock,
@@ -400,6 +452,8 @@ function PreviewToolbar({
             </span>
           </div>
 
+          <PreviewTabLink url={previewTabUrl} />
+
           <button
             type="button"
             onClick={onOpenConsole}
@@ -486,6 +540,7 @@ export function PreviewChrome({
   onTransitionComplete,
   previewAddressLabel,
   previewAddressTitle,
+  previewTabUrl,
   activeMode,
   showModeToggle,
   onModeChange,
@@ -496,6 +551,7 @@ export function PreviewChrome({
         mode={mode}
         previewAddressLabel={previewAddressLabel}
         previewAddressTitle={previewAddressTitle}
+        previewTabUrl={previewTabUrl}
         onClose={onClose}
         onFloat={onFloat}
         onDock={onDock}

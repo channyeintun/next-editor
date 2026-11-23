@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  applyRouteToRuntimePreviewLocation,
   createRuntimePreviewLocationFromUrl,
+  getPreviewTabUrl,
   normalizePreviewRoute,
   runtimePreviewSrcNeedsReset,
 } from "./runtimePreview";
@@ -77,6 +79,30 @@ describe("createRuntimePreviewLocationFromUrl", () => {
     expect(createRuntimePreviewLocationFromUrl(RUNTIME_URL, 3000)?.route).toBe("/");
     expect(createRuntimePreviewLocationFromUrl(`${RUNTIME_URL}/a?b=1#c`, null)?.route).toBe(
       "/a?b=1#c",
+    );
+  });
+});
+
+describe("getPreviewTabUrl", () => {
+  const location = createRuntimePreviewLocationFromUrl(RUNTIME_URL, 3000);
+
+  it("is the live preview's address, at the route it shows", () => {
+    expect(getPreviewTabUrl(location, true)).toBe(`${RUNTIME_URL}/`);
+    expect(
+      getPreviewTabUrl(applyRouteToRuntimePreviewLocation(location, "/todos?done=1#top"), true),
+    ).toBe(`${RUNTIME_URL}/todos?done=1#top`);
+  });
+
+  it("is null while no live runtime answers at the address", () => {
+    // A replay, or a recorded snapshot's address: its runtime session is gone.
+    expect(getPreviewTabUrl(location, false)).toBeNull();
+    expect(getPreviewTabUrl(null, true)).toBeNull();
+  });
+
+  it("is null for an address a tab cannot load", () => {
+    // An unparsable preview URL is kept as is for the address bar's label.
+    expect(getPreviewTabUrl(createRuntimePreviewLocationFromUrl("not a url", 3000), true)).toBe(
+      null,
     );
   });
 });
