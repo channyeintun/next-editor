@@ -1,10 +1,17 @@
 import { BUILD_PARAMETER } from "../../src/core/webnode/buildId";
 import {
+  DEPS_OBJECT_HEADERS,
+  DEPS_OBJECT_REFUSAL_HEADERS,
+  depsObjectKey,
+} from "../../src/core/webnode/depsObjects";
+import {
+  depsObjectRequest,
   webnodeHostAsset,
   webnodeHostResponse,
 } from "../../src/core/webnode/preview/hostResponses";
 import { isWebnodeHostname } from "../../src/core/webnode/preview/origin";
 import type { Env } from "./env";
+import { acceptsBrotli } from "./staticAssets";
 
 /** Where the build puts the runtime's scripts (build/webnodeBundlePlugin.ts). */
 const ASSET_DIRECTORY = "/webnode/";
@@ -17,8 +24,43 @@ const BUILD_MANIFEST = "build.json";
  * `<session>-<port>.<WEBNODE_PREVIEW_HOST>`. Without the variable there are none.
  */
 export function isWebnodeHost(hostname: string, env: Pick<Env, "WEBNODE_PREVIEW_HOST">): boolean {
-  const base = env.WEBNODE_PREVIEW_HOST?.trim();
+  const base = webnodeBase(env);
   return base ? isWebnodeHostname(hostname, base) : false;
+}
+
+function webnodeBase(env: Pick<Env, "WEBNODE_PREVIEW_HOST">): string {
+  return env.WEBNODE_PREVIEW_HOST?.trim() ?? "";
+}
+
+function refuseDepsObject(status: 404 | 405): Response {
+  return new Response(null, { status, headers: DEPS_OBJECT_REFUSAL_HEADERS });
+}
+
+/**
+ * A prepared install object from the bucket. It is stored Brotli-compressed
+ * and only ever sent that way: the installer checks the decoded bytes against
+ * the id, so a browser that cannot decode them gets nothing rather than bytes
+ * that would fail. The whole object always: no Range or conditional request
+ * reaches the bucket, and the answer carries none of the stored metadata.
+ */
+async function serveDepsObject(
+  request: Request,
+  id: string,
+  bucket: R2Bucket | undefined,
+): Promise<Response> {
+  if (!acceptsBrotli(request) || !bucket) {
+    return refuseDepsObject(404);
+  }
+  const stored = await bucket.get(depsObjectKey(id));
+  if (!stored) {
+    return refuseDepsObject(404);
+  }
+  return new Response(stored.body, {
+    status: 200,
+    headers: { ...DEPS_OBJECT_HEADERS, "content-length": String(stored.size) },
+    // The stored bytes are already Brotli: sent as they are, not compressed again.
+    encodeBody: "manual",
+  });
 }
 
 /**
@@ -66,9 +108,25 @@ function readServedBuild(assets: Fetcher, base: URL): Promise<string | null> {
  */
 export async function serveWebnodeHost(
   request: Request,
-  env: Pick<Env, "ASSETS" | "PUBLIC_URL">,
+  env: Pick<Env, "ASSETS" | "PUBLIC_URL" | "WEBNODE_PREVIEW_HOST"> & Partial<Pick<Env, "BUCKET">>,
 ): Promise<Response> {
   const url = new URL(request.url);
+  // Decided before anything else, so a path under the objects' prefix never
+  // gets the document fallback or a script's answer.
+  const deps = depsObjectRequest(
+    {
+      method: request.method,
+      hostname: url.hostname,
+      pathname: url.pathname,
+      search: url.search,
+    },
+    webnodeBase(env),
+  );
+  if (deps) {
+    return deps.status === 200
+      ? serveDepsObject(request, deps.id, env.BUCKET)
+      : refuseDepsObject(deps.status);
+  }
   const asset = webnodeHostAsset(url.pathname);
   const requestedBuild = url.searchParams.get(BUILD_PARAMETER);
   const currentBuild = await readServedBuild(env.ASSETS, url);

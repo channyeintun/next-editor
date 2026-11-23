@@ -40,6 +40,9 @@ const RENDERABLE_CONTENT_TYPES: ReadonlySet<string> = new Set([
 // member removed from a room kept permanent unauthenticated access to every
 // asset id they had seen. Allow-listing the public prefixes here means a
 // namespace added to this bucket later is private by default.
+// Never add "webnode-deps/" here: those objects are served only by the webnode
+// runtime host (webnodePreviewHost.ts), same-origin to the installer that
+// checks them, with the Brotli encoding their stored bytes need.
 const PUBLIC_KEY_PREFIXES = ["lessons/", "slide-images/"];
 
 // Keys whose bytes never change once written:

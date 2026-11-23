@@ -262,3 +262,163 @@ describe("serveWebnodeHost for what a preview page asks itself", () => {
     expect(other.headers.get("clear-site-data")).toBeNull();
   });
 });
+
+describe("serveWebnodeHost for prepared install objects", () => {
+  const id = "0123456789abcdef".repeat(4);
+  const runtime = "https://runtime.preview.example.dev";
+  const stored = new Uint8Array([0x1b, 0x03, 0x00, 0xf8, 0xff, 0x00, 0x7f]);
+
+  function bucket(objects: Record<string, Uint8Array<ArrayBuffer>>) {
+    const asked: unknown[][] = [];
+    const binding = {
+      get: async (...args: unknown[]) => {
+        asked.push(args);
+        const bytes = objects[args[0] as string];
+        return bytes === undefined
+          ? null
+          : { body: new Blob([bytes]).stream(), size: bytes.length };
+      },
+    } as unknown as R2Bucket;
+    return { binding, asked };
+  }
+
+  function withObjects(binding?: R2Bucket) {
+    return { ...env, WEBNODE_PREVIEW_HOST: "preview.example.dev", BUCKET: binding };
+  }
+
+  function objectRequest(
+    path = `/__webnode__/deps/${id}`,
+    init: RequestInit = {},
+    host = runtime,
+  ): Request {
+    return new Request(`${host}${path}`, {
+      ...init,
+      headers: { "accept-encoding": "gzip, deflate, br", ...init.headers },
+    });
+  }
+
+  // Cloudflare keeps the browser's own Accept-Encoding there when it rewrites the header.
+  function withClientEncoding(request: Request, accepted: string): Request {
+    Object.defineProperty(request, "cf", { value: { clientAcceptEncoding: accepted } });
+    return request;
+  }
+
+  // What a refusal shows: its status, no-store, no encoding and an empty body.
+  async function refusal(response: Response) {
+    return {
+      status: response.status,
+      cacheControl: response.headers.get("cache-control"),
+      encoding: response.headers.get("content-encoding"),
+      body: await response.text(),
+    };
+  }
+  const refused = (status: number) => ({
+    status,
+    cacheControl: "no-store",
+    encoding: null,
+    body: "",
+  });
+
+  it("streams the stored Brotli bytes untouched, with the object's headers", async () => {
+    const { binding, asked } = bucket({ [`webnode-deps/${id}`]: stored });
+    const response = await serveWebnodeHost(objectRequest(), withObjects(binding));
+    expect(response.status).toBe(200);
+    expect(Object.fromEntries(response.headers)).toEqual({
+      "content-type": "application/octet-stream",
+      "content-encoding": "br",
+      "cache-control": "public, max-age=31536000, immutable, no-transform",
+      "cross-origin-resource-policy": "same-origin",
+      "x-content-type-options": "nosniff",
+      vary: "Accept-Encoding",
+      "content-length": String(stored.length),
+    });
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(stored);
+    expect(asked).toEqual([[`webnode-deps/${id}`]]);
+  });
+
+  it("answers the whole object to a Range request, which never reaches the bucket", async () => {
+    const { binding, asked } = bucket({ [`webnode-deps/${id}`]: stored });
+    const response = await serveWebnodeHost(
+      objectRequest(undefined, { headers: { range: "bytes=0-1", "if-none-match": '"x"' } }),
+      withObjects(binding),
+    );
+    expect(response.status).toBe(200);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(stored);
+    expect(asked).toEqual([[`webnode-deps/${id}`]]);
+  });
+
+  it("answers 404 for an object the bucket does not have", async () => {
+    const { binding } = bucket({});
+    expect(await refusal(await serveWebnodeHost(objectRequest(), withObjects(binding)))).toEqual(
+      refused(404),
+    );
+  });
+
+  it("answers 404 without a bucket binding", async () => {
+    expect(await refusal(await serveWebnodeHost(objectRequest(), withObjects()))).toEqual(
+      refused(404),
+    );
+  });
+
+  it("goes by the browser's own Accept-Encoding when Cloudflare rewrote the header", async () => {
+    const { binding } = bucket({ [`webnode-deps/${id}`]: stored });
+    const rewritten = withClientEncoding(
+      new Request(`${runtime}/__webnode__/deps/${id}`, { headers: { "accept-encoding": "gzip" } }),
+      "gzip, br",
+    );
+    const response = await serveWebnodeHost(rewritten, withObjects(binding));
+    expect(response.status).toBe(200);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(stored);
+  });
+
+  it("answers 404 to a browser that does not take Brotli", async () => {
+    const { binding, asked } = bucket({ [`webnode-deps/${id}`]: stored });
+    const neither = withClientEncoding(
+      new Request(`${runtime}/__webnode__/deps/${id}`, { headers: { "accept-encoding": "gzip" } }),
+      "gzip, deflate",
+    );
+    expect(await refusal(await serveWebnodeHost(neither, withObjects(binding)))).toEqual(
+      refused(404),
+    );
+    const zeroQuality = new Request(`${runtime}/__webnode__/deps/${id}`, {
+      headers: { "accept-encoding": "gzip, br;q=0" },
+    });
+    expect(await refusal(await serveWebnodeHost(zeroQuality, withObjects(binding)))).toEqual(
+      refused(404),
+    );
+    expect(asked).toEqual([]);
+  });
+
+  it("answers 405 to anything but GET", async () => {
+    const { binding, asked } = bucket({ [`webnode-deps/${id}`]: stored });
+    for (const method of ["POST", "HEAD"]) {
+      expect(
+        await refusal(
+          await serveWebnodeHost(objectRequest(undefined, { method }), withObjects(binding)),
+        ),
+      ).toEqual(refused(405));
+    }
+    expect(asked).toEqual([]);
+  });
+
+  it("answers 404 on a preview host, to a query string, and to an id not spelled canonically", async () => {
+    const { binding, asked } = bucket({
+      [`webnode-deps/${id}`]: stored,
+      [`webnode-deps/${id.toUpperCase()}`]: stored,
+    });
+    const requests = [
+      objectRequest(undefined, {}, "https://abc123defg-5173.preview.example.dev"),
+      objectRequest(`/__webnode__/deps/${id}?v=b2`),
+      objectRequest(`/__webnode__/deps/${id.toUpperCase()}`),
+      objectRequest(`/__webnode__/deps/${id.slice(1)}`),
+      objectRequest(`/__webnode__/deps/${id}0`),
+      objectRequest("/__webnode__/deps/"),
+    ];
+    for (const request of requests) {
+      expect(await refusal(await serveWebnodeHost(request, withObjects(binding)))).toEqual(
+        refused(404),
+      );
+    }
+    expect(asked).toEqual([]);
+  });
+});
