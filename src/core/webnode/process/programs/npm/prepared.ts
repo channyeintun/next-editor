@@ -6,6 +6,7 @@
 // check, is dropped and is fetched again. It takes its `fetch`, origin, index
 // and cache as arguments, so tests run it in memory.
 import { depsObjectPath, isDepsObjectId } from "../../../depsObjects";
+import { sha256HexOfBytes } from "./integrity";
 import { decodePlan } from "./plan";
 import type { DependencyPlan, PackageArchive } from "./plan";
 import {
@@ -38,17 +39,16 @@ export interface PreparedInstalls {
   stored(): Promise<void>;
 }
 
-export interface PreparedOptions extends RetryOptions {
+/** The environment variable that switches prepared installs off when it is "0". */
+export const DEPS_SWITCH_VARIABLE = "WEBNODE_DEPS";
+
+export interface PreparedOptions extends Pick<RetryOptions, "retryDelayMs"> {
   fetch: FetchLike;
   /** The origin the objects are served from: the runtime's own. */
   origin: string;
   /** Manifest hash → the id of its plan (plans.generated.ts). */
   index: Readonly<Record<string, string>>;
   cache?: TarballCache | null;
-  /** How many objects are fetched at once. */
-  concurrency?: number;
-  /** How long a request may wait for headers or the next bytes (ms). */
-  timeoutMs?: number;
 }
 
 /**
@@ -65,20 +65,13 @@ export function preparedInstallsWanted(environment: {
   return (
     /^https?:\/\//.test(environment.origin ?? "") &&
     environment.registry === DEFAULT_REGISTRY &&
-    environment.env.WEBNODE_DEPS !== "0"
+    environment.env[DEPS_SWITCH_VARIABLE] !== "0"
   );
 }
 
 /** The id an object with these decoded bytes has: the lowercase hex SHA-256. */
-export async function depsObjectIdOf(bytes: Uint8Array): Promise<string> {
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>),
-  );
-  let hex = "";
-  for (const byte of digest) {
-    hex += byte.toString(16).padStart(2, "0");
-  }
-  return hex;
+export function depsObjectIdOf(bytes: Uint8Array): Promise<string> {
+  return sha256HexOfBytes(bytes);
 }
 
 /** Opens the object cache when the environment has Cache Storage, else null. */
@@ -89,9 +82,10 @@ export function openDepsObjectCache(): Promise<TarballCache | null> {
 /** Creates the prepared installs a process reads. */
 export function createPreparedInstalls(options: PreparedOptions): PreparedInstalls {
   const origin = options.origin.replace(/\/+$/, "");
-  const request = createBodyRequest((url, init) => options.fetch(url, init), options);
-  const limit = createLimiter(options.concurrency ?? TARBALL_CONCURRENCY);
-  const timeoutMs = options.timeoutMs ?? TARBALL_TIMEOUT_MS;
+  const request = createBodyRequest((url, init) => options.fetch(url, init), {
+    retryDelayMs: options.retryDelayMs,
+  });
+  const limit = createLimiter(TARBALL_CONCURRENCY);
   const cache = options.cache ?? null;
   const storing: Promise<void>[] = [];
 
@@ -122,7 +116,7 @@ export function createPreparedInstalls(options: PreparedOptions): PreparedInstal
         url,
         { cache: "no-store", credentials: "omit" },
         `The object ${id}`,
-        timeoutMs,
+        TARBALL_TIMEOUT_MS,
       );
     } catch {
       return null;

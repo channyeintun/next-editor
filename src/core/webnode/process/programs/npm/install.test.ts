@@ -753,6 +753,14 @@ describe("install: from a plan", () => {
     expect(tree(second.rt)).toEqual(made.tree);
     expect(second.fake.requests).toEqual([]);
     expect(host.requests).toHaveLength(made.objects.size);
+    // Every archive came from the network, so every package counts as downloaded.
+    const count = Object.keys(made.plan.packages).length;
+    expect(second.rt.stdout()).toMatch(
+      new RegExp(
+        `^Progress: resolved ${count}, reused 0, downloaded ${count}, added \\d+, done$`,
+        "m",
+      ),
+    );
   });
 
   it("fetches from the registry only the tarball of an archive it cannot have", async () => {
@@ -944,7 +952,9 @@ describe("install: from a plan", () => {
     expect(
       asked.has(`${RUNTIME}${depsObjectPath(made.plan.packages["vite@5.4.21"].archive)}`),
     ).toBe(true);
-    // And a later install with nothing changed is up to date.
+    // And a later install with nothing changed is up to date, without asking for a plan.
+    const objectRequests = host.requests.length;
     expect((await second.run({ prepared: preparedFor(made, host) })).upToDate).toBe(true);
+    expect(host.requests.length).toBe(objectRequests);
   });
 });

@@ -84,7 +84,12 @@ export async function integrityOf(bytes: Uint8Array): Promise<string> {
   return `sha512-${toBase64(await digest("sha512", bytes))}`;
 }
 
+/** Lowercase hex SHA-256 of `bytes`. */
+export async function sha256HexOfBytes(bytes: Uint8Array): Promise<string> {
+  return toHex(await digest("sha256", bytes));
+}
+
 /** Hex SHA-256 of a string (manifest fingerprints). */
-export async function sha256Hex(text: string): Promise<string> {
-  return toHex(await digest("sha256", new TextEncoder().encode(text)));
+export function sha256Hex(text: string): Promise<string> {
+  return sha256HexOfBytes(new TextEncoder().encode(text));
 }

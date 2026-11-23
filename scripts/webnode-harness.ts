@@ -45,6 +45,7 @@ import { chromium } from "playwright-core";
 import type { Page } from "playwright-core";
 import { buildWebnodeBundles } from "../build/webnodeBundle";
 import { DEPS_OBJECT_HEADERS, DEPS_OBJECT_REFUSAL_HEADERS } from "../src/core/webnode/depsObjects";
+import { DEPS_SWITCH_VARIABLE } from "../src/core/webnode/process/programs/npm/prepared";
 import {
   depsObjectRequest,
   webnodeHostAsset,
@@ -52,6 +53,7 @@ import {
 } from "../src/core/webnode/preview/hostResponses";
 import { ScenarioFailure, failureMessage, scenarioTools } from "../src/core/webnode/test/scenario";
 import type { PreviewFrame, ScenarioTools } from "../src/core/webnode/test/scenario";
+import { depsStoreObjectFile } from "./webnode-deps-store";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 // A second harness run at the same time needs its own port and build directory.
@@ -80,7 +82,6 @@ export const DEPS_SETTINGS = {
   bytesPerSecond: positiveSetting(process.env.WEBNODE_HARNESS_DEPS_BPS),
   firstByteMs: positiveSetting(process.env.WEBNODE_HARNESS_DEPS_TTFB_MS),
 };
-const DEPS_OBJECTS_DIR = resolve(ROOT, "node_modules/.cache/webnode-deps/objects");
 /** How much of an object goes out per turn on a limited link, so responses in flight take turns. */
 const DEPS_CHUNK_BYTES = 16 * 1024;
 
@@ -103,9 +104,7 @@ const depsLink = DEPS_SETTINGS.bytesPerSecond ? sharedLink(DEPS_SETTINGS.bytesPe
 
 /** Answers for object `id` as the deployment does: its stored Brotli bytes, or a 404. */
 async function sendDepsObject(id: string, response: ServerResponse): Promise<void> {
-  const body = DEPS_SETTINGS.on
-    ? await readFile(resolve(DEPS_OBJECTS_DIR, `${id}.br`)).catch(() => null)
-    : null;
+  const body = DEPS_SETTINGS.on ? await readFile(depsStoreObjectFile(id)).catch(() => null) : null;
   if (!body) {
     response.writeHead(404, DEPS_OBJECT_REFUSAL_HEADERS);
     response.end();
@@ -269,7 +268,7 @@ export function pageQuery(): string {
   if (!DEPS_SETTINGS.on) {
     // The installer's switch for prepared installs, given to every command
     // the page spawns: off, it asks for no object at all.
-    query.append("env", "WEBNODE_DEPS=0");
+    query.append("env", `${DEPS_SWITCH_VARIABLE}=0`);
   }
   if (TARGET_PREVIEW_HOST) {
     query.set("previewHost", TARGET_PREVIEW_HOST);

@@ -5,8 +5,8 @@
 //   bun scripts/webnode-deps.ts list                       every manifest the lessons and starters install, and its plan
 //   bun scripts/webnode-deps.ts build [filter …] [--refresh] build the plans not built yet (only the matching ones, with filters)
 //   bun scripts/webnode-deps.ts check                      ask the registry whether every planned version is still as it was
-//   bun scripts/webnode-deps.ts upload --remote|--local [--dry-run]
-//                                                          put the objects the bucket does not have yet (a person runs this)
+//   bun scripts/webnode-deps.ts upload --remote|--local [--all] [--dry-run]
+//                                                          put the objects this machine has not put to that bucket before (a person runs this)
 //
 // A filter is a label ("vite 5"), a user (a lesson's slug, starter:<name>) or
 // the start of a manifest hash. --refresh builds a matching manifest again
@@ -25,7 +25,11 @@
 // The local store is node_modules/.cache/webnode-deps/: objects/<id>.br (what
 // the harness serves and upload puts) and plans/<manifestHash>.json (what was
 // built, for whom, from which installer sources). upload keeps a ledger there
-// of what it has put, so a second run puts only new objects.
+// for each destination and bucket (uploaded-<destination>-<bucket>.json) of
+// what it has put, so a second run puts only new objects. It never asks the
+// bucket what it has, which would take one wrangler call per object: --all
+// ignores the ledger and puts every object, for a bucket that was emptied or
+// replaced.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -41,7 +45,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { brotliCompress, brotliDecompressSync, constants as zlib } from "node:zlib";
-import { depsObjectIdOfPath, depsObjectKey } from "../src/core/webnode/depsObjects";
+import { depsObjectIdOfPath, depsObjectKey, isDepsObjectId } from "../src/core/webnode/depsObjects";
 import { O_CREAT, O_TRUNC, O_WRONLY } from "../src/core/webnode/kernel/vfs/types";
 import { setRuntime } from "../src/core/webnode/process/runtime";
 import type { FsBackend } from "../src/core/webnode/process/runtime";
@@ -64,12 +68,16 @@ import {
 } from "../src/core/webnode/process/programs/npm/registry";
 import type { FetchLike, RegistryClient } from "../src/core/webnode/process/programs/npm/registry";
 import { gunzip } from "../src/core/webnode/process/programs/npm/tar";
+import {
+  DEPS_STORE_DIR,
+  DEPS_STORE_OBJECTS_DIR,
+  DEPS_STORE_OBJECT_SUFFIX,
+  DEPS_STORE_PLANS_DIR,
+  depsStoreObjectFile,
+} from "./webnode-deps-store";
 import { runtimeLessons, starterWorkspaces } from "./webnode-scenarios/workspaces";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const STORE = resolve(ROOT, "node_modules/.cache/webnode-deps");
-const OBJECTS = join(STORE, "objects");
-const PLANS = join(STORE, "plans");
 const NPM_SOURCES = resolve(ROOT, "src/core/webnode/process/programs/npm");
 const INDEX_FILE = join(NPM_SOURCES, "plans.generated.ts");
 const WRANGLER_CONFIG = resolve(ROOT, "infra/wrangler.toml");
@@ -196,12 +204,8 @@ function matches(entry: ManifestEntry, filter: string): boolean {
 
 // ---------------------------------------------------------------- the store
 
-function objectFile(id: string): string {
-  return join(OBJECTS, `${id}.br`);
-}
-
 function planFile(hash: string): string {
-  return join(PLANS, `${hash}.json`);
+  return join(DEPS_STORE_PLANS_DIR, `${hash}.json`);
 }
 
 function readRecord(hash: string): PlanRecord | null {
@@ -213,13 +217,15 @@ function readRecord(hash: string): PlanRecord | null {
 }
 
 function allRecords(): PlanRecord[] {
-  if (!existsSync(PLANS)) {
+  if (!existsSync(DEPS_STORE_PLANS_DIR)) {
     return [];
   }
-  return readdirSync(PLANS)
+  return readdirSync(DEPS_STORE_PLANS_DIR)
     .filter((name) => name.endsWith(".json"))
     .sort()
-    .map((name) => JSON.parse(readFileSync(join(PLANS, name), "utf8")) as PlanRecord);
+    .map(
+      (name) => JSON.parse(readFileSync(join(DEPS_STORE_PLANS_DIR, name), "utf8")) as PlanRecord,
+    );
 }
 
 /** Writes a file whole or not at all: an interrupted build leaves no half object. */
@@ -246,25 +252,22 @@ async function brotli(bytes: Uint8Array): Promise<Uint8Array> {
 
 /** The stored object `id`, decoded as `fetch` decodes `Content-Encoding: br`; null when missing. */
 function readObject(id: string): Uint8Array | null {
-  const path = objectFile(id);
+  const path = depsStoreObjectFile(id);
   return existsSync(path) ? new Uint8Array(brotliDecompressSync(readFileSync(path))) : null;
 }
+
+/** The sources that decide what a plan says: which packages, where each goes, and the plan's form. */
+const PLAN_SOURCES = ["hoist.ts", "plan.ts", "resolve.ts", "substitutions.ts"];
 
 /**
  * Which installer sources made a plan: a plan from other sources may place
  * other things, and is built again after the resolver or the hoisting changes.
+ * Only those sources count, so a change elsewhere in the installer does not
+ * mark every plan as old.
  */
 function installerFingerprint(): string {
   const hash = createHash("sha256");
-  for (const name of readdirSync(NPM_SOURCES).sort()) {
-    if (
-      !name.endsWith(".ts") ||
-      name.endsWith(".test.ts") ||
-      name === "testkit.ts" ||
-      name === "plans.generated.ts"
-    ) {
-      continue;
-    }
+  for (const name of PLAN_SOURCES) {
     hash.update(`${name}\0`);
     hash.update(readFileSync(join(NPM_SOURCES, name)));
   }
@@ -489,9 +492,9 @@ async function build(entry: ManifestEntry): Promise<void> {
   }
 
   // 3. The archives: gunzipped, named, compressed; only a few tars in memory at once.
-  mkdirSync(OBJECTS, { recursive: true });
-  mkdirSync(PLANS, { recursive: true });
-  const storedBefore = new Set(readdirSync(OBJECTS));
+  mkdirSync(DEPS_STORE_OBJECTS_DIR, { recursive: true });
+  mkdirSync(DEPS_STORE_PLANS_DIR, { recursive: true });
+  const storedBefore = new Set(readdirSync(DEPS_STORE_OBJECTS_DIR));
   const archives = new Map<string, PackageArchive>();
   /** Archive id → its compressed size, once for each archive however many packages share it. */
   const objects = new Map<string, number>();
@@ -503,7 +506,7 @@ async function build(entry: ManifestEntry): Promise<void> {
     }
     const tar = await gunzip(tarball);
     const id = await depsObjectIdOf(tar);
-    const path = objectFile(id);
+    const path = depsStoreObjectFile(id);
     if (!existsSync(path)) {
       writeAtomically(path, await brotli(tar));
     }
@@ -518,7 +521,7 @@ async function build(entry: ManifestEntry): Promise<void> {
   const tarBytes = [...tarSizes.values()].reduce((sum, bytes) => sum + bytes, 0);
   const compressedBytes = [...objects.values()].reduce((sum, bytes) => sum + bytes, 0);
   const sharedBytes = [...objects]
-    .filter(([id]) => storedBefore.has(`${id}.br`))
+    .filter(([id]) => storedBefore.has(`${id}${DEPS_STORE_OBJECT_SUFFIX}`))
     .reduce((sum, [, bytes]) => sum + bytes, 0);
   lap("archives");
 
@@ -527,8 +530,8 @@ async function build(entry: ManifestEntry): Promise<void> {
   const planBytes = encodePlan(plan);
   const planId = await depsObjectIdOf(planBytes);
   const compressedPlan = await brotli(planBytes);
-  if (!existsSync(objectFile(planId))) {
-    writeAtomically(objectFile(planId), compressedPlan);
+  if (!existsSync(depsStoreObjectFile(planId))) {
+    writeAtomically(depsStoreObjectFile(planId), compressedPlan);
   }
   lap("plan");
 
@@ -644,12 +647,13 @@ async function buildCommand(args: string[]): Promise<number> {
       (filters.length === 0 || filters.some((filter) => matches(entry, filter))) &&
       (refresh || !existsSync(planFile(entry.hash))),
   );
-  if (chosen.length === 0) {
-    console.log("every chosen manifest has a plan (--refresh builds them again)");
-    return 0;
-  }
   let failures = 0;
   try {
+    // The index is written however little was built, so it can always be made
+    // again from the store's plans alone.
+    if (chosen.length === 0) {
+      console.log("every chosen manifest has a plan (--refresh builds them again)");
+    }
     for (const entry of chosen) {
       try {
         await build(entry);
@@ -747,6 +751,7 @@ async function upload(args: string[]): Promise<number> {
   const remote = args.includes("--remote");
   const local = args.includes("--local");
   const dryRun = args.includes("--dry-run");
+  const all = args.includes("--all");
   if (remote === local) {
     throw new Error(
       "upload needs exactly one of --remote (the real bucket) or --local (wrangler dev's)",
@@ -757,20 +762,26 @@ async function upload(args: string[]): Promise<number> {
     return 1;
   }
   const destination = remote ? "remote" : "local";
-  const ledgerFile = join(STORE, `uploaded-${destination}.json`);
+  const bucket = bucketName();
+  // What was put is known only from this ledger: the bucket is not asked.
+  const ledgerFile = join(DEPS_STORE_DIR, `uploaded-${destination}-${bucket}.json`);
   const ledger = new Set<string>(
-    existsSync(ledgerFile) ? (JSON.parse(readFileSync(ledgerFile, "utf8")) as string[]) : [],
+    !all && existsSync(ledgerFile)
+      ? (JSON.parse(readFileSync(ledgerFile, "utf8")) as string[])
+      : [],
   );
   const plans = new Set(allRecords().map((record) => record.planId));
-  const ids = (existsSync(OBJECTS) ? readdirSync(OBJECTS) : [])
-    .filter((name) => /^[0-9a-f]{64}\.br$/.test(name))
-    .map((name) => name.slice(0, -".br".length))
-    .filter((id) => !ledger.has(id))
+  const ids = (existsSync(DEPS_STORE_OBJECTS_DIR) ? readdirSync(DEPS_STORE_OBJECTS_DIR) : [])
+    .filter((name) => name.endsWith(DEPS_STORE_OBJECT_SUFFIX))
+    .map((name) => name.slice(0, -DEPS_STORE_OBJECT_SUFFIX.length))
+    .filter((id) => isDepsObjectId(id) && !ledger.has(id))
     // Archives first: a plan in the bucket then never names an archive that is not.
     .sort((a, b) => Number(plans.has(a)) - Number(plans.has(b)) || (a < b ? -1 : 1));
-  const bucket = bucketName();
   console.log(
-    `${ids.length} objects to put in ${bucket} (${destination}); ${ledger.size} put before`,
+    all
+      ? `${ids.length} objects to put in ${bucket} (${destination}): all of them (--all)`
+      : `${ids.length} objects this machine has not put to ${bucket} (${destination}) before; ` +
+          `${ledger.size} put before by its ledger (--all puts every object, for a bucket that was emptied or replaced)`,
   );
   for (const id of ids) {
     const command = [
@@ -781,7 +792,7 @@ async function upload(args: string[]): Promise<number> {
       "put",
       `${bucket}/${depsObjectKey(id)}`,
       "--file",
-      objectFile(id),
+      depsStoreObjectFile(id),
       "--content-type",
       "application/octet-stream",
       "--config",
@@ -817,7 +828,7 @@ async function main(): Promise<number> {
       return upload(args);
     default:
       console.error(
-        "usage: bun scripts/webnode-deps.ts <list|build [filter …] [--refresh]|check|upload --remote|--local [--dry-run]>",
+        "usage: bun scripts/webnode-deps.ts <list|build [filter …] [--refresh]|check|upload --remote|--local [--all] [--dry-run]>",
       );
       return 2;
   }
