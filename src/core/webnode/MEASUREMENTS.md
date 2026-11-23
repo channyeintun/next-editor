@@ -499,6 +499,53 @@ profile for each target and arm. Medians, off then on.
 The runs are kept as `prepared-first.jsonl`, `prepared-later.jsonl` and
 `prepared-all-on.jsonl` in `node_modules/.cache/webnode-measure`.
 
+**Deployed** the same day. The 450 objects went into the bucket first, then
+Worker version `333af6a0` (runtime build `mwtut7k8`, head `194e8c8a`), then
+Worker version `33fb2575` (head `99d889e6`, the same runtime build) for the
+fix described at the end of this section.
+
+`editor-check.ts` passed on a local Worker serving that `dist/` with the
+objects in its bucket (the first preview after 4.5 s; the Worker answered 141
+object requests, all 200, and none on the second visit), and on
+https://nexteditor.dev after the fix: the first preview after 18.8 s, install
+included (49.5 s on 2026-11-23, section 10), and the second visit's after
+1.0 s.
+
+**On production**, the first install of each target with plans off
+(`WEBNODE_DEPS=0`) and on, in turn, three rounds, a browser of its own for
+each run: the harness against the deployment (`WEBNODE_HARNESS_TARGET`), with
+`lessons.ts` and `starters.ts`, which time the install and nothing else. The
+same uplink and the same ten minutes. Seconds: the median, then the three runs.
+
+| Target                                | off                     | on                      |
+| ------------------------------------- | ----------------------- | ----------------------- |
+| `css-course-01-basics`                | 6.2 (6.2, 6.4, 5.7)     | 4.4 (3.8, 4.7, 4.4)     |
+| `typescript-course-07-functions`      | 12.1 (15.0, 12.1, 10.1) | 5.5 (5.5, 5.5, 17.3)    |
+| `testing-course-02-first-vitest-test` | 7.6 (7.6, 7.3, 8.2)     | 5.7 (5.1, 5.8, 5.7)     |
+| `starter:react`                       | 40.4 (40.5, 40.0, 40.4) | 16.3 (16.3, 15.0, 21.5) |
+| `starter:htmx`                        | 3.2 (3.2, 1.7, 3.4)     | 2.6 (2.4, 2.6, 2.7)     |
+
+- On this uplink a first install is a quarter to a half shorter on the
+  lessons and 60% shorter on the React starter.
+- One install with plans on took 17.3 s (the TypeScript lesson, its third
+  run), and one took 22.9 s in an earlier pass (the Vite 5 lesson). Why is not
+  known; an install's time follows the network with plans on as with them off.
+
+**What the first deploy showed.** For the 24 minutes between the two deploys
+(22:49 to 23:13 UTC on 2026-11-23), the runtime host answered about one request in twenty with a 500 on its ordinary
+paths (the runtime frame, `kernel.js`, `process.js`): 6 of 100 requests, each
+on a connection of its own, and four of the first thirty production runs above
+did not boot ("did not answer as a runtime"). The Worker's log gave the
+reason: "This promise was created by a request that has since ended, so it can
+never settle." `serveWebnodeHost` kept the promise of the served build's id
+for the life of an isolate. When the first request of a fresh isolate ended
+before that read did, the promise never settled, and every later request of
+the isolate that waited on it failed. The code was older than this change; a
+deploy makes every isolate fresh, and browsers that a test closes end requests
+early. It keeps the id now, and a request that finds none reads for itself
+(`99d889e6`). After that deploy: 60 requests cut off after 0.12 s, then 300
+more, all 200, and the thirty production runs of the table above all passed.
+
 ## Measuring again
 
 ```bash
