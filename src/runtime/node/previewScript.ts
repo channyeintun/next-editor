@@ -27,6 +27,14 @@ const RUNTIME_RELOAD_HOLD_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_RELOAD_HOLD__";
 // document on the fly. Returns a raw script body (no `<script>` wrapper); the
 // runtime supplies the tag. Both halves are guarded by per-window markers,
 // so re-running on navigation (or inside an htmx fragment swap) is a no-op.
+//
+// All of it is the editor's instrumentation of its own preview frame, and all
+// of it talks to `window.parent`. A preview opened in a browser tab of its own
+// has no editor above it: its `window.parent` is the page itself, so the
+// recorder would post every DOM change to the page's own `message` listeners,
+// the console bridge would stand between the page's logs and DevTools, and the
+// reload hold would change how the tab reloads. There the script does nothing,
+// and the page runs as the project wrote it.
 export function createRuntimePreviewScript(): string {
   const interactionCaptureScript = createIframeInteractionCaptureScript(
     RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER,
@@ -62,5 +70,5 @@ export function createRuntimePreviewScript(): string {
   // and nothing below may keep it from running.
   const reloadHoldScript = createIframeReloadHoldScript(RUNTIME_RELOAD_HOLD_SETUP_MARKER);
 
-  return `${reloadHoldScript}\n${rrwebRecordScript}\n${apiClientProxyScript}\n${screenshotBridgeScript}\n${studioCommandBridgeScript}\n${snapshotScript}`;
+  return `if(window.parent!==window){\n${reloadHoldScript}\n${rrwebRecordScript}\n${apiClientProxyScript}\n${screenshotBridgeScript}\n${studioCommandBridgeScript}\n${snapshotScript}\n}`;
 }
