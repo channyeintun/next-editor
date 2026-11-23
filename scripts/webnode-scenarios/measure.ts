@@ -22,6 +22,16 @@
 // runs are recorded, one JSON line each, in
 // node_modules/.cache/webnode-measure/runs.jsonl (MEASURE_RUNS names another).
 //
+// Prepared installs (scripts/webnode-harness.ts says how they are served) are
+// off unless WEBNODE_HARNESS_DEPS=1: every command gets WEBNODE_DEPS=0 and
+// installs from the registry. With them on, WEBNODE_HARNESS_DEPS_BPS=<bytes
+// per second> limits all object downloads in flight to one shared rate and
+// WEBNODE_HARNESS_DEPS_TTFB_MS=<ms> waits that long before each one's first
+// byte, a stand-in for the registry's link. Each run records which of these
+// held, and the table keeps the arms apart, so one runs file can hold runs
+// with prepared installs off and on: measure the second arm with RESUME=1,
+// which keeps the first arm's runs and counts only its own as done.
+//
 // One run, in a browser of its own with an empty cache (unless PROFILE):
 //   boot     the runtime boots;
 //   install  the lesson's init command, as the editor runs it (`sh -lc`), to its exit;
@@ -38,20 +48,13 @@
 //
 // The webnode scripts are built minified, as a deployment ships them. The
 // install comes from the npm registry, so the times move with the network.
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { parse } from "yaml";
 import type { Browser } from "playwright-core";
 import { plainText } from "./text";
+import type { LessonScript } from "./workspaces";
 
 process.env.WEBNODE_HARNESS_OUT ||= "node_modules/.cache/webnode-measure";
 process.env.WEBNODE_HARNESS_MINIFY ??= "1";
@@ -101,6 +104,35 @@ interface Run {
   shown: string | null;
   final: string | null;
   consoleErrors: string[];
+  /** Whether prepared installs were served; a run recorded before they existed had them off. */
+  deps?: boolean;
+  /** The object link's shared rate and first-byte wait, when they were set. */
+  depsBps?: number | null;
+  depsTtfbMs?: number | null;
+}
+
+/** How this process's harness serves prepared installs, as a run records it. */
+async function depsArm(): Promise<Pick<Run, "deps" | "depsBps" | "depsTtfbMs">> {
+  const { DEPS_SETTINGS } = await import("../webnode-harness");
+  return DEPS_SETTINGS.on
+    ? {
+        deps: true,
+        depsBps: DEPS_SETTINGS.bytesPerSecond,
+        depsTtfbMs: DEPS_SETTINGS.firstByteMs,
+      }
+    : { deps: false, depsBps: null, depsTtfbMs: null };
+}
+
+/** The arm a run belongs to, as the table names it. */
+function armOf(run: Pick<Run, "deps" | "depsBps" | "depsTtfbMs">): string {
+  if (!run.deps) {
+    return "off";
+  }
+  const limits = [
+    run.depsBps ? `${run.depsBps} B/s` : null,
+    run.depsTtfbMs ? `${run.depsTtfbMs} ms to first byte` : null,
+  ].filter(Boolean);
+  return limits.length ? `on, ${limits.join(", ")}` : "on";
 }
 
 // ---------------------------------------------------------------- targets
@@ -118,23 +150,6 @@ const PREFERRED_LESSONS = new Set([
 
 /** The testing course's panel once a test run has finished: its status beside the heading. */
 const TEST_RESULT = /\bVitest (PASS|FAIL)\b/;
-
-interface LessonScript {
-  lesson: { workspace: { files: Record<string, string> } };
-  runtime?: {
-    kind?: string;
-    initCommand?: string;
-    runCommand?: string;
-    expectedPort?: number;
-    environment?: Record<string, string>;
-  };
-  scenes?: { actions?: LessonAction[] }[];
-}
-interface LessonAction {
-  type: string;
-  target?: { file: string; after: string; occurrence?: number };
-  text?: string;
-}
 
 /** A lesson's files at its end: every `editor.type`, in the script's order. */
 function filesAtEnd(slug: string, script: LessonScript): Record<string, string> {
@@ -181,19 +196,10 @@ function dependenciesOf(files: Record<string, string>): [string, string][] {
 
 /** The runtime lessons, grouped by what they install; the largest group first. */
 async function lessonSetups(): Promise<{ setups: Setup[]; scripts: Map<string, LessonScript> }> {
-  const { LESSON_SCRIPTS } = await import("./lessons");
-  const scripts = new Map<string, LessonScript>();
+  const { runtimeLessons } = await import("./workspaces");
+  const scripts = runtimeLessons();
   const groups = new Map<string, string[]>();
-  for (const name of readdirSync(LESSON_SCRIPTS).sort()) {
-    if (!name.endsWith(".yaml")) {
-      continue;
-    }
-    const script = parse(readFileSync(`${LESSON_SCRIPTS}${name}`, "utf8")) as LessonScript;
-    if (script.runtime?.kind !== "webcontainer") {
-      continue;
-    }
-    const slug = name.replace(/\.yaml$/, "");
-    scripts.set(slug, script);
+  for (const [slug, script] of scripts) {
     const label =
       dependenciesOf(script.lesson.workspace.files)
         .map(([dependency, version]) => `${dependency}@${version}`)
@@ -240,18 +246,9 @@ async function lessonTarget(slug: string, setup: string, script: LessonScript): 
 }
 
 async function starterTargets(): Promise<Target[]> {
-  const { STARTERS, STARTERS_ROOT } = await import("./starters");
+  const { starterWorkspaces } = await import("./workspaces");
   const targets: Target[] = [];
-  for (const [name, starter] of Object.entries(STARTERS)) {
-    const project = (await import(STARTERS_ROOT + starter.file))[starter.factory]();
-    const files: Record<string, string> = {};
-    for (const [path, file] of Object.entries(
-      project.files as Record<string, { content?: string }>,
-    )) {
-      if (typeof file.content === "string") {
-        files[path] = file.content;
-      }
-    }
+  for (const { name, files, shows } of await starterWorkspaces()) {
     targets.push({
       name: `starter:${name}`,
       setup:
@@ -263,7 +260,7 @@ async function starterTargets(): Promise<Target[]> {
       initCommand: "pnpm install",
       runCommand: "pnpm dev",
       environment: {},
-      shows: starter.shows,
+      shows,
     });
   }
   return targets;
@@ -391,7 +388,7 @@ function tail(output: string, lines = 12): string {
 
 async function measure(target: Target, run: number): Promise<Run> {
   const { chromium } = await import("playwright-core");
-  const { serve, previewFrame } = await import("../webnode-harness");
+  const { serve, previewFrame, pageQuery } = await import("../webnode-harness");
   const { tree } = await import("./lessons");
   const result: Run = {
     target: target.name,
@@ -407,6 +404,7 @@ async function measure(target: Target, run: number): Promise<Run> {
     shown: null,
     final: null,
     consoleErrors: [],
+    ...(await depsArm()),
   };
   const server = await serve();
   // A profile kept between runs: a later run is a later visit of the same browser.
@@ -426,7 +424,7 @@ async function measure(target: Target, run: number): Promise<Run> {
       }
     });
     page.on("pageerror", (error) => consoleErrors.add(`pageerror: ${error.message.slice(0, 240)}`));
-    await page.goto(server.url);
+    await page.goto(`${server.url}${pageQuery()}`);
     const call = <R>(method: string, ...args: unknown[]) =>
       page.evaluate(
         ([name, parameters]) =>
@@ -596,18 +594,24 @@ function median(values: (number | null)[]): number | null {
 
 const seconds = (ms: number | null) => (ms === null ? "–" : (ms / 1000).toFixed(1));
 
-/** The table of `runs`: one row per target, the median of its runs that passed. */
+/**
+ * The table of `runs`: one row per target and arm (prepared installs off, or
+ * on with the link they had), the median of its runs that passed.
+ */
 function table(runs: Run[]): string {
   const rows = [
-    "| setup | target | pass | install s | preview s | peak MB | end MB |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
+    "| setup | target | prepared | pass | install s | preview s | peak MB | end MB |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
   ];
   const failures: string[] = [];
-  for (const name of new Set(runs.map((run) => run.target))) {
-    const ofTarget = runs.filter((run) => run.target === name);
+  const rowKey = (run: Run) => `${run.target}\n${armOf(run)}`;
+  for (const key of new Set(runs.map(rowKey))) {
+    const ofTarget = runs.filter((run) => rowKey(run) === key);
+    const { target: name } = ofTarget[0];
+    const arm = armOf(ofTarget[0]);
     const passed = ofTarget.filter((run) => run.pass);
     rows.push(
-      `| ${ofTarget[0].setup} | ${name} | ${[
+      `| ${ofTarget[0].setup} | ${name} | ${arm} | ${[
         `${passed.length}/${ofTarget.length}`,
         seconds(median(passed.map((run) => run.installMs))),
         seconds(median(passed.map((run) => run.previewMs))),
@@ -617,7 +621,7 @@ function table(runs: Run[]): string {
     );
     const failed = ofTarget.find((run) => !run.pass);
     if (failed) {
-      failures.push(`- ${name}: ${failed.error}`);
+      failures.push(`- ${name} (prepared ${arm}): ${failed.error}`);
     }
   }
   return (
@@ -666,6 +670,7 @@ async function runInChild(target: string, run: number): Promise<Run> {
     shown: null,
     final: null,
     consoleErrors: [],
+    ...(await depsArm()),
   };
 }
 
@@ -713,7 +718,9 @@ async function main(): Promise<void> {
     : targets.map((target) => target.name);
   const runs = Number(process.env.RUNS ?? 3);
   mkdirSync(dirname(RUNS_FILE), { recursive: true });
-  const done = process.env.RESUME === "1" ? recordedRuns() : [];
+  // A run of the other arm is not this one's: both can share one runs file.
+  const arm = armOf(await depsArm());
+  const done = process.env.RESUME === "1" ? recordedRuns().filter((one) => armOf(one) === arm) : [];
   if (process.env.RESUME !== "1") {
     writeFileSync(RUNS_FILE, "");
   }
@@ -726,7 +733,7 @@ async function main(): Promise<void> {
       const result = await runInChild(name, run);
       appendFileSync(RUNS_FILE, `${JSON.stringify(result)}\n`);
       console.log(
-        `${result.pass ? "ok  " : "FAIL"} ${name} #${run}: install ${seconds(result.installMs)} s, ` +
+        `${result.pass ? "ok  " : "FAIL"} ${name} #${run} (prepared ${arm}): install ${seconds(result.installMs)} s, ` +
           `preview ${seconds(result.previewMs)} s, peak ${result.peakMb} MB, end ${result.endMb} MB` +
           (result.error ? `\n     ${result.error}` : ""),
       );

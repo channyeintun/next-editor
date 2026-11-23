@@ -16,6 +16,16 @@
 // deployment ships them. WEBNODE_HARNESS_FS=kernel runs on the filesystem
 // inside the kernel worker, to compare with the shared one.
 //
+// WEBNODE_HARNESS_DEPS=1 lets the installer read prepared installs: the
+// runtime host serves node_modules/.cache/webnode-deps/objects/<id>.br
+// (bun scripts/webnode-deps.ts builds them) as the deployment serves them from
+// its bucket. Without it every object is missing and every command the
+// harness runs is given WEBNODE_DEPS=0, so the installer asks for none and
+// installs from the registry as it did before it had them. For measuring on a
+// link like the registry's: WEBNODE_HARNESS_DEPS_BPS=<bytes per second> is one
+// budget all object responses in flight share, and
+// WEBNODE_HARNESS_DEPS_TTFB_MS=<ms> is a wait before each one's first byte.
+//
 // WEBNODE_HARNESS_TARGET=<editor origin> runs `run`, `cases` and `script`
 // against hosts something else serves: a `wrangler dev` listener
 // (http://localhost:8787, whose hosts are *.localhost:8787), or the deployment
@@ -23,16 +33,23 @@
 // runtime and preview hosts live under>). The harness page is put on the
 // editor origin by request interception; the hosts are the real ones.
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
+import type { ServerResponse } from "node:http";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "rolldown";
 import { chromium } from "playwright-core";
 import type { Page } from "playwright-core";
 import { buildWebnodeBundles } from "../build/webnodeBundle";
-import { webnodeHostAsset, webnodeHostResponse } from "../src/core/webnode/preview/hostResponses";
+import { DEPS_OBJECT_HEADERS, DEPS_OBJECT_REFUSAL_HEADERS } from "../src/core/webnode/depsObjects";
+import {
+  depsObjectRequest,
+  webnodeHostAsset,
+  webnodeHostResponse,
+} from "../src/core/webnode/preview/hostResponses";
 import { ScenarioFailure, failureMessage, scenarioTools } from "../src/core/webnode/test/scenario";
 import type { PreviewFrame, ScenarioTools } from "../src/core/webnode/test/scenario";
 
@@ -50,6 +67,77 @@ const TARGET = process.env.WEBNODE_HARNESS_TARGET
 const TARGET_PREVIEW_HOST = process.env.WEBNODE_HARNESS_PREVIEW_HOST?.trim() || null;
 /** Where the harness page lives on a target origin: a path the target never serves itself. */
 const TARGET_PAGE_PATH = "/__webnode_harness__/";
+
+/** A setting that is a positive number of something, or null when it is unset or not one. */
+function positiveSetting(value: string | undefined): number | null {
+  const number = Number(value);
+  return value && Number.isFinite(number) && number > 0 ? number : null;
+}
+
+/** How the runtime host serves prepared install objects: whether at all, and how slowly. */
+export const DEPS_SETTINGS = {
+  on: process.env.WEBNODE_HARNESS_DEPS === "1",
+  bytesPerSecond: positiveSetting(process.env.WEBNODE_HARNESS_DEPS_BPS),
+  firstByteMs: positiveSetting(process.env.WEBNODE_HARNESS_DEPS_TTFB_MS),
+};
+const DEPS_OBJECTS_DIR = resolve(ROOT, "node_modules/.cache/webnode-deps/objects");
+/** How much of an object goes out per turn on a limited link, so responses in flight take turns. */
+const DEPS_CHUNK_BYTES = 16 * 1024;
+
+const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
+
+/**
+ * A link of `bytesPerSecond` that every response in flight shares, as a
+ * learner's one connection is: each chunk waits for the link to be free, so
+ * two downloads at once take twice as long as one.
+ */
+function sharedLink(bytesPerSecond: number): (bytes: number) => Promise<void> {
+  let freeAt = 0;
+  return async (bytes) => {
+    freeAt = Math.max(Date.now(), freeAt) + (bytes / bytesPerSecond) * 1000;
+    await sleep(freeAt - Date.now());
+  };
+}
+
+const depsLink = DEPS_SETTINGS.bytesPerSecond ? sharedLink(DEPS_SETTINGS.bytesPerSecond) : null;
+
+/** Answers for object `id` as the deployment does: its stored Brotli bytes, or a 404. */
+async function sendDepsObject(id: string, response: ServerResponse): Promise<void> {
+  const body = DEPS_SETTINGS.on
+    ? await readFile(resolve(DEPS_OBJECTS_DIR, `${id}.br`)).catch(() => null)
+    : null;
+  if (!body) {
+    response.writeHead(404, DEPS_OBJECT_REFUSAL_HEADERS);
+    response.end();
+    return;
+  }
+  if (DEPS_SETTINGS.firstByteMs) {
+    await sleep(DEPS_SETTINGS.firstByteMs);
+  }
+  if (response.destroyed) {
+    return;
+  }
+  // The object's own headers only: the harness's `no-store` would hide what
+  // the deployment tells the browser it may keep.
+  response.writeHead(200, { ...DEPS_OBJECT_HEADERS, "content-length": String(body.length) });
+  if (!depsLink) {
+    response.end(body);
+    return;
+  }
+  // The headers go now, as a server's would: only the body waits for the link.
+  response.flushHeaders();
+  for (let at = 0; at < body.length && !response.destroyed; at += DEPS_CHUNK_BYTES) {
+    const chunk = body.subarray(at, at + DEPS_CHUNK_BYTES);
+    await depsLink(chunk.length);
+    if (!response.write(chunk)) {
+      await new Promise((go) => {
+        response.once("drain", go);
+        response.once("close", go);
+      });
+    }
+  }
+  response.end();
+}
 
 export const ISOLATION_HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin",
@@ -98,6 +186,18 @@ export async function serve(): Promise<{ stop(): void; url: string }> {
 
     if (hostname !== "localhost" && hostname.endsWith(".localhost")) {
       // A preview or runtime host: nothing of the harness page is served there.
+      const objectRequest = depsObjectRequest(
+        { method: request.method ?? "GET", hostname, pathname: url.pathname, search: url.search },
+        "localhost",
+      );
+      if (objectRequest?.status === 200) {
+        sendDepsObject(objectRequest.id, response).catch(() => response.destroy());
+        return;
+      }
+      if (objectRequest) {
+        send(objectRequest.status, DEPS_OBJECT_REFUSAL_HEADERS, "");
+        return;
+      }
       const asset = webnodeHostAsset(url.pathname);
       const header = (name: string) => {
         const value = request.headers[name];
@@ -164,8 +264,13 @@ export interface HarnessApi extends ScenarioTools {
 }
 
 /** What the harness page reads from its address (test/harnessPage.ts). */
-function pageQuery(): string {
+export function pageQuery(): string {
   const query = new URLSearchParams();
+  if (!DEPS_SETTINGS.on) {
+    // The installer's switch for prepared installs, given to every command
+    // the page spawns: off, it asks for no object at all.
+    query.append("env", "WEBNODE_DEPS=0");
+  }
   if (TARGET_PREVIEW_HOST) {
     query.set("previewHost", TARGET_PREVIEW_HOST);
   }

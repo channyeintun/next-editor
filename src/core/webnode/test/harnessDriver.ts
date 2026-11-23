@@ -97,6 +97,10 @@ function track(process: WebNodeProcess): number {
 
 /** How the page's runtime boots. */
 let bootRuntime: (() => Promise<WebNode>) | null = null;
+/** Variables every command the harness spawns gets, under what the caller names. */
+let baseEnv: Record<string, string> = {};
+
+const envOf = (env: Record<string, string> | undefined) => ({ ...baseEnv, ...env });
 
 const harness: Harness = {
   async boot() {
@@ -113,7 +117,7 @@ const harness: Harness = {
   },
   mount: (tree) => runtime().mount(tree),
   async run(command, args, options = {}) {
-    const process = await runtime().spawn(command, args, { env: options.env });
+    const process = await runtime().spawn(command, args, { env: envOf(options.env) });
     const id = track(process);
     const record = running.get(id)!;
     if (options.input !== undefined) {
@@ -137,7 +141,9 @@ const harness: Harness = {
     return { code: timedOut ? null : code, output: record.output.replace(/\r/g, ""), timedOut };
   },
   async start(command, args, env, terminal = DEFAULT_TERMINAL) {
-    return track(await runtime().spawn(command, args, { env, terminal: terminal ?? undefined }));
+    return track(
+      await runtime().spawn(command, args, { env: envOf(env), terminal: terminal ?? undefined }),
+    );
   },
   read(id) {
     const record = running.get(id);
@@ -213,8 +219,15 @@ const harness: Harness = {
   },
 };
 
-/** Puts the driver on `window.webnodeHarness`; its `boot()` boots the runtime with `boot`. */
-export function installHarness(boot: () => Promise<WebNode>): void {
+/**
+ * Puts the driver on `window.webnodeHarness`; its `boot()` boots the runtime
+ * with `boot`, and every command it spawns gets `env` under its own variables.
+ */
+export function installHarness(
+  boot: () => Promise<WebNode>,
+  env: Record<string, string> = {},
+): void {
   bootRuntime = boot;
+  baseEnv = env;
   (window as unknown as { webnodeHarness: Harness }).webnodeHarness = harness;
 }
