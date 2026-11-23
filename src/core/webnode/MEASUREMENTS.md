@@ -365,6 +365,140 @@ head `0ebf55b2`. `editor-check.ts` passed on a local Worker serving that
 first preview after 49.5 s (install included), 7 entries (4.6 MB) kept a
 minute on, and the second visit asked for 7 of 7.
 
+## 11. Prepared installs (2026-11-24)
+
+On a first visit an install's time is the network, so the two things an
+install takes from the registry are now prepared ahead of time: the plan (what
+resolving and hoisting gave) and each package's files (its tarball, gunzipped
+and stored with Brotli). The README says how, under "An install can come from
+a prepared plan". Code: `859d5381` to `113a98b8`, with the index of the 27
+plans.
+
+Not every figure of this section is a run of `measure.ts`. The first table and
+its notes come from timers added to the installer for single runs and removed
+after them (no run file keeps them). The weights come from the builder's
+records. The tables under "Measured" and "Later visits" are `measure.ts`
+runs, kept in the files named at the end.
+
+**Where a first-visit install's time went**, before the change: head
+`d1d16380`, with timers added for the runs and removed after them. One run a
+row, a fresh profile.
+
+| Target                           | Install | Registry requests          | Over the wire    | Gunzip, tar, integrity and writes, summed |
+| -------------------------------- | ------- | -------------------------- | ---------------- | ----------------------------------------- |
+| `css-course-01-basics`           | 6.7 s   | 12 metadata, 8 tarballs    | 0.64 + 5.03 MB   | 0.15 s                                    |
+| `typescript-course-07-functions` | 11.9 s  | 13 metadata, 9 tarballs    | 0.65 + 9.55 MB   | 0.12 s                                    |
+| `starter:react`                  | 59.3 s  | 193 metadata, 140 tarballs | 14.27 + 29.26 MB | 1.3 s                                     |
+
+- After the last network byte an install ended within 0.1 s: its own work
+  runs while other requests are in flight.
+- A request took 0.1 to 0.8 s to its first byte (most of them 0.3 to 0.5 s),
+  tarballs wait for one of 8 places, and the link gave about 0.85 MB/s on the
+  lessons and 0.73 MB/s on the React starter. On the React starter the
+  metadata alone is a third of the bytes and its requests last 45 s.
+- A first run of the React starter took 78.8 s: the registry gave 0.14 MB/s
+  for half a minute.
+
+**What the objects weigh**, from the builder (`bun scripts/webnode-deps.ts`).
+An archive is a package's tar with Brotli (quality 11, a 16 MB window). The
+gzip column is the size of the tarballs in the timed runs above, so it is
+missing for the manifests those runs did not cover.
+
+| Manifest                           | Packages | Files | Tar      | The registry's gzip tarballs | Archives | Plan    |
+| ---------------------------------- | -------- | ----- | -------- | ---------------------------- | -------- | ------- |
+| vite 5 (49 lessons)                | 8        | 187   | 19.7 MB  | 5.02 MB                      | 3.39 MB  | 1.7 KB  |
+| typescript 6 + vite 5 (31 lessons) | 9        | 327   | 44.1 MB  | 9.53 MB                      | 5.47 MB  | 1.9 KB  |
+| vite 7 + vitest 5 (26 lessons)     | 30       | 549   | 25.8 MB  | not measured                 | 4.53 MB  | 5.5 KB  |
+| `starter:react`                    | 140      | 8,428 | 126.7 MB | 29.17 MB                     | 16.54 MB | 22.8 KB |
+| `starter:htmx`                     | 65       | 566   | 2.8 MB   | not measured                 | 0.56 MB  | 10.4 KB |
+
+The 27 manifests that install something (17 from lessons, 10 from starters)
+share 423 archives, 39.4 MB in all. Kept apart for each manifest they would be
+151 MB.
+
+**Measured**: head `113a98b8` with the 27 plans, minified. Three arms in turn,
+three rounds, a fresh profile each run:
+
+- **off**: `WEBNODE_DEPS=0`, an install from the registry as before.
+- **on**: the objects come from the harness on the same machine. The download
+  costs nothing there, so this is the floor: what is left of an install when
+  the network is free.
+- **on, held**: all object downloads in flight share 850 kB/s, and each waits
+  200 ms for its first byte. It stands in for a link, and a slower one than
+  the off arm had: the 5.67 MB the timed run of the Vite 5 lesson took, over
+  the off arm's 5.6 s install, is 1.0 MB/s with every request's wait counted
+  in (1.1 MB/s by the same sum on the TypeScript lesson and the React
+  starter).
+
+Install, in seconds: the median, then the three runs.
+
+| Target                                | off                     | on                  | on, held                |
+| ------------------------------------- | ----------------------- | ------------------- | ----------------------- |
+| `css-course-01-basics`                | 5.6 (5.7, 5.4, 5.6)     | 0.2 (0.2, 0.3, 0.2) | 4.7 (4.7, 4.7, 4.7)     |
+| `typescript-course-07-functions`      | 9.0 (8.7, 9.5, 9.0)     | 0.3 (0.3, 0.3, 0.3) | 7.0 (7.0, 7.0, 7.0)     |
+| `testing-course-02-first-vitest-test` | 6.9 (6.6, 6.9, 7.2)     | 0.2 (0.2, 0.2, 0.2) | 6.2 (6.3, 6.2, 6.2)     |
+| `starter:react`                       | 39.7 (40.6, 39.7, 38.7) | 0.7 (0.7, 0.7, 0.8) | 20.1 (20.1, 20.1, 20.1) |
+| `starter:htmx`                        | 2.9 (4.0, 2.9, 1.6)     | 0.2 (0.1, 0.2, 0.2) | 2.7 (2.7, 2.7, 2.7)     |
+
+The rest of the same runs, medians, in the order off / on / on, held:
+
+| Target                                | Preview s       | Peak MB            | End MB             |
+| ------------------------------------- | --------------- | ------------------ | ------------------ |
+| `css-course-01-basics`                | 0.8 / 0.8 / 0.8 | 442 / 420 / 471    | 294 / 288 / 289    |
+| `typescript-course-07-functions`      | 1.5 / 1.5 / 1.5 | 559 / 552 / 585    | 417 / 422 / 420    |
+| `testing-course-02-first-vitest-test` | 1.3 / 1.4 / 1.4 | 466 / 500 / 472    | 364 / 369 / 368    |
+| `starter:react`                       | 3.6 / 3.7 / 2.8 | 1168 / 1165 / 1186 | 1138 / 1125 / 1162 |
+| `starter:htmx`                        | 0.8 / 0.8 / 0.6 | 199 / 186 / 186    | 173 / 166 / 166    |
+
+**Later visits**: a first visit held 110 s, then three later ones, one
+profile for each target and arm. Medians, off then on.
+
+| Target                                | Install s | Preview s | Peak MB     | End MB      |
+| ------------------------------------- | --------- | --------- | ----------- | ----------- |
+| `css-course-01-basics`                | 0.6 → 0.1 | 0.6 → 0.7 | 356 → 378   | 282 → 278   |
+| `testing-course-02-first-vitest-test` | 0.9 → 0.1 | 1.2 → 1.2 | 433 → 392   | 358 → 355   |
+| `starter:react`                       | 2.2 → 0.2 | 2.5 → 2.5 | 1098 → 1098 | 1098 → 1098 |
+
+- A later visit asks for nothing: the plan and the archives come from Cache
+  Storage, each checked against its id. With plans off the installer fetches
+  every packument again (it keeps them for one install only), and the
+  browser's HTTP cache answers for as long as the registry's headers allow
+  (`max-age=300` today) and asks the registry after that. These later visits
+  came within those five minutes, so the off column is the registry path at
+  its best.
+- Memory moved within what "How far to trust a difference" allows, in both
+  directions (the Vitest lesson's later-visit peak by 41 MB down, at its
+  edge).
+- On a link like this one the gain on a lesson's first visit is small (a
+  tenth to a fifth of the install) and about half on the React starter; what
+  the floor shows is how much a faster link would gain.
+- **Every target once with plans on** (one lesson for each setup and every
+  starter, 29 targets, `RUNS=1`): 29 of 29 passed. The 27 that have a plan
+  installed from it in 0.1 to 0.6 s; the other two have no dependencies.
+- **One run of the 63 failed**, in the off arm: the React starter's first
+  later visit. Its dev server ended in `path_open`, called by rolldown's
+  WebAssembly module, and the preview showed a 502. 36 more runs of that
+  target with plans off passed (24 in one browser, then the same sequence
+  three times), and all 11 of its runs with plans on. The cause is not known:
+  the report then kept only the last 6 lines and 900 characters of a dead
+  server's output, which cut the message off. It keeps 40 lines and 4,000
+  characters now. `@tybys/wasm-util` rethrows an error whose code it has no
+  WASI number for, which ends the process. The row above is from the two runs
+  that passed (peak and end 1098 and 1131 MB; `measure.ts` takes the lower of
+  two as the median).
+- One preview of `starter:htmx` took 28.4 s (on, held; the other two 0.6 s):
+  its page loads htmx from unpkg.com.
+- Before these went out: the unit tests (744 files, 11,491 tests), the Worker
+  tests, `vp check`, the filesystem crate's tests (145), the conformance cases
+  on the minified build (75 of 76, and the 76th, `npm-lost-reader.cjs`, with
+  pnpm 9 first on the PATH), and the thirteen scenarios of `gate.sh` on the
+  minified build. The Worker's answer for an object was checked on a local
+  `wrangler dev` with the objects in its bucket: the bytes that leave are the
+  stored Brotli bytes, and they decode to the object's id.
+
+The runs are kept as `prepared-first.jsonl`, `prepared-later.jsonl` and
+`prepared-all-on.jsonl` in `node_modules/.cache/webnode-measure`.
+
 ## Measuring again
 
 ```bash
@@ -380,6 +514,21 @@ RUNS=3 PROFILE=node_modules/.cache/webnode-measure/profile bun scripts/webnode-s
 
 # Section 7: the real editor on production.
 bun scripts/webnode-scenarios/editor-check.ts https://nexteditor.dev
+
+# Section 11: prepared installs off, on, and on with the link held, the three
+# arms in turn for each of three rounds, into one runs file (RESUME=1 keeps
+# the other arms' runs; RUNS=$round adds that round's run). The plans and
+# archives must be in the local store first: bun scripts/webnode-deps.ts build
+targets="css-course-01-basics typescript-course-07-functions testing-course-02-first-vitest-test starter:react starter:htmx"
+held="WEBNODE_HARNESS_DEPS=1 WEBNODE_HARNESS_DEPS_BPS=850000 WEBNODE_HARNESS_DEPS_TTFB_MS=200"
+for round in 1 2 3; do
+  for arm in "WEBNODE_HARNESS_DEPS=0" "WEBNODE_HARNESS_DEPS=1" "$held"; do
+    env $arm RESUME=1 RUNS=$round MEASURE_RUNS=/tmp/prepared.jsonl bun scripts/webnode-scenarios/measure.ts $targets
+  done
+done
+
+# Section 11: every target once from its plan.
+WEBNODE_HARNESS_DEPS=1 RUNS=1 bun scripts/webnode-scenarios/measure.ts
 ```
 
 `bun scripts/webnode-scenarios/measure.ts --table` prints the table of the

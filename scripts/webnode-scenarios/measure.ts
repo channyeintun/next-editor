@@ -377,13 +377,13 @@ async function sampleMemory(
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** The end of what a command printed, on one line. */
-function tail(output: string, lines = 12): string {
+function tail(output: string, lines = 12, characters = 900): string {
   return plainText(output)
     .split("\n")
     .filter((line) => line.trim() && !line.startsWith("Progress:"))
     .slice(-lines)
     .join(" | ")
-    .slice(-900);
+    .slice(-characters);
 }
 
 async function measure(target: Target, run: number): Promise<Run> {
@@ -529,7 +529,8 @@ async function measure(target: Target, run: number): Promise<Run> {
           const state = await runnerState();
           throw fail(
             `${what}: the preview did not show the lesson's page within ${timeoutMs / 1000} s: ` +
-              `${describe(view)}; the server printed: ${tail(state.output, 6)}`,
+              // A server that died says why above its stack: enough of the end to reach it.
+              `${describe(view)}; the server printed: ${tail(state.output, 40, 4000)}`,
           );
         }
         return view!;
