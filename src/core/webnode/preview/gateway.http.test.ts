@@ -13,6 +13,7 @@ import {
   writeAll,
 } from "./gatewayTestKit";
 import { allowNonceInPolicy, injectScripts } from "./htmlInject";
+import type { FromGatewayMessage, ToGatewayMessage } from "./protocol";
 
 let harness: ReturnType<typeof createGatewayHarness>;
 
@@ -404,6 +405,36 @@ describe("PreviewGateway HTTP", () => {
     const pong = new Promise((resolve) => harness.watch(77, resolve));
     harness.send({ type: "ping", id: 77 });
     expect(await pong).toEqual({ type: "pong", id: 77 });
+  });
+
+  it("serves a port sent on a control port as one more control port of the same server", async () => {
+    harness = createGatewayHarness();
+    harness.serve(3000, (server) =>
+      writeAll(server, ["HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"]),
+    );
+    // A window's spare (clientScript.ts): the window keeps the far end.
+    const spare = new MessageChannel();
+    const answers: FromGatewayMessage[] = [];
+    spare.port1.onmessage = (event: MessageEvent<FromGatewayMessage>) => answers.push(event.data);
+    harness.send({ type: "control", port: spare.port2 }, [spare.port2]);
+    spare.port1.postMessage({ type: "ping", id: 0 } satisfies ToGatewayMessage);
+    spare.port1.postMessage({
+      type: "request",
+      id: 1,
+      method: "GET",
+      url: "/",
+      headers: [],
+      body: null,
+    } satisfies ToGatewayMessage);
+    await tick(20);
+    spare.port1.close();
+    expect(answers.map((answer) => answer.type)).toEqual([
+      "pong",
+      "response-head",
+      "response-chunk",
+      "response-end",
+    ]);
+    expect(answers[1]).toMatchObject({ id: 1, status: 200 });
   });
 
   it("fails the requests in flight when it is disposed, so none hangs", async () => {

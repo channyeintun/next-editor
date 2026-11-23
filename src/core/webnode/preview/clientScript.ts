@@ -1,6 +1,7 @@
 // The script the gateway injects first into every HTML document of a preview:
 // a runtime-backed `WebSocket` (so Vite's HMR client reaches the dev server),
-// a refusal of the page's own service worker registrations, the hand-off of a fresh control port when the service worker lost its own,
+// a refusal of the page's own service worker registrations, the hand-off of a fresh control port when the service worker lost its own
+// (asked of the editor by a framed preview, kept as a spare by one in a browser tab of its own),
 // reload on request from the editor, and error forwarding to the editor. Every
 // message to the editor names the editor's origin as its target, and messages
 // from the parent are accepted only from that origin, so a page that frames
@@ -304,17 +305,51 @@ window.addEventListener("message", function (event) {
   }
 });
 
+/* A preview in a browser tab of its own has no editor above it to ask. While
+   the worker still has a port, the page has the gateway serve one more and
+   keeps its end: the worker gets that spare when it has lost its own (the
+   browser stops an idle worker), and the page then keeps another. */
+var spare = null;
+
+function keepSpare() {
+  var controller = serviceWorker && serviceWorker.controller;
+  if (parentWindow || spare || !controller) return;
+  var channel = new MessageChannel();
+  spare = channel.port1;
+  controller.postMessage({ type: "webnode:spare", port: channel.port2 }, [channel.port2]);
+}
+
+/* Hands the spare over once the gateway answers on it: one whose runtime is
+   gone, or that never reached a gateway, is not offered, so the worker does
+   not wait for it. */
+function offerSpare(ack) {
+  var port = spare;
+  if (!port) return;
+  port.onmessage = function (event) {
+    var controller = serviceWorker.controller;
+    if (spare !== port || !controller || !event.data || event.data.type !== "pong") return;
+    port.onmessage = null;
+    spare = null;
+    if (ack) ack.postMessage(true);
+    controller.postMessage({ type: "webnode:attach", control: port }, [port]);
+    keepSpare();
+  };
+  port.postMessage({ type: "ping", id: 0 });
+}
+
 if (serviceWorker) {
   serviceWorker.addEventListener("message", function (event) {
     var data = event.data;
     if (!data || data.type !== "webnode:need-port") return;
-    // Only a framed preview can get a port from the editor; it says so at once,
-    // so the worker does not wait on a window that never could.
     var ack = data.ack || (event.ports && event.ports[0]);
-    if (ack && parentWindow) ack.postMessage(true);
+    if (!parentWindow) { offerSpare(ack); return; }
+    // A framed preview gets a port from the editor; it says so at once, so the
+    // worker waits only on windows that can get one.
+    if (ack) ack.postMessage(true);
     requestPort();
   });
   if (typeof serviceWorker.startMessages === "function") serviceWorker.startMessages();
+  keepSpare();
 }
 
 /* ── error forwarding ──────────────────────────────────────────────────── */

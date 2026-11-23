@@ -122,6 +122,10 @@ export class PreviewGateway {
         link.exchanges.get(message.id)?.cancel();
         link.exchanges.delete(message.id);
         return;
+      case "control":
+        // A window's spare: one more port for the server this one serves.
+        this.attach(message.port, serverPort);
+        return;
       case "request": {
         const { id } = message;
         const options = this.#options;

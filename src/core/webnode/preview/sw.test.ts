@@ -438,6 +438,39 @@ describe("preview service worker", () => {
     expect(head).toContain("Sec-WebSocket-Protocol: vite-hmr\r\n");
   });
 
+  it("has the gateway serve a window's spare port, which can then stand in for its own", async () => {
+    const worker = createWorker();
+    serveText(worker, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+    await worker.attach();
+    // A preview in a tab of its own keeps the far end (clientScript.ts).
+    const spare = new MessageChannel();
+    cleanups.push(() => spare.port1.close());
+    await worker.message({ type: "webnode:spare", port: spare.port2 });
+    const pong = new Promise<unknown>((resolve) => {
+      spare.port1.onmessage = (event) => resolve(event.data);
+    });
+    spare.port1.postMessage({ type: "ping", id: 0 });
+    expect(await pong).toEqual({ type: "pong", id: 0 });
+    // The window hands it over when the worker asks for a port: requests go on it.
+    spare.port1.onmessage = null;
+    await worker.message({ type: "webnode:attach", control: spare.port1 });
+    const response = (await worker.fetch(new Request(`${ORIGIN}/`)))!;
+    expect(await response.text()).toBe("ok");
+  });
+
+  it("closes a window's spare port when it has no gateway to send it to", async () => {
+    const worker = createWorker();
+    const spare = new MessageChannel();
+    cleanups.push(() => spare.port1.close());
+    const answers: unknown[] = [];
+    spare.port1.onmessage = (event) => answers.push(event.data);
+    await worker.message({ type: "webnode:spare", port: spare.port2 });
+    spare.port1.postMessage({ type: "ping", id: 0 });
+    await tick(20);
+    // Never answered: the window does not offer it (clientScript.ts).
+    expect(answers).toEqual([]);
+  });
+
   it("keeps cookies the server sets and sends them back by path", async () => {
     const worker = createWorker();
     await worker.attach();

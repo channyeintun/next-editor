@@ -14,7 +14,7 @@
 # once, for example). Exit status: the number of scenarios that failed.
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
-SCENARIOS="term term-cat term-jobs term-resize express vite-react ts-starter react-ports fsbench sharedfs-stress starters lessons"
+SCENARIOS="term term-cat term-jobs term-resize express preview-tab vite-react ts-starter react-ports fsbench sharedfs-stress starters lessons"
 [ $# -gt 0 ] && SCENARIOS="$*"
 export WEBNODE_HARNESS_PORT=${WEBNODE_HARNESS_PORT:-5199}
 export WEBNODE_HARNESS_OUT=${WEBNODE_HARNESS_OUT:-node_modules/.cache/webnode-gate}

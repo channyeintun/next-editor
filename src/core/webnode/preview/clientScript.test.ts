@@ -8,8 +8,14 @@ type ParentPost = Posted & { targetOrigin?: string };
 
 const EDITOR = "https://editor.test";
 
-/** A fake browsing context the client script runs in. */
-function createContext(forwardPreviewErrors: boolean | "exceptions-only" = false) {
+/**
+ * A fake browsing context the client script runs in: framed by the editor, or
+ * with `topLevel` a browser tab of its own (its `parent` is itself).
+ */
+function createContext(
+  forwardPreviewErrors: boolean | "exceptions-only" = false,
+  { topLevel = false }: { topLevel?: boolean } = {},
+) {
   const parentPosts: ParentPost[] = [];
   const controllerPosts: Posted[] = [];
   const nativeCalls: unknown[][] = [];
@@ -30,6 +36,9 @@ function createContext(forwardPreviewErrors: boolean | "exceptions-only" = false
     parent: typeof parent;
     WebSocket: new (url: string, protocols?: string | string[]) => FakeSocket;
   };
+  if (topLevel) {
+    (window as { parent: unknown }).parent = window;
+  }
   const serviceWorker = Object.assign(new EventTarget(), {
     controller: {
       postMessage(message: Record<string, unknown>, transfer?: Transferable[]) {
@@ -301,6 +310,64 @@ describe("createPreviewClientScript", () => {
       { message: { type: "webnode:attach", control: port1 }, transfer: [port1] },
     ]);
     port1.close();
+  });
+
+  it("keeps a spare control port in a browser tab of its own, and none in a frame", () => {
+    expect(createContext().controllerPosts).toEqual([]);
+    const context = createContext(false, { topLevel: true });
+    const [post] = context.controllerPosts;
+    expect(context.controllerPosts).toHaveLength(1);
+    expect(post.message.type).toBe("webnode:spare");
+    expect(post.transfer).toEqual([post.message.port]);
+    (post.message.port as MessagePort).close();
+  });
+
+  it("offers its spare once the gateway answers on it, then keeps another", async () => {
+    const context = createContext(false, { topLevel: true });
+    // The gateway's end of the spare: it answers a ping, as on any control port.
+    const gateway = context.controllerPosts[0].message.port as MessagePort;
+    gateway.onmessage = (event) => {
+      if (event.data.type === "ping") gateway.postMessage({ type: "pong", id: event.data.id });
+    };
+    const ack = new MessageChannel();
+    const acknowledged = new Promise<unknown>((resolve) => {
+      ack.port2.onmessage = (event) => resolve(event.data);
+    });
+    dispatchMessage(context.serviceWorker, { type: "webnode:need-port", ack: ack.port1 });
+    expect(await acknowledged).toBe(true);
+    expect(context.controllerPosts.map((post) => post.message.type)).toEqual([
+      "webnode:spare",
+      "webnode:attach",
+      "webnode:spare",
+    ]);
+    // What it attaches is the end it kept: the gateway hears the worker on it.
+    const attached = context.controllerPosts[1].message.control as MessagePort;
+    expect(context.controllerPosts[1].transfer).toEqual([attached]);
+    const heard = new Promise<unknown>((resolve) => {
+      gateway.onmessage = (event) => resolve(event.data);
+    });
+    attached.postMessage({ type: "ping", id: 1 });
+    expect(await heard).toEqual({ type: "ping", id: 1 });
+    // No editor above it: nothing is asked of a parent.
+    expect(context.parentPosts).toEqual([]);
+    for (const port of [gateway, attached, ack.port1, ack.port2]) port.close();
+    (context.controllerPosts[2].message.port as MessagePort).close();
+  });
+
+  it("does not offer a spare the gateway never answers on", async () => {
+    const context = createContext(false, { topLevel: true });
+    const ack = new MessageChannel();
+    let acknowledged = false;
+    ack.port2.onmessage = () => {
+      acknowledged = true;
+    };
+    // The worker had no port to send the spare on, or the runtime is gone.
+    dispatchMessage(context.serviceWorker, { type: "webnode:need-port", ack: ack.port1 });
+    await tick(20);
+    expect(acknowledged).toBe(false);
+    expect(context.controllerPosts.map((post) => post.message.type)).toEqual(["webnode:spare"]);
+    for (const port of [ack.port1, ack.port2]) port.close();
+    (context.controllerPosts[0].message.port as MessagePort).close();
   });
 
   it("closes its open sockets with 1001 when the page is hidden for good", async () => {

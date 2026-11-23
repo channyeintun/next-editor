@@ -57,7 +57,8 @@ const script = (editorOrigin: string) => `(function () {
     return;
   }
   if (window.parent === window) {
-    show("Open this preview from the editor.");
+    // A browser tab of its own: only the editor's own frame can connect a preview.
+    show("This preview is not connected to the editor.", "Keep the project running in the editor with its preview open, then reload this page.");
     return;
   }
   // Resolves with the registration's worker once it is the worker at url.

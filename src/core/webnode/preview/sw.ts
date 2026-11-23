@@ -17,6 +17,7 @@ import type {
   NeedPortMessage,
   SocketCloseEvent,
   SocketErrorEvent,
+  SpareControlMessage,
   ToGatewayMessage,
   WebSocketOpenMessage,
 } from "./protocol";
@@ -299,6 +300,11 @@ class ControlLink {
       { type: "ws-connect", url, protocols, pageHost: this.#location.host, cookie, port },
       [port],
     );
+  }
+
+  /** Sends a window's spare control port on to the gateway, to serve as this one is served. */
+  openControl(port: MessagePort): void {
+    this.#post({ type: "control", port }, [port]);
   }
 
   /** Forwards `request`; resolves with the response once its head arrives. */
@@ -697,6 +703,25 @@ export function installPreviewServiceWorker(
       }
       attach(control);
       data.reply?.postMessage({ type: "webnode:attached" });
+      return;
+    }
+    if (isMessageOfType<SpareControlMessage>(data, "webnode:spare")) {
+      const port = data.port ?? event.ports[0];
+      if (!port) {
+        return;
+      }
+      event.waitUntil(
+        (async () => {
+          // Without a port of its own the worker has no gateway to send it to:
+          // closed, the spare never answers the window that kept it.
+          const current = await liveLink();
+          if (current) {
+            current.openControl(port);
+          } else {
+            port.close();
+          }
+        })(),
+      );
       return;
     }
     if (isMessageOfType<WebSocketOpenMessage>(data, "webnode:ws")) {

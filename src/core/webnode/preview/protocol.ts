@@ -59,6 +59,16 @@ export interface NeedPortMessage {
   ack?: MessagePort;
 }
 
+/**
+ * Window → service worker: "have the gateway serve `port` as one more control
+ * port". A preview in a browser tab of its own has no editor to ask when the
+ * worker needs a port, so it keeps the other end as a spare (clientScript.ts).
+ */
+export interface SpareControlMessage {
+  type: "webnode:spare";
+  port: MessagePort;
+}
+
 /** Window → service worker: open a WebSocket; events flow on `port`. */
 export interface WebSocketOpenMessage {
   type: "webnode:ws";
@@ -105,12 +115,19 @@ export interface GatewayWebSocketConnectMessage {
   port: MessagePort;
 }
 
+/** Serve `port` as one more control port for the same server (a window's spare). */
+export interface GatewayControlMessage {
+  type: "control";
+  port: MessagePort;
+}
+
 /** Service worker → gateway. */
 export type ToGatewayMessage =
   | GatewayRequestMessage
   | GatewayCancelMessage
   | GatewayPingMessage
-  | GatewayWebSocketConnectMessage;
+  | GatewayWebSocketConnectMessage
+  | GatewayControlMessage;
 
 export interface GatewayResponseHeadMessage {
   type: "response-head";
