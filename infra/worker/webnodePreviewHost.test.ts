@@ -201,6 +201,45 @@ describe("serveWebnodeHost across a deploy", () => {
     expect(reads).toBe(2);
   });
 
+  it("answers the next request when the first one ended before its read of the build did", async () => {
+    let reads = 0;
+    const abandoned = {
+      PUBLIC_URL: "https://editor.example",
+      ASSETS: {
+        fetch: (request: Request) => {
+          if (new URL(request.url).pathname === "/webnode/build.json") {
+            reads += 1;
+            // The first request's read never settles: a visitor who left, whose
+            // request the runtime ended with its work still under way.
+            return reads === 1
+              ? new Promise<Response>(() => {})
+              : Promise.resolve(
+                  new Response(JSON.stringify({ id: "b2" }), {
+                    headers: { "content-type": "application/json" },
+                  }),
+                );
+          }
+          return Promise.resolve(
+            new Response("/* script */", { headers: { "content-type": "text/javascript" } }),
+          );
+        },
+      } as unknown as Fetcher,
+    };
+    const ask = () =>
+      serveWebnodeHost(
+        new Request("https://runtime.preview.example.dev/__webnode__/process.js?v=b2"),
+        abandoned,
+      );
+
+    void ask();
+    const next = await ask();
+    expect(next.status).toBe(200);
+    expect(await next.text()).toBe("/* script */");
+    // The answer is kept from then on.
+    expect((await ask()).status).toBe(200);
+    expect(reads).toBe(2);
+  });
+
   it("keeps the answer of a deployment that has no manifest", async () => {
     let reads = 0;
     const unversioned = {

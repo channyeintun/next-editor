@@ -69,34 +69,35 @@ async function serveDepsObject(
  * kept: the id, or null for a deployment whose build wrote no manifest. A read
  * that failed is not an answer and is tried again by the next request, since
  * without the id no request for another build can be refused.
+ *
+ * What is kept is the answer, never the promise of one. A promise belongs to
+ * the request that made it: when that request ends before the read does (a
+ * visitor who left), the promise never settles, and every later request of the
+ * isolate that waited on it failed with a 500. So each request that finds no
+ * answer reads for itself.
  */
-const servedBuilds = new WeakMap<Fetcher, Promise<string | null>>();
+const servedBuilds = new WeakMap<Fetcher, string | null>();
 
-function readServedBuild(assets: Fetcher, base: URL): Promise<string | null> {
-  const known = servedBuilds.get(assets);
-  if (known) {
-    return known;
+async function readServedBuild(assets: Fetcher, base: URL): Promise<string | null> {
+  if (servedBuilds.has(assets)) {
+    return servedBuilds.get(assets) ?? null;
   }
-  const forget = () => {
-    if (servedBuilds.get(assets) === build) {
-      servedBuilds.delete(assets);
+  let build: string | null = null;
+  try {
+    const stored = await assets.fetch(
+      new Request(new URL(`${ASSET_DIRECTORY}${BUILD_MANIFEST}`, base)),
+    );
+    if (!stored.ok) {
+      return null;
     }
-    return null;
-  };
-  const build: Promise<string | null> = assets
-    .fetch(new Request(new URL(`${ASSET_DIRECTORY}${BUILD_MANIFEST}`, base)))
-    .then(async (stored) => {
-      if (!stored.ok) {
-        return forget();
-      }
-      // A missing file comes back as the app shell: only JSON is the manifest.
-      if (!stored.headers.get("content-type")?.includes("json")) {
-        return null;
-      }
+    // A missing file comes back as the app shell: only JSON is the manifest.
+    if (stored.headers.get("content-type")?.includes("json")) {
       const id = ((await stored.json()) as { id?: unknown }).id;
-      return typeof id === "string" && id ? id : null;
-    })
-    .catch(forget);
+      build = typeof id === "string" && id ? id : null;
+    }
+  } catch {
+    return null;
+  }
   servedBuilds.set(assets, build);
   return build;
 }
