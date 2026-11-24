@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vite-plus/test";
-import type { Recording } from "../core/src";
+import { describe, expect, it, vi } from "vite-plus/test";
+import type { EditorFrame, Recording } from "../core/src";
 import type { SlideEvent } from "../core/src/slides";
+import { reconstructFrameAtIndex } from "../core/src/utils/frameDelta";
+import { compressFrames } from "../core/src/utils/frameStreamEncoder";
 import {
   EMPTY_WHITEBOARD_SCENE,
   applyWhiteboardEvent,
@@ -9,8 +11,28 @@ import {
 import type { WorkspaceFile, WorkspaceProject } from "../core/src/workspace";
 import { decompressBinaryToRecording, encodeRecordingToStream } from "../storage/recordingCodec";
 import type { StudioActionEndReading, StudioPageReading } from "./driver";
+import { runsInBackground } from "./performer";
 import { captureGateChecks, firstDifference, type CaptureObservations } from "./qaCapture";
 import type { ActionReceipt, StudioCheckResult } from "./report";
+
+// Pass-throughs, so a test can count the folds from a keyframe or move the
+// background rule.
+vi.mock("../core/src/utils/frameDelta", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../core/src/utils/frameDelta")>();
+  return {
+    ...original,
+    reconstructFrameAtIndex: vi.fn<typeof original.reconstructFrameAtIndex>(
+      original.reconstructFrameAtIndex,
+    ),
+  };
+});
+vi.mock("./performer", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./performer")>();
+  return {
+    ...original,
+    runsInBackground: vi.fn<typeof original.runsInBackground>(original.runsInBackground),
+  };
+});
 
 /*
  * A small render: open main.go, type a comment into it, show a slide, draw a
@@ -404,6 +426,141 @@ describe("captureGateChecks", () => {
     observations.endOfTake = null;
     const checks = await checksFor(recording, observations);
     expect(failed(checks).filter((id) => id.startsWith("capture.end."))).toHaveLength(5);
+  });
+});
+
+describe("captureGateChecks on a long take", () => {
+  // One typed character per action, recorded as delta frames between keyframes.
+  function typedTake(actions: number) {
+    const fullFrames: EditorFrame[] = [];
+    const actionEnds: CaptureObservations["actionEnds"][number][] = [];
+    const receipts: ActionReceipt[] = [];
+    const workspaceEvents: NonNullable<Recording["workspaceEvents"]> = [];
+    let text = INITIAL;
+    for (let index = 0; index < actions; index++) {
+      text += "x";
+      const endedAtMs = index * 100 + 50;
+      fullFrames.push({
+        timestamp: endedAtMs - 10,
+        state: {
+          content: text,
+          position: { lineNumber: 2, column: index + 2 },
+          selection: caretAt(2, index + 2),
+          viewState: null,
+        },
+      });
+      workspaceEvents.push({
+        timestamp: endedAtMs - 10,
+        snapshot: { project: project(text), activeFilePath: "main.go" },
+      });
+      receipts.push({ ...receipt(`t${index}`, endedAtMs - 20, endedAtMs) });
+      actionEnds.push(actionEnd(`t${index}`, endedAtMs, text));
+    }
+    const { recording, observations } = healthy();
+    recording.frames = compressFrames(fullFrames);
+    recording.workspaceEvents = workspaceEvents;
+    observations.receipts = receipts;
+    observations.actionEnds = actionEnds;
+    observations.endOfTake = null;
+    return { recording, observations };
+  }
+
+  it("reads each action's frame by folding the track forward once, not from a keyframe each time", () => {
+    const { recording, observations } = typedTake(300);
+    expect(recording.frames.filter((frame) => frame.isKeyframe).length).toBeLessThan(10);
+    vi.mocked(reconstructFrameAtIndex).mockClear();
+    const checks = captureGateChecks({
+      recording,
+      decoded: recording,
+      artifactRecording: recording,
+      observations,
+    });
+
+    expect(detailOf(checks, "capture.actions.editor")).toBe(
+      "300 actions, window 0 ms: each action's editor text recorded, largest lag 0 ms",
+    );
+    // A fold from the keyframe is started at most once per keyframe passed.
+    expect(vi.mocked(reconstructFrameAtIndex).mock.calls.length).toBeLessThan(10);
+  });
+
+  it("finds the same frames, and lists misses in take order, when actions end out of time order", () => {
+    const { recording, observations } = typedTake(200);
+    // A miss early and one late, then the ends read in reverse.
+    observations.actionEnds = observations.actionEnds.map((end, index) =>
+      index === 20 || index === 150
+        ? { ...end, reading: { ...end.reading, editor: { ...end.reading.editor!, text: "?" } } }
+        : end,
+    );
+    observations.actionEnds = [...observations.actionEnds].reverse();
+    const checks = captureGateChecks({
+      recording,
+      decoded: recording,
+      artifactRecording: recording,
+      observations,
+    });
+
+    expect(detailOf(checks, "capture.actions.editor")).toMatch(
+      /^200 actions, window 0 ms: 2 actions left editor text no frame holds by the window's end: t150 at 15050 ms: .*; t20 at 2050 ms: /,
+    );
+  });
+});
+
+describe("a capture check that throws", () => {
+  it("is reported as a warning naming the throw, and the other checks still run", async () => {
+    const { recording, observations } = healthy();
+    const decoded = await decompressBinaryToRecording(await encodeRecordingToStream(recording));
+    // A frame whose delta cannot be applied: replaying the editor track throws.
+    const broken = {
+      ...decoded,
+      frames: [
+        ...decoded.frames,
+        {
+          timestamp: 90,
+          isKeyframe: false,
+          contentDelta: { ops: [] },
+          contentEditDelta: { edits: [] },
+        },
+      ],
+    } as unknown as Recording;
+    const checks = captureGateChecks({
+      recording,
+      decoded,
+      artifactRecording: broken,
+      observations,
+    });
+
+    expect(checks).toHaveLength(10);
+    expect(checks.every((check) => check.advisory === true)).toBe(true);
+    const threw = checks.filter((check) => check.detail.startsWith("the check threw: "));
+    expect(threw.map((check) => check.id)).toEqual([
+      "capture.end.editor",
+      "capture.end.workspace",
+      "capture.end.console",
+      "capture.end.whiteboard",
+      "capture.end.slides",
+      "capture.actions.workspace",
+      "capture.actions.editor",
+    ]);
+    expect(threw.every((check) => !check.ok)).toBe(true);
+    expect(threw[0].detail).toContain("conflicting content delta variants");
+    expect(failed(checks.filter((check) => !threw.includes(check)))).toEqual([]);
+  });
+});
+
+describe("the background rule", () => {
+  it("is the performer's: an action type it runs in the background is skipped", async () => {
+    const { recording, observations } = healthy();
+    // The frames stop, so every action after the first would miss its text.
+    recording.frames = recording.frames.slice(0, 1);
+    vi.mocked(runsInBackground).mockImplementation((type) => type === "workspace.openFile");
+    try {
+      const checks = await checksFor(recording, observations);
+      expect(detailOf(checks, "capture.actions.editor")).toMatch(
+        /^0 actions \(5 skipped while the runtime started\)/,
+      );
+    } finally {
+      vi.mocked(runsInBackground).mockRestore();
+    }
   });
 });
 

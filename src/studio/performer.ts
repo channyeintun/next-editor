@@ -1,4 +1,9 @@
-import { planActionBusyMs, type StudioPlan, type StudioPlanAction } from "./plan";
+import {
+  planActionBusyMs,
+  type StudioPlan,
+  type StudioPlanAction,
+  type StudioPlanActionType,
+} from "./plan";
 import type { StudioDriver } from "./driver";
 import {
   RENDER_CANCELLED_MESSAGE,
@@ -237,7 +242,12 @@ type RuntimeStartAction = Extract<StudioPlanAction, { type: "runtime.start" }>;
  * the board it was describing.
  */
 export function performsInBackground(action: StudioPlanAction): action is RuntimeStartAction {
-  return action.type === "runtime.start";
+  return runsInBackground(action.type);
+}
+
+/** {@link performsInBackground} by the action's type, for code that holds only a receipt. */
+export function runsInBackground(type: StudioPlanActionType): type is RuntimeStartAction["type"] {
+  return type === "runtime.start";
 }
 
 /**

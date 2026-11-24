@@ -50,7 +50,7 @@ export function readEditor(deps: Pick<StudioDriverDeps, "getEditor">): EditorRea
   const selection = editor.getSelection();
   return {
     path: workspacePathFromMonacoModelUri(model.uri),
-    text: model.getValue(),
+    text: readModelText(model),
     selection: selection
       ? {
           selectionStartLineNumber: selection.selectionStartLineNumber,
@@ -60,6 +60,22 @@ export function readEditor(deps: Pick<StudioDriverDeps, "getEditor">): EditorRea
         }
       : null,
   };
+}
+
+/** The text last read from each model, so a reading of an unchanged file holds no new copy. */
+const lastTextByModel = new WeakMap<object, string>();
+
+/**
+ * The model's text. A render keeps a reading of every action, and most actions
+ * leave the file as it was: handing back the string read last time when the
+ * text is the same keeps one copy of a large file instead of one per action.
+ */
+function readModelText(model: Pick<monaco.editor.ITextModel, "getValue">): string {
+  const text = model.getValue();
+  const last = lastTextByModel.get(model);
+  if (last === text) return last;
+  lastTextByModel.set(model, text);
+  return text;
 }
 
 /**

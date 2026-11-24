@@ -1,12 +1,21 @@
-import type { Recording } from "../core/src";
+import type { EditorFrame, Recording } from "../core/src";
 import { latestEditorModelBoundaryTime } from "../core/src/machine/frameReplay";
 import { RECORDING_TRACK_NAMES } from "../core/src/machine/recordingAssembly";
-import { getSlideReplayResult } from "../core/src/machine/replayState/slide";
+import {
+  getSlideReplayResult,
+  slidePanelShown,
+  type SlidePanelShown,
+} from "../core/src/machine/replayState/slide";
 import { getWhiteboardReplayResult } from "../core/src/machine/replayState/whiteboard";
 import { resolveLatestRuntimeSnapshot } from "../core/src/runtimeTrack";
-import type { SlideEvent, SlidePreviewState } from "../core/src/slides";
+import type { SlideEvent } from "../core/src/slides";
+import { isKeyframe, type DeltaFrame } from "../core/src/utils/deltaTypes";
 import { normalizeRecordingData } from "../core/src/utils/editorState";
-import { reconstructFrameAtIndex } from "../core/src/utils/frameDelta";
+import {
+  applyFrameDeltaToNormalized,
+  findNearestKeyframeIndex,
+  reconstructFrameAtIndex,
+} from "../core/src/utils/frameDelta";
 import { findTimedEventIndexAtOrBefore } from "../core/src/utils/timedIndex";
 import { EMPTY_WHITEBOARD_SCENE, type WhiteboardEvent } from "../core/src/whiteboard";
 import { isSlideEventKeptOnDecode } from "../storage/streamingRecordingCodec/decode";
@@ -21,8 +30,10 @@ import type {
   StudioActionEndReading,
   StudioPageReading,
 } from "./driver";
+import { runsInBackground } from "./performer";
 import type { RenderClockKind } from "./renderClock";
 import type { ActionReceipt, StudioCheckResult } from "./report";
+import { firstValueDifference, formatValuePath } from "./valueDifference";
 
 /**
  * The capture checks of the artifact QA (qa.ts): what the recording holds
@@ -33,7 +44,8 @@ import type { ActionReceipt, StudioCheckResult } from "./report";
  * mis-timed something.
  *
  * Every check here is advisory: it reports a failure as a warning and never
- * fails the render, until it has run clean on real lessons.
+ * fails the render, until it has run clean on real lessons. A check that
+ * throws is a warning too ("the check threw"), and the other checks still run.
  *
  * What they cannot see: a recorder that captured faithfully something that
  * should not have happened (a preview that really reloaded), the preview's
@@ -81,28 +93,61 @@ export interface CaptureGateInput {
   observations: CaptureObservations;
 }
 
+type CaptureCheck = Omit<StudioCheckResult, "advisory">;
+
+const SLIDES_PROVENANCE_ID = "capture.slides.provenance";
+const WHITEBOARD_PROVENANCE_ID = "capture.whiteboard.provenance";
+const ROUND_TRIP_ID = "capture.tracks.roundTrip";
+const END_OF_TAKE_IDS = [
+  "capture.end.editor",
+  "capture.end.workspace",
+  "capture.end.console",
+  "capture.end.whiteboard",
+  "capture.end.slides",
+] as const;
+const ACTION_END_IDS = ["capture.actions.workspace", "capture.actions.editor"] as const;
+
+/**
+ * Runs one group of checks. An advisory check must never decide a render, so
+ * a group that throws (a recording these checks do not expect, or a bug in
+ * them) reports each of its checks as a warning saying so, and the other
+ * groups still run.
+ */
+function guarded(ids: readonly string[], run: () => CaptureCheck[]): CaptureCheck[] {
+  try {
+    return run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return ids.map((id) => ({ id, ok: false, detail: `the check threw: ${message}` }));
+  }
+}
+
 export function captureGateChecks({
   recording,
   decoded,
   artifactRecording,
   observations,
 }: CaptureGateInput): StudioCheckResult[] {
-  const checks: Omit<StudioCheckResult, "advisory">[] = [
-    provenanceCheck(
-      "capture.slides.provenance",
-      artifactRecording.slideEvents ?? [],
-      observations.stageSends.slideEvents,
-      describeSlideEvent,
-    ),
-    provenanceCheck(
-      "capture.whiteboard.provenance",
-      artifactRecording.whiteboardEvents ?? [],
-      observations.stageSends.whiteboardEvents,
-      describeWhiteboardEvent,
-    ),
-    roundTripCheck(recording, decoded),
-    ...endOfTakeChecks(artifactRecording, observations),
-    ...actionEndChecks(artifactRecording, observations),
+  const checks: CaptureCheck[] = [
+    ...guarded([SLIDES_PROVENANCE_ID], () => [
+      provenanceCheck(
+        SLIDES_PROVENANCE_ID,
+        artifactRecording.slideEvents ?? [],
+        observations.stageSends.slideEvents,
+        describeSlideEvent,
+      ),
+    ]),
+    ...guarded([WHITEBOARD_PROVENANCE_ID], () => [
+      provenanceCheck(
+        WHITEBOARD_PROVENANCE_ID,
+        artifactRecording.whiteboardEvents ?? [],
+        observations.stageSends.whiteboardEvents,
+        describeWhiteboardEvent,
+      ),
+    ]),
+    ...guarded([ROUND_TRIP_ID], () => [roundTripCheck(recording, decoded)]),
+    ...guarded(END_OF_TAKE_IDS, () => endOfTakeChecks(artifactRecording, observations)),
+    ...guarded(ACTION_END_IDS, () => actionEndChecks(artifactRecording, observations)),
   ];
   return checks.map((check) => ({ ...check, advisory: true }));
 }
@@ -126,56 +171,22 @@ function describeValue(value: unknown): string {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    !ArrayBuffer.isView(value)
-  );
-}
-
 /**
- * Where two plain-data values first differ, as a path and both sides, or null
- * when they are equal. It treats a value the way the recording file stores
- * it: a key holding undefined is no key (the encoder skips it), an undefined
- * array item is null, and binary data is compared byte by byte.
+ * Where two plain-data values first differ, as a path from `path` and both
+ * sides, or null when they are equal (firstValueDifference's rule).
  */
 export function firstDifference(left: unknown, right: unknown, path: string): string | null {
-  if (left === right) return null;
-  if (Number.isNaN(left) && Number.isNaN(right)) return null;
-  if (ArrayBuffer.isView(left) && ArrayBuffer.isView(right)) {
-    const leftBytes = new Uint8Array(left.buffer, left.byteOffset, left.byteLength);
-    const rightBytes = new Uint8Array(right.buffer, right.byteOffset, right.byteLength);
-    if (leftBytes.length !== rightBytes.length) {
-      return `${path}: ${leftBytes.length} bytes vs ${rightBytes.length}`;
-    }
-    const at = leftBytes.findIndex((byte, index) => byte !== rightBytes[index]);
-    return at === -1 ? null : `${path}: bytes differ at ${at}`;
+  const difference = firstValueDifference(left, right);
+  if (!difference) return null;
+  const at = formatValuePath(path, difference.path);
+  switch (difference.kind) {
+    case "value":
+      return `${at}: ${describeValue(difference.left)} vs ${describeValue(difference.right)}`;
+    case "length":
+      return `${at}: ${difference.left} ${difference.unit} vs ${difference.right}`;
+    case "bytes":
+      return `${at}: bytes differ at ${difference.offset}`;
   }
-  if (Array.isArray(left) && Array.isArray(right)) {
-    if (left.length !== right.length) {
-      return `${path}: ${left.length} items vs ${right.length}`;
-    }
-    for (let index = 0; index < left.length; index++) {
-      const difference = firstDifference(
-        left[index] ?? null,
-        right[index] ?? null,
-        `${path}[${index}]`,
-      );
-      if (difference) return difference;
-    }
-    return null;
-  }
-  if (isRecord(left) && isRecord(right)) {
-    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-    for (const key of keys) {
-      const difference = firstDifference(left[key], right[key], `${path}.${key}`);
-      if (difference) return difference;
-    }
-    return null;
-  }
-  return `${path}: ${describeValue(left)} vs ${describeValue(right)}`;
 }
 
 /** Where two texts first part, as line:column. */
@@ -242,7 +253,7 @@ function provenanceCheck<E extends { timestamp: number }>(
   recorded: readonly E[],
   sent: readonly E[],
   describe: (event: E) => string,
-): Omit<StudioCheckResult, "advisory"> {
+): CaptureCheck {
   const missing: number[] = [];
   const unsent: number[] = [];
   let next = 0;
@@ -303,11 +314,8 @@ function provenanceCheck<E extends { timestamp: number }>(
  * the decoder keeps (isSlideEventKeptOnDecode).
  * An empty track and a missing one are the same.
  */
-function roundTripCheck(
-  recording: Recording,
-  decoded: Recording | null,
-): Omit<StudioCheckResult, "advisory"> {
-  const id = "capture.tracks.roundTrip";
+function roundTripCheck(recording: Recording, decoded: Recording | null): CaptureCheck {
+  const id = ROUND_TRIP_ID;
   if (!decoded) {
     return { id, ok: false, detail: "the artifact did not decode, so no track was compared" };
   }
@@ -337,6 +345,39 @@ function roundTripCheck(
 /** The editor text and selection after frame `index`, as replay folds it. */
 function frameAt(recording: Recording, index: number) {
   return reconstructFrameAtIndex(recording.frames, index)?.state ?? null;
+}
+
+/**
+ * frameAt for many indices, mostly rising: it keeps the last state it built
+ * and folds on from there, so reading every frame of a take in order applies
+ * each delta once instead of once per read from its keyframe. An index behind
+ * the last one, or past a later keyframe, is built from its keyframe again.
+ */
+function createFrameReader(frames: readonly DeltaFrame[]) {
+  let index = -1;
+  let frame: EditorFrame | null = null;
+  return (target: number): EditorFrame["state"] | null => {
+    if (target < 0 || target >= frames.length) return null;
+    if (target !== index) {
+      const base = frame;
+      const from = index;
+      index = -1;
+      frame = null;
+      if (base && target > from && findNearestKeyframeIndex(frames, target) <= from) {
+        // No keyframe lies after `from` up to `target`: every frame between is a delta.
+        let next: EditorFrame = base;
+        for (let at = from + 1; at <= target; at++) {
+          const delta = frames[at];
+          if (!isKeyframe(delta)) next = applyFrameDeltaToNormalized(next, delta, at);
+        }
+        frame = next;
+      } else {
+        frame = reconstructFrameAtIndex(frames, target);
+      }
+      index = target;
+    }
+    return frame?.state ?? null;
+  };
 }
 
 /**
@@ -397,10 +438,9 @@ function selectionDifference(
     : `the selection is ${shown.selectionStartLineNumber}:${shown.selectionStartColumn}→${shown.positionLineNumber}:${shown.positionColumn}, the last frame has ${selection.selectionStartLineNumber}:${selection.selectionStartColumn}→${selection.positionLineNumber}:${selection.positionColumn}`;
 }
 
-/** What a viewer sees of the slide panel: nothing more than "closed" when it is shut. */
-function visibleSlidePanel(state: SlidePreviewState): string {
-  return state.isOpen
-    ? `open on ${state.currentSlideId ?? "no slide"}${state.isMaximized ? ", maximized" : ""}, step ${state.indexv ?? 0}`
+function describeSlidePanel(shown: SlidePanelShown): string {
+  return shown.isOpen
+    ? `open on ${shown.currentSlideId ?? "no slide"}${shown.isMaximized ? ", maximized" : ""}, step ${shown.indexv}`
     : "closed";
 }
 
@@ -408,18 +448,9 @@ function visibleSlidePanel(state: SlidePreviewState): string {
 // End of take: the page against the recording's last state, track by track
 // ---------------------------------------------------------------------------
 
-function endOfTakeChecks(
-  recording: Recording,
-  observations: CaptureObservations,
-): Omit<StudioCheckResult, "advisory">[] {
+function endOfTakeChecks(recording: Recording, observations: CaptureObservations): CaptureCheck[] {
   const page = observations.endOfTake;
-  const ids = [
-    "capture.end.editor",
-    "capture.end.workspace",
-    "capture.end.console",
-    "capture.end.whiteboard",
-    "capture.end.slides",
-  ];
+  const ids = END_OF_TAKE_IDS;
   if (!page) {
     return ids.map((id) => ({
       id,
@@ -498,10 +529,12 @@ function endOfTakeChecks(
     lastAppliedIndex: -1,
     isResync: true,
   }).applications[0]?.slideState;
-  const shownDeck = visibleSlidePanel(page.slidePanel);
-  const endDeck = recordedDeck ? visibleSlidePanel(recordedDeck) : "closed";
+  const shownDeck = slidePanelShown(page.slidePanel);
+  const endDeck = slidePanelShown(recordedDeck ?? { isOpen: false });
   const slidesProblem =
-    shownDeck === endDeck ? null : `the panel is ${shownDeck}, the recording ends ${endDeck}`;
+    firstValueDifference(shownDeck, endDeck) === null
+      ? null
+      : `the panel is ${describeSlidePanel(shownDeck)}, the recording ends ${describeSlidePanel(endDeck)}`;
 
   const lastFrameTime = recording.frames.at(-1)?.timestamp ?? 0;
   return [
@@ -536,7 +569,9 @@ function endOfTakeChecks(
     {
       id: ids[4],
       ok: slidesProblem === null,
-      detail: slidesProblem ?? `the slide panel is ${shownDeck}, as the recording ends`,
+      detail:
+        slidesProblem ??
+        `the slide panel is ${describeSlidePanel(shownDeck)}, as the recording ends`,
     },
   ];
 }
@@ -582,19 +617,16 @@ function lastIndexBy(events: readonly { timestamp: number }[], timeMs: number): 
   return findTimedEventIndexAtOrBefore(events as { timestamp: number }[], timeMs, -1);
 }
 
-function actionEndChecks(
-  recording: Recording,
-  observations: CaptureObservations,
-): Omit<StudioCheckResult, "advisory">[] {
+function actionEndChecks(recording: Recording, observations: CaptureObservations): CaptureCheck[] {
   const windowMs = ACTION_END_WINDOW_MS[observations.clock];
   const starts = observations.receipts
     .filter((receipt) => receipt.startedAtMs !== null)
     .map((receipt) => ({ actionId: receipt.actionId, startedAtMs: receipt.startedAtMs as number }));
-  // A runtime.start runs in the background, and while it installs and boots
-  // the runtime writes to the page on its own schedule; nothing measured then
+  // An action run in the background (the runtime's start) writes to the page
+  // on its own schedule while it installs and boots; nothing measured then
   // says anything about the action that ended.
-  const runtimeStarts = observations.receipts
-    .filter((receipt) => receipt.actionType === "runtime.start" && receipt.startedAtMs !== null)
+  const backgroundRuns = observations.receipts
+    .filter((receipt) => runsInBackground(receipt.actionType) && receipt.startedAtMs !== null)
     .map((receipt) => ({
       from: receipt.startedAtMs as number,
       to: receipt.endedAtMs ?? Number.POSITIVE_INFINITY,
@@ -602,6 +634,7 @@ function actionEndChecks(
 
   const workspaceEvents = recording.workspaceEvents ?? [];
   const frames = recording.frames;
+  const frameAtIndex = createFrameReader(frames);
   const workspaceMisses: string[] = [];
   const editorMisses: string[] = [];
   let compared = 0;
@@ -609,12 +642,21 @@ function actionEndChecks(
   let workspaceLagMs = 0;
   let editorLagMs = 0;
 
-  for (const { actionId, endedAtMs, reading } of observations.actionEnds) {
-    if (runtimeStarts.some(({ from, to }) => endedAtMs >= from && endedAtMs <= to)) {
+  // Walked in time order, so the frame reader folds the track forward once;
+  // the misses are still listed in the order the actions ended in the take.
+  const misses = new Map<number, { workspace?: string; editor?: string }>();
+  const byEnd = observations.actionEnds
+    .map((end, order) => ({ ...end, order }))
+    .sort((left, right) => left.endedAtMs - right.endedAtMs || left.order - right.order);
+
+  for (const { actionId, endedAtMs, reading, order } of byEnd) {
+    if (backgroundRuns.some(({ from, to }) => endedAtMs >= from && endedAtMs <= to)) {
       skipped++;
       continue;
     }
     compared++;
+    const miss: { workspace?: string; editor?: string } = {};
+    misses.set(order, miss);
     const nextStart = Math.min(
       ...starts
         .filter((start) => start.actionId !== actionId && start.startedAtMs >= endedAtMs)
@@ -635,21 +677,19 @@ function actionEndChecks(
       workspaceLagMs = Math.max(workspaceLagMs, workspace.lagMs);
     } else {
       const last = workspaceEvents[lastIndexBy(workspaceEvents, windowEndMs)];
-      workspaceMisses.push(
-        `${at}: ${last ? filesDifference(reading.workspaceFiles, last.snapshot.project.files) : "no workspace event yet"}`,
-      );
+      miss.workspace = `${at}: ${last ? filesDifference(reading.workspaceFiles, last.snapshot.project.files) : "no workspace event yet"}`;
     }
 
     const editor = reading.editor;
     if (!editor) {
-      editorMisses.push(`${at}: no editor was on screen`);
+      miss.editor = `${at}: no editor was on screen`;
       continue;
     }
     const frameText = matchInWindow(
       frames,
       endedAtMs,
       windowEndMs,
-      (index) => frameAt(recording, index)?.content === editor.text,
+      (index) => frameAtIndex(index)?.content === editor.text,
     );
     // After a switch to a file no frame was recorded for yet, replay shows
     // that file's recorded text, so that is what must match.
@@ -666,17 +706,20 @@ function actionEndChecks(
     if (text.matched) {
       editorLagMs = Math.max(editorLagMs, text.lagMs);
     } else {
-      const last = frameAt(recording, lastIndexBy(frames, windowEndMs));
-      editorMisses.push(
-        `${at}: ${last ? `the editor and the frame part at ${textPartsAt(editor.text, last.content)}` : "no frame yet"}`,
-      );
+      const last = frameAtIndex(lastIndexBy(frames, windowEndMs));
+      miss.editor = `${at}: ${last ? `the editor and the frame part at ${textPartsAt(editor.text, last.content)}` : "no frame yet"}`;
     }
+  }
+  for (const order of [...misses.keys()].sort((left, right) => left - right)) {
+    const { workspace, editor } = misses.get(order)!;
+    if (workspace) workspaceMisses.push(workspace);
+    if (editor) editorMisses.push(editor);
   }
 
   const scope = `${compared} actions${skipped > 0 ? ` (${skipped} skipped while the runtime started)` : ""}, window ${windowMs} ms`;
   return [
     {
-      id: "capture.actions.workspace",
+      id: ACTION_END_IDS[0],
       ok: workspaceMisses.length === 0,
       detail:
         workspaceMisses.length === 0
@@ -684,7 +727,7 @@ function actionEndChecks(
           : `${scope}: ${workspaceMisses.length} actions left files the recording does not hold by the window's end: ${listed(workspaceMisses)}; largest lag ${Math.round(workspaceLagMs)} ms`,
     },
     {
-      id: "capture.actions.editor",
+      id: ACTION_END_IDS[1],
       ok: editorMisses.length === 0,
       detail:
         editorMisses.length === 0

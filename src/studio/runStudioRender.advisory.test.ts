@@ -3,7 +3,9 @@ import { createRuntimePanelStore } from "../stores/runtimePanelStore";
 import { createSlidesStore } from "../stores/slidesStore";
 import { createWhiteboardStore } from "../stores/whiteboardStore";
 import type { StudioPlan } from "./plan";
+import type { Recording } from "../core/src";
 import { runArtifactChecks } from "./qa";
+import { captureGateChecks } from "./qaCapture";
 import type { StudioCheckResult } from "./report";
 import { runStudioRender, type StudioRunDeps } from "./runStudioRender";
 import { encodeWavPcm16 } from "./tts/wav";
@@ -145,6 +147,54 @@ describe("runStudioRender with advisory checks", () => {
 
     expect(result.report.outcome).toBe("failed");
     expect(result.artifacts).toBeNull();
+  });
+
+  it("passes a render, and keeps its files and other checks, when a capture check throws", async () => {
+    // The real capture checks, run on what the take observed, against a
+    // recording whose editor track cannot be replayed.
+    const broken = {
+      id: "take",
+      duration: 1_000,
+      frames: [
+        {
+          timestamp: 0,
+          isKeyframe: true,
+          state: {
+            content: "",
+            position: { lineNumber: 1, column: 1 },
+            selection: null,
+            viewState: null,
+          },
+        },
+        { timestamp: 10, isKeyframe: false, contentDelta: { ops: [] }, contentEditDelta: {} },
+      ],
+    } as unknown as Recording;
+    vi.mocked(runArtifactChecks).mockImplementation(async ({ recording, capture }) => ({
+      checks: [
+        { id: "recording.decodes", ok: true, detail: "decodes" },
+        ...captureGateChecks({
+          recording: broken,
+          decoded: broken,
+          artifactRecording: broken,
+          observations: capture!,
+        }),
+      ],
+      artifactRecording: recording,
+    }));
+    const result = await runStudioRender(plan, "fixture", takeDeps(), options);
+
+    expect(result.report.outcome).toBe("passed");
+    expect(result.report.errors).toEqual([]);
+    expect(result.artifacts?.neBlob).toBeInstanceOf(Blob);
+    const checks = result.report.checks;
+    expect(checks.find((check) => check.id === "recording.decodes")?.ok).toBe(true);
+    expect(checks.find((check) => check.id === "capture.end.editor")).toMatchObject({
+      ok: false,
+      advisory: true,
+      detail: expect.stringMatching(/^the check threw: .*conflicting content delta variants/),
+    });
+    expect(checks.find((check) => check.id === "capture.slides.provenance")?.ok).toBe(true);
+    expect(checks.filter((check) => check.id.startsWith("capture."))).toHaveLength(10);
   });
 
   it("hands the gates what the render observed: its clock, its sends and the page at the end", async () => {

@@ -334,3 +334,24 @@ export function withSlideView(
 ): SlidePreviewState {
   return { ...slideState, isOpen: view.isOpen, isMaximized: view.isMaximized };
 }
+
+/**
+ * What a viewer sees of the slide panel: while it is open, which slide at which build
+ * step and whether it fills the screen; when it is shut, nothing more than that, since
+ * the slides store keeps the slide only for when the panel reopens. A field the state
+ * leaves out shows as its default.
+ */
+export type SlidePanelShown =
+  | { isOpen: false }
+  | { isOpen: true; isMaximized: boolean; currentSlideId: string | null; indexv: number };
+
+export function slidePanelShown(state: SlidePreviewState): SlidePanelShown {
+  return state.isOpen
+    ? {
+        isOpen: true,
+        isMaximized: state.isMaximized ?? false,
+        currentSlideId: state.currentSlideId ?? null,
+        indexv: state.indexv ?? 0,
+      }
+    : { isOpen: false };
+}
