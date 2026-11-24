@@ -20,7 +20,11 @@ import {
   selectVolume,
 } from "../core/src/useNextEditor";
 import { findRetakeTarget } from "../core/src/machine/retake";
-import { isRecordingClockPaused, readRecordingClock } from "../core/src/machine/recordingClock";
+import { isRecordingClockPaused } from "../core/src/machine/recordingClock";
+import {
+  getRecordingTimestamp,
+  type RecordingTimeState,
+} from "../core/src/machine/recordingSession";
 
 /**
  * Hook to access stable actions, refs, and storage methods.
@@ -108,20 +112,33 @@ export const useLiveTimeValue = <T>(derive: (currentTime: number) => T): T =>
  */
 export const useRecordingElapsedMs = (intervalMs = 100): number => {
   const recordingClock = NextEditorActorContext.useSelector(selectRecordingClock, shallowEqual);
-  const [now, setNow] = useState(() => performance.now());
+  // A take can read time from a source other than the page's clock (timeSource.ts), so
+  // recorded time is read through core on that source, never as
+  // `performance.now() - startedAtPerf`.
+  const timeSource = NextEditorActorContext.useSelector((state) =>
+    selectRecordingClock(state) ? state.context.session?.timeSource : undefined,
+  );
+  const take: RecordingTimeState | null = recordingClock ? { ...recordingClock, timeSource } : null;
+  // The last reading, kept with the clock it was read on.
+  const [reading, setReading] = useState<{
+    of: NonNullable<typeof recordingClock>;
+    ms: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!recordingClock || isRecordingClockPaused(recordingClock.clock)) return;
-    const tick = () => setNow(performance.now());
-    // Read at once, so a resumed take does not show the reading from before its pause.
-    tick();
-    const interval = setInterval(tick, intervalMs);
+    const current = { ...recordingClock, timeSource };
+    const interval = setInterval(
+      () => setReading({ of: recordingClock, ms: getRecordingTimestamp(current) }),
+      intervalMs,
+    );
     return () => clearInterval(interval);
-  }, [recordingClock, intervalMs]);
+  }, [recordingClock, timeSource, intervalMs]);
 
-  return recordingClock
-    ? readRecordingClock(recordingClock.clock, recordingClock.startedAtPerf, now)
-    : 0;
+  if (!take) return 0;
+  // A new take, a pause or a resume replaces the clock: read it at once rather than show
+  // the reading from before.
+  return reading?.of === recordingClock ? reading.ms : getRecordingTimestamp(take);
 };
 
 /**

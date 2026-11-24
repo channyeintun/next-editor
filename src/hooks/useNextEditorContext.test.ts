@@ -1,5 +1,8 @@
+import { act, renderHook } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
 import { shallowEqual } from "@xstate/react";
-import { describe, expect, it } from "vite-plus/test";
+import { fromCallback } from "xstate";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "../core/src";
 import { editorMachine } from "../core/src/machine/editorMachine";
 import { createInitialContext, type RecordingSession } from "../core/src/machine/types";
@@ -14,6 +17,9 @@ import {
   selectRecordingSafePoints,
   type EditorMachineSnapshot,
 } from "../core/src/useNextEditor";
+import type { TimeSource } from "../core/src/machine/timeSource";
+import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
+import { useRecordingElapsedMs } from "./useNextEditorContext";
 
 // The epsilon isAtPlaybackEnd allows (playbackValues.ts PLAYBACK_END_EPSILON_MS).
 const END_EPSILON_MS = 100;
@@ -265,5 +271,69 @@ describe("recording selectors", () => {
     ["playing", playbackAt("playing", 400), false],
   ] as const)("says whether a take is in progress when %s", (_label, snapshot, expected) => {
     expect(selectIsTakeInProgress(snapshot)).toBe(expected);
+  });
+});
+
+type ProviderProps = Parameters<typeof NextEditorActorContext.Provider>[0];
+
+describe("useRecordingElapsedMs", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  // The page's clock stands still; only the take's own source moves.
+  const renderTimer = () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    vi.spyOn(performance, "now").mockReturnValue(1_000);
+    const time = { perf: 500_000, wall: 9_000_000 };
+    const timeSource: TimeSource = { perfNow: () => time.perf, wallNow: () => time.wall };
+    const logic = editorMachine.provide({
+      actors: { mouseTracking: fromCallback(() => {}) },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(
+        NextEditorActorContext.Provider,
+        // The Provider's props type asks for children, which createElement passes after.
+        { logic, options: { input: { editorRef: { current: null } } } } as ProviderProps,
+        children,
+      );
+    const view = renderHook(
+      () => ({
+        elapsedMs: useRecordingElapsedMs(100),
+        actor: NextEditorActorContext.useActorRef(),
+      }),
+      { wrapper },
+    );
+    const advance = (ms: number) =>
+      act(() => {
+        time.perf += ms;
+        time.wall += ms;
+        vi.advanceTimersByTime(100);
+      });
+    return { view, timeSource, advance };
+  };
+
+  it("reads recorded time on the take's own time source", () => {
+    const { view, timeSource, advance } = renderTimer();
+    expect(view.result.current.elapsedMs).toBe(0);
+
+    act(() => view.result.current.actor.send({ type: "START_RECORDING", timeSource }));
+    expect(view.result.current.elapsedMs).toBe(0);
+
+    advance(1_500);
+    expect(view.result.current.elapsedMs).toBe(1_500);
+
+    act(() => view.result.current.actor.send({ type: "PAUSE_RECORDING" }));
+    expect(view.result.current.elapsedMs).toBe(1_500);
+    advance(2_000);
+    expect(view.result.current.elapsedMs).toBe(1_500);
+
+    act(() => view.result.current.actor.send({ type: "RESUME_RECORDING" }));
+    advance(250);
+    expect(view.result.current.elapsedMs).toBe(1_750);
+
+    act(() => view.result.current.actor.send({ type: "STOP_RECORDING" }));
+    expect(view.result.current.elapsedMs).toBe(0);
   });
 });

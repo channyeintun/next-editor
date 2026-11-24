@@ -1,7 +1,8 @@
 // ============================================================================
 // The recording clock.
 //
-// Recorded time is `performance.now()` since the take started, except across
+// Recorded time is the take's time source (timeSource.ts; the page's
+// `performance.now()` by default) since the take started, except across
 // exclusions: spans where the take was paused. Recorded time stands still
 // across an exclusion, so anything captured inside one (an edit made while
 // paused, a late preview batch) lands on the instant the clock stopped, and
@@ -15,13 +16,13 @@
 // ============================================================================
 
 export interface RecordingClockExclusion {
-  /** `performance.now()` when the clock stopped. */
+  /** The time source's `perfNow()` when the clock stopped. */
   startPerf: number;
-  /** `performance.now()` when it ran again. */
+  /** Its `perfNow()` when it ran again. */
   endPerf: number;
-  /** `Date.now()` at `startPerf`. */
+  /** Its `wallNow()` at `startPerf`. */
   startWall: number;
-  /** `Date.now()` at `endPerf`. */
+  /** Its `wallNow()` at `endPerf`. */
   endWall: number;
 }
 
@@ -42,7 +43,7 @@ export function isRecordingClockPaused(clock: RecordingClock): boolean {
 }
 
 /**
- * Recorded time at `perf`, a `performance.now()` reading taken during the take.
+ * Recorded time at `perf`, a reading of the take's time source taken during the take.
  * A reading inside an exclusion (or at or after the open pause) maps to the
  * instant the clock stopped.
  */
@@ -63,11 +64,14 @@ export function recordingTimeAtPerf(
   return Math.max(0, clampedPerf - startedAtPerf - excluded);
 }
 
-/** Recorded time now. */
+/**
+ * Recorded time at `nowPerf`, the take's time source read now. There is no default: the
+ * page's `performance.now()` is the wrong reading for a take started with another source.
+ */
 export function readRecordingClock(
   clock: RecordingClock,
   startedAtPerf: number,
-  nowPerf: number = performance.now(),
+  nowPerf: number,
 ): number {
   return recordingTimeAtPerf(clock, startedAtPerf, nowPerf);
 }

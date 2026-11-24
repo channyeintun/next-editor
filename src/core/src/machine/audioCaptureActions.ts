@@ -12,7 +12,8 @@ import type { RecorderControlEvent } from "./recorderControl";
 // Narration capture action bodies
 //
 // The take's audio slice: the microphone recorder ("audioRecorder") and a selected
-// narration file, played in step with the take by "recordingAudioPlayer". What the
+// narration file, played in step with the take by "recordingAudioPlayer" (or kept
+// unplayed when the caller gives its length and ends the take itself). What the
 // slice holds (AudioState), starting each source, storing what its recorder sends,
 // and dropping the slice when a take fails. editorMachine.ts wraps each body as
 // `assign(fn)` / `enqueueActions(fn)` under the same name, so `setup()` still infers
@@ -58,6 +59,20 @@ export const createIdleAudioState = (): AudioState => ({
 export const getExternalAudioBlob = (event: EditorMachineEvent): Blob | null =>
   event.type === "START_RECORDING" && event.audioBlob instanceof Blob && event.audioBlob.size > 0
     ? event.audioBlob
+    : null;
+
+/**
+ * The length of a narration file the take keeps but does not play, or null when the
+ * file is played as usual. A caller that performs the take on its own clock knows the
+ * length already and ends the take itself, so nothing needs to play the file to measure
+ * or to end it. A length that is not a positive number counts as none.
+ */
+export const getKeptExternalAudioDurationMs = (event: EditorMachineEvent): number | null =>
+  event.type === "START_RECORDING" &&
+  typeof event.externalAudioDurationMs === "number" &&
+  Number.isFinite(event.externalAudioDurationMs) &&
+  event.externalAudioDurationMs > 0
+    ? event.externalAudioDurationMs
     : null;
 
 /** The take's microphone, per take like the camera: a start that names none uses the default. */
@@ -107,16 +122,20 @@ export const prepareExternalAudioRecording = ({
 }: EditorActionArgs): EditorContextUpdate => {
   const audioBlob = getExternalAudioBlob(event);
   if (!audioBlob) return {};
+  const keptDurationMs = getKeptExternalAudioDurationMs(event);
 
   return {
     audio: {
       ...context.audio,
       blob: audioBlob,
-      isRecording: true,
+      // A kept file has no player, so it is not running: a pause, resume or retake then
+      // sends nothing to a `recordingAudioPlayer` that does not exist (runningRecorders.ts).
+      isRecording: keptDurationMs === null,
       mediaRecorder: null,
       mimeType: audioBlob.type || "audio/webm",
       source: "external" as const,
-      externalDurationMs: null,
+      // The player reports a played file's length once it has loaded it.
+      externalDurationMs: keptDurationMs,
     },
   };
 };
@@ -135,7 +154,7 @@ export const startExternalAudioPlayback = ({
   enqueue,
 }: EditorActionArgs & { enqueue: RecordingAudioPlayerEnqueue }): void => {
   const audioBlob = getExternalAudioBlob(event);
-  if (!audioBlob) return;
+  if (!audioBlob || getKeptExternalAudioDurationMs(event) !== null) return;
 
   enqueue.spawnChild("audioPlayback", {
     id: "recordingAudioPlayer",

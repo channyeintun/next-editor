@@ -2,7 +2,8 @@ import { expect, vi } from "vite-plus/test";
 import { createActor, fromCallback } from "xstate";
 import type * as monaco from "monaco-editor";
 import { editorMachine } from "../editorMachine";
-import type { EditorMachineInput } from "../types";
+import type { EditorMachineInput, StartRecordingEvent } from "../types";
+import type { TimeSource } from "../timeSource";
 import type { Recording } from "../../types";
 import type { WorkspaceRecordingSnapshot } from "../../workspace";
 
@@ -112,16 +113,34 @@ export function pinPerformanceClock() {
   return clock;
 }
 
+/**
+ * A time source that moves only when the test says so, apart from the page's clock.
+ * It starts far from what pinClocks() pins, so a stamp read from the wrong clock shows.
+ */
+export function createManualTimeSource(perf = 700_000, wall = 9_000_000) {
+  const clock = { perf, wall };
+  const source: TimeSource = { perfNow: () => clock.perf, wallNow: () => clock.wall };
+  return {
+    clock,
+    source,
+    advance(ms: number) {
+      clock.perf += ms;
+      clock.wall += ms;
+    },
+  };
+}
+
 /** The machine with mouse tracking stubbed out, since tests have no document to track. */
 export const takeMachine = editorMachine.provide({
   actors: { mouseTracking: fromCallback(() => {}) },
 });
 
-/** Starts a take recording from `editor`, and checks that it did start. */
+/** Starts a take recording from `editor`, with `start`'s options, and checks that it did start. */
 export function startTake(
   editor: TakeEditor = new RecordingEditor(),
   input: Partial<EditorMachineInput> = {},
   machine = takeMachine,
+  start: Omit<StartRecordingEvent, "type"> = {},
 ) {
   const actor = createActor(machine, {
     input: {
@@ -129,7 +148,7 @@ export function startTake(
       ...input,
     },
   }).start();
-  actor.send({ type: "START_RECORDING" });
+  actor.send({ ...start, type: "START_RECORDING" });
   expect(actor.getSnapshot().matches("recording")).toBe(true);
   return actor;
 }

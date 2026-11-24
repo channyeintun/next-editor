@@ -25,6 +25,7 @@ import type { RuntimeCheckpointProgress } from "../runtimeTrack";
 import type { ChatCheckpoint, ChatRecordingEvent } from "../chat";
 import type { TextEditEvent } from "../textEdit";
 import type { RecordingClock } from "./recordingClock";
+import type { TimeSource } from "./timeSource";
 import type { RecordingTracks } from "./recordingAssembly";
 import type { RecordingSafePoint } from "./retake";
 import type { MediaSpan } from "../utils/mediaSpans";
@@ -81,13 +82,22 @@ export interface TimelineState {
  */
 export interface RecordingSession extends RecordingTracks {
   /**
-   * Wall-clock time recording started (`Date.now()`). Metadata only (e.g. the live
-   * elapsed-time display) — never subtracted from another wall-clock read to derive an
-   * in-session timestamp, since `Date.now()` is not monotonic. Use `startedAtPerf` for that.
+   * Wall-clock time recording started (the time source's `wallNow()`). Metadata only
+   * (e.g. the live elapsed-time display) — never subtracted from another wall-clock read
+   * to derive an in-session timestamp, since `Date.now()` is not monotonic. Use
+   * `startedAtPerf` for that.
    */
   startedAt: number;
-  /** When recording started (`performance.now()`), monotonic origin for all in-session timestamps */
+  /**
+   * When recording started (the time source's `perfNow()`), monotonic origin for all
+   * in-session timestamps
+   */
   startedAtPerf: number;
+  /**
+   * Where the take reads time (timeSource.ts), from START_RECORDING; the page's own
+   * clock when absent. Read it through `getRecordingTimeSource` (recordingSession.ts).
+   */
+  timeSource?: TimeSource;
   /**
    * Pauses the recorded time skips over (see recordingClock.ts). Replaced, never mutated,
    * so a selector sees a pause or resume. Read in-session timestamps through
@@ -339,6 +349,14 @@ export type StartRecordingEvent = {
   screenStream?: MediaStream;
   /** The microphone to narrate with (a `deviceId`); the default one when absent. */
   microphoneDeviceId?: string;
+  /** Where the take reads time (timeSource.ts); the page's own clock when absent. */
+  timeSource?: TimeSource;
+  /**
+   * The length of `audioBlob`, for a take that keeps it as its narration but
+   * does not play it. Such a take ends on STOP_RECORDING alone, and its
+   * duration is still capped at this length.
+   */
+  externalAudioDurationMs?: number;
 };
 
 /** Stop recording event */

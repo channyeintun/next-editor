@@ -24,6 +24,7 @@ import {
   RUNTIME_CHECKPOINT_RESET,
 } from "../runtimeTrack";
 import type { RecordingSession } from "./types";
+import { SYSTEM_TIME_SOURCE, type TimeSource } from "./timeSource";
 import {
   hasRecordingClockExclusions,
   readRecordingClock,
@@ -31,9 +32,30 @@ import {
   toRecordingWallTime,
 } from "./recordingClock";
 
+/** What reading a take's recorded time needs: its clock, origin and time source. */
+export type RecordingTimeState = Pick<RecordingSession, "clock" | "startedAtPerf" | "timeSource">;
+
+/** Where the take reads time: the one it was started with, else the page's own clock. */
+export function getRecordingTimeSource(session: Pick<RecordingSession, "timeSource">): TimeSource {
+  return session.timeSource ?? SYSTEM_TIME_SOURCE;
+}
+
+/** The take's time source read now, as the anchor a pause, resume or safe point stores. */
+export function readRecordingTimeSource(session: Pick<RecordingSession, "timeSource">): {
+  perf: number;
+  wall: number;
+} {
+  const source = getRecordingTimeSource(session);
+  return { perf: source.perfNow(), wall: source.wallNow() };
+}
+
 /** Recorded time now: the take's clock, which stands still while it is paused. */
-export function getRecordingTimestamp(session: RecordingSession): number {
-  return readRecordingClock(session.clock, session.startedAtPerf);
+export function getRecordingTimestamp(session: RecordingTimeState): number {
+  return readRecordingClock(
+    session.clock,
+    session.startedAtPerf,
+    getRecordingTimeSource(session).perfNow(),
+  );
 }
 
 /**

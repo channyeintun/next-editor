@@ -24,6 +24,7 @@ import {
   appendWhiteboardRecordingEvent,
   appendWorkspaceRecordingEvent,
   getRecordingTimestamp,
+  readRecordingTimeSource,
 } from "./recordingSession";
 import {
   createRecordingClock,
@@ -54,14 +55,19 @@ import { getRunningRecorders } from "./runningRecorders";
 // ============================================================================
 
 export const initRecordingSession = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
+  // A microphone take starts when its recorder does, on the recorder's own readings of
+  // the page's clock, so it keeps the page's clock. Any other take starts on
+  // START_RECORDING, which may name the source the take reads time from.
+  const timeSource = event.type === "START_RECORDING" ? event.timeSource : undefined;
+  const origin = readRecordingTimeSource({ timeSource });
   const startedAt =
     event.type === "AUDIO_RECORDING_STARTED" && Number.isFinite(event.startedAtMs)
       ? event.startedAtMs
-      : Date.now();
+      : origin.wall;
   const startedAtPerf =
     event.type === "AUDIO_RECORDING_STARTED" && Number.isFinite(event.startedAtPerf)
       ? event.startedAtPerf
-      : performance.now();
+      : origin.perf;
   const slideEvents: SlideEvent[] = [];
   const previewEvents: PreviewEvent[] = [];
   const workspaceEvents: WorkspaceRecordingEvent[] = [];
@@ -130,6 +136,7 @@ export const initRecordingSession = ({ context, event }: EditorActionArgs): Edit
     session: {
       startedAt,
       startedAtPerf,
+      ...(timeSource ? { timeSource } : {}),
       clock: createRecordingClock(),
       // The take's start is the first moment a retake can rewind to.
       safePoints: [{ recordingTime: 0, perf: startedAtPerf, wall: startedAt, mediaTime: 0 }],
@@ -220,7 +227,8 @@ export const captureWhiteboardEvent = ({ context, event }: EditorActionArgs): vo
 export const pauseRecordingSession = ({ context }: EditorActionArgs): void => {
   const session = context.session;
   if (!session || isRecordingClockPaused(session.clock)) return;
-  session.clock = pauseRecordingClock(session.clock, performance.now(), Date.now());
+  const { perf, wall } = readRecordingTimeSource(session);
+  session.clock = pauseRecordingClock(session.clock, perf, wall);
 };
 
 /**
@@ -232,8 +240,7 @@ export const pauseRecordingSession = ({ context }: EditorActionArgs): void => {
 export const resumeRecordingSession = ({ context }: EditorActionArgs): void => {
   const session = context.session;
   if (!session || !isRecordingClockPaused(session.clock)) return;
-  const perf = performance.now();
-  const wall = Date.now();
+  const { perf, wall } = readRecordingTimeSource(session);
   session.clock = resumeRecordingClock(session.clock, perf, wall);
   const recordingTime = getRecordingTimestamp(session);
   addSafePoint(session, recordingTime, { perf, wall });
@@ -261,7 +268,7 @@ export const addChapterMarker = ({ context, event }: EditorActionArgs): EditorCo
     { time: recordingTime, title: chapterTitle(event.title, session.chapters.length) },
   ];
   // While paused, the clock stands at the moment the pause began: that is the anchor.
-  const at = session.clock.pausedAt ?? { perf: performance.now(), wall: Date.now() };
+  const at = session.clock.pausedAt ?? readRecordingTimeSource(session);
   addSafePoint(session, recordingTime, at);
   return { session };
 };
