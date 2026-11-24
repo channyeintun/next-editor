@@ -5,6 +5,7 @@ import {
   fetchMyLessons,
   publishLesson,
   unpublishLesson,
+  updateLessonDuration,
   updateLessonName,
   updateLessonThumbnail,
 } from "./myLessonsApi";
@@ -80,6 +81,16 @@ describe("updateLessonName", () => {
     await updateLessonName("lesson-1", "Ownership");
 
     expect(mockedPatch).toHaveBeenCalledWith("/lessons/lesson-1", { title: "Ownership" });
+  });
+});
+
+describe("updateLessonDuration", () => {
+  it("patches the lesson's duration", async () => {
+    mockedPatch.mockResolvedValueOnce({ data: {} });
+
+    await updateLessonDuration("lesson-1", "12:34");
+
+    expect(mockedPatch).toHaveBeenCalledWith("/lessons/lesson-1", { duration: "12:34" });
   });
 });
 

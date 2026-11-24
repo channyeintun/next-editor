@@ -6,6 +6,7 @@ import {
   createSession,
   insertDraftLesson,
   listPublishedLessons,
+  updateLesson,
   type UpsertUserParams,
   upsertUserByGoogleSub,
   USERNAME_PATTERN,
@@ -540,5 +541,18 @@ describe("insertDraftLesson", () => {
     expect(await insertDraftLesson(db, draft("elsewhere", "other"))).toMatchObject({
       owner_id: "other",
     });
+  });
+});
+
+describe("updateLesson", () => {
+  it("sets the duration, and only on the owner's row", async () => {
+    const db = createDb([{ id: "l1", publishedAt: 1 }]);
+
+    const row = await updateLesson(db, "l1", "owner", { duration: "12:34" });
+    expect(row).toMatchObject({ id: "l1", duration: "12:34" });
+    expect(row!.updated_at).toBeGreaterThan(0);
+
+    expect(await updateLesson(db, "l1", "someone-else", { duration: "0:01" })).toBeNull();
+    expect(await updateLesson(db, "l1", "owner", {})).toMatchObject({ duration: "12:34" });
   });
 });

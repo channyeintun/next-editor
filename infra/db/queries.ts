@@ -406,6 +406,8 @@ export interface UpdateLessonParams {
   description?: string;
   tags?: string[] | null;
   thumbnail?: string;
+  /** As formatDuration (infra/client/upload/uploadLesson.ts) writes it; the route checks the shape. */
+  duration?: string;
 }
 
 // Only touches columns actually present in `params` — column names in the SET
@@ -436,6 +438,10 @@ export async function updateLesson(
   if (params.thumbnail !== undefined) {
     sets.push("thumbnail = ?");
     values.push(params.thumbnail);
+  }
+  if (params.duration !== undefined) {
+    sets.push("duration = ?");
+    values.push(params.duration);
   }
   if (sets.length === 0) {
     // A no-op update still has to answer as the owner-scoped UPDATE below

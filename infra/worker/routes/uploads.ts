@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Env } from "../env";
-import { releaseMediaObject, reserveMediaObject } from "../../db/mediaObjects";
+import { forgetMediaObject, releaseMediaObject, reserveMediaObject } from "../../db/mediaObjects";
 import { getLessonById } from "../../db/queries";
 import { requireUser, type SignedInEnv } from "../auth/requireUser";
 import { clientClosedResponse, isClientCancel } from "../clientClosed";
@@ -12,6 +12,7 @@ import {
   MAX_LESSON_MEDIA_FILENAME_CHARS,
 } from "../lessonMediaFiles";
 import { chargeUserWriteBudget } from "../rateLimit";
+import { RECORDING_AUDIO_EXTENSIONS } from "../../../src/shared/recordingMediaFiles";
 import {
   MAX_CAPTION_BYTES,
   MAX_MEDIA_BYTES,
@@ -144,4 +145,52 @@ uploadsRoute.put(
   `/:id{${LESSON_ID_PATTERN}}/media/:filename{[\\w-]+(?:\\.[a-z0-9-]+)?\\.vtt}`,
   requireUser,
   handleMediaUpload,
+);
+
+// Only a narration file may be deleted on its own. A lesson that is replaced in
+// place uploads its new narration under a new name, then the .ne that names
+// it, and then deletes the old narration, which nothing points at any more.
+// The .ne, the thumbnail (the row points at both), camera video and captions
+// stay until the lesson is deleted (DELETE /api/lessons/:id).
+const AUDIO_FILENAME_RE = new RegExp(`\\.(?:${RECORDING_AUDIO_EXTENSIONS.join("|")})$`);
+
+uploadsRoute.delete(
+  `/:id{${LESSON_ID_PATTERN}}/media/:filename{${LESSON_MEDIA_FILENAME_PATTERN}}`,
+  requireUser,
+  async (c) => {
+    const user = c.get("user");
+    const limited = await chargeUserWriteBudget(
+      c,
+      c.env.MEDIA_UPLOAD_RATE_LIMITER,
+      user.id,
+      "Media delete",
+    );
+    if (limited) return limited;
+
+    const { id, filename } = c.req.param();
+    if (filename.length > MAX_LESSON_MEDIA_FILENAME_CHARS) {
+      return c.json({ error: "filename is too long" }, 400);
+    }
+    if (!AUDIO_FILENAME_RE.test(filename)) {
+      return c.json({ error: "only a narration file can be deleted" }, 400);
+    }
+
+    // Unlike an upload, a delete needs the lesson to exist: there is nothing to
+    // claim under a fresh id, and only the row says who owns the folder.
+    const lesson = await getLessonById(c.env.DB, id);
+    if (!lesson) {
+      return c.json({ error: "not found" }, 404);
+    }
+    if (lesson.owner_id !== user.id) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    // Deleting a key R2 does not hold succeeds, so a retry after a lost
+    // response is answered the same way. The storage is forgotten only once
+    // the object is gone, as when a thumbnail is replaced (routes/lessons.ts).
+    const key = `lessons/${id}/${filename}`;
+    await c.env.BUCKET.delete(key);
+    await forgetMediaObject(c.env.DB, key, user.id);
+    return c.body(null, 204);
+  },
 );

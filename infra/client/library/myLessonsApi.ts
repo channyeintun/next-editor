@@ -41,3 +41,8 @@ export async function updateLessonThumbnail(
 export async function updateLessonName(lessonId: string, title: string): Promise<void> {
   await apiClient.patch(`/lessons/${lessonId}`, { title });
 }
+
+/** `duration` is the gallery's display text, as formatDuration (upload/uploadLesson.ts) writes it. */
+export async function updateLessonDuration(lessonId: string, duration: string): Promise<void> {
+  await apiClient.patch(`/lessons/${lessonId}`, { duration });
+}

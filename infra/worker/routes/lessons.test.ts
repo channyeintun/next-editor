@@ -541,6 +541,65 @@ describe("lessonsRoute text limits", () => {
   });
 });
 
+describe("lessonsRoute duration edits", () => {
+  function patchLesson(body: Record<string, unknown>) {
+    return lessonsRoute.request(
+      `https://nexteditor.dev/${LESSON_ID}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json" },
+      },
+      env,
+    );
+  }
+
+  it.each(["0:07", "4:12", "75:03", "1:02:03"])("sets a duration of %s", async (duration) => {
+    vi.mocked(updateLesson).mockResolvedValueOnce({ ...lessonRow(LESSON_ID), duration });
+
+    const response = await patchLesson({ duration });
+
+    expect(response.status).toBe(200);
+    expect(updateLesson).toHaveBeenCalledWith(expect.anything(), LESSON_ID, "user-1", {
+      duration,
+    });
+    expect(await response.json()).toMatchObject({ duration });
+  });
+
+  it.each([
+    ["not text", 252],
+    ["empty", ""],
+    ["seconds past 59", "4:60"],
+    ["one seconds digit", "4:2"],
+    ["words", "about 4 minutes"],
+    ["too long", "99999:00"],
+    ["a trailing line", "4:12\n"],
+  ])("refuses a duration that is %s", async (_, duration) => {
+    const response = await patchLesson({ duration });
+
+    expect(response.status).toBe(400);
+    expect(updateLesson).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 when the lesson is someone else's", async () => {
+    // updateLesson scopes its UPDATE to the owner, so a non-owner matches no row.
+    vi.mocked(updateLesson).mockResolvedValueOnce(null);
+
+    const response = await patchLesson({ duration: "4:12" });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("requires a signed-in user", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(null as never);
+
+    const response = await patchLesson({ duration: "4:12" });
+
+    expect(response.status).toBe(401);
+    expect(updateLesson).not.toHaveBeenCalled();
+  });
+});
+
 describe("lessonsRoute route order", () => {
   // "/mine" and "/:slug" both match /mine; Hono picks the one registered first.
   it("routes /mine to the owner's library, not the slug lookup", async () => {

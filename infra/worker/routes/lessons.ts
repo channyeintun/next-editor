@@ -69,6 +69,12 @@ function isOwnUploadPath(value: string, lessonId: string): boolean {
   return value.startsWith(prefix) && isLessonMediaFilename(value.slice(prefix.length));
 }
 
+// The display length formatDuration (infra/client/upload/uploadLesson.ts)
+// writes: "m:ss", where the minutes run past 59 ("75:03"). "h:mm:ss" is also
+// taken, so a tool that writes hours is not refused. An edit is held to that
+// shape because the gallery shows the text as it is.
+const LESSON_DURATION_RE = /^(?:\d{1,4}:[0-5]\d|\d{1,3}:[0-5]\d:[0-5]\d)$/;
+
 // A lesson holds a handful of objects; the per-owner object quota
 // (infra/db/ownerLimits.ts) bounds the rest. Past this many pages the cleanup
 // stops and says so rather than looping without end.
@@ -256,6 +262,12 @@ lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
       return c.json({ error: "thumbnail must be a media path uploaded for this lesson" }, 400);
     }
     updateParams.thumbnail = toStoredThumbnailPath(body.thumbnail);
+  }
+  if (body.duration !== undefined) {
+    if (typeof body.duration !== "string" || !LESSON_DURATION_RE.test(body.duration)) {
+      return c.json({ error: "duration must be m:ss or h:mm:ss" }, 400);
+    }
+    updateParams.duration = body.duration;
   }
   const textError = metadataTextError(updateParams);
   if (textError) {
