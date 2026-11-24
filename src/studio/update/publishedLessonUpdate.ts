@@ -121,12 +121,25 @@ function quote(cue: CaptionCue | undefined): string {
   return `"${text.length > EXAMPLE_TEXT_LIMIT ? `${text.slice(0, EXAMPLE_TEXT_LIMIT - 1)}…` : text}"`;
 }
 
-/** A cue time as m:ss.s, close enough for a person to see a cue move. */
-function cueTime(ms: number): string {
-  const tenths = Math.max(0, Math.round(ms / 100));
-  const minutes = Math.floor(tenths / 600);
-  const seconds = (tenths % 600) / 10;
-  return `${minutes}:${seconds.toFixed(1).padStart(4, "0")}`;
+/** A cue time as m:ss.s (or m:ss.sss with `digits` 3). */
+function cueTime(ms: number, digits: 1 | 3): string {
+  const steps = 10 ** digits;
+  const units = Math.max(0, Math.round((ms / 1000) * steps));
+  const minutes = Math.floor(units / (60 * steps));
+  const seconds = (units % (60 * steps)) / steps;
+  return `${minutes}:${seconds.toFixed(digits).padStart(3 + digits, "0")}`;
+}
+
+/**
+ * Where a moved cue was and is, start and end, since either may be what moved.
+ * Tenths are enough for a person; when the tenths read the same on both sides,
+ * milliseconds show the move instead of "0:16.4 → 0:16.4".
+ */
+function movedCueText(old: CaptionCue, now: CaptionCue): string {
+  const span = (cue: CaptionCue, digits: 1 | 3) =>
+    `${cueTime(cue.start, digits)}–${cueTime(cue.end, digits)}`;
+  const digits = span(old, 1) === span(now, 1) ? 3 : 1;
+  return `${quote(now)}: ${span(old, digits)} → ${span(now, digits)}`;
 }
 
 function sameTime(a: number, b: number): boolean {
@@ -157,7 +170,7 @@ export function compareCaptions(
       reworded.push(`${quote(old)} → ${quote(now)}`);
     } else if (!sameTime(old.start, now.start) || !sameTime(old.end, now.end)) {
       changedCues += 1;
-      moved.push(`${quote(now)}: ${cueTime(old.start)} → ${cueTime(now.start)}`);
+      moved.push(movedCueText(old, now));
     }
   }
   return {

@@ -127,8 +127,11 @@ export function ReplacePublishedLesson({
 
   const busy = step.kind === "checking" || step.kind === "replacing";
 
+  // `contents`: the button is one more item in the results panel's row of
+  // buttons (Render again, Download bundle…), aligned with them; what it opens
+  // takes a row of its own under it.
   return (
-    <div className="mt-3">
+    <div className="contents">
       <button
         type="button"
         onClick={() => void compare()}
@@ -141,13 +144,13 @@ export function ReplacePublishedLesson({
       </button>
 
       {step.kind === "checking" ? (
-        <p role="status" className="mt-2 text-[12px] text-slate-400">
+        <p role="status" className="basis-full text-[12px] text-slate-400">
           Finding the published lesson…
         </p>
       ) : null}
 
       {step.kind === "compared" ? (
-        <div className="mt-2 rounded-lg border border-slate-600/40 p-2">
+        <div className="basis-full rounded-lg border border-slate-600/40 p-2">
           <LessonChangeSummary lesson={step.lesson} change={step.change} />
           <p className="mt-1 text-[12px] text-slate-400">
             The lesson keeps its URL, thumbnail, playlist place and publish date.
@@ -172,14 +175,14 @@ export function ReplacePublishedLesson({
       ) : null}
 
       {step.kind === "replacing" ? (
-        <p role="status" className="mt-2 text-[12px] text-slate-400">
+        <p role="status" className="basis-full text-[12px] text-slate-400">
           Replacing “{step.lesson.title}”…
           {step.fraction === null ? "" : ` ${Math.round(step.fraction * 100)}%`}
         </p>
       ) : null}
 
       {step.kind === "replaced" ? (
-        <div role="status" className="mt-2 rounded-lg border border-emerald-500/30 p-2">
+        <div role="status" className="basis-full rounded-lg border border-emerald-500/30 p-2">
           <p className="text-[12px] font-semibold text-emerald-300">Replaced.</p>
           <LessonChangeSummary lesson={step.lesson} change={step.change} />
           <p className="mt-1 text-[12px] text-slate-400">
@@ -199,7 +202,7 @@ export function ReplacePublishedLesson({
       {step.kind === "refused" ? (
         <p
           role="alert"
-          className="mt-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-[12px] text-rose-200"
+          className="basis-full rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-[12px] text-rose-200"
         >
           {step.message}
         </p>

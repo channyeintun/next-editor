@@ -254,7 +254,19 @@ describe("compareCaptions", () => {
     expect(change.changedCues).toBe(2);
     expect(change.examples).toEqual([
       '(no cue) → "Wrap them."',
-      '"Errors are values.": 0:00.0 → 0:00.4',
+      '"Errors are values.": 0:00.0–0:00.9 → 0:00.4–0:01.3',
+    ]);
+  });
+
+  it("shows a cue whose end moved, in milliseconds when tenths read the same", () => {
+    const published = [cue("What if it is odd?", 16_410, 17_520)];
+    const endMoved = [cue("What if it is odd?", 16_410, 17_310)];
+    expect(compareCaptions(withCues(published), withCues(endMoved)).examples).toEqual([
+      '"What if it is odd?": 0:16.4–0:17.5 → 0:16.4–0:17.3',
+    ]);
+    const slightly = [cue("What if it is odd?", 16_412, 17_523)];
+    expect(compareCaptions(withCues(published), withCues(slightly)).examples).toEqual([
+      '"What if it is odd?": 0:16.410–0:17.520 → 0:16.412–0:17.523',
     ]);
   });
 

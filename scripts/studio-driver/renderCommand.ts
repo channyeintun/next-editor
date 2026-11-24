@@ -306,12 +306,15 @@ export async function runUpdateCommand(
   if (!("replaced" in replaced))
     throw new DriverError(`${slug}: the studio compared again instead of replacing`);
   writeJson(folder, "update-replaced.json", replaced.replaced);
-  printChange("replaced", replaced.replaced);
+  // The change was printed just above; the examples are not repeated.
+  console.log(`  replaced: /learn/${replaced.replaced.urlSlug} now plays this render`);
+  // null covers two cases the result does not tell apart: the new narration has
+  // the old one's name (same bytes, nothing to delete), or the delete failed.
   console.log(
     `  narration: ${replaced.replaced.audioFile}${
       replaced.replaced.removedAudioFile
         ? `, removed ${replaced.replaced.removedAudioFile}`
-        : ", the old narration file was not removed"
+        : "; nothing deleted (the old narration had this name, or deleting it failed)"
     }`,
   );
   return true;
