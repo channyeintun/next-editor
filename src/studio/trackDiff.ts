@@ -48,6 +48,14 @@ export interface TrackDiffOptions {
    * press is 220 ms.
    */
   cursorRestGapMs: number;
+  /**
+   * How far in time a pointer sample may sit from its match before its
+   * distance counts. A real timer fires a few ms late (7 ms measured on a pen
+   * stroke moving 1.5 px/ms, which reads as 10 px at the same instant though
+   * both renders drew the same points). Less than one 16 ms pointer step, so a
+   * step that is skipped or a different speed still shows as distance.
+   */
+  cursorTimeSlackMs: number;
 }
 
 export const DEFAULT_TRACK_DIFF_OPTIONS: TrackDiffOptions = {
@@ -56,6 +64,7 @@ export const DEFAULT_TRACK_DIFF_OPTIONS: TrackDiffOptions = {
   cursorDistancePx: 4,
   durationMs: 100,
   cursorRestGapMs: 120,
+  cursorTimeSlackMs: 10,
 };
 
 /** One side of a difference: where it is and what it shows. */
@@ -104,10 +113,12 @@ interface TrackItem {
   /** Equal keys mean the same change. */
   key: string;
   description: string;
-  /** For a pointer run: its path sampled at fixed fractions, ending where it rests. */
-  path?: Point[];
+  /** For a pointer run: its samples, from where it left rest to where it rests. */
+  run?: CursorRecordingEvent[];
   /** What `explain` reads to say where two different changes part. */
   content?: string;
+  /** Editor only: equal for the steps of one drag-select (all but the selection's moving end). */
+  sweep?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,13 +154,138 @@ function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function pathDistance(a: Point[], b: Point[]): number {
+/**
+ * Where a run of motion has the pointer at `timeMs`: on a straight line
+ * between the two samples around it, at its first point before it starts and
+ * at its last after it ends (the pointer rests there).
+ */
+function positionAt(run: readonly CursorRecordingEvent[], timeMs: number): Point {
+  const first = run[0];
+  const last = run[run.length - 1];
+  if (timeMs <= first.timestamp) return { x: first.x, y: first.y };
+  if (timeMs >= last.timestamp) return { x: last.x, y: last.y };
+  let low = 0;
+  let high = run.length - 1;
+  while (high - low > 1) {
+    const middle = (low + high) >> 1;
+    if (run[middle].timestamp <= timeMs) low = middle;
+    else high = middle;
+  }
+  const from = run[low];
+  const to = run[high];
+  const width = to.timestamp - from.timestamp;
+  const share = width > 0 ? (timeMs - from.timestamp) / width : 1;
+  return { x: from.x + (to.x - from.x) * share, y: from.y + (to.y - from.y) * share };
+}
+
+function distanceToSegment(point: Point, from: Point, to: Point): number {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = dx * dx + dy * dy;
+  const share =
+    length > 0
+      ? Math.max(0, Math.min(1, ((point.x - from.x) * dx + (point.y - from.y) * dy) / length))
+      : 0;
+  return distance(point, { x: from.x + dx * share, y: from.y + dy * share });
+}
+
+/** How close `run` comes to `point` while it is within `slackMs` of `timeMs`. */
+function distanceNear(
+  point: Point,
+  run: readonly CursorRecordingEvent[],
+  timeMs: number,
+  slackMs: number,
+): number {
+  if (slackMs <= 0) return distance(point, positionAt(run, timeMs));
+  const path: Point[] = [positionAt(run, timeMs - slackMs)];
+  for (const sample of run) {
+    if (sample.timestamp > timeMs - slackMs && sample.timestamp < timeMs + slackMs) {
+      path.push(sample);
+    }
+  }
+  path.push(positionAt(run, timeMs + slackMs));
+  let nearest = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < path.length; index++) {
+    nearest = Math.min(nearest, distanceToSegment(point, path[index - 1], path[index]));
+  }
+  return nearest;
+}
+
+/** Times at fixed fractions of a run's span. */
+function timesAcross(run: readonly CursorRecordingEvent[]): number[] {
+  const start = run[0].timestamp;
+  const span = run[run.length - 1].timestamp - start;
+  return PATH_FRACTIONS.map((fraction) => start + span * fraction);
+}
+
+/**
+ * The farthest the two runs are apart when b is read `shiftMs` later than a,
+ * each point matched anywhere on the other run within `slackMs` of its time.
+ */
+function apartWithShift(
+  a: readonly CursorRecordingEvent[],
+  b: readonly CursorRecordingEvent[],
+  timesA: readonly number[],
+  timesB: readonly number[],
+  shiftMs: number,
+  slackMs: number,
+): number {
   let worst = 0;
-  const length = Math.min(a.length, b.length);
-  for (let index = 0; index < length; index++) {
-    worst = Math.max(worst, distance(a[index], b[index]));
+  for (const time of timesA) {
+    worst = Math.max(worst, distanceNear(positionAt(a, time), b, time + shiftMs, slackMs));
+  }
+  for (const time of timesB) {
+    worst = Math.max(worst, distanceNear(positionAt(b, time), a, time - shiftMs, slackMs));
   }
   return worst;
+}
+
+/**
+ * How far apart two runs of motion are, with the second moved in time by
+ * whatever constant amount, up to `maxShiftMs`, brings them closest.
+ *
+ * A run is read on its own timeline, not stretched over its first and last
+ * recorded change: the recorder keeps only samples that move the pointer, and
+ * an eased start or landing stays on the same rounded pixel for several steps,
+ * so where the first and last visible change fall depends on how the steps
+ * happen to land (16 ms apart on a virtual clock, 17 to 21 ms on a real one).
+ * Stretching two such runs over their visible spans compares points up to a
+ * step apart in time, which at drag speed is several pixels, though both
+ * draw the same motion. One constant shift absorbs a run that simply started
+ * a little later; a different route, speed or landing still shows as distance.
+ */
+function runsApart(
+  a: readonly CursorRecordingEvent[],
+  b: readonly CursorRecordingEvent[],
+  maxShiftMs: number,
+  slackMs: number,
+): number {
+  const timesA = timesAcross(a);
+  const timesB = timesAcross(b);
+  const coarseStepMs = 2;
+  const within = (shift: number) => Math.abs(shift) <= maxShiftMs;
+  let bestShift = 0;
+  let best = apartWithShift(a, b, timesA, timesB, 0, slackMs);
+  const tryShift = (shift: number) => {
+    if (!within(shift)) return;
+    const apart = apartWithShift(a, b, timesA, timesB, shift, slackMs);
+    if (apart < best) {
+      best = apart;
+      bestShift = shift;
+    }
+  };
+  // The run simply starting, or ending, that much later is tried exactly: a
+  // press and the first step of a drag can be recorded in the same
+  // millisecond, a jump that a shift off by a fraction of a millisecond reads
+  // as tens of pixels apart.
+  tryShift(b[0].timestamp - a[0].timestamp);
+  tryShift(b[b.length - 1].timestamp - a[a.length - 1].timestamp);
+  for (let shift = -maxShiftMs; shift <= maxShiftMs; shift += coarseStepMs) tryShift(shift);
+  const around = bestShift;
+  for (let shift = around - coarseStepMs; shift <= around + coarseStepMs; shift += 0.25) {
+    tryShift(shift);
+  }
+  return best;
 }
 
 /** Drop consecutive items with the same key: the later one changed nothing a viewer sees. */
@@ -187,6 +323,12 @@ function editorScrollOf(frame: EditorFrame): { top: string; left: number } {
 function editorItems(recording: Recording): TrackItem[] {
   const items: TrackItem[] = [];
   let current: EditorFrame | null = null;
+  // With a slide track, playback shows slides from it and ignores the slide
+  // state a frame carries (frameReplay's mirrorFrameSlideState). That state is
+  // only copied into whichever frame is captured next, which in a real render
+  // can be the pointer's next move seconds later, so it is not compared here;
+  // the slides track compares what a viewer sees.
+  const slidesFromTrack = (recording.slideEvents?.length ?? 0) > 0;
   recording.frames.forEach((frame, index) => {
     // The same forward walk reconstructFrameAtIndex makes, kept running so
     // each frame costs one delta instead of a walk from its keyframe.
@@ -199,17 +341,49 @@ function editorItems(recording: Recording): TrackItem[] {
     const { content, selection, slideState, currentSlideIndex } = current.state;
     const scroll = editorScrollOf(current);
     const range = `${selection.selectionStartLineNumber}:${selection.selectionStartColumn}-${selection.positionLineNumber}:${selection.positionColumn}`;
-    const slide = slideState
-      ? `${slideState.isOpen ? "open" : "shut"}${slideState.isMaximized ? " max" : ""} ${slideState.currentSlideId ?? "-"}#${slideState.indexv ?? 0}`
-      : "none";
+    const slide = slidesFromTrack
+      ? "track"
+      : slideState
+        ? `${slideState.isOpen ? "open" : "shut"}${slideState.isMaximized ? " max" : ""} ${slideState.currentSlideId ?? "-"}#${slideState.indexv ?? 0}`
+        : "none";
+    const slideIndex = slidesFromTrack ? undefined : currentSlideIndex;
     items.push({
       timesMs: [current.timestamp],
-      key: canonicalJson({ content, range, scroll, slide, currentSlideIndex }),
-      description: `${content.length} chars #${shortHash(content)}, sel ${range}, scroll top ${scroll.top} left ${scroll.left}, slide ${slide}${currentSlideIndex === undefined ? "" : ` @${currentSlideIndex}`}`,
+      key: canonicalJson({ content, range, scroll, slide, slideIndex }),
+      sweep: canonicalJson({
+        content,
+        anchor: `${selection.selectionStartLineNumber}:${selection.selectionStartColumn}`,
+        scroll,
+        slide,
+        slideIndex,
+      }),
+      description: `${content.length} chars #${shortHash(content)}, sel ${range}, scroll top ${scroll.top} left ${scroll.left}, slide ${slide}${slideIndex === undefined ? "" : ` @${slideIndex}`}`,
       content,
     });
   });
-  return withoutRepeats(items);
+  return withoutSweepSteps(withoutRepeats(items));
+}
+
+/**
+ * A drag-select as the selection it lands on. While the button is held the
+ * highlight follows the character under the pointer at each step, and which
+ * characters the steps hit depends on when they fire: 16 ms apart on a
+ * virtual clock, 17 to 21 ms on a real one, so the two renders pass through
+ * different in-between selections (haskell-crash-course: 4:5 against 4:6) on
+ * the same sweep. The sweep itself is the pointer's path, which the cursor
+ * track compares; here only where it lands, and when, is.
+ */
+function withoutSweepSteps(items: TrackItem[]): TrackItem[] {
+  const kept: TrackItem[] = [];
+  for (const item of items) {
+    const last = kept[kept.length - 1];
+    if (last && last.sweep !== undefined && last.sweep === item.sweep) {
+      kept[kept.length - 1] = item;
+    } else {
+      kept.push(item);
+    }
+  }
+  return kept;
 }
 
 function textFilesOf(snapshot: WorkspaceRecordingSnapshot): Record<string, string> {
@@ -300,22 +474,6 @@ function slideItems(recording: Recording): TrackItem[] {
 /** Fractions of a run at which the two paths are compared. */
 const PATH_FRACTIONS = Array.from({ length: 21 }, (_, index) => index / 20);
 
-/** The run's position at `fraction` of its time span (of its samples, when it has no span). */
-function pointOnRun(run: CursorRecordingEvent[], fraction: number): Point {
-  if (run.length === 1) return { x: run[0].x, y: run[0].y };
-  const start = run[0].timestamp;
-  const span = run[run.length - 1].timestamp - start;
-  const at = (index: number) =>
-    span > 0 ? (run[index].timestamp - start) / span : index / (run.length - 1);
-  let index = 1;
-  while (index < run.length - 1 && at(index) < fraction) index++;
-  const from = run[index - 1];
-  const to = run[index];
-  const width = at(index) - at(index - 1);
-  const share = width > 0 ? Math.min(1, Math.max(0, (fraction - at(index - 1)) / width)) : 1;
-  return { x: from.x + (to.x - from.x) * share, y: from.y + (to.y - from.y) * share };
-}
-
 /**
  * The pointer as runs of motion. A run ends where the pointer rests: before a
  * pause longer than `restGapMs`, or where it is shown or hidden, or pressed or
@@ -340,7 +498,10 @@ function cursorItems(recording: Recording, restGapMs: number): TrackItem[] {
     if (!sameState) {
       if (run.length) runs.push(run);
       run = [sample];
-    } else if (sample.timestamp - lastTime > restGapMs) {
+    } else if (sample.visible && sample.timestamp - lastTime > restGapMs) {
+      // Only a shown pointer rests where a viewer sees it. A hidden one that is
+      // placed twice (at 0 and again 240 ms later in a real render, both at 0
+      // on a virtual clock) is one wait, seen only where it reappears.
       runs.push(run);
       // A move from rest starts at the rest point, whether or not its first
       // step was recorded there: a real render's first step is a hair off the
@@ -366,10 +527,13 @@ function cursorItems(recording: Recording, restGapMs: number): TrackItem[] {
     const end = samples[samples.length - 1];
     const state = `${end.visible ? "shown" : "hidden"}${end.flags ? ` buttons ${end.flags}` : ""}`;
     return {
-      timesMs: [end.timestamp],
+      // When a hidden pointer was placed is not seen either; the time a viewer
+      // sees is where it reappears, the start of the next run.
+      timesMs: end.visible ? [end.timestamp] : [],
       key: state,
       description: `rests at ${Math.round(end.x)},${Math.round(end.y)} ${state} after ${samples.length} samples`,
-      path: PATH_FRACTIONS.map((fraction) => pointOnRun(samples, fraction)),
+      // A hidden pointer's moves are not seen; only where it waits to reappear is.
+      run: end.visible ? samples : [end],
     };
   });
 }
@@ -397,7 +561,9 @@ function chapterItems(recording: Recording): TrackItem[] {
 // ---------------------------------------------------------------------------
 
 function sideOf(item: TrackItem | undefined): TrackDiffSide | null {
-  return item ? { timeMs: Math.round(item.timesMs[0] ?? 0), description: item.description } : null;
+  if (!item) return null;
+  const timeMs = item.timesMs[0] ?? item.run?.[item.run.length - 1]?.timestamp ?? 0;
+  return { timeMs: Math.round(timeMs), description: item.description };
 }
 
 function compareItems(
@@ -427,8 +593,9 @@ function compareItems(
       };
       break;
     }
-    if (left.path && right.path) {
-      const apart = pathDistance(left.path, right.path);
+    if (left.run && right.run) {
+      // A run may sit as far off in time as any change of the track may.
+      const apart = runsApart(left.run, right.run, options.maxMs, options.cursorTimeSlackMs);
       maxDistancePx = Math.max(maxDistancePx, apart);
       if (apart > options.cursorDistancePx) {
         firstDifference = {
@@ -436,7 +603,7 @@ function compareItems(
           reason: "distance",
           a: sideOf(left),
           b: sideOf(right),
-          detail: `paths up to ${apart.toFixed(1)}px apart (rest points ${distance(left.path[left.path.length - 1], right.path[right.path.length - 1]).toFixed(1)}px)`,
+          detail: `paths up to ${apart.toFixed(1)}px apart (rest points ${distance(left.run[left.run.length - 1], right.run[right.run.length - 1]).toFixed(1)}px)`,
         };
         break;
       }
