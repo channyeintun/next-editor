@@ -59,7 +59,8 @@ const NUM_RUNS = 200;
 
 const STUB_EDITOR = { getModel: () => null } as unknown as monaco.editor.IStandaloneCodeEditor;
 
-type FilePath = "index.html" | "style.css";
+/** `scratch.html` is created inside a take and may be deleted again. */
+type FilePath = "index.html" | "style.css" | "scratch.html";
 type ProjectId = "p" | "q";
 
 const SLIDES: Slide[] = [
@@ -74,6 +75,8 @@ type Op =
   /** A switch to another file or project, and maybe the editor's first frame of it. */
   | { k: "file"; path: FilePath; frame: boolean }
   | { k: "project"; frame: boolean }
+  /** Creates and opens `scratch.html`, or deletes it and opens `index.html`. */
+  | { k: "scratch"; frame: boolean }
   | { k: "resize"; sidebar: number; dock: number }
   | { k: "runtime"; text: string; checkpoint: boolean }
   | { k: "chat"; kind: "start" | "content" | "draft" | "checkpoint"; text: string }
@@ -116,6 +119,7 @@ const arbOp: fc.Arbitrary<Op> = fc.oneof(
     }),
   },
   { weight: 2, arbitrary: fc.record({ k: fc.constant("project"), frame: fc.boolean() }) },
+  { weight: 2, arbitrary: fc.record({ k: fc.constant("scratch"), frame: fc.boolean() }) },
   {
     weight: 2,
     arbitrary: fc.record({
@@ -204,7 +208,7 @@ const selectionAt = (column: number) => ({
   positionColumn: column,
 });
 
-function projectOf(id: ProjectId, files: Record<FilePath, string>): WorkspaceProject {
+function projectOf(id: ProjectId, files: Partial<Record<FilePath, string>>): WorkspaceProject {
   return {
     id,
     name: id,
@@ -226,7 +230,7 @@ function projectOf(id: ProjectId, files: Record<FilePath, string>): WorkspacePro
  * every file, and the first workspace, runtime and editor records are at 0.
  */
 function record(steps: Array<[number, Op]>): Recording {
-  const files: Record<ProjectId, Record<FilePath, string>> = {
+  const files: Record<ProjectId, Partial<Record<FilePath, string>>> = {
     p: { "index.html": "<h1>", "style.css": "" },
     q: { "index.html": "q", "style.css": "q{}" },
   };
@@ -248,7 +252,7 @@ function record(steps: Array<[number, Op]>): Recording {
     frames.push({
       timestamp,
       state: {
-        content: files[project][path],
+        content: files[project][path] ?? "",
         selection: selectionAt(column),
         position: { lineNumber: 1, column },
         viewState: { scrollTop } as unknown as monaco.editor.ICodeEditorViewState,
@@ -283,7 +287,7 @@ function record(steps: Array<[number, Op]>): Recording {
     serial += 1;
     switch (op.k) {
       case "type": {
-        const text = files[project][path];
+        const text = files[project][path] ?? "";
         const at = op.at % (text.length + 1);
         files[project][path] = text.slice(0, at) + op.text + text.slice(at + op.drop);
         column = at + op.text.length + 1;
@@ -298,8 +302,20 @@ function record(steps: Array<[number, Op]>): Recording {
         break;
       case "file":
       case "project":
-        if (op.k === "file") path = op.path;
-        else project = project === "p" ? "q" : "p";
+      case "scratch":
+        if (op.k === "file") {
+          path = op.path;
+        } else if (op.k === "project") {
+          project = project === "p" ? "q" : "p";
+        } else if (files[project]["scratch.html"] === undefined) {
+          files[project]["scratch.html"] = "";
+          path = "scratch.html";
+        } else {
+          delete files[project]["scratch.html"];
+          if (path === "scratch.html") path = "index.html";
+        }
+        // A file can only be open in a project that has it.
+        if (files[project][path] === undefined) files[project][path] = "";
         pushWorkspace(time);
         if (op.frame) pushFrame(time + (serial % 2));
         break;
@@ -508,6 +524,41 @@ const nearACut = (time: number, cuts: readonly MediaSpan[]) =>
       (time > cut.end && time - cut.end < INTERPOLATION_WINDOW_MS),
   );
 
+/**
+ * What a cut keeps inside its own window, which no time outside the cuts reaches: a
+ * playback tick or a chapter seek can still land there. Each workspace event there but
+ * the cut's last one (the survivor) holds the survivor's project and files and opens
+ * only one of them, or none, and is either stamped like the event after it, so replay
+ * never applies it on its own, or in the survivor's project and file.
+ */
+function expectNothingNewInsideCuts(edited: Recording, cuts: readonly MediaSpan[]) {
+  const events = edited.workspaceEvents ?? [];
+  const found: string[] = [];
+  for (const cut of cuts) {
+    const from = mapTimeThroughCuts(cut.start, cuts);
+    const to = mapTimeThroughCuts(cut.end, cuts);
+    const inside = events.flatMap((event, index) =>
+      event.timestamp > from && event.timestamp <= to ? [index] : [],
+    );
+    const survivor = events[inside.at(-1) ?? -1]?.snapshot;
+    for (const index of inside.slice(0, -1)) {
+      const { timestamp, snapshot } = events[index];
+      const where = `event ${index} in the cut ${JSON.stringify(cut)}`;
+      if (JSON.stringify(snapshot.project) !== JSON.stringify(survivor.project)) {
+        found.push(`${where} is in another project or files`);
+      }
+      if (!["", ...Object.keys(snapshot.project.files)].includes(snapshot.activeFilePath)) {
+        found.push(`${where} opens ${snapshot.activeFilePath}, which it does not hold`);
+      }
+      const appliedAlone = events[index + 1].timestamp !== timestamp;
+      if (appliedAlone && snapshot.activeFilePath !== survivor.activeFilePath) {
+        found.push(`${where} can be shown on its own, with another file open`);
+      }
+    }
+  }
+  expect(found).toEqual([]);
+}
+
 describe("a cut keeps what is outside it", () => {
   it("shows at the moved time what the original shows, on every track the law covers", () => {
     let compared = 0;
@@ -526,6 +577,7 @@ describe("a cut keeps what is outside it", () => {
           }),
         );
         const edited = applyRecordingEdit(recording, { cuts, mutes: [] });
+        expectNothingNewInsideCuts(edited, cuts);
 
         for (const time of timesToCheck(recording, cuts)) {
           const moved = mapTimeThroughCuts(time, cuts);

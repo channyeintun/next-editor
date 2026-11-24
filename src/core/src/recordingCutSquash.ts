@@ -93,16 +93,27 @@ function hasRunToSquash(events: readonly { timestamp: number }[], cutOf: CutOf):
 
 const WORKSPACE_WIDTH_DELTAS = ["sidebarWidthDelta", "previewDockWidthDelta"] as const;
 
-/** `snapshot`'s files and panels, in the editor model (project and open file) of `other`. */
-function withEditorModelOf(
+/** Whether replay, going from `from` to `to`, opens another file or project. */
+function opensAnotherModel(from: WorkspaceRecordingSnapshot, to: WorkspaceRecordingSnapshot) {
+  const pair = [
+    { timestamp: 0, snapshot: from },
+    { timestamp: 1, snapshot: to },
+  ];
+  return latestEditorModelBoundaryTime(pair, 1) === 1;
+}
+
+/**
+ * `snapshot` with another file open, which names nothing but what `snapshot` holds: no
+ * file open, or, when it has none open, the first of its own files. Null when it has
+ * no file to open and none open.
+ */
+function withAnotherFileOpen(
   snapshot: WorkspaceRecordingSnapshot,
-  other: WorkspaceRecordingSnapshot,
-): WorkspaceRecordingSnapshot {
-  return {
-    ...snapshot,
-    project: { ...snapshot.project, id: other.project.id },
-    activeFilePath: other.activeFilePath,
-  };
+): WorkspaceRecordingSnapshot | null {
+  const path = ["", ...Object.keys(snapshot.project.files)].find(
+    (candidate) => candidate !== snapshot.activeFilePath,
+  );
+  return path === undefined ? null : { ...snapshot, activeFilePath: path };
 }
 
 /**
@@ -120,10 +131,18 @@ function withEditorModelOf(
  * (latestEditorModelBoundaryTime). The survivor alone would move that event to its own
  * time, or remove it when the cut switches away and back, and replay would then skip
  * the cut's last frame where it showed it, or put another file's text in the open one.
- * So when the run opens the file the cut ends on before its last event, the event that
- * opened it is kept too, with the one before it, so that it still opens a file. Both
- * carry the survivor's files, and no width change, so nothing from inside the cut is
- * kept but where that file was opened.
+ * So when the run opened the survivor's file or project, events are kept at the moment
+ * it did: the survivor's state with another file open, when the survivor's file is the
+ * one open before the cut (a switch away and back), then the survivor's state, unless
+ * the survivor is itself stamped at that moment. A file is then opened there whatever
+ * was open before the cut.
+ *
+ * They are stamped at that one moment, and replay applies only the last of the events
+ * stamped alike, so a playback tick or a seek inside the cut never shows the first on
+ * its own: it lands on the state before the cut, the survivor's, or the survivor's
+ * without its width changes. And they hold only the survivor's project and files, so
+ * nothing from inside the cut is kept but the moment its file was opened: not another
+ * project, nor the name of a file created and deleted inside it.
  */
 export function squashWorkspaceEvents(
   events: readonly WorkspaceRecordingEvent[],
@@ -144,33 +163,23 @@ export function squashWorkspaceEvents(
   ): WorkspaceRecordingEvent[] => {
     // The first event is never in a run, so `first - 1` is the event kept before it.
     const opened = modelOpenedAt(last);
-    if (opened === modelOpenedAt(first - 1)) return [];
-
-    // The event that opened the survivor's model.
-    let opener = last;
-    while (opener > first && modelOpenedAt(opener - 1) === opened) opener -= 1;
-    // The one it switched away from is kept too, unless the event kept before the run
-    // is already in that model (no other was opened between them), and so serves.
-    const switchedFrom =
-      opener - 1 >= first && modelOpenedAt(opener - 1) !== modelOpenedAt(first - 1)
-        ? opener - 1
-        : opener;
-    // Events stamped at the very moment the model opened can switch it again; each is
-    // kept, so replay sees the same switches at that moment.
-    let end = opener;
-    while (end + 1 < last && events[end + 1].timestamp === opened) end += 1;
+    if (opened === null || opened === modelOpenedAt(first - 1)) return [];
 
     const {
       sidebarWidthDelta: _sidebarWidthDelta,
       previewDockWidthDelta: _previewDockWidthDelta,
       ...withoutWidths
     } = snapshot;
-    const kept: WorkspaceRecordingEvent[] = [];
-    for (let index = switchedFrom; index <= Math.min(end, last - 1); index += 1) {
-      kept.push({
-        timestamp: events[index].timestamp,
-        snapshot: withEditorModelOf(withoutWidths, events[index].snapshot),
-      });
+    // When the cut switched away and back, the survivor's file is the one open before
+    // the cut, so another one is opened first.
+    const away = opensAnotherModel(events[first - 1].snapshot, snapshot)
+      ? null
+      : withAnotherFileOpen(withoutWidths);
+    const kept: WorkspaceRecordingEvent[] = away ? [{ timestamp: opened, snapshot: away }] : [];
+    // A survivor stamped later is in the model opened at `opened`, and must not open it
+    // again at its own time.
+    if (events[last].timestamp !== opened) {
+      kept.push({ timestamp: opened, snapshot: withoutWidths });
     }
     return kept;
   };

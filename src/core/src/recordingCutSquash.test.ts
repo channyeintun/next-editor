@@ -216,9 +216,11 @@ describe("file switches inside a cut", () => {
 
     const edited = expectSameOutsideCuts(recording, edit, [1_500, 5_001, 5_500, 6_500]);
     expect(shownAt(recording, 5_500)).toEqual({ activeFilePath: "a.txt", frame: null, text: "ab" });
+    // b.txt was opened inside the cut, so another file is opened at a.txt's moment.
     expect(edited.workspaceEvents?.map((kept) => kept.timestamp)).toEqual(
-      [0, 3_200, 4_500].map((time) => mapTimeThroughCuts(time, cuts)),
+      [0, 4_500, 4_500].map((time) => mapTimeThroughCuts(time, cuts)),
     );
+    expect(edited.workspaceEvents?.[1].snapshot.activeFilePath).toBe("");
   });
 
   it("keeps the switch of a cut that opens a file before its last frame", () => {
@@ -284,7 +286,7 @@ describe("file switches inside a cut", () => {
       [1_500, 5_001, 5_800, 9_001, 9_500, 11_000],
     );
     expect(edited.workspaceEvents?.map((kept) => kept.timestamp)).toEqual(
-      [0, 2_500, 4_500, 7_000, 8_500].map((time) => mapTimeThroughCuts(time, twoCuts.cuts)),
+      [0, 4_500, 4_500, 8_500, 8_500].map((time) => mapTimeThroughCuts(time, twoCuts.cuts)),
     );
   });
 
@@ -301,7 +303,7 @@ describe("file switches inside a cut", () => {
 
     const edited = expectSameOutsideCuts(recording, fromStart, [0, 5_001, 5_500, 6_500]);
     expect(edited.workspaceEvents?.map((kept) => kept.timestamp)).toEqual(
-      [0, 2_500, 4_500].map((time) => mapTimeThroughCuts(time, fromStart.cuts)),
+      [0, 4_500, 4_500].map((time) => mapTimeThroughCuts(time, fromStart.cuts)),
     );
   });
 
@@ -320,12 +322,82 @@ describe("file switches inside a cut", () => {
     });
 
     const edited = expectSameOutsideCuts(recording, edit, [1_500, 5_001, 5_500, 6_500]);
-    expect(edited.workspaceEvents?.[1].snapshot.project.id).toBe("q");
-    // The project opened inside the cut carries the files the cut ends on.
+    // The project opened inside the cut is not kept: no file is open for a moment, in
+    // the project and files the cut ends on.
+    expect(edited.workspaceEvents?.map(({ snapshot }) => snapshot.project.id)).toEqual([
+      "p",
+      "p",
+      "p",
+    ]);
+    expect(edited.workspaceEvents?.[1].snapshot.activeFilePath).toBe("");
     expect(edited.workspaceEvents?.[1].snapshot.project.files["a.txt"].content).toBe("a");
   });
 
-  it("keeps the switches made at one moment, in order", () => {
+  it("opens no other project or file for a moment inside the cut", () => {
+    // Project q and b.txt are opened inside the cut, and the cut ends where it started.
+    const inProject = (id: string, kept: WorkspaceRecordingEvent): WorkspaceRecordingEvent => ({
+      ...kept,
+      snapshot: { ...kept.snapshot, project: { ...kept.snapshot.project, id } },
+    });
+    const recording = recordingWith({
+      frames: compressFrames([frame(0, "a"), frame(3_000, "other"), frame(6_000, "a1")]),
+      workspaceEvents: [
+        event(0, "a.txt", { a: "a", b: "b" }),
+        inProject("q", event(2_500, "a.txt", { a: "other", b: "b" })),
+        event(3_500, "b.txt", { a: "a", b: "b" }),
+        event(4_000, "a.txt", { a: "a", b: "b" }, { sidebarWidthDelta: 4 }),
+        event(4_500, "a.txt", { a: "a", b: "b" }),
+      ],
+    });
+    const edited = expectSameOutsideCuts(recording, edit, [1_500, 5_001, 5_500, 6_500]);
+
+    // Walk the cut's window the way playback ticks do, and the way a seek lands.
+    const workspaceEvents = edited.workspaceEvents ?? [];
+    const from = mapTimeThroughCuts(cut.start, cuts);
+    const to = mapTimeThroughCuts(cut.end, cuts);
+    let lastAppliedIndex = 0;
+    for (let time = from; time <= to; time += 0.01) {
+      for (const startIndex of [lastAppliedIndex, -1]) {
+        const shown = getWorkspaceReplayResult({
+          workspaceEvents,
+          currentTime: time,
+          lastAppliedIndex: startIndex,
+        });
+        const snapshot = workspaceEvents[shown.nextIndex].snapshot;
+        expect([snapshot.project.id, snapshot.activeFilePath], `at ${time}`).toEqual([
+          "p",
+          "a.txt",
+        ]);
+        if (startIndex === lastAppliedIndex) lastAppliedIndex = shown.nextIndex;
+      }
+    }
+  });
+
+  it("keeps no name of a file created and deleted inside the cut", () => {
+    const withKeys = event(2_500, "keys.txt", { a: "ab", b: "b" });
+    withKeys.snapshot.project.files["keys.txt"] = {
+      path: "keys.txt",
+      name: "keys.txt",
+      language: "plaintext",
+      content: SECRET,
+    };
+    const recording = recordingWith({
+      frames: compressFrames([frame(0, "a"), frame(3_000, SECRET), frame(6_000, "a1")]),
+      workspaceEvents: [
+        event(0, "a.txt", { a: "a", b: "b" }),
+        withKeys,
+        event(4_500, "a.txt", { a: "ab", b: "b" }),
+      ],
+    });
+
+    const edited = expectSameOutsideCuts(recording, edit, [1_500, 5_001, 5_500, 6_500]);
+    expect(holds(edited.workspaceEvents, "keys.txt")).toBe(false);
+    for (const { snapshot } of edited.workspaceEvents ?? []) {
+      expect(["", ...Object.keys(snapshot.project.files)]).toContain(snapshot.activeFilePath);
+    }
+  });
+
+  it("keeps where switches made at one moment opened the file", () => {
     // A studio take on its own clock can stamp several switches with one time.
     const recording = recordingWith({
       frames: compressFrames([frame(0, "a"), frame(4_000, "a1"), frame(6_000, "a2")]),
@@ -340,7 +412,22 @@ describe("file switches inside a cut", () => {
 
     const edited = expectSameOutsideCuts(recording, edit, [1_500, 5_001, 5_500, 6_500]);
     expect(edited.workspaceEvents?.map((kept) => kept.timestamp)).toEqual(
-      [0, 2_500, 3_000, 3_000, 4_500].map((time) => mapTimeThroughCuts(time, cuts)),
+      [0, 3_000, 4_500].map((time) => mapTimeThroughCuts(time, cuts)),
+    );
+
+    // The same moment can also switch away and back to the file open before the cut.
+    const backAtOnce = recordingWith({
+      frames: recording.frames,
+      workspaceEvents: [
+        event(0, "a.txt", { a: "a", b: "b" }),
+        event(3_000, "b.txt", { a: "a", b: "b" }),
+        event(3_000, "a.txt", { a: "a", b: "b" }),
+        event(4_500, "a.txt", { a: "a1", b: "b" }),
+      ],
+    });
+    const editedBack = expectSameOutsideCuts(backAtOnce, edit, [1_500, 5_001, 5_500, 6_500]);
+    expect(editedBack.workspaceEvents?.map((kept) => kept.timestamp)).toEqual(
+      [0, 3_000, 3_000, 4_500].map((time) => mapTimeThroughCuts(time, cuts)),
     );
   });
 
