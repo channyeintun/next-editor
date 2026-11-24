@@ -340,6 +340,15 @@ What the comparison had to learn to say this, each with a test in `src/studio/tr
 
 Not yet proved in a browser: a `console.point` (xterm rows) and a horizontal scroll while typing (Monaco), because none of these lessons has one.
 
+**Deployed 2026-11-24** (Worker version `0c49dd52`), together with lesson scripts served from R2 in place of the bundle. What was checked on nexteditor.dev, signed out, through `scripts/studio-render.ts` with a new browser profile:
+
+- The studio lists 404 lessons from the index published from commit `1319c8c6`; the index answers `no-cache` with an ETag and a 304 on a match, and a script's bytes are the file in the repository.
+- `go-error-values` rendered twice at full speed and the two renders passed the repeatability check. The first render of a profile downloads the speech model (about three minutes that time) and narrates; the driver prints each step.
+- The runtime host answered 240 of 240 requests, each on its own connection, across both deploys of the day.
+- One of the first 30 requests to the lesson index after the second deploy was not a 200; its status was not captured, and 450 more requests were all 200.
+
+What the scripts change measured: `dist/` went from 119 MB in 824 files to 89 MB in 810, with no lesson-script chunks. `bun run build` takes the same 68 s as before (the typecheck and the source-map upload are most of it); what changed is that a lesson no longer needs one. The first publish of all 404 scripts took 11 min 20 s at two puts at a time; a publish after that puts only the scripts that changed.
+
 ### Content quality
 
 The script is the highest-leverage artifact. Maintain a versioned persona guide that defines:
