@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { createActor, waitFor } from "xstate";
 import { editorMachine } from "./editorMachine";
 import type { LearnerWorkspaceSave } from "./learnerWorkspace";
-import { createRecording, createWorkspaceSnapshot } from "./testing/takeFixtures";
+import { createRecording, createWorkspaceSnapshot, selection } from "./testing/takeFixtures";
 import type { Recording } from "../types";
 
 describe("editorMachine learner workspace", () => {
@@ -11,8 +11,22 @@ describe("editorMachine learner workspace", () => {
   const setup = async () => {
     let workspace = createWorkspaceSnapshot("outside");
     const saves: LearnerWorkspaceSave[] = [];
+    const keyframeOf = (timestamp: number, content: string): Recording["frames"][number] => ({
+      timestamp,
+      isKeyframe: true,
+      state: {
+        content,
+        selection,
+        position: { lineNumber: 1, column: 1 },
+        viewState: null,
+        mouseCursor: { x: 0, y: 0, visible: false },
+      },
+    });
+    // The editor's frames hold the file's text as the workspace events do, as a recorder
+    // captures them: a hand-over to the viewer puts the frame's text into the file.
     const recording: Recording = {
       ...createRecording(),
+      frames: [keyframeOf(0, "recorded-0"), keyframeOf(500, "recorded-500")],
       workspaceEvents: [
         { timestamp: 0, snapshot: createWorkspaceSnapshot("recorded-0") },
         { timestamp: 500, snapshot: createWorkspaceSnapshot("recorded-500") },

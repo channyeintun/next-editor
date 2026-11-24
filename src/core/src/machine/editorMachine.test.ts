@@ -2540,6 +2540,21 @@ describe("editorMachine actor lifecycle", () => {
       actor.stop();
     });
 
+    // The app unmounts the editor while a non-text file is in front. The frame step
+    // applies nothing then, and the hand-over puts the frame's text into the workspace.
+    it("adopts the target frame into the workspace with no editor bound", async () => {
+      const { actor, editor, workspace } = await startPausedAt50(recordingOnOneFile());
+      actor.send({ type: "SET_EDITOR_REF", editor: null });
+
+      actor.send({ type: "SEEK", time: 250 });
+
+      expect(workspace.current.activeFilePath).toBe("a.ts");
+      expect(workspace.current.project.files["a.ts"].content).toBe("abc");
+      expect(editor.getValue()).toBe("a");
+
+      actor.stop();
+    });
+
     // The editor binds another file's model only after the seek, so the frame's text goes
     // into the workspace in the seek, and the binding shows the frame's caret and scroll.
     describe("a seek that opens another file", () => {
@@ -2576,8 +2591,9 @@ describe("editorMachine actor lifecycle", () => {
       const handOverAt50 = async (
         state: "paused" | "ended",
         onLearnerWorkspaceSaved?: (save: LearnerWorkspaceSave) => void,
+        recording: Recording = recordingWithSwitch(),
       ) => {
-        const loaded = await loadReady(recordingWithSwitch(), onLearnerWorkspaceSaved);
+        const loaded = await loadReady(recording, onLearnerWorkspaceSaved);
         loaded.actor.send({ type: "PLAY" });
         loaded.actor.send({ type: "TICK", currentTime: 50 });
         loaded.actor.send({ type: state === "paused" ? "PAUSE" : "FINISHED" });
@@ -2623,6 +2639,84 @@ describe("editorMachine actor lifecycle", () => {
           });
           expect(bModel.getValue()).toBe("bc!");
           expect(editor.getSelection()).toEqual(selection);
+
+          actor.stop();
+        },
+      );
+
+      // A non-text file in front: CodeEditor has unmounted the editor and sent a null ref.
+      // It mounts again on the file the seek opens, and its mount binds that file.
+      it.each(["paused", "ended"] as const)(
+        "shows the frame once the editor mounts on the file, with no editor at the seek (%s)",
+        async (state) => {
+          const loaded = await handOverAt50(state);
+          const { actor, workspace } = loaded;
+          actor.send({ type: "SET_EDITOR_REF", editor: null });
+
+          actor.send({ type: "SEEK", time: 150 });
+
+          expect(workspace.current.activeFilePath).toBe("b.ts");
+          expect(workspace.current.project.files["a.ts"].content).toBe("a-frame");
+          expect(workspace.current.project.files["b.ts"].content).toBe("bc");
+
+          const bModel = bindOpenFile(loaded);
+          expect(bModel.getValue()).toBe("bc");
+          expect(loaded.editor.getSelection()).toEqual(caretAt3);
+          expect(
+            actor.getSnapshot().context.learnerWorkspaceBaseline?.project.files["b.ts"],
+          ).toEqual(expect.objectContaining({ content: "bc" }));
+
+          actor.stop();
+        },
+      );
+
+      const image = { kind: "asset", assetId: "img-1", mimeType: "image/png", size: 4 } as const;
+      const withImage = (activeFilePath: string): WorkspaceRecordingSnapshot => {
+        const base = createTwoFileWorkspaceSnapshot("a.ts", "a-frame", "");
+        const imageFile = {
+          path: "img.png",
+          name: "img.png",
+          language: "plaintext",
+          encoding: "asset",
+          content: image,
+        } as const;
+        return {
+          ...base,
+          activeFilePath,
+          project: { ...base.project, files: { ...base.project.files, "img.png": imageFile } },
+        };
+      };
+      // A frame after the switch to the image, so only the file's kind keeps it out.
+      const recordingOpeningImage = (): Recording => ({
+        ...createRecording(),
+        frames: [keyframe(0, "a-frame"), keyframe(120, "stray", caretAt3)],
+        workspaceEvents: [
+          { timestamp: 0, snapshot: withImage("a.ts") },
+          { timestamp: 100, snapshot: withImage("img.png") },
+        ],
+      });
+
+      it.each([
+        ["bound", false],
+        ["unbound", true],
+      ] as const)(
+        "gives no frame to a non-text file the seek opens (editor %s)",
+        async (_label, unbind) => {
+          const loaded = await handOverAt50("paused", undefined, recordingOpeningImage());
+          const { actor, editor, workspace } = loaded;
+          if (unbind) actor.send({ type: "SET_EDITOR_REF", editor: null });
+
+          actor.send({ type: "SEEK", time: 150 });
+
+          expect(workspace.current.activeFilePath).toBe("img.png");
+          expect(workspace.current.project.files["img.png"]).toEqual(
+            expect.objectContaining({ encoding: "asset", content: image }),
+          );
+          expect(workspace.current.project.files["a.ts"].content).toBe("a-frame");
+          expect(editor.getValue()).toBe("a-frame");
+          const { context } = actor.getSnapshot();
+          expect(context.frameAwaitingEditor).toBeNull();
+          expect(context.currentFrame).toBeNull();
 
           actor.stop();
         },
@@ -2721,6 +2815,48 @@ describe("editorMachine actor lifecycle", () => {
         expect(saves.map((save) => save.snapshot.project.files["b.ts"].content)).toEqual([
           "b-learner",
         ]);
+
+        actor.stop();
+      });
+
+      // The restored version holds the frame's text in the file it opens (the edits are in
+      // another file), so only the restore, not the text, keeps the frame's caret off it.
+      it("leaves the caret alone after a restore that keeps the frame's text in the file", async () => {
+        const loaded = await handOverAt50("paused");
+        const { actor, editor, workspace } = loaded;
+
+        actor.send({
+          type: "RESTORE_LEARNER_WORKSPACE",
+          recordingTime: 150,
+          snapshot: createTwoFileWorkspaceSnapshot("b.ts", "a-frame!", "bc"),
+        });
+        const caretBefore = editor.getSelection();
+        const bModel = bindOpenFile(loaded);
+
+        expect(bModel.getValue()).toBe("bc");
+        expect(workspace.current.project.files["a.ts"].content).toBe("a-frame!");
+        expect(editor.getSelection()).toEqual(caretBefore);
+        expect(editor.getSelection()).not.toEqual(caretAt3);
+
+        actor.stop();
+      });
+
+      // Growth leaves the adopted text as it is, so the binding still shows that frame.
+      it("shows the frame on the binding after the recording grows", async () => {
+        const loaded = await handOverAt50("paused");
+        const { actor, editor, workspace } = loaded;
+        actor.send({ type: "SEEK", time: 150 });
+
+        const { recording } = actor.getSnapshot().context;
+        actor.send({
+          type: "EXTEND_RECORDING",
+          recording: { ...recording!, frames: [...recording!.frames, keyframe(400, "bcd")] },
+        });
+
+        expect(workspace.current.project.files["b.ts"].content).toBe("bc");
+        const bModel = bindOpenFile(loaded);
+        expect(bModel.getValue()).toBe("bc");
+        expect(editor.getSelection()).toEqual(caretAt3);
 
         actor.stop();
       });

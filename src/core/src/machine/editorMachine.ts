@@ -123,9 +123,8 @@ import { isDmpCodecLoaded } from "../../dmp/dmpCodec";
 
 /**
  * Hands the workspace to the viewer (paused, ended): keep what the recording shows (the
- * frame still waiting for the editor to bind a file a replayed switch opened included),
- * stop replaying the workspace over it, and remember it as the baseline the viewer's own
- * edits are told apart from.
+ * frame the frame step held back for the editor included), stop replaying the workspace
+ * over it, and remember it as the baseline the viewer's own edits are told apart from.
  */
 const SYNC_PAUSED_WORKSPACE_ACTIONS = [
   "resolveFrameWithheldForEditor",
@@ -425,7 +424,6 @@ export const editorMachine = setup({
         guard: "shouldSyncPlaybackEditorRef",
         actions: [
           "setEditorRef",
-          "showFrameAwaitingEditor",
           "clearPendingPlaybackEditorSync",
           "invalidateRenderedPlaybackState",
           "applyReplayStateAtTime",
@@ -838,11 +836,12 @@ export const editorMachine = setup({
         // viewer has taken over (paused and ended detach on entry; ready detaches on
         // WORKSPACE_EVENT), detachPlaybackWorkspace has reset the replay cursors, so re-applying
         // would rebuild the recording on top of the viewer's edits. PLAY/SEEK reattach and pick
-        // up the new data.
+        // up the new data. A frame the hand-over kept for the binding stays: the workspace
+        // still holds its text, and the binding shows it only on a model with that text.
         EXTEND_RECORDING: [
           {
             guard: "isGrowthWhileViewerOwnsWorkspace",
-            actions: ["extendRecording", "clearFrameAwaitingEditor", "syncStreamedRecordingGrowth"],
+            actions: ["extendRecording", "syncStreamedRecordingGrowth"],
           },
           {
             guard: "isForLoadedRecording",
@@ -852,11 +851,7 @@ export const editorMachine = setup({
         APPEND_RECORDING_DELTA: [
           {
             guard: "isGrowthWhileViewerOwnsWorkspace",
-            actions: [
-              "appendRecordingDelta",
-              "clearFrameAwaitingEditor",
-              "syncStreamedRecordingGrowth",
-            ],
+            actions: ["appendRecordingDelta", "syncStreamedRecordingGrowth"],
           },
           {
             guard: "isForLoadedRecording",

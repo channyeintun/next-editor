@@ -368,6 +368,60 @@ describe("CodeEditor's model swaps", () => {
 
     expect(restoreViewState).not.toHaveBeenCalled();
   });
+
+  // The binding may show a recorded caret and scroll on the file (a seek while paused
+  // that opened it), so the file's own saved view must be restored before it.
+  describe("restores the file's view before it tells the machine of the binding", () => {
+    const workspaceModel = { uri: { toString: () => "file:///index.html" } };
+    const savedView = { cursorState: [{ position: { lineNumber: 3, column: 2 } }] };
+
+    const renderLoggingOrder = () => {
+      const order: string[] = [];
+      harness.actions = {
+        ...(harness.actions as object),
+        syncEditorRef: (bound: unknown) => order.push(bound ? "bind" : "unbind"),
+      };
+      render(<CodeEditor />);
+      const props = harness.monacoEditorProps as {
+        onMount: (editor: unknown) => void;
+        onBeforeModelChange: (editor: unknown, model: unknown) => void;
+        onAfterModelChange: (editor: unknown, model: unknown) => void;
+        onWillDispose: (editor: unknown, model: unknown) => void;
+      };
+      const leaving = { getModel: () => workspaceModel, saveViewState: () => savedView };
+      const restoreViewState = (viewState: unknown) => {
+        expect(viewState).toBe(savedView);
+        order.push("restore");
+      };
+      return { order, props, leaving, restoreViewState };
+    };
+
+    it("on mount", () => {
+      const { order, props, leaving, restoreViewState } = renderLoggingOrder();
+      // The editor that showed the file is disposed; the next one mounts on it.
+      props.onWillDispose(leaving, workspaceModel);
+      // fakeModel's URI is the workspace model's.
+      const mounted = { ...fakeEditor(fakeModel(ACTIVE_FILE.content)), restoreViewState };
+      order.length = 0;
+
+      props.onMount(mounted);
+
+      expect(order).toEqual(["restore", "bind"]);
+    });
+
+    it("on a workspace model swap", () => {
+      const { order, props, leaving, restoreViewState } = renderLoggingOrder();
+      props.onBeforeModelChange(leaving, workspaceModel);
+      order.length = 0;
+
+      props.onAfterModelChange(
+        { getModel: () => workspaceModel, restoreViewState },
+        workspaceModel,
+      );
+
+      expect(order).toEqual(["restore", "bind"]);
+    });
+  });
 });
 
 describe("CodeEditor's remote cursors", () => {

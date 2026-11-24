@@ -31,7 +31,7 @@ import {
   createContentEditDelta,
   type CreatedContentEditDelta,
 } from "../../utils/contentDelta";
-import type { DeltaFrame } from "../../utils/deltaTypes";
+import { isKeyframe, type DeltaFrame } from "../../utils/deltaTypes";
 import { normalizeEditorFrame } from "../../utils/editorState";
 import { createFrameStreamEncoder, pushFrame } from "../../utils/frameStreamEncoder";
 import {
@@ -41,6 +41,7 @@ import {
   type WhiteboardSceneState,
 } from "../../whiteboard";
 import { RECORDING_TRACK_NAMES, type RecordingTracks } from "../recordingAssembly";
+import { latestEditorModelBoundaryTime } from "../frameReplay";
 import { grow, load, send, type PlaybackMachine } from "../testing/replayWalk";
 import type { EditorMachineContext, EditorMachineHostHooks } from "../types";
 import type { ViewerPanel } from "../viewerPanels";
@@ -58,17 +59,26 @@ import { getWhiteboardReplayResult } from "./whiteboard";
 //
 // - Replay owns the page: after a tick or a seek while ready or playing, a seek
 //   while paused or ended, STOP, PLAY (ended then PLAY too), SET_EDITOR_REF when
-//   it re-syncs the editor, SET_EDITOR_REF when it binds the file a seek while
-//   paused or ended (or the end) put in front, and growth while replay owns, the
-//   track shows what a cold resolve at T shows.
+//   it re-syncs the editor, and growth while replay owns, the track shows what a
+//   cold resolve at T shows.
 // - The viewer owns the page: paused, ended, or after a viewer's WORKSPACE_EVENT,
 //   a tick, growth, SET_EDITOR_REF and a panel view change leave what the track
 //   shows as it was, the viewer's own changes included. The next PLAY, SEEK or
-//   STOP hands it back to the first law. The one exception is the binding above:
-//   when a seek while paused or ended, or the end, puts another file in front,
-//   the editor's first SET_EDITOR_REF after it (with no PLAY, SEEK, STOP, viewer
-//   WORKSPACE_EVENT or growth between) shows that file as a cold resolve at T
-//   does, once, and the page stays the viewer's.
+//   STOP hands it back to the first law.
+//
+// The hand-over to the viewer (PAUSE, the end, a WORKSPACE_EVENT that pauses, a
+// seek while paused or ended) keeps what the recording shows at T, and with it the
+// frame at T the frame step had not applied yet, for want of an editor or while it
+// waited for the editor to bind the open file:
+// - The workspace: the file the recording has open at T, when it is the text file
+//   in front, takes the text of the frame at T if that frame was captured in that
+//   file (latestEditorModelBoundaryTime), with or without an editor. Everything else
+//   in the workspace is as before. The replay writes the workspace only when its
+//   cursor moves, so the file keeps that text through PLAY, SEEK and STOP until then.
+// - The editor: its first SET_EDITOR_REF after that hand-over (with no PLAY, SEEK,
+//   STOP or viewer WORKSPACE_EVENT between; growth may come between) shows that
+//   frame, once, as a cold resolve at the hand-over showed it, when the model it
+//   binds holds the frame's text, and the page stays the viewer's.
 //
 // Each test below generates a time-sorted log and a walk of those moves, and
 // checks the law the move falls under after the load and after every move.
@@ -214,9 +224,12 @@ const START_SELECTION: EditorSelection = {
 
 /**
  * The recording around a track's log. Its one frame makes it playable (canPlay). With
- * no editor, applyFrameAtTime applies nothing, and with no current frame
- * adoptPlaybackWorkspaceAtPause adopts nothing at a pause either. The frames property
- * replaces the frame with its own log and gives the walk an editor.
+ * no editor, applyFrameAtTime applies nothing. A hand-over to the viewer resolves the
+ * frame at T without the editor and adopts its text into the recorded text file in
+ * front, when the frame was captured in that file: only a track with workspace events
+ * has such a file (the workspace track says what it shows then, `handOver`), so for
+ * every other track nothing is adopted. The frames property replaces the frame with
+ * its own log and gives the walk an editor.
  */
 const RECORDING: Recording = {
   version: 4,
@@ -290,7 +303,8 @@ interface TrackHost {
    * left out. A track whose machine state is what a seek lands on (the preview's
    * retained state), or whose host may be waiting for the editor (frames), says so here.
    * `handedBack` says the step gave the page back to the viewer as it ended (a seek
-   * while paused or ended), which drops the machine's record of what it applied.
+   * while paused or ended), which drops the machine's record of what it applied, or
+   * the page stays the viewer's (the binding that shows a hand-over's frame).
    */
   landed?(context: EditorMachineContext, expected: unknown, handedBack: boolean): unknown;
   /** The viewer changes what the track shows, as they may while they own the page. */
@@ -303,6 +317,22 @@ interface TrackHost {
   rebind?(context: EditorMachineContext): void;
   /** Whether the editor still shows another file than the one the workspace has open. */
   opensAnotherFile?(): boolean;
+  /**
+   * Whether the editor's binding, just made, shows `frame` (a cold resolve a hand-over
+   * kept): the bound model holds that frame's text.
+   */
+  showsOnBinding?(frame: unknown): boolean;
+  /**
+   * What the track shows once the workspace goes to the viewer at `time` (a pause, the
+   * end, a pausing WORKSPACE_EVENT, a seek while paused or ended), from what it showed
+   * just before. Left out, it shows the same.
+   */
+  handOver?(shown: unknown, recording: Recording, time: number): unknown;
+  /**
+   * What replay shows while it owns the page, from the cold resolve at `time`: a host
+   * that keeps what a hand-over gave it (handOver) says so here. Left out, the cold one.
+   */
+  expected?(cold: unknown, recording: Recording, time: number): unknown;
 }
 
 interface ReplayTrack {
@@ -366,13 +396,14 @@ function walk(
   // ---- The checks.
   const playhead = (label: string) =>
     expect(machine.context.timeline.currentTime, `the playhead ${label}`).toBe(time);
-  const replayOwns = (label: string, landsOnOneState: boolean, handedBack = false) => {
-    if (track.replaysTransients && landsOnOneState) {
-      expect(applied.length, `states applied ${label}`).toBeLessThanOrEqual(1);
-    }
-    playhead(label);
-    const loaded = log.slice(0, loadedCount);
-    const expected = track.cold(copyTracks(machine.context.recording!), time, loaded);
+  /** The cold resolve at T over what is loaded now, and what replay must show from it. */
+  const resolveAtT = () => {
+    const recording = copyTracks(machine.context.recording!);
+    const cold = track.cold(recording, time, log.slice(0, loadedCount));
+    return { recording, cold, owned: host.expected ? host.expected(cold, recording, time) : cold };
+  };
+  /** The track shows `expected`, as replay landed on it (`host.landed`). */
+  const landsOn = (label: string, expected: unknown, handedBack: boolean) => {
     const actual = host.landed
       ? host.landed(machine.context, expected, handedBack)
       : host.shown(machine.context);
@@ -380,12 +411,28 @@ function walk(
     applied.length = 0;
     compared += 1;
   };
+  /**
+   * The replay-owns law. `handedBack`: the step gave the page back to the viewer as it
+   * ended (a seek while paused or ended), so the track also shows what the hand-over
+   * adopts (`host.handOver`).
+   */
+  const replayOwns = (label: string, landsOnOneState: boolean, handedBack = false) => {
+    if (track.replaysTransients && landsOnOneState) {
+      expect(applied.length, `states applied ${label}`).toBeLessThanOrEqual(1);
+    }
+    playhead(label);
+    const { recording, cold, owned } = resolveAtT();
+    landsOn(label, handedBack ? handOver(owned, recording) : owned, handedBack);
+    return cold;
+  };
   const viewerOwns = (label: string, before: unknown) => {
     expect(applied.length, `states applied ${label}`).toBe(0);
     playhead(label);
     expect(host.shown(machine.context), `what the viewer sees ${label}`).toEqual(before);
     compared += 1;
   };
+  const handOver = (shown: unknown, recording: Recording) =>
+    host.handOver ? host.handOver(shown, recording, time) : shown;
   /** Runs `act` under the viewer-owns law: what the track shows must not change. */
   const keptForViewer = (label: string, act: () => void) => {
     host.startMove?.();
@@ -393,14 +440,30 @@ function walk(
     act();
     viewerOwns(label, before);
   };
+  /**
+   * Runs `act`, which hands the workspace to the viewer (a pause, the end, a pausing
+   * WORKSPACE_EVENT): the track shows what it showed, but for what the hand-over adopts
+   * (`host.handOver`). When the frame step was still waiting for the editor, the hand-over
+   * resolves the frame at T for the editor's next binding to show.
+   */
+  const handedToViewer = (label: string, act: () => void) => {
+    const waitedForEditor = Boolean(host.awaitsEditorRef?.(machine.context));
+    host.startMove?.();
+    const before = host.shown(machine.context);
+    act();
+    viewerOwns(label, handOver(before, copyTracks(machine.context.recording!)));
+    owner = "viewer";
+    frameForBinding = waitedForEditor ? resolveAtT().cold : null;
+  };
   const hasRecords = () => loadedCount > 0;
 
   // ---- The app telling the machine its editor again (SET_EDITOR_REF).
   let editorRefIn: number | null = null;
   let waits = 0;
-  // A seek while paused or ended, or the end, put another file in front: the editor's
-  // next binding shows that file at T (the exception to the viewer-owns law).
-  let bindShowsFrame = false;
+  // A hand-over (a pause, the end, a pausing WORKSPACE_EVENT, a seek while paused or
+  // ended) found the frame step waiting for the editor: the frame at T it resolved then,
+  // which the editor's next binding shows (the exception to the viewer-owns law).
+  let frameForBinding: unknown = null;
   const tellEditor = (label: string) => {
     host.startMove?.();
     // What the app shows as it binds the model is the app's, not the machine's.
@@ -408,19 +471,23 @@ function walk(
     const before = host.shown(machine.context);
     send(machine, { type: "SET_EDITOR_REF", editor: machine.context.editorRefs.editor });
     // The machine re-syncs a real editor while replay owns the page
-    // (shouldSyncPlaybackEditorRef), and shows the frame the hand-over resolved on the
-    // file it opened (showFrameAwaitingEditor). Without an editor, or otherwise for the
-    // viewer, nothing re-applies.
-    const resolves = Boolean(host.editor) && (owner === "replay" || bindShowsFrame);
-    bindShowsFrame = false;
-    if (resolves) replayOwns(label, true, owner === "viewer");
-    else viewerOwns(label, before);
+    // (shouldSyncPlaybackEditorRef). For the viewer, it shows the frame a hand-over
+    // resolved, once, on a model holding that frame's text (showFrameAwaitingEditor).
+    // Without an editor, or otherwise for the viewer, nothing re-applies.
+    const frame = frameForBinding;
+    frameForBinding = null;
+    if (owner === "replay" && host.editor) replayOwns(label, true);
+    else if (frame !== null && host.showsOnBinding?.(frame)) {
+      playhead(label);
+      landsOn(label, frame, true);
+    } else viewerOwns(label, before);
   };
   // The app re-renders some moves after the change, and always before the viewer's
-  // next action, which comes from a later render.
+  // next action, which comes from a later render. A pause may come first: the page
+  // or the narration pauses the lesson without waiting for a render.
   const deliverEditorRef = (move: Move | "end", label: string) => {
     if (editorRefIn === null) return;
-    const viewerActs = move === "end" || !["tick", "append"].includes(move.kind);
+    const viewerActs = move === "end" || !["tick", "append", "pause"].includes(move.kind);
     if (editorRefIn > 0 && !viewerActs) {
       editorRefIn -= 1;
       return;
@@ -464,16 +531,16 @@ function walk(
         time = Math.max(0, stamp + move.offset);
         const handedOver = machine.state === "paused" || machine.state === "ended";
         send(machine, { type: "SEEK", time });
-        replayOwns(at(), true, handedOver);
-        // A seek while paused or ended takes the page for that step only.
+        const cold = replayOwns(at(), true, handedOver);
+        // A seek while paused or ended takes the page for that step only. One that puts
+        // another file in front leaves the editor to bind it.
         owner = handedOver ? "viewer" : "replay";
-        bindShowsFrame = handedOver && Boolean(host.opensAnotherFile?.());
+        frameForBinding = handedOver && host.opensAnotherFile?.() ? cold : null;
         break;
       }
       case "play": {
         if (machine.state === "playing") {
-          keptForViewer(`${at()}, paused to resume`, () => send(machine, { type: "PAUSE" }));
-          owner = "viewer";
+          handedToViewer(`${at()}, paused to resume`, () => send(machine, { type: "PAUSE" }));
           host.startMove?.();
         }
         // With no records loaded the machine has nothing to put back, so the viewer's
@@ -484,21 +551,29 @@ function walk(
         send(machine, { type: "PLAY" });
         if (restarts) time = 0;
         owner = "replay";
+        // The replay applies frames itself again.
+        frameForBinding = null;
         track.onPlaying?.(machine.context);
         replayOwns(at(), true);
         break;
       }
       case "pause": {
         if (machine.state !== "playing") break;
-        keptForViewer(at(), () => send(machine, { type: "PAUSE" }));
-        owner = "viewer";
+        handedToViewer(at(), () => send(machine, { type: "PAUSE" }));
         break;
       }
       case "viewerWorkspaceEvent": {
         if (move.viewerEdits && hasRecords()) host.viewerEdit?.();
-        // Playing, it pauses; otherwise it detaches the replay from the workspace.
-        keptForViewer(at(), () => send(machine, { type: "WORKSPACE_EVENT" }));
-        owner = "viewer";
+        const event = { type: "WORKSPACE_EVENT" } as const;
+        // Playing, it pauses, which hands the workspace over as PAUSE does. Otherwise it
+        // detaches the replay from the workspace, and the binding shows no frame.
+        if (machine.state === "playing") {
+          handedToViewer(at(), () => send(machine, event));
+        } else {
+          keptForViewer(at(), () => send(machine, event));
+          owner = "viewer";
+          frameForBinding = null;
+        }
         break;
       }
       case "finish": {
@@ -506,16 +581,15 @@ function walk(
         time = DURATION;
         send(machine, { type: "TICK", currentTime: time });
         replayOwns(`${at()}, the last tick`, false);
-        keptForViewer(at(), () => send(machine, { type: "FINISHED" }));
-        owner = "viewer";
         // The last tick may have opened a file the editor has not bound yet.
-        bindShowsFrame = Boolean(host.opensAnotherFile?.());
+        handedToViewer(at(), () => send(machine, { type: "FINISHED" }));
         break;
       }
       case "stop": {
         send(machine, { type: "STOP" });
         time = 0;
         owner = "replay";
+        frameForBinding = null;
         replayOwns(at(), true);
         break;
       }
@@ -527,9 +601,8 @@ function walk(
           grow(machine, records, move.extend);
           replayOwns(at(), false);
         } else {
-          // PLAY, SEEK or STOP picks the new records up. The binding no longer shows a
-          // frame: the one resolved before the growth may not be the one at T now.
-          bindShowsFrame = false;
+          // PLAY, SEEK or STOP picks the new records up. The binding still shows the
+          // frame the hand-over resolved before the growth: the workspace holds its text.
           keptForViewer(at(), () => grow(machine, records, move.extend));
         }
         break;
@@ -931,6 +1004,43 @@ function describeWorkspace(snapshot: WorkspaceRecordingSnapshot) {
   };
 }
 
+/** The workspace event a cold resolve at `time` shows, or -1 before the first. */
+function workspaceEventIndexAt({ workspaceEvents }: Recording, time: number): number {
+  return (workspaceEvents ?? []).findLastIndex((event) => event.timestamp <= time);
+}
+
+/**
+ * The law at a hand-over: the file the recording has open at `time`, when it is the
+ * text file in front (`view`), takes the text of the frame at `time`, unless that frame
+ * was captured before the file came to the front (it belongs to the file before).
+ * Undefined when nothing is adopted.
+ */
+function handedOverText(
+  recording: Recording,
+  time: number,
+  view: ReturnType<typeof describeWorkspace>,
+): string | undefined {
+  const events = recording.workspaceEvents ?? [];
+  const eventIndex = workspaceEventIndexAt(recording, time);
+  if (eventIndex < 0 || events[eventIndex].snapshot.activeFilePath !== view.activeFilePath) {
+    return undefined;
+  }
+  if (typeof view.content !== "string") return undefined;
+  const { frames } = recording;
+  const frame =
+    frames[
+      Math.max(
+        0,
+        frames.findLastIndex((entry) => entry.timestamp <= time),
+      )
+    ];
+  const boundaryTime = latestEditorModelBoundaryTime(events, eventIndex);
+  if (boundaryTime !== null && frame.timestamp < boundaryTime) return undefined;
+  // RECORDING's one frame, a keyframe: its text is its own.
+  expect(isKeyframe(frame)).toBe(true);
+  return isKeyframe(frame) ? frame.state.content : undefined;
+}
+
 // The machine keeps the workspace cursor through seeks and pauses (it is not in
 // REPLAY_CURSORS_RESET): the widths are relative, so the replay must know which
 // offsets it has already added. Resetting the cursor to -1 would add them all a
@@ -939,6 +1049,11 @@ function describeWorkspace(snapshot: WorkspaceRecordingSnapshot) {
 // and STOP take it back. The viewer edits no files here: PLAY keeps their
 // edits on purpose until the recording changes the workspace again (see the
 // "learner workspace" tests in learnerWorkspace.test.ts).
+//
+// The walk has no editor, so the frame step applies no frame, and a hand-over (a
+// pause, the end, a pausing WORKSPACE_EVENT, a seek while paused or ended) resolves
+// the frame at T itself: the recorded text file in front takes that frame's text
+// when the frame was captured in that file, as it would with an editor.
 const workspaceTrack: ReplayTrack = {
   fields: ["workspaceEvents"],
   host() {
@@ -947,6 +1062,8 @@ const workspaceTrack: ReplayTrack = {
       sidebarWidth: BASE_SIDEBAR_WIDTH,
       previewDockWidth: BASE_PREVIEW_DOCK_WIDTH,
     };
+    // The text the last hand-over put into a file, at the workspace event it was given at.
+    let adopted: { eventIndex: number; path: string; content: string } | null = null;
     return {
       hooks: {
         getWorkspaceSnapshot: () => live.snapshot,
@@ -964,6 +1081,24 @@ const workspaceTrack: ReplayTrack = {
         previewDockWidth: live.previewDockWidth,
         ...describeWorkspace(live.snapshot),
       }),
+      handOver: (shown, recording, time) => {
+        const view = shown as ReturnType<typeof describeWorkspace>;
+        const text = handedOverText(recording, time, view);
+        if (text === undefined) return shown;
+        adopted = {
+          eventIndex: workspaceEventIndexAt(recording, time),
+          path: view.activeFilePath,
+          content: text,
+        };
+        return { ...view, content: text };
+      },
+      // The replay writes the workspace only when its cursor moves: until then, the file
+      // keeps the text a hand-over gave it, PLAY, SEEK and STOP included.
+      expected: (cold, recording, time) => {
+        if (adopted?.eventIndex !== workspaceEventIndexAt(recording, time)) adopted = null;
+        const view = cold as ReturnType<typeof describeWorkspace>;
+        return adopted?.path === view.activeFilePath ? { ...view, content: adopted.content } : cold;
+      },
     };
   },
   // The law: each width is the viewer's width plus every offset recorded at or
@@ -1296,10 +1431,11 @@ const previewTrack: ReplayTrack = {
 // the editor shows. A file switch, the load of another file, and PLAY after the
 // viewer had the workspace make the machine wait for the app to bind the new
 // model and say so (SET_EDITOR_REF). Until then the frame must not be applied:
-// it would land in the model the editor still shows. A seek while paused or
-// ended that switches files (or the end, right after a tick that did) puts the
-// frame's text into the workspace instead, the model the app binds is made from
-// it, and that binding shows the frame's caret and scroll on it.
+// it would land in the model the editor still shows. A hand-over during that
+// wait (a seek while paused or ended that switches files, or a pause or the end
+// right after a tick that did) puts the frame's text into the workspace instead,
+// the model the app binds is made from it, and that binding shows the frame's
+// caret and scroll on it.
 // ============================================================================
 
 /** What the editor shows from a frame: its text, caret and selection, and scroll. */
@@ -1644,6 +1780,9 @@ const framesTrack: ReplayTrack = {
       awaitsEditorRef: (context) =>
         context.pendingPlaybackEditorSync || editor.boundPath !== live.snapshot.activeFilePath,
       opensAnotherFile: () => editor.boundPath !== live.snapshot.activeFilePath,
+      showsOnBinding: (frame) =>
+        frame !== FRAME_SKIPPED &&
+        editor.view().contents[editor.boundPath] === (frame as EditorShows).content,
       // While the viewer owns the page, the app shows the file's own model, made from the
       // workspace's text for it (CodeEditor's syncWorkspaceModel).
       rebind: (context) => {

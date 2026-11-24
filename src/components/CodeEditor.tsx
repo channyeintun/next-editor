@@ -611,8 +611,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
         }
 
         disposePlaybackModelsIfIdle(editor.getModel()?.uri ?? null);
-        // MonacoEditor only swaps a workspace model in, and restoreViewAndBind tells the
-        // machine once the file's view is back.
+        // A workspace model reaches this point only through MonacoEditor's model effect,
+        // which calls restoreViewAndBind right after setModel: that tells the machine
+        // once the file's view is back.
         presence.publishCursor(editor);
         presence.publishViewport(editor);
         yMonacoBinding.reconcile(editor);

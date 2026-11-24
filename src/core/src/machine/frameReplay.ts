@@ -4,7 +4,7 @@ import type { EditorFrame } from "../types";
 import type { PreviewState } from "../preview";
 import { slidePreviewStateChanged } from "../slides";
 import { isKeyframe, type DeltaFrame, type FrameDelta } from "../utils/deltaTypes";
-import type { WorkspaceRecordingEvent } from "../workspace";
+import { isWorkspaceTextFile, type WorkspaceRecordingEvent } from "../workspace";
 import {
   reconstructFrameAtIndex,
   applyFrameDeltaToNormalized,
@@ -121,6 +121,28 @@ export function isRecordedFileInFront(
   return (
     recordedPath !== undefined && context.getWorkspaceSnapshot?.()?.activeFilePath === recordedPath
   );
+}
+
+/**
+ * Whether the frame step holds the frame back for the editor: none is bound (a non-text
+ * file is in front), or the editor has yet to bind the model a replayed switch, a load or
+ * a PLAY after the viewer had the workspace put in front (pendingPlaybackEditorSync).
+ * Writing then would land in no model, or in another file's. The one statement of it for
+ * applyFrameAtTime and resolveFrameWithheldForEditor.
+ */
+function isFrameWithheldForEditor(context: EditorMachineContext): boolean {
+  return !context.editorRefs.editor || context.pendingPlaybackEditorSync;
+}
+
+/**
+ * Whether the file the recording has open at the workspace cursor is in front of the
+ * viewer and is a text file, so a frame's text may be copied into it.
+ */
+function isRecordedTextFileInFront(context: EditorMachineContext): boolean {
+  if (!isRecordedFileInFront(context, context.lastAppliedWorkspaceEventIndex)) return false;
+  const live = context.getWorkspaceSnapshot?.();
+  const file = live?.project.files[live.activeFilePath];
+  return file !== undefined && isWorkspaceTextFile(file);
 }
 
 /**
@@ -314,10 +336,11 @@ function mirrorFramePreviewState(
 }
 
 export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } = context;
+  const { recording, lastAppliedFrameIndex, currentFrame } = context;
   const currentTime = resolveBoundedReplayTime(context, event);
+  const editor = isFrameWithheldForEditor(context) ? null : context.editorRefs.editor;
 
-  if (!recording || !editorRefs.editor || context.pendingPlaybackEditorSync) {
+  if (!recording || !editor) {
     return {};
   }
 
@@ -351,7 +374,7 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
     return { lastAppliedFrameIndex: frameIndex, currentFrame: null };
   }
 
-  applyFrameState(editorRefs.editor, frame, currentFrame);
+  applyFrameState(editor, frame, currentFrame);
 
   const updates: EditorContextUpdate = {
     lastAppliedFrameIndex: frameIndex,
@@ -369,29 +392,28 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
 
 /**
  * The workspace goes to the viewer (a seek while paused or ended, a pause, the end) while
- * the frame at the playhead waits for the editor to bind the file a replayed switch just
- * put in front (pendingPlaybackEditorSync). The hand-over detaches, so no binding after it
- * re-syncs the replay, and the file would show the workspace event's text, without what
- * was typed since, until PLAY. So the frame is resolved here without the editor:
- * adoptPlaybackWorkspaceAtPause puts its text into the file before the editor shows it,
- * and it is kept for the binding to show its caret, selection and scroll.
+ * the frame step holds the frame at the playhead back for the editor
+ * (isFrameWithheldForEditor): no editor is bound, or it has yet to bind the file a
+ * replayed switch just put in front. While the replay owns the workspace, a later binding
+ * that re-syncs the replay makes up for it. The hand-over detaches, so none comes, and
+ * the file would show the workspace event's text, without what was typed since, until
+ * PLAY. So the frame is resolved here without the editor: adoptPlaybackWorkspaceAtPause
+ * puts its text into the file before the editor shows it, and it is kept for the binding
+ * (or the editor's mount) to show its caret, selection and scroll.
  *
- * Only while the file in front is the one the recording has open: a file the viewer
- * opened gets no frame.
+ * Only while the file in front is the one the recording has open, and is a text file: a
+ * file the viewer opened, or an image, gets no frame.
  */
 export const resolveFrameWithheldForEditor = ({
   context,
   event,
 }: EditorActionArgs): EditorContextUpdate => {
   const frames = context.recording?.frames;
-  // Without an editor (a binary file is shown) no frame is applied anywhere, as in
-  // applyFrameAtTime.
   if (
     !frames?.length ||
-    !context.editorRefs.editor ||
-    !context.pendingPlaybackEditorSync ||
+    !isFrameWithheldForEditor(context) ||
     context.hasManualWorkspaceOverride ||
-    !isRecordedFileInFront(context, context.lastAppliedWorkspaceEventIndex)
+    !isRecordedTextFileInFront(context)
   ) {
     return {};
   }
