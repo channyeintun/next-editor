@@ -101,6 +101,36 @@ describe("CheckList", () => {
     expect(screen.getByText("Uncaught TypeError: x")).toBeInTheDocument();
   });
 
+  it("shows a failed advisory check as a warning with its detail, not as a failure", () => {
+    render(
+      <CheckList
+        report={report({
+          outcome: "passed",
+          checks: [
+            { id: "timing", ok: true, detail: "within budget" },
+            {
+              id: "capture.end.editor",
+              ok: false,
+              advisory: true,
+              detail: "the editor shows other text",
+            },
+            { id: "capture.tracks.roundTrip", ok: true, advisory: true, detail: "all equal" },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("heading")).toHaveTextContent("Checks (2/3 ok · 1 warning)");
+    const rows = screen.getAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "✓ timing — within budget",
+      "! capture.end.editor (warning) — the editor shows other text",
+      "✓ capture.tracks.roundTrip — all equal",
+    ]);
+    expect(rows[1]).toHaveClass("text-amber-300");
+    expect(rows[1]).not.toHaveClass("text-rose-300");
+  });
+
   it("shows a check's preview screenshot, or why there is none", () => {
     render(
       <CheckList

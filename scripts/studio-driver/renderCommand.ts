@@ -9,6 +9,7 @@ import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright-core";
 import type { StudioRuntimeMode } from "../../src/studio/plan.ts";
 import type { RenderSpeed } from "../../src/studio/renderClock.ts";
+import { advisoryWarningLines } from "../../src/studio/report.ts";
 import type { StudioWindowHandle, StudioWindowRun } from "../../src/studio/studioWindowHandle.ts";
 import type { Command } from "./args.ts";
 import {
@@ -149,6 +150,9 @@ async function renderLessonRuns(input: {
     console.log(
       `  render #${run}: ${entry.outcome}${entry.report.clock ? ` (${entry.report.clock} clock)` : ""}`,
     );
+    // Advisory checks never change the outcome or the exit code; they are
+    // printed so a failing one is seen without opening the report.
+    for (const line of advisoryWarningLines(entry.report.checks)) console.log(`    ${line}`);
     writeJson(folder, `run-${run}-report.json`, entry.report);
     writeJson(folder, `run-${run}-manifest.json`, entry.manifest);
     if (entry.outcome !== "passed") {

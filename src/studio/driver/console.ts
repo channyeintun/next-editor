@@ -4,7 +4,7 @@ import {
   appendRunnerConsoleLines,
   beginRunnerOperation,
 } from "../../runtime/playgroundConsoleStore";
-import { selectIsCollapsed } from "../../stores/runtimePanelStore";
+import { selectConsoleLines, selectIsCollapsed } from "../../stores/runtimePanelStore";
 import { StudioActionError, waitUntil } from "../async";
 import { consoleLineAimPoint, findConsoleLine, type ConsoleLineLookup } from "../consoleLines";
 import {
@@ -68,6 +68,17 @@ function visibleConsole(): { container: Element; terminal: Terminal } | null {
     }
   }
   return null;
+}
+
+/**
+ * The runner console's lines as the store holds them, the lines the runtime
+ * track records. Synchronous and read-only; xterm's painted rows are not read,
+ * since xterm parses and paints them later, on its own timer and frame.
+ */
+export function readConsoleLines(
+  deps: Pick<StudioDriverDeps, "runtimePanelStore">,
+): readonly string[] {
+  return selectConsoleLines(deps.runtimePanelStore.getSnapshot().context);
 }
 
 export function consoleCommands(

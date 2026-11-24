@@ -30,11 +30,23 @@ import type {
   TypingChunk,
 } from "../plan";
 import type { RenderClock } from "../renderClock";
-import { consoleCommands } from "./console";
-import { editorCommands } from "./editor";
+import type { SlidePreviewState } from "../../core/src/slides";
+import type { WhiteboardSceneState } from "../../core/src/whiteboard";
+import type { WorkspaceFile } from "../../types/workspace";
+import { consoleCommands, readConsoleLines } from "./console";
+import { editorCommands, readEditor, readWorkspaceFiles, type EditorReading } from "./editor";
 import { createStudioPointer, moveCursor } from "./pointer";
-import { stageCommands } from "./stage";
+import {
+  logStageSends,
+  readSlidePanel,
+  readWhiteboardScene,
+  stageCommands,
+  type StageSends,
+} from "./stage";
 import { nodeRuntimeCommands } from "./nodeRuntime";
+
+export type { EditorReading, EditorSelectionPoints } from "./editor";
+export type { StageSends } from "./stage";
 
 export { cursorDispatchTarget } from "./pointer";
 
@@ -168,18 +180,57 @@ export interface StudioDriver {
   expectFile(input: { path: string; contains: string }): Promise<Record<string, unknown>>;
 }
 
+/** What an action leaves in the editor and the workspace store. */
+export interface StudioActionEndReading {
+  editor: EditorReading | null;
+  workspaceFiles: Readonly<Record<string, WorkspaceFile>>;
+}
+
+/** What the page shows, for each part a recording holds a track of. */
+export interface StudioPageReading extends StudioActionEndReading {
+  consoleLines: readonly string[];
+  slidePanel: SlidePreviewState;
+  whiteboard: WhiteboardSceneState;
+}
+
+/**
+ * A driver that can also say what it did and what the page shows, for checks
+ * that compare the recording with the performance. The readers are
+ * synchronous and read-only: no flush, no render, no wait. A reading taken
+ * during the take therefore cannot move or add anything the recorder stamps.
+ */
+export interface ObservedStudioDriver extends StudioDriver {
+  readActionEnd(): StudioActionEndReading;
+  readPage(): StudioPageReading;
+  /** Every slide and whiteboard event the driver sent, in order. */
+  stageSends: StageSends;
+}
+
 /**
  * The hub: composes each domain's commands around one shared pointer. Every
  * command lives with its domain (pointer, editor, console, nodeRuntime,
  * stage); only the pointer is shared, and only through its own controller.
  */
-export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
+export function createStudioDriver(deps: StudioDriverDeps): ObservedStudioDriver {
   const pointer = createStudioPointer(deps.clock);
+  const { deps: stageDeps, sends: stageSends } = logStageSends(deps);
+  const readActionEnd = (): StudioActionEndReading => ({
+    editor: readEditor(deps),
+    workspaceFiles: readWorkspaceFiles(deps),
+  });
   return {
     ...editorCommands(deps, pointer),
     moveCursor: (input) => moveCursor(deps, pointer, input),
     ...consoleCommands(deps, pointer),
     ...nodeRuntimeCommands(deps, pointer),
-    ...stageCommands(deps, pointer),
+    ...stageCommands(stageDeps, pointer),
+    readActionEnd,
+    readPage: () => ({
+      ...readActionEnd(),
+      consoleLines: readConsoleLines(deps),
+      slidePanel: readSlidePanel(deps),
+      whiteboard: readWhiteboardScene(deps),
+    }),
+    stageSends,
   };
 }

@@ -1,6 +1,7 @@
 import { monaco, workspacePathFromMonacoModelUri } from "../../monaco";
+import type { EditorSelection } from "../../core/src";
 import { POINTER_SETTLE_MS, easePointerDrag } from "../../core/src/utils/pointerMotion";
-import { isWorkspaceTextFile } from "../../types/workspace";
+import { isWorkspaceTextFile, type WorkspaceFile } from "../../types/workspace";
 import { StudioActionError, resolveAnchorOffset, tween, waitUntil } from "../async";
 import { chunkPlacements, easeInOutCubic } from "../cadence";
 import { createStepSeries } from "../renderClock";
@@ -20,6 +21,57 @@ const DRAG_PRESS_HOLD_MS = 120;
 
 // The shortest scroll toward off-screen code before a drag-select.
 const MIN_SELECT_SCROLL_MS = 150;
+
+/** A selection as its anchor and its caret: the two points that fix it, direction included. */
+export type EditorSelectionPoints = Pick<
+  EditorSelection,
+  "selectionStartLineNumber" | "selectionStartColumn" | "positionLineNumber" | "positionColumn"
+>;
+
+/** What the editor on screen shows. */
+export interface EditorReading {
+  /** The workspace file the model is, or null when it is no workspace file. */
+  path: string | null;
+  text: string;
+  /** Null when Monaco reports no selection. */
+  selection: EditorSelectionPoints | null;
+}
+
+/**
+ * Reads the editor on screen, or null when none is attached. It reads the
+ * editor the driver types into, not the one the recorder captures from, so a
+ * recorder that lost its editor shows up as a difference. Synchronous and
+ * read-only: it calls nothing that renders, focuses or moves the editor.
+ */
+export function readEditor(deps: Pick<StudioDriverDeps, "getEditor">): EditorReading | null {
+  const editor = deps.getEditor();
+  const model = editor?.getModel();
+  if (!editor || !model) return null;
+  const selection = editor.getSelection();
+  return {
+    path: workspacePathFromMonacoModelUri(model.uri),
+    text: model.getValue(),
+    selection: selection
+      ? {
+          selectionStartLineNumber: selection.selectionStartLineNumber,
+          selectionStartColumn: selection.selectionStartColumn,
+          positionLineNumber: selection.positionLineNumber,
+          positionColumn: selection.positionColumn,
+        }
+      : null,
+  };
+}
+
+/**
+ * The workspace store's files. The store replaces its project on every change
+ * and never edits one in place, so the record returned stays what it was at
+ * the call, and holding it copies nothing.
+ */
+export function readWorkspaceFiles(
+  deps: Pick<StudioDriverDeps, "workspace">,
+): Readonly<Record<string, WorkspaceFile>> {
+  return deps.workspace.getProject().files;
+}
 
 export function editorCommands(
   deps: Pick<

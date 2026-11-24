@@ -69,7 +69,7 @@ import {
   type StudioLessonLoadOptions,
   type StudioLessonSource,
 } from "./plans";
-import type { ActionReceipt, StudioCheckResult } from "./report";
+import { checkFailsRender, type ActionReceipt, type StudioCheckResult } from "./report";
 import { CheckList, ReceiptList, RepeatabilityVerdict } from "./StudioRunResults";
 import { patchStudioWindowHandle, type StudioWindowRun } from "./studioWindowHandle";
 import {
@@ -143,9 +143,12 @@ const NO_VOICE_TASK: NarratorVoiceTask = { busy: null, recording: false };
  */
 const RECORDING_PHASES: ReadonlySet<string> = new Set(["start-recording", "perform", "finalize"]);
 
-/** What a failed render reports as its error: the first gate or action that failed. */
+/**
+ * What a failed render reports as its error: the first gate or action that failed.
+ * An advisory check that failed is a warning, not a reason the render failed.
+ */
 function renderFailureOf(report: StudioRunResult["report"]): string {
-  const failedChecks = report.checks.filter((check) => !check.ok);
+  const failedChecks = report.checks.filter(checkFailsRender);
   const failedAction = report.receipts.find((receipt) => receipt.status === "failed");
   if (failedAction?.error) {
     return `Action "${failedAction.actionId}" (${failedAction.actionType}) failed: ${failedAction.error}`;

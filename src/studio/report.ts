@@ -31,9 +31,36 @@ export interface StudioCheckResult {
   id: string;
   ok: boolean;
   detail: string;
+  /**
+   * A check that reports without deciding: when it fails, the render still
+   * passes, keeps its files, and goes on as a passed render goes on. It is
+   * shown as a warning. A check is advisory while it has not yet run clean on
+   * real lessons, so a false alarm cannot cost a good render.
+   */
+  advisory?: true;
   diagnostic?: {
     previewScreenshot: { dataUrl: string; height: number; width: number } | { error: string };
   };
+}
+
+/** Whether a check's result fails the render: it failed, and it is not advisory. */
+export function checkFailsRender(check: StudioCheckResult): boolean {
+  return !check.ok && check.advisory !== true;
+}
+
+/** The one rule for a render's outcome from its checks: no check fails it. */
+export function renderOutcomeOf(checks: readonly StudioCheckResult[]): StudioRenderOutcome {
+  return checks.some(checkFailsRender) ? "failed" : "passed";
+}
+
+/** The advisory checks that failed: warnings, which never fail the render. */
+export function advisoryWarningsOf(checks: readonly StudioCheckResult[]): StudioCheckResult[] {
+  return checks.filter((check) => !check.ok && check.advisory === true);
+}
+
+/** One printable line per advisory warning, for a terminal that shows a render's result. */
+export function advisoryWarningLines(checks: readonly StudioCheckResult[]): string[] {
+  return advisoryWarningsOf(checks).map((check) => `warning: ${check.id} — ${check.detail}`);
 }
 
 export interface TimingStats {

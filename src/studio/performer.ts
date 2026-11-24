@@ -44,6 +44,13 @@ export interface PerformPlanOptions {
   signal: AbortSignal;
   abort: (reason: string) => void;
   onProgress?: (receipt: ActionReceipt) => void;
+  /**
+   * Called for each action that succeeded, at its end: in the same task that
+   * reads its end time, before anything else runs, so what the caller reads
+   * of the page then is what the action left. It must be synchronous and
+   * change nothing, or it would move what the recorder stamps.
+   */
+  onActionEnd?: (receipt: ActionReceipt) => void;
 }
 
 /**
@@ -311,6 +318,7 @@ export async function performPlan({
   signal,
   abort,
   onProgress,
+  onActionEnd,
 }: PerformPlanOptions): Promise<PerformPlanResult> {
   // One slot per plan action: a background runtime.start acknowledges after
   // actions planned later, but the returned receipts stay in plan order, so
@@ -321,6 +329,7 @@ export async function performPlan({
 
   const record = (index: number, receipt: ActionReceipt) => {
     slots[index] = receipt;
+    if (receipt.status === "ok") onActionEnd?.(receipt);
     onProgress?.(receipt);
   };
   const skip = (index: number, action: StudioPlanAction, error?: string) =>

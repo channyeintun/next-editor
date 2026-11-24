@@ -784,6 +784,43 @@ describe("StudioController workflow", () => {
     ]);
   });
 
+  it("names only the checks that fail a render as the reasons it failed", async () => {
+    studio.runRender.mockResolvedValue({
+      report: {
+        planSlug: "english-script",
+        outcome: "failed",
+        checks: [
+          { id: "gate.passing", ok: true, detail: "fine" },
+          { id: "capture.end.console", ok: false, advisory: true, detail: "a warning only" },
+          { id: "gate.audio", ok: false, detail: "no narration audio" },
+        ],
+        errors: [],
+        receipts: [],
+      },
+      manifest: { planSlug: "english-script", planHash: "0".repeat(64), runtimeMode: "fixture" },
+      semantics: null,
+      artifacts: null,
+    } as unknown as Awaited<ReturnType<typeof runStudioRender>>);
+    studio.narrateAhead.mockResolvedValue({
+      outcome: "ready",
+      dialogCount: 1,
+      synthesizedCount: 1,
+    });
+    renderController(await freshStudioController());
+    pickLesson("english-script");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Publish the draft" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Create a draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start workflow (1)" }));
+
+    // The whole message: the advisory warning is not one of the reasons listed. The
+    // run's results still show it, as a warning.
+    await waitFor(() =>
+      expect(
+        screen.getByText("The render failed a check: gate.audio — no narration audio"),
+      ).toBeInTheDocument(),
+    );
+  });
+
   it("renders a narrated lesson although the narration pass emptied the AthanLab balance", async () => {
     studio.capabilities = { athanlab: true, burmeseVoxCpm2: false };
     localStorage.setItem("next-editor:studio:narration-provider", "athanlab");

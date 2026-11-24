@@ -79,6 +79,20 @@ function replay(events: readonly WhiteboardEvent[]): WhiteboardSceneState {
 }
 
 describe("StudioDriver whiteboard drawing", () => {
+  it("keeps a copy of every event it sends, as it was when sent", async () => {
+    const { driver, events } = makeDriver();
+
+    await driver.applyWhiteboard({ open: true, upsertIds: ["box", "label"], drawMs: 200 });
+
+    expect(driver.stageSends.whiteboardEvents).toEqual(events);
+    expect(driver.stageSends.slideEvents).toEqual([]);
+    // The recorder holds the sent objects themselves; a later write to one of
+    // them (the board writing to elements it was handed) must not reach the
+    // log, or the provenance check would compare the write with itself.
+    events[0].upserts![0].width = 999;
+    expect(driver.stageSends.whiteboardEvents[0].upserts![0].width).not.toBe(999);
+  });
+
   it("applies every asset in one delta when no draw budget is given", async () => {
     const { driver, events } = makeDriver();
 

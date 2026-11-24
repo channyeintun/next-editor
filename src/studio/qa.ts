@@ -3,6 +3,7 @@ import { resolveLatestRuntimeSnapshot } from "../core/src/runtimeTrack";
 import { RECORDING_SCHEMA_VERSION } from "../core/src/utils/deltaTypes";
 import { decompressBinaryToRecording } from "../storage/recordingCodec";
 import type { StudioPlan } from "./plan";
+import { captureGateChecks, type CaptureObservations } from "./qaCapture";
 import { planUsesPreview, previewGateChecks, type PreviewScreenshotCapture } from "./qaPreview";
 import { runtimeGateChecks } from "./qaRuntime";
 import type { StudioCheckResult } from "./report";
@@ -12,9 +13,11 @@ import type { StudioCheckResult } from "./report";
  * encoded stream back, assert structural invariants (finite duration,
  * monotonic in-bounds event times, required tracks), then assert the semantic
  * checkpoints the plan declares. Every check is report-friendly — id, ok,
- * human-readable detail — and any failed check rejects the build. The
- * structural gates live here; the preview gates (qaPreview.ts) and the runtime
- * gates (qaRuntime.ts) follow them, in that order.
+ * human-readable detail — and any failed check rejects the build, except an
+ * advisory one, which only warns. The structural gates live here; the preview
+ * gates (qaPreview.ts), the runtime gates (qaRuntime.ts) and, for a render
+ * that observed its own performance, the advisory capture checks
+ * (qaCapture.ts) follow them, in that order.
  */
 
 function isMonotonicNonDecreasing(timestamps: readonly number[]): boolean {
@@ -62,6 +65,8 @@ export interface ArtifactCheckInput {
   plan: StudioPlan;
   /** Captured lazily only when an artifact-level preview checkpoint fails. */
   capturePreviewScreenshot?: PreviewScreenshotCapture;
+  /** What the render saw while it performed; the capture checks run only with it. */
+  capture?: CaptureObservations;
 }
 
 export interface ArtifactCheckOutput {
@@ -82,6 +87,7 @@ export async function runArtifactChecks({
   neBytes,
   plan,
   capturePreviewScreenshot,
+  capture,
 }: ArtifactCheckInput): Promise<ArtifactCheckOutput> {
   const results: StudioCheckResult[] = [];
 
@@ -243,6 +249,11 @@ export async function runArtifactChecks({
     })),
     ...runtimeGateChecks({ artifactRecording, plan, lastRuntimeSnapshot, consoleLines }),
   );
+  if (capture) {
+    results.push(
+      ...captureGateChecks({ recording, decoded, artifactRecording, observations: capture }),
+    );
+  }
 
   return { checks: results, artifactRecording };
 }

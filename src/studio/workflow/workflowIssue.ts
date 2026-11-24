@@ -1,11 +1,12 @@
 import { LESSON_SCRIPTS_FOLDER } from "../plans/publishedScripts";
-import type { StudioRenderReport } from "../report";
+import { advisoryWarningsOf, checkFailsRender, type StudioRenderReport } from "../report";
 import type { WorkflowStep } from "./workflowQueue";
 
 /**
  * The issue report a stopped studio workflow hands Chan to paste into Claude:
  * which lesson, which step, the error, and the render's own evidence (failed
- * gates, failed actions, page errors, Director warnings), in Markdown, with
+ * gates, advisory warnings, failed actions, page errors, Director warnings), in
+ * Markdown, with
  * where the lesson's source lives so the fix can start there.
  */
 
@@ -81,11 +82,17 @@ export function buildWorkflowIssueReport(input: WorkflowIssueInput): string {
 
   const report = input.report;
   if (report) {
-    const failedChecks = report.checks
-      .filter((check) => !check.ok)
-      .map((check) => `${inlineCode(check.id)}: ${check.detail}`);
+    const checkLine = (check: StudioRenderReport["checks"][number]) =>
+      `${inlineCode(check.id)}: ${check.detail}`;
+    // An advisory check that failed did not stop the render, so it is not listed as
+    // one that failed; it may still point at the cause.
+    const failedChecks = report.checks.filter(checkFailsRender).map(checkLine);
     if (failedChecks.length > 0) {
       lines.push("", "### Failed checks", "", bulletList(failedChecks));
+    }
+    const warnings = advisoryWarningsOf(report.checks).map(checkLine);
+    if (warnings.length > 0) {
+      lines.push("", "### Warnings", "", bulletList(warnings));
     }
     const failedActions = report.receipts
       // Not "skipped": everything after a failure is skipped, and says nothing.

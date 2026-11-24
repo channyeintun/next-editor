@@ -1,5 +1,40 @@
 import { describe, expect, it } from "vite-plus/test";
-import { computeTimingStats, timingGateCheck, type ActionReceipt } from "./report";
+import {
+  advisoryWarningLines,
+  advisoryWarningsOf,
+  checkFailsRender,
+  computeTimingStats,
+  renderOutcomeOf,
+  timingGateCheck,
+  type ActionReceipt,
+  type StudioCheckResult,
+} from "./report";
+
+describe("renderOutcomeOf", () => {
+  const passed: StudioCheckResult = { id: "a", ok: true, detail: "fine" };
+  const failed: StudioCheckResult = { id: "b", ok: false, detail: "broken" };
+  const warned: StudioCheckResult = { id: "c", ok: false, detail: "odd", advisory: true };
+
+  it("fails a render on a failed check that is not advisory", () => {
+    expect(renderOutcomeOf([passed, failed])).toBe("failed");
+    expect(renderOutcomeOf([passed, warned, failed])).toBe("failed");
+    expect(checkFailsRender(failed)).toBe(true);
+  });
+
+  it("passes a render whose only failures are advisory", () => {
+    expect(renderOutcomeOf([passed, warned])).toBe("passed");
+    expect(renderOutcomeOf([])).toBe("passed");
+    expect(checkFailsRender(warned)).toBe(false);
+    // An advisory check that passed is no warning.
+    expect(advisoryWarningsOf([passed, { ...passed, advisory: true }, warned, failed])).toEqual([
+      warned,
+    ]);
+  });
+
+  it("prints each advisory failure as a warning line", () => {
+    expect(advisoryWarningLines([passed, warned, failed])).toEqual(["warning: c — odd"]);
+  });
+});
 
 function receipt(overrides: Partial<ActionReceipt>): ActionReceipt {
   return {

@@ -19,12 +19,13 @@ import { createWorkspaceFile } from "../starters/shared";
 import { workspacePathFromMonacoModelUri } from "../monaco";
 import { extractRenderSemantics, type RenderSemantics } from "./compare";
 import { StudioActionError, waitForVisibleDocument, waitUntil } from "./async";
-import { createStudioDriver, type StudioDriverDeps } from "./driver";
+import { createStudioDriver, type StudioDriverDeps, type StudioPageReading } from "./driver";
 import { sha256Hex, sha256HexOfJson, hashWorkspaceFiles } from "./hash";
 import { runtimeDockStartsCollapsed } from "./plan";
 import type { StudioPlan, StudioRuntimeMode } from "./plan";
 import { performPlan } from "./performer";
 import { runArtifactChecks } from "./qa";
+import type { ActionEndObservation } from "./qaCapture";
 import { planRunsOffWallClock } from "./qaPreview";
 import {
   REAL_RENDER_CLOCK,
@@ -37,6 +38,7 @@ import { encodeWavToOggOpus } from "./tts/opus";
 import { decodeWavPcm16 } from "./tts/wav";
 import {
   computeTimingStats,
+  renderOutcomeOf,
   timingGateCheck,
   type ActionReceipt,
   type StudioBuildManifest,
@@ -50,7 +52,7 @@ import {
  * compiled plan, wait for the audio-driven finalize, attach captions, encode
  * the bundle, and run the mechanical QA gates. Fails closed: any perform or
  * gate failure stops the performance, keeps the diagnostic report, and never
- * yields a downloadable lesson bundle.
+ * yields a downloadable lesson bundle. An advisory check only warns.
  */
 
 export interface StudioRunDeps {
@@ -532,6 +534,22 @@ export async function runStudioRender(
     clock: renderClock,
   });
 
+  // What each action left on the page, read the moment it ended, and the
+  // page read once more right before the take stops: the capture checks
+  // compare the recording with these. Reading is synchronous and read-only,
+  // so it moves nothing the recorder stamps.
+  const actionEnds: ActionEndObservation[] = [];
+  let endOfTake: StudioPageReading | null = null;
+  // The checks these feed only warn, so a reading that throws must not fail
+  // the action or the render: it is left out, and the checks say so.
+  const readOrNull = <T>(read: () => T): T | null => {
+    try {
+      return read();
+    } catch {
+      return null;
+    }
+  };
+
   const performOutcome = await performPlan({
     plan,
     driver,
@@ -545,6 +563,16 @@ export async function runStudioRender(
     onProgress: (receipt) => {
       receipts.push(receipt);
       deps.onProgress?.(receipt);
+    },
+    onActionEnd: (receipt) => {
+      const reading = readOrNull(driver.readActionEnd);
+      if (reading) {
+        actionEnds.push({
+          actionId: receipt.actionId,
+          endedAtMs: receipt.endedAtMs ?? clock.nowMs(),
+          reading,
+        });
+      }
     },
   });
 
@@ -571,11 +599,16 @@ export async function runStudioRender(
       Math.max(0, measuredAudioMs - clock.nowMs()),
       new AbortController().signal,
     );
+    endOfTake = readOrNull(driver.readPage);
     try {
       await deps.nextEditor.stopRecording();
     } catch {
       // Finalize below reports a take that did not stop.
     }
+  } else {
+    // The narration stops a real take on its own; the render does nothing
+    // more on the page from here, so this is its last state.
+    endOfTake = readOrNull(driver.readPage);
   }
 
   // Real time the take still has to run: the rest of the narration as it
@@ -656,6 +689,13 @@ export async function runStudioRender(
       neBytes,
       plan,
       capturePreviewScreenshot: deps.preview.captureScreenshot,
+      capture: {
+        clock: renderClock.kind,
+        receipts,
+        actionEnds,
+        endOfTake,
+        stageSends: driver.stageSends,
+      },
     });
     checks = artifactChecks;
     const timing = computeTimingStats(receipts, plan.dependencies);
@@ -668,9 +708,9 @@ export async function runStudioRender(
       planSha256: planHash,
       dependencies: plan.dependencies,
     });
-    const allChecksOk = checks.every((check) => check.ok);
-    const outcome = allChecksOk ? "passed" : "failed";
-    if (!allChecksOk) {
+    const outcome = renderOutcomeOf(checks);
+    const passed = outcome === "passed";
+    if (!passed) {
       errors.push("One or more artifact checks failed");
     }
 
@@ -699,7 +739,7 @@ export async function runStudioRender(
       },
       manifest,
       semantics,
-      artifacts: allChecksOk
+      artifacts: passed
         ? { neBlob, audioBlob: publishedAudioBlob, audioFileName, recording: publishedRecording }
         : null,
     };

@@ -1,4 +1,9 @@
-import { applyWhiteboardEvent, type WhiteboardEvent } from "../../core/src/whiteboard";
+import type { SlideEvent, SlidePreviewState } from "../../core/src/slides";
+import {
+  applyWhiteboardEvent,
+  type WhiteboardEvent,
+  type WhiteboardSceneState,
+} from "../../core/src/whiteboard";
 import { flushPendingWhiteboardChange } from "../../hooks/useWhiteboardController";
 import {
   DEFAULT_PREVIEW_STATE,
@@ -31,6 +36,58 @@ const hasSize = (element: Element | null): element is Element => {
   const rect = element?.getBoundingClientRect();
   return !!rect && rect.width > 0 && rect.height > 0;
 };
+
+/** Every slide and whiteboard event the stage handed the recorder, in the order it did. */
+export interface StageSends {
+  slideEvents: readonly SlideEvent[];
+  whiteboardEvents: readonly WhiteboardEvent[];
+}
+
+type StageNotifyDeps = Pick<StudioDriverDeps, "notifySlideEvent" | "notifyWhiteboardEvent">;
+
+/**
+ * Wraps the stage's two recorder sends so each event is also kept, as it was
+ * when sent. A check after the take compares these with what the recording
+ * holds. Each is a copy: the recorder keeps the event's own element objects,
+ * so a later write to them would change the record and an uncopied log alike
+ * and hide that write.
+ */
+export function logStageSends<Deps extends StageNotifyDeps>(
+  deps: Deps,
+): { deps: Deps; sends: StageSends } {
+  const slideEvents: SlideEvent[] = [];
+  const whiteboardEvents: WhiteboardEvent[] = [];
+  return {
+    deps: {
+      ...deps,
+      notifySlideEvent: (event) => {
+        slideEvents.push(structuredClone(event));
+        deps.notifySlideEvent(event);
+      },
+      notifyWhiteboardEvent: (event) => {
+        whiteboardEvents.push(structuredClone(event));
+        deps.notifyWhiteboardEvent(event);
+      },
+    },
+    sends: { slideEvents, whiteboardEvents },
+  };
+}
+
+/** The slide panel's state as the slides store holds it. Synchronous and read-only. */
+export function readSlidePanel(deps: Pick<StudioDriverDeps, "slidesStore">): SlidePreviewState {
+  return selectPreviewState(deps.slidesStore.getSnapshot().context);
+}
+
+/**
+ * The whiteboard scene as the whiteboard store holds it. Synchronous and
+ * read-only: unlike the virtual clock's settle step, it flushes nothing, so
+ * reading it cannot move a pending report to another time.
+ */
+export function readWhiteboardScene(
+  deps: Pick<StudioDriverDeps, "whiteboardStore">,
+): WhiteboardSceneState {
+  return deps.whiteboardStore.getSnapshot().context.scene;
+}
 
 export function stageCommands(
   deps: Pick<

@@ -1,4 +1,10 @@
-import type { ActionReceipt, StudioCheckResult, StudioRenderReport } from "./report";
+import {
+  advisoryWarningsOf,
+  checkFailsRender,
+  type ActionReceipt,
+  type StudioCheckResult,
+  type StudioRenderReport,
+} from "./report";
 
 /**
  * The studio console's results for a render (see StudioController): each action's
@@ -68,14 +74,24 @@ export function ReceiptList({ receipts }: { receipts: ActionReceipt[] }) {
   );
 }
 
+/** How a check reads in the list: passed, a warning that leaves the render passed, or failed. */
+function checkMark(check: StudioCheckResult): { mark: string; className: string } {
+  if (check.ok) return { mark: "✓", className: "text-slate-400" };
+  return checkFailsRender(check)
+    ? { mark: "✗", className: "text-rose-300" }
+    : { mark: "!", className: "text-amber-300" };
+}
+
 /** The finished render's QA checks (with any preview diagnostic) and page errors. */
 export function CheckList({ report }: { report: StudioRenderReport }) {
+  const warnings = advisoryWarningsOf(report.checks).length;
   return (
     <div className="mt-3">
       <h3 className="font-semibold text-slate-300">
         Checks{" "}
         <span className="text-slate-400">
           ({report.checks.filter((check) => check.ok).length}/{report.checks.length} ok
+          {warnings > 0 ? ` · ${warnings} ${warnings === 1 ? "warning" : "warnings"}` : ""}
           {report.timing ? ` · p95 ${report.timing.p95Ms}ms` : ""})
         </span>
       </h3>
@@ -90,9 +106,11 @@ export function CheckList({ report }: { report: StudioRenderReport }) {
       <ul className="mt-1 space-y-0.5 text-[12px]">
         {report.checks.map((check) => {
           const screenshot = check.diagnostic?.previewScreenshot;
+          const { mark, className } = checkMark(check);
           return (
-            <li key={check.id} className={check.ok ? "text-slate-400" : "text-rose-300"}>
-              {check.ok ? "✓" : "✗"} <span className="font-mono">{check.id}</span> — {check.detail}
+            <li key={check.id} className={className}>
+              {mark} <span className="font-mono">{check.id}</span>
+              {checkFailsRender(check) || check.ok ? "" : " (warning)"} — {check.detail}
               {screenshot && "dataUrl" in screenshot ? (
                 <img
                   src={screenshot.dataUrl}
