@@ -321,6 +321,25 @@ The seed controls path shape and typing cadence. The compiled plan records the g
 
 The render report should include input hashes, environment versions, action receipts, retries, assertion results, console/runtime errors, timing percentiles, and links or paths to diagnostic screenshots.
 
+### Full-speed renders record what real-time renders record
+
+A render at `--speed=full` performs on a virtual clock (`src/studio/renderClock.ts`) when nothing in the lesson waits on real time. It was checked against real-time renders in headless Chrome on 2026-11-24 (8 GB M1 Mac, local dev server, fixture runtimes, cached narration except where noted). Each lesson was rendered once at each speed with `bun scripts/studio-render.ts render <slug> --speed=real|full --runs=1`. Both renders passed every gate, and `bun scripts/studio-compare.ts real.ne full.ne` found every track equal:
+
+| Lesson                      | What it exercises                                               | Recording | Real-time wall | Full-speed wall | Speed-up |
+| --------------------------- | --------------------------------------------------------------- | --------- | -------------- | --------------- | -------- |
+| `go-error-values`           | typing, selects, a fixture run                                  | 54.0 s    | 54.9 s         | 1.1 s           | 48×      |
+| `next-editor-state-machine` | whiteboard, typing, a fixture run                               | 92.7 s    | 94.4 s         | 2.2 s           | 41×      |
+| `haskell-crash-course`      | 11 scenes: pen-drawn whiteboard, typing, 12 selects             | 356.2 s   | 525.7 s ¹      | 6.5 s           | 55×      |
+| a two-slide JS lesson ²     | html slides shown and pointed at, pen drawing, typing, a select | 53.5 s    | 54.8 s         | 2.1 s           | 26×      |
+
+¹ Includes synthesizing the narration, which the full-speed render then read from the cache. ² Written for this check, not in the repository.
+
+"Equal" means: the same changes in the same order on every track (editor content, selection and scroll; workspace; console; whiteboard elements; slides; captions; chapters), each within 150 ms p95 and 500 ms at worst; every pointer run within 4 px of the other; durations within 100 ms. The worst differences were 56 ms (a console line, the real render's fixture latency running late) and 0.7 px (the pointer). In every pair the difference was the real render running late, never the virtual one.
+
+What the comparison had to learn to say this, each with a test in `src/studio/trackDiff.test.ts`: a hidden pointer is compared only where it reappears; the slide state an editor frame carries is ignored when the recording has a slide track, as playback ignores it; a drag-select is compared by where it lands, since its in-between selections depend on when each step fires; and pointer samples may sit up to 10 ms off their match, the size of ordinary timer lateness. One real-render bug was found and fixed: typing and pen drawing slept each delay in turn, so timer lateness added up (21 keystrokes ran 165 ms past plan); they now sleep to each step's planned time.
+
+Not yet proved in a browser: a `console.point` (xterm rows) and a horizontal scroll while typing (Monaco), because none of these lessons has one.
+
 ### Content quality
 
 The script is the highest-leverage artifact. Maintain a versioned persona guide that defines:
