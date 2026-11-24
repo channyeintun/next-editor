@@ -339,7 +339,10 @@ function buildRecordingStreamMeta(
     slides: normalized.slides,
     workspaceSnapshot: normalized.workspaceSnapshot,
     runtimeSnapshot: normalized.runtimeSnapshot,
-  };
+    // Every header field is optional, so one left out here would still compile and never
+    // be written. Naming each key makes that a type error; the literal stays as it is
+    // because msgpack writes keys in this order, and the order is part of the file's bytes.
+  } satisfies Record<keyof RecordingStreamMeta, unknown>;
 }
 
 export async function encodeRecordingToStream(recording: DecodedRecording): Promise<Uint8Array> {

@@ -116,8 +116,10 @@ export const SEGMENT_KIND = {
   cursor: 7,
   whiteboard: 8,
   chat: 9,
-  // 10 is retired: it named a final-metadata segment that only the never-enabled live
-  // recording sink wrote, so no file carries one. Readers skip it; do not reuse it.
+  // 10 is retired (RETIRED_SEGMENT_KIND): it named a final-metadata segment that only the
+  // never-enabled live recording sink wrote, so no file carries one. Readers skip it; do
+  // not reuse it. A kind added here needs a case in decode.ts's decodeSegment, which the
+  // typecheck demands.
   /** Raw content-addressed workspace asset; project snapshots carry only its descriptor. */
   workspaceAsset: 11,
   // Audio/camera are never inline — they remain sibling files. 12+ are free for future kinds.
@@ -702,7 +704,26 @@ export function readSegmentHeader(view: DataView, offset: number): SegmentHeader
   };
 }
 
-/** Retired kind 10 falls inside this range, so a reader skips it rather than stopping. */
+/** The retired final-metadata segment kind (see {@link SEGMENT_KIND}). Never reuse it. */
+export const RETIRED_SEGMENT_KIND = 10;
+
+const SEGMENT_KINDS: ReadonlySet<number> = new Set(Object.values(SEGMENT_KIND));
+
+/**
+ * Whether `kind` is one this reader decodes: exactly the entries of {@link SEGMENT_KIND}.
+ * Read from the table, not kept as a range, so a kind added there is decoded at once
+ * instead of being stepped over as a newer writer's.
+ */
+export function isSegmentKind(kind: number): kind is SegmentKind {
+  return SEGMENT_KINDS.has(kind);
+}
+
+/**
+ * Whether a segment is taken into the stream (counted, its times and cluster read)
+ * rather than stepped over as an unknown kind from a newer writer. The retired kind
+ * is taken in as an empty segment, so a stream carrying one still reads on before its
+ * footer arrives.
+ */
 export function isKnownSegmentKind(kind: number): boolean {
-  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.workspaceAsset;
+  return isSegmentKind(kind) || kind === RETIRED_SEGMENT_KIND;
 }

@@ -29,6 +29,7 @@ import {
   hasMagicAt,
   HEADER_PREFIX_SIZE,
   isKnownSegmentKind,
+  isSegmentKind,
   parseHeader,
   readFooterSegmentOffset,
   readSegmentHeader,
@@ -165,6 +166,19 @@ interface PendingSegment {
   commit(): void;
 }
 
+const EMPTY_SEGMENT: PendingSegment = { recordCount: 0, commit: () => {} };
+
+/**
+ * Whether a file's slide event is kept when it is read. `slide_interaction` events are
+ * dropped: nothing reads the interaction they carry. Older lessons hold thousands of
+ * them, the code preview's hovers, scrolls and mousemoves recorded a second time as
+ * slide events, and on replay each one only re-rendered the slides store and lengthened
+ * every seek's backward scan.
+ */
+export function isSlideEventKeptOnDecode(event: SlideEvent): boolean {
+  return event.type !== "slide_interaction";
+}
+
 /**
  * Decodes one segment's payload without touching the stream. Every step that can
  * throw runs here, and what the segment decodes to (its records, and whatever its
@@ -178,6 +192,9 @@ function decodeSegment(
   kind: number,
   payload: Uint8Array,
 ): PendingSegment {
+  // The retired kind is the only other kind that reaches here (see isKnownSegmentKind): no
+  // file carries one, so it decodes to nothing.
+  if (!isSegmentKind(kind)) return EMPTY_SEGMENT;
   const { records } = stream;
   switch (kind) {
     case SEGMENT_KIND.frames: {
@@ -192,11 +209,7 @@ function decodeSegment(
     }
     case SEGMENT_KIND.slide: {
       const events = decodeRecords<SlideEvent>(payload, budget);
-      // `slide_interaction` events are dropped: nothing reads the interaction they
-      // carry. Older lessons hold thousands of them, the code preview's hovers, scrolls
-      // and mousemoves recorded a second time as slide events, and on replay each one
-      // only re-rendered the slides store and lengthened every seek's backward scan.
-      const kept = events.filter((event) => event.type !== "slide_interaction");
+      const kept = events.filter(isSlideEventKeptOnDecode);
       return { recordCount: events.length, commit: () => appendAll(records.slideEvents, kept) };
     }
     case SEGMENT_KIND.preview:
@@ -259,9 +272,13 @@ function decodeSegment(
         records.chatEvents,
         decodeRecords<ChatRecordingEvent>(payload, budget).map(ownChatDeltaBytes),
       );
-    default:
-      // Kind 10, the retired final-metadata segment: no file carries one, so skip it.
-      return { recordCount: 0, commit: () => {} };
+    default: {
+      // A kind in SEGMENT_KIND without a case here fails this assignment, so a new
+      // track cannot be dropped from every file without a word.
+      const unhandled: never = kind;
+      void unhandled;
+      return EMPTY_SEGMENT;
+    }
   }
 }
 
@@ -412,6 +429,18 @@ function ingestSegmentRegion(
 }
 
 /**
+ * Header fields the recording takes from the header as it is built. Every header field
+ * is optional, so one missing from that literal would still compile and be dropped from
+ * every file read; naming them all here makes it a type error. Left out: the media types,
+ * which only the header keeps (the track list carries each medium's type to playback),
+ * and the track and cluster lists, which are resolved from the header afterwards.
+ */
+type HeaderFieldCopiedOnDecode = Exclude<
+  keyof RecordingStreamMeta,
+  "audioType" | "cameraType" | "tracks" | "clusters"
+>;
+
+/**
  * Builds a {@link DecodedRecording} from a decoded stream. `records` are passed separately
  * so the streaming reader can hand in a copy and keep its own arrays private.
  */
@@ -461,7 +490,7 @@ function buildDecodedRecording(
     streamFinalized,
     workspaceSnapshot: meta.workspaceSnapshot,
     runtimeSnapshot: meta.runtimeSnapshot,
-  };
+  } satisfies DecodedRecording & Record<HeaderFieldCopiedOnDecode, unknown>;
 
   // Copies, never the summaries themselves: later segments keep widening those in
   // place, and a recording already handed out must not change underneath its owner.
