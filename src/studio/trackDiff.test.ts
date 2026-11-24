@@ -243,6 +243,7 @@ describe("diffRecordings", () => {
       "captions",
       "chapters",
       "duration",
+      "order",
     ]);
     for (const track of result.tracks) {
       expect(track.firstDifference).toBeNull();
@@ -255,9 +256,9 @@ describe("diffRecordings", () => {
   });
 
   it("accepts a keystroke that moved within the tolerance", () => {
-    const editor = trackOf(lesson(), lesson({ keystrokeAt: 1_100 }), "editor");
+    const editor = trackOf(lesson(), lesson({ keystrokeAt: 1_060 }), "editor");
     expect(editor.equal).toBe(true);
-    expect(editor.timing?.maxMs).toBe(100);
+    expect(editor.timing?.maxMs).toBe(60);
   });
 
   it("names a keystroke that moved beyond the tolerance", () => {
@@ -273,9 +274,13 @@ describe("diffRecordings", () => {
   });
 
   it("lets the caller loosen the tolerances", () => {
-    expect(isEqual(lesson(), lesson({ keystrokeAt: 1_700 }), { p95Ms: 800, maxMs: 800 })).toBe(
-      true,
-    );
+    expect(
+      isEqual(lesson(), lesson({ keystrokeAt: 1_700 }), {
+        p95Ms: 800,
+        maxMs: 800,
+        orderMarginMs: 800,
+      }),
+    ).toBe(true);
   });
 
   it("finds a missing whiteboard stroke", () => {
@@ -523,6 +528,190 @@ describe("diffRecordings", () => {
     expect(duration.equal).toBe(false);
     expect(duration.firstDifference).toMatchObject({ reason: "time" });
     expect(isEqual(lesson(), longer, { durationMs: 400 })).toBe(true);
+  });
+
+  describe("a pointer that hides", () => {
+    function hidesAt(at: number): Recording {
+      return {
+        ...lesson(),
+        duration: 10_000,
+        cursorEvents: [
+          ...move(0, 500, { x: 0, y: 0 }, { x: 300, y: 200 }, 16),
+          { timestamp: at, x: 300, y: 200, visible: false },
+          { timestamp: 8_000, x: 300, y: 200, visible: true },
+        ],
+      };
+    }
+
+    it("is compared by when it vanished after being shown", () => {
+      // Shown 7.3 s longer: the runs before and after end at the same times.
+      const cursor = trackOf(hidesAt(600), hidesAt(7_900), "cursor");
+      expect(cursor.firstDifference).toMatchObject({
+        reason: "time",
+        a: { timeMs: 600 },
+        b: { timeMs: 7_900 },
+      });
+      expect(trackOf(hidesAt(600), hidesAt(620), "cursor").firstDifference).toBeNull();
+    });
+  });
+
+  describe("selections that are not one sweep", () => {
+    const text = "abcdefghijklmnop";
+    function editorWith(frames: FrameSpec[]): Recording {
+      return {
+        ...lesson(),
+        duration: 10_000,
+        frames: compressFrames([frame({ at: 0, content: text }), ...frames.map(frame)]),
+      };
+    }
+    const select = (at: number, caretColumn: number): FrameSpec => ({
+      at,
+      content: text,
+      anchorColumn: 1,
+      caretColumn,
+    });
+
+    it("finds a highlight that grows slowly different from one that pops at its end", () => {
+      const grows = editorWith(
+        Array.from({ length: 16 }, (_, index) => select(3_000 + index * 200, 1 + index)),
+      );
+      const pops = editorWith([select(6_000, 16)]);
+      expect(trackOf(grows, pops, "editor").equal).toBe(false);
+    });
+
+    it("finds a quick sweep that pops at its end late by when it began", () => {
+      const sweeps = editorWith(
+        Array.from({ length: 15 }, (_, index) => select(1_000 + index * 16, 2 + index)),
+      );
+      const pops = editorWith([select(1_224, 16)]);
+      const editor = trackOf(sweeps, pops, "editor");
+      expect(editor.counts).toEqual({ a: 2, b: 2 });
+      expect(editor.firstDifference).toMatchObject({ reason: "time", a: { timeMs: 1_000 } });
+    });
+
+    it("does not start a sweep at a caret", () => {
+      const caretAt = (at: number) =>
+        editorWith([{ at, content: text, caretColumn: 1 }, select(5_000, 9)]);
+      const editor = trackOf(caretAt(1_000), caretAt(4_990), "editor");
+      expect(editor.firstDifference).toMatchObject({ reason: "time", a: { timeMs: 1_000 } });
+    });
+
+    it("finds a selection held before it grows", () => {
+      const held = editorWith([select(1_000, 5), select(4_000, 9)]);
+      const straight = editorWith([select(4_000, 9)]);
+      expect(trackOf(held, straight, "editor").equal).toBe(false);
+    });
+  });
+
+  describe("a long pointer run", () => {
+    const straight = move(0, 5_000, { x: 0, y: 0 }, { x: 1_000, y: 0 }, 16);
+    const withCursor = (cursorEvents: CursorRecordingEvent[]): Recording => ({
+      ...lesson(),
+      duration: 10_000,
+      cursorEvents,
+    });
+
+    it("is checked between the fixed fractions of its span", () => {
+      // 1040-1200 ms falls between the checks at 1000 and 1250 ms.
+      const detour = straight.map((sample) =>
+        sample.timestamp > 1_040 && sample.timestamp < 1_200 ? { ...sample, y: 60 } : sample,
+      );
+      const cursor = trackOf(withCursor(straight), withCursor(detour), "cursor");
+      expect(cursor.firstDifference?.reason).toBe("distance");
+      expect(cursor.maxDistancePx).toBe(60);
+    });
+
+    it("finds a stall that catches up with a jump", () => {
+      const stalled = straight.map((sample) =>
+        sample.timestamp > 1_010 && sample.timestamp < 1_110 ? { ...sample, x: 202 } : sample,
+      );
+      const cursor = trackOf(withCursor(straight), withCursor(stalled), "cursor");
+      expect(cursor.firstDifference?.reason).toBe("distance");
+    });
+  });
+
+  describe("the default tolerances", () => {
+    // Forty runs: twenty moves out and back, one second apart.
+    function moves(lateMove: number, lateMs: number): Recording {
+      const cursorEvents: CursorRecordingEvent[] = [];
+      for (let index = 0; index < 20; index++) {
+        const start = index * 2_000 + (index === lateMove ? lateMs : 0);
+        cursorEvents.push(
+          ...move(start, 300, { x: index * 10, y: 0 }, { x: index * 10 + 10, y: 100 }, 16),
+          ...move(
+            start + 500,
+            300,
+            { x: index * 10 + 10, y: 100 },
+            { x: index * 10 + 10, y: 0 },
+            16,
+          ),
+        );
+      }
+      return { ...lesson(), duration: 45_000, cursorEvents };
+    }
+
+    it("find one pointer move late by a fraction of a second", () => {
+      expect(trackOf(moves(-1, 0), moves(7, 300), "cursor").equal).toBe(false);
+    });
+
+    it("bound how far a pointer run may slide in time on their own", () => {
+      const loose = { p95Ms: 1_000, maxMs: 1_000, orderMarginMs: 1_000 };
+      const cursor = diffRecordings(moves(-1, 0), moves(7, 400), loose).tracks.find(
+        (track) => track.track === "cursor",
+      );
+      expect(cursor?.firstDifference?.reason).toBe("distance");
+      expect(isEqual(moves(-1, 0), moves(7, 400), { ...loose, cursorMaxShiftMs: 500 })).toBe(true);
+    });
+
+    it("find a few keystrokes that land in one instant", () => {
+      const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789ABCD";
+      const typed = (collapsed: boolean): Recording => ({
+        ...lesson(),
+        duration: 10_000,
+        frames: compressFrames([
+          frame({ at: 0, content: "" }),
+          ...Array.from({ length: 40 }, (_, index) => {
+            const count = index + 1;
+            const at = 1_000 + (collapsed && count >= 10 && count <= 12 ? 10 : count) * 150;
+            return frame({ at, content: alphabet.slice(0, count) });
+          }),
+        ]),
+      });
+      expect(trackOf(typed(false), typed(true), "editor").firstDifference?.reason).toBe("time");
+    });
+  });
+
+  describe("the order of changes across tracks", () => {
+    function keyThenOutput(keyAt: number, outputAt: number): Recording {
+      return {
+        ...lesson(),
+        frames: compressFrames([
+          frame({ at: 0, content: "" }),
+          frame({ at: 1_000, content: "a" }),
+          frame({ at: keyAt, content: "ab" }),
+        ]),
+        runtimeEvents: [runtimeEvent(0, "idle", []), runtimeEvent(outputAt, "ready", ["hello"])],
+      };
+    }
+
+    it("finds output that comes before the keystroke that produced it", () => {
+      // Each track alone is within its tolerance: 70 ms and 60 ms.
+      const result = diffRecordings(keyThenOutput(2_000, 2_060), keyThenOutput(2_070, 2_000));
+      const order = result.tracks.find((track) => track.track === "order");
+      expect(result.tracks.filter((track) => !track.equal).map((track) => track.track)).toEqual([
+        "order",
+      ]);
+      expect(order?.firstDifference).toMatchObject({
+        reason: "order",
+        a: { timeMs: 2_060 },
+        b: { timeMs: 2_000 },
+      });
+      expect(order?.firstDifference?.detail).toContain("runtime and editor");
+    });
+
+    it("lets two changes closer than the margin swap", () => {
+      expect(isEqual(keyThenOutput(2_000, 2_030), keyThenOutput(2_040, 2_010))).toBe(true);
+    });
   });
 
   it("compares recordings that went through the codec", async () => {

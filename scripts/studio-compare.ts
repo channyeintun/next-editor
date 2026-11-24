@@ -1,8 +1,11 @@
 /**
  * Studio compare — track-by-track comparison of two recordings.
  *
- *   bun scripts/studio-compare.ts <a.ne> <b.ne> [--json]
- *       [--p95=150] [--max=500] [--cursor=4] [--duration=100]
+ *   bun scripts/studio-compare.ts <a.ne> <b.ne> [--json] [--<tolerance>=<value>]
+ *
+ * Every tolerance has a flag (USAGE below says what each one loosens); the
+ * defaults are DEFAULT_TRACK_DIFF_OPTIONS in src/studio/trackDiff.ts, where
+ * the measurement behind each is written down.
  *
  * Decodes both files with the app's own decoder and compares what a viewer
  * sees change on every track (editor, workspace, runtime, whiteboard, slides,
@@ -22,21 +25,59 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import type { Recording } from "../src/core/src";
-import type { TrackComparison, TrackDiffOptions } from "../src/studio/trackDiff.ts";
+import {
+  DEFAULT_TRACK_DIFF_OPTIONS,
+  diffRecordings,
+  type TrackComparison,
+  type TrackDiffOptions,
+} from "../src/studio/trackDiff.ts";
 
 const DMP_WASM_PATH = fileURLToPath(
   new URL("../src/core/dmp/build/next-editor-dmp.wasm", import.meta.url),
 );
 
-const USAGE =
-  "usage: bun scripts/studio-compare.ts <a.ne> <b.ne> [--json] [--p95=ms] [--max=ms] [--cursor=px] [--duration=ms]";
-
-const NUMBER_FLAGS: Record<string, keyof TrackDiffOptions> = {
-  "--p95": "p95Ms",
-  "--max": "maxMs",
-  "--cursor": "cursorDistancePx",
-  "--duration": "durationMs",
+/** Each flag, the tolerance it sets, and what a larger value lets through. */
+const NUMBER_FLAGS: Record<string, { key: keyof TrackDiffOptions; loosens: string }> = {
+  "--p95": {
+    key: "p95Ms",
+    loosens: "ms: more of a track's changes may sit late or early (the p95 of |time a - time b|)",
+  },
+  "--max": { key: "maxMs", loosens: "ms: any one change may sit this late or early" },
+  "--cursor": {
+    key: "cursorDistancePx",
+    loosens: "px: the two pointer paths, and where they rest, may lie this far apart",
+  },
+  "--shift": {
+    key: "cursorMaxShiftMs",
+    loosens: "ms: a whole pointer run may be slid this far in time to line up with the other",
+  },
+  "--slack": {
+    key: "cursorTimeSlackMs",
+    loosens: "ms: each pointer point may match the other path anywhere this near in time",
+  },
+  "--rest-gap": {
+    key: "cursorRestGapMs",
+    loosens:
+      "ms: a longer pause still counts as one pointer move, and one drag-select; fewer rests and selections are compared",
+  },
+  "--order": {
+    key: "orderMarginMs",
+    loosens: "ms: changes on two tracks this close in time may swap order",
+  },
+  "--duration": {
+    key: "durationMs",
+    loosens: "ms: the two recordings' lengths may differ this much",
+  },
 };
+
+const USAGE = [
+  "usage: bun scripts/studio-compare.ts <a.ne> <b.ne> [--json] [--<tolerance>=<value>]",
+  "Each tolerance flag loosens the comparison when raised and tightens it when lowered:",
+  ...Object.entries(NUMBER_FLAGS).map(
+    ([flag, { key, loosens }]) =>
+      `  ${`${flag}=${DEFAULT_TRACK_DIFF_OPTIONS[key]}`.padEnd(16)} ${loosens}`,
+  ),
+].join("\n");
 
 function fail(message: string): never {
   console.error(message);
@@ -54,9 +95,9 @@ function parseArgs(argv: string[]) {
     }
     if (arg.startsWith("--")) {
       const [flag, value] = arg.split("=", 2);
-      const key = NUMBER_FLAGS[flag];
+      const key = NUMBER_FLAGS[flag]?.key;
       const number = Number(value);
-      if (!key || value === undefined || !Number.isFinite(number) || number < 0) {
+      if (!key || !value || !Number.isFinite(number) || number < 0) {
         fail(`unknown or bad option ${arg}\n${USAGE}`);
       }
       options[key] = number;
@@ -106,7 +147,6 @@ async function main(): Promise<void> {
   // diff-match-patch WASM, fflate or msgpack) is reported as a reason rather
   // than a stack trace.
   let decode: (bytes: Uint8Array) => Promise<Recording>;
-  let diff: typeof import("../src/studio/trackDiff.ts").diffRecordings;
   try {
     // Content deltas apply through the Rust diff-match-patch codec. The app
     // loads it as a WASM-ESM import through Vite; here it is built from its
@@ -114,7 +154,6 @@ async function main(): Promise<void> {
     const { installDmpCodec, instantiateDmpCodec } = await import("../src/core/dmp/dmpCodec.ts");
     installDmpCodec(await instantiateDmpCodec(await readFile(DMP_WASM_PATH)));
     ({ decompressBinaryToRecording: decode } = await import("../src/storage/recordingCodec.ts"));
-    ({ diffRecordings: diff } = await import("../src/studio/trackDiff.ts"));
   } catch (error) {
     fail(
       `the recording decoder does not load here: ${(error as Error).message}\nCompare the two recordings in a page instead (src/studio/trackDiff.ts diffRecordings).`,
@@ -136,9 +175,9 @@ async function main(): Promise<void> {
     }
   }
 
-  let result: ReturnType<typeof diff>;
+  let result: ReturnType<typeof diffRecordings>;
   try {
-    result = diff(recordings[0], recordings[1], options);
+    result = diffRecordings(recordings[0], recordings[1], options);
   } catch (error) {
     // A delta that does not apply to its base (a damaged file) throws with the frame index.
     fail(`cannot compare: ${(error as Error).message}`);
