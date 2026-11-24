@@ -86,6 +86,10 @@ function harness(options: {
   narrations?: Record<string, LessonNarrationAttempt[]>;
   /** Runs while a lesson is narrated ahead, as Chan clicking mid-pass would. */
   duringNarration?: (slug: string, isCancelled: () => boolean) => void;
+  /** The published script id each lesson renders from. */
+  publishedIds?: Record<string, string>;
+  /** Make keeping the thumbnails fail. */
+  thumbnailStoreFails?: boolean;
 }) {
   const commits: StudioWorkflow[] = [];
   /** Narrations and renders in the order the runner asked for them. */
@@ -94,7 +98,7 @@ function harness(options: {
   /** The lesson the runner called active (rendering) each time a narration began. */
   const activeDuringNarration: (string | null)[] = [];
   let activeLesson: string | null = null;
-  const renderCalls: { slug: string; stream: MediaStream | null }[] = [];
+  const renderCalls: { slug: string; stream: MediaStream | null; speed: string }[] = [];
   const uploads: { uploadId: string; title: string; thumbnail: File | null }[] = [];
   const published: string[] = [];
   const playlisted: string[] = [];
@@ -114,9 +118,9 @@ function harness(options: {
       if (isCancelled()) return { outcome: "cancelled" };
       return options.narrations?.[slug]?.shift() ?? { outcome: "ready" };
     },
-    renderLesson: async (slug, stream) => {
+    renderLesson: async (slug, stream, { speed }) => {
       steps.push(`render ${slug}`);
-      renderCalls.push({ slug, stream });
+      renderCalls.push({ slug, stream, speed });
       options.duringRender?.(slug);
       const next = options.renders[slug]?.shift();
       if (!next) throw new Error(`no render scripted for ${slug}`);
@@ -124,6 +128,7 @@ function harness(options: {
     },
     narration: { provider: "VoxCPM2", voice: "Chan", runtimeMode: null },
     isImported: () => false,
+    publishedIdOf: (slug) => options.publishedIds?.[slug] ?? null,
     screenRecording: options.screenRecording ?? false,
   };
   const io: WorkflowRunnerIo = {
@@ -137,6 +142,7 @@ function harness(options: {
     onNarration: (narration) => narrationStates.push(narration),
     acquireScreen: async () => screen.stream,
     storeThumbnails: async (thumbnails) => {
+      if (options.thumbnailStoreFails) throw new Error("quota exceeded");
       storedThumbnails.clear();
       for (const [slug, file] of thumbnails) storedThumbnails.set(slug, file);
     },
@@ -172,6 +178,7 @@ function harness(options: {
   const latest = () => commits.at(-1)!;
   return {
     runner,
+    io,
     commits,
     latest,
     steps,
@@ -195,6 +202,80 @@ const lessons = [
 const unillustrated = lessons.map((lesson) => ({ ...lesson, thumbnail: null }));
 
 describe("createWorkflowRunner", () => {
+  it("never asks for the screen when the start says not to, whatever the studio's setting", async () => {
+    const run = harness({ renders: { a: [passed("A")] }, screenRecording: true });
+    const acquire = vi.spyOn(run.io, "acquireScreen");
+    const begun: (string | null)[] = [];
+
+    await run.runner.start(
+      {
+        lessons: [lessons[0]],
+        settings: { ...SETTINGS, createDraft: false, publish: false },
+        thumbnails: new Map(),
+      },
+      { recordScreen: false, onBegin: (refusal) => begun.push(refusal) },
+    );
+
+    expect(acquire).not.toHaveBeenCalled();
+    expect(run.renderCalls.map((call) => call.stream)).toEqual([null]);
+    expect(begun).toEqual([null]);
+    expect(run.latest().state).toBe("finished");
+  });
+
+  it("says once why a start did not begin", async () => {
+    const run = harness({ renders: {}, thumbnailStoreFails: true });
+    const begun: (string | null)[] = [];
+    const onBegin = (refusal: string | null) => begun.push(refusal);
+
+    await run.runner.start(undefined, { onBegin });
+    await run.runner.start(
+      { lessons, settings: SETTINGS, thumbnails: new Map([["a", new File(["png"], "01-a.png")]]) },
+      { onBegin },
+    );
+
+    expect(begun).toEqual([
+      "There is no workflow to resume.",
+      "Could not keep the thumbnails in this browser: quota exceeded",
+    ]);
+    expect(run.commits).toHaveLength(0);
+  });
+
+  it("renders at full speed only when the workflow's setting asks for it", async () => {
+    const fast = harness({ renders: { a: [passed("A")] } });
+    await fast.runner.start({
+      lessons: [unillustrated[0]],
+      settings: { ...SETTINGS, createDraft: false, publish: false, fullSpeed: true },
+      thumbnails: new Map(),
+    });
+    const real = harness({ renders: { a: [passed("A")] } });
+    // Stored before the setting existed: no fullSpeed at all.
+    await real.runner.start({
+      lessons: [unillustrated[0]],
+      settings: { ...SETTINGS, createDraft: false, publish: false },
+      thumbnails: new Map(),
+    });
+
+    expect(fast.renderCalls.map((call) => call.speed)).toEqual(["full"]);
+    expect(real.renderCalls.map((call) => call.speed)).toEqual(["real"]);
+  });
+
+  it("names the published script a failed lesson rendered from", async () => {
+    const run = harness({
+      renders: {
+        a: [{ ok: false, error: "boom", phase: "perform", report: null, buildWarnings: [] }],
+      },
+      publishedIds: { a: "f".repeat(64) },
+    });
+
+    await run.runner.start({
+      lessons: [unillustrated[0]],
+      settings: SETTINGS,
+      thumbnails: new Map(),
+    });
+
+    expect(run.latest().lessons[0].issue?.report).toContain(`published as \`${"f".repeat(64)}\``);
+  });
+
   it("takes every lesson through render, draft and publish, then finishes", async () => {
     const thumbnail = new File(["png"], "01-a.png", { type: "image/png" });
     const run = harness({

@@ -869,10 +869,221 @@ describe("StudioController workflow", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Publish the draft" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Create a draft" }));
 
+    const start = screen.getByRole("button", { name: "Start workflow (1)" });
+    expect(start).toBeDisabled();
+    expect(start).toHaveAccessibleDescription(/^burmese-script: /);
+    fireEvent.click(start);
+    expect(studio.runRender).not.toHaveBeenCalled();
+  });
+
+  it("renders at full speed when the workflow's setting asks for it", async () => {
+    studio.runRender.mockReturnValue(new Promise(() => {}));
+    studio.narrateAhead.mockResolvedValue({
+      outcome: "ready",
+      dialogCount: 1,
+      synthesizedCount: 1,
+    });
+    renderController(await freshStudioController());
+    pickLesson("english-script");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Publish the draft" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Create a draft" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Full speed" }));
+
     fireEvent.click(screen.getByRole("button", { name: "Start workflow (1)" }));
 
-    expect(screen.getByRole("alert").textContent).toMatch(/^burmese-script: /);
+    await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+    expect(studio.runRender.mock.calls[0][3]).toMatchObject({ speed: "full" });
+  });
+});
+
+describe("StudioController render speed", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    studio.searchParams = new URLSearchParams();
+    studio.voices = [];
+    studio.runRender.mockReturnValue(new Promise(() => {}));
+  });
+
+  it("renders in real time unless Full speed is checked, and remembers the choice", async () => {
+    const first = renderController();
+    await settle();
+    const fullSpeed = () => screen.getByRole("checkbox", { name: /^Full speed/ });
+    expect(fullSpeed()).not.toBeChecked();
+    expect(fullSpeed().closest("label")).toHaveAttribute(
+      "title",
+      expect.stringMatching(/no live preview.*as fast as this computer runs.*real time/),
+    );
+
+    fireEvent.click(fullSpeed());
+    fireEvent.click(startButton());
+    await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+    expect(studio.runRender.mock.calls[0][3]).toMatchObject({ speed: "full" });
+    first.unmount();
+
+    renderController();
+    expect(fullSpeed()).toBeChecked();
+  });
+
+  it("takes the speed from the URL over the checkbox", async () => {
+    localStorage.setItem("next-editor:studio:full-speed", "true");
+    studio.searchParams = new URLSearchParams("speed=real");
+    renderController();
+    await settle();
+
+    fireEvent.click(startButton());
+    await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+    expect(studio.runRender.mock.calls[0][3]).toMatchObject({ speed: "real" });
+  });
+
+  it("says it ignores a speed it does not know", () => {
+    studio.searchParams = new URLSearchParams("speed=warp");
+    renderController();
+    expect(screen.getByText(/speed=warp/).closest("p")).toHaveTextContent(
+      "Ignoring speed=warp — expected full or real.",
+    );
+  });
+});
+
+describe("StudioController window handle", () => {
+  let restoreWebdriver: () => void = () => {};
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+    studio.searchParams = new URLSearchParams();
+    studio.voices = [];
+    delete window.__NEXT_EDITOR_STUDIO__;
+    restoreWebdriver = stubWebdriver();
+  });
+
+  afterEach(() => {
+    restoreWebdriver();
+  });
+
+  it("keeps the automation, the narration pass and fatal across a render", async () => {
+    let failRender: (error: Error) => void = () => {};
+    studio.runRender.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          failRender = reject;
+        }),
+    );
+    renderController(await freshStudioController());
+    await settle();
+
+    const automation = window.__NEXT_EDITOR_STUDIO__?.automation;
+    expect(automation).toBeDefined();
+    expect(window.__NEXT_EDITOR_STUDIO__?.narration).toEqual({
+      active: null,
+      ready: [],
+      stopped: null,
+    });
+    expect(window.__NEXT_EDITOR_STUDIO__?.waitingFor).toBeNull();
+    expect(automation?.status()).toMatchObject({ ready: true, provider: "pocket" });
+
+    act(() => {
+      expect(automation?.startRender({ slug: "english-script", speed: "full" })).toEqual({
+        started: true,
+      });
+    });
+    await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+    expect(studio.runRender.mock.calls[0][3]).toMatchObject({
+      speed: "full",
+      screenStream: undefined,
+    });
+    expect(window.__NEXT_EDITOR_STUDIO__).toMatchObject({ running: true, fatal: null, automation });
+    // A second start while one runs is refused, not queued.
+    expect(automation?.startRender({ slug: "english-script" })).toEqual({
+      refused: "A render or a workflow is running.",
+    });
+
+    failRender(new Error("The live preview command bridge is not mounted"));
+    await waitFor(() => expect(window.__NEXT_EDITOR_STUDIO__?.running).toBe(false));
+    expect(window.__NEXT_EDITOR_STUDIO__).toMatchObject({
+      fatal: "The live preview command bridge is not mounted",
+      automation,
+      narration: { active: null, ready: [], stopped: null },
+    });
+  });
+
+  it("says at once why a request for an unknown lesson never became a run", async () => {
+    studio.searchParams = new URLSearchParams("plan=no-such-lesson&autostart=1");
+    renderController(await freshStudioController());
+
+    await waitFor(() =>
+      expect(window.__NEXT_EDITOR_STUDIO__?.fatal).toMatch(/^Unknown lesson "no-such-lesson"/),
+    );
+    expect(window.__NEXT_EDITOR_STUDIO__?.running).toBe(false);
+    expect(window.__NEXT_EDITOR_STUDIO__?.runs).toEqual([]);
     expect(studio.runRender).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unknown lesson through the automation with the Start guard's reason", async () => {
+    renderController(await freshStudioController());
+    await settle();
+    expect(window.__NEXT_EDITOR_STUDIO__?.automation?.startRender({ slug: "nope" })).toEqual({
+      refused: 'Unknown lesson "nope": it is not published on this site and not imported.',
+    });
+  });
+
+  it("says what a start waits for while the lesson list is read", async () => {
+    studio.lessons = { status: "loading", error: null };
+    try {
+      renderController(await freshStudioController());
+      await settle();
+      expect(window.__NEXT_EDITOR_STUDIO__?.waitingFor).toBe("the list of published lessons");
+      expect(
+        window.__NEXT_EDITOR_STUDIO__?.automation?.startRender({ slug: "english-script" }),
+      ).toEqual({
+        refused: "The studio is not ready: waiting for the list of published lessons.",
+      });
+    } finally {
+      studio.lessons = { status: "ready", error: null };
+    }
+  });
+
+  it("waits for the AthanLab panel's answer, then leaves an empty balance to the blocked reasons", async () => {
+    studio.capabilities = { athanlab: true, burmeseVoxCpm2: false };
+    localStorage.setItem("next-editor:studio:narration-provider", "athanlab");
+    try {
+      renderController(await freshStudioController());
+      await settle();
+      const automation = window.__NEXT_EDITOR_STUDIO__?.automation;
+      expect(automation?.status()).toMatchObject({
+        ready: false,
+        waitingFor: "your AthanLab setup",
+      });
+
+      const emptyBalance = "Your AthanLab balance is empty — no characters left.";
+      const panel = studio.athanLabPanel;
+      if (!panel) throw new Error("AthanLabPanel not rendered");
+      act(() => {
+        panel.onVoiceChange("voice-a", "Voice A");
+        panel.onReadyChange(false, emptyBalance, true);
+      });
+      expect(automation?.status()).toMatchObject({
+        ready: true,
+        providerIsPaid: true,
+        voice: "Voice A",
+        workflowBlockedReason: emptyBalance,
+      });
+      expect(automation?.startRender({ slug: "burmese-script" })).toEqual({
+        refused: emptyBalance,
+      });
+    } finally {
+      studio.capabilities = { athanlab: false, burmeseVoxCpm2: false };
+      studio.athanLabPanel = null;
+    }
+  });
+
+  it("is not there in a browser a person drives", async () => {
+    restoreWebdriver();
+    restoreWebdriver = () => {};
+    renderController(await freshStudioController());
+    await settle();
+    expect(window.__NEXT_EDITOR_STUDIO__?.automation).toBeUndefined();
   });
 });
 

@@ -37,6 +37,12 @@ export interface WorkflowSettings {
    * goes on lesson by lesson rather than narrating the rest first.
    */
   narrateFirst?: boolean;
+  /**
+   * Render each lesson off the wall clock where the lesson allows it (no live
+   * preview, no real runtime): it then renders as fast as the machine runs.
+   * Absent, and off, in workflows stored before it.
+   */
+  fullSpeed?: boolean;
 }
 
 /** The draft lesson a passing render was uploaded as. */

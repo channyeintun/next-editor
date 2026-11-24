@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Info, TriangleAlert } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateAthanLabAccount,
+  type OwnedPlaylist,
   UploadLessonModal,
   useAuth,
   useStudioCapabilities,
@@ -30,8 +31,14 @@ import { recordingSettingsStore } from "../stores/recordingSettingsStore";
 import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
 import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/displayCapture";
 import { downloadBlob } from "../utils/downloadBlob";
+import {
+  createStudioAutomation,
+  installStudioAutomation,
+  runBundleFilesOf,
+  studioWaitingFor,
+  type StudioAutomationDeps,
+} from "./automation";
 import { describeDraftDescription, describeDraftProvenance } from "./draftProvenance";
-import { canonicalJson } from "./hash";
 import { buildPlanFromScript, synthesizeNarrationAhead } from "./inPageDirector";
 import { importNarrationAudio } from "./narrationPack/audioImport";
 import {
@@ -42,7 +49,12 @@ import {
 import { narrationCoverageOf } from "./narrationPack/coverage";
 import { buildNarrationRequestPack } from "./narrationPack/requestPack";
 import { defaultRuntimeModeOf, type StudioRuntimeMode } from "./plan";
-import { parseRuntimeModeParam, shouldAutostartRender } from "./renderLaunch";
+import type { RenderSpeed } from "./renderClock";
+import {
+  parseRenderSpeedParam,
+  parseRuntimeModeParam,
+  shouldAutostartRender,
+} from "./renderLaunch";
 import {
   appendCompletedRun,
   checkRepeatability,
@@ -53,6 +65,7 @@ import {
   defaultStudioPlanSlugFor,
   missingLessonReason,
   parseLessonScriptYaml,
+  publishedScriptIndexQueryOptions,
   useStudioLessons,
   type StudioLessonSource,
 } from "./plans";
@@ -89,6 +102,9 @@ import {
 import AthanLabPanel from "./AthanLabPanel";
 import NarratorVoicePanel, { type NarratorVoiceTask } from "./NarratorVoicePanel";
 import StudioIntro from "./StudioIntro";
+import { findPublishedLesson, replacePublishedLesson } from "./update/publishedLessonUpdate";
+import { ReplacePublishedLesson } from "./update/ReplacePublishedLesson";
+import AuthorPlaylists from "./workflow/AuthorPlaylists";
 import StudioWorkflowPanel from "./workflow/StudioWorkflowPanel";
 import { useStudioWorkflow } from "./workflow/useStudioWorkflow";
 import type { LessonRenderAttempt, StudioWorkflowDeps } from "./workflow/workflowRunner";
@@ -107,6 +123,7 @@ import { workflowProgressOf } from "./workflow/workflowQueue";
 // the browsing session so an import → render → reload → re-render loop works.
 const IMPORTED_SCRIPTS_KEY = "next-editor:studio:imported-scripts";
 const NARRATION_PROVIDER_KEY = "next-editor:studio:narration-provider";
+const FULL_SPEED_KEY = "next-editor:studio:full-speed";
 
 function readStoredNarrationProvider(): StudioNarrationProvider {
   const stored = readStoredPreference(NARRATION_PROVIDER_KEY);
@@ -240,10 +257,20 @@ function storeSemantics(slug: string, mode: StudioRuntimeMode, semantics: Render
   }
 }
 
-function publishWindowHandle(comparison: StudioCheckResult[] | null, running: boolean): void {
-  const handle: StudioWindowHandle = {
-    // The workflow hook owns this field; keep what it last published.
-    workflow: window.__NEXT_EDITOR_STUDIO__?.workflow ?? null,
+/**
+ * Write the runs and the given fields onto the window handle. Every field not
+ * given is kept as it was: the workflow hook owns `workflow` and `narration`,
+ * the automation is installed once, and `fatal` and `waitingFor` change only
+ * when they are given.
+ */
+function publishWindowHandle(
+  patch: { comparison: StudioCheckResult[] | null; running: boolean } & Pick<
+    StudioWindowHandle,
+    "fatal"
+  >,
+): void {
+  window.__NEXT_EDITOR_STUDIO__ = {
+    ...window.__NEXT_EDITOR_STUDIO__,
     runs: runHistory.map((entry) => ({
       index: entry.index,
       mode: entry.mode,
@@ -251,10 +278,14 @@ function publishWindowHandle(comparison: StudioCheckResult[] | null, running: bo
       report: entry.result.report,
       manifest: entry.result.manifest,
     })),
-    comparison,
-    running,
+    ...patch,
   };
-  window.__NEXT_EDITOR_STUDIO__ = handle;
+}
+
+/** What a requested start is waiting for, on the window handle beside the runs. */
+function publishWaitingFor(waitingFor: string | null): void {
+  const handle = window.__NEXT_EDITOR_STUDIO__ ?? { runs: [], comparison: null, running: false };
+  window.__NEXT_EDITOR_STUDIO__ = { ...handle, waitingFor };
 }
 
 export default function StudioController() {
@@ -297,10 +328,12 @@ export default function StudioController() {
   // when the caller asked for fixture (STUDIO-05).
   const runtimeModeParam = parseRuntimeModeParam(searchParams.get("runtime"));
   const requestedMode = runtimeModeParam.mode;
-  const autostart = shouldAutostartRender(
-    searchParams.get("autostart"),
-    typeof navigator !== "undefined" && navigator.webdriver === true,
-  );
+  // `?speed=` wins over the checkbox, so a harness's URL says what it renders at.
+  const speedParam = parseRenderSpeedParam(searchParams.get("speed"));
+  const [fullSpeed, setFullSpeed] = useState(() => readStoredPreference(FULL_SPEED_KEY) === "true");
+  const requestedSpeed: RenderSpeed = speedParam.speed ?? (fullSpeed ? "full" : "real");
+  const automated = typeof navigator !== "undefined" && navigator.webdriver === true;
+  const autostart = shouldAutostartRender(searchParams.get("autostart"), automated);
 
   const [phase, setPhase] = useState<string>("idle");
   const [running, setRunning] = useState(false);
@@ -433,7 +466,11 @@ export default function StudioController() {
   const lessons = useStudioLessons(importedScripts);
   const sources = lessons.sources;
 
-  const selectLesson = (slug: string) => {
+  /** Select a lesson, and with `launch` the runtime mode and speed the URL asks for. */
+  const selectLesson = (
+    slug: string,
+    launch: { runtimeMode?: StudioRuntimeMode; speed?: RenderSpeed } = {},
+  ) => {
     if (slug !== planSlug) {
       // Moving to a different lesson: drop the previous run's transient verdicts
       // so nothing stale lingers beside the new selection (STUDIO-02). The
@@ -447,6 +484,8 @@ export default function StudioController() {
       (current) => {
         const next = new URLSearchParams(current);
         next.set("plan", slug);
+        if (launch.runtimeMode) next.set("runtime", launch.runtimeMode);
+        if (launch.speed) next.set("speed", launch.speed);
         return next;
       },
       { replace: true },
@@ -556,11 +595,13 @@ export default function StudioController() {
   /**
    * Render one lesson. `screenStream` is the workflow's (a stream, or null for
    * none); left out, the Start render click asks for one when screen recording
-   * is on. Never throws: a failure comes back as the attempt's error.
+   * is on. `options` overrides the console's runtime mode and speed. Never
+   * throws: a failure comes back as the attempt's error.
    */
   const renderLesson = async (
     slug: string,
     screenStream?: MediaStream | null,
+    options: { runtimeMode?: StudioRuntimeMode; speed?: RenderSpeed } = {},
   ): Promise<LessonRenderAttempt> => {
     if (runningRef.current) {
       return {
@@ -588,7 +629,7 @@ export default function StudioController() {
     // pre-render failure (e.g. a plan-build throw, which never reaches setLatest)
     // can't leave a stale passing artifact sitting beside the new error (STUDIO-02).
     setLatest(null);
-    publishWindowHandle(null, true);
+    publishWindowHandle({ comparison: null, running: true, fatal: null });
 
     // Hoisted so the catch can release the display stream if the render throws
     // before the recorder machine takes ownership of it (e.g. plan build fails).
@@ -631,7 +672,8 @@ export default function StudioController() {
       const narrationProvider = narrationProviderLabel(renderProvider);
       warnings = built.warnings;
       setBuildWarnings(built.warnings);
-      const mode: StudioRuntimeMode = requestedMode ?? defaultRuntimeModeOf(plan.runtime);
+      const mode: StudioRuntimeMode =
+        options.runtimeMode ?? requestedMode ?? defaultRuntimeModeOf(plan.runtime);
 
       const result = await runStudioRender(
         plan,
@@ -673,7 +715,12 @@ export default function StudioController() {
           onPhase: reportPhase,
           onProgress: (receipt) => setReceipts((current) => [...current, receipt]),
         },
-        { startedAt, narration: built.narration, screenStream: acquiredScreenStream },
+        {
+          startedAt,
+          narration: built.narration,
+          screenStream: acquiredScreenStream,
+          speed: options.speed ?? requestedSpeed,
+        },
       );
 
       const entry: StudioRunEntry = {
@@ -710,7 +757,7 @@ export default function StudioController() {
         setBaselineNote(repeatability.baselineNote);
         storeSemantics(plan.lesson.slug, mode, result.semantics);
       }
-      publishWindowHandle(nextComparison, false);
+      publishWindowHandle({ comparison: nextComparison, running: false });
       setPhase(result.report.outcome === "passed" ? "done" : "failed");
       if (result.report.outcome === "passed" && result.artifacts) {
         return { ok: true, title: script.lesson.title, recording: result.artifacts.recording };
@@ -737,7 +784,8 @@ export default function StudioController() {
       const message = error instanceof Error ? error.message : String(error);
       setFatal(message);
       setPhase("failed");
-      publishWindowHandle(null, false);
+      // A request that never became a run says why at once, not by a timeout.
+      publishWindowHandle({ comparison: null, running: false, fatal: message });
       return {
         ok: false,
         error: message,
@@ -829,7 +877,7 @@ export default function StudioController() {
     : null;
 
   useEffect(() => {
-    publishWindowHandle(comparison, runningRef.current);
+    publishWindowHandle({ comparison, running: runningRef.current });
   }, [comparison, latest]);
 
   // One-shot per page load (module flag): StrictMode remounts and later
@@ -841,13 +889,22 @@ export default function StudioController() {
   // ready panel. Before that, renderLesson would read the mount-time defaults.
   // It also waits for the lesson list to be read or to fail, never for a
   // script: an unknown lesson or an unreadable list then fails at once.
+  const waitingFor = studioWaitingFor({
+    lessons: lessons.status,
+    authLoading,
+    capabilitiesLoading: studioCapabilitiesLoading,
+    provider,
+    voxCpm2Enabled: studioCapabilities.burmeseVoxCpm2,
+    narratorVoiceReported,
+    athanLabReported: athanLabReadiness !== ATHANLAB_NOT_REPORTED,
+  });
+  // A render, unlike a resume, also needs AthanLab able to buy narration now:
+  // its Start stays disabled until then.
   const autostartReady =
-    lessons.status !== "loading" &&
-    !authLoading &&
-    !studioCapabilitiesLoading &&
-    (provider !== "voxcpm2" || studioCapabilities.burmeseVoxCpm2) &&
-    narratorVoiceReported &&
-    (provider !== "athanlab" || athanLabReadiness.ready);
+    waitingFor === null && (provider !== "athanlab" || athanLabReadiness.ready);
+  useEffect(() => {
+    publishWaitingFor(waitingFor);
+  }, [waitingFor]);
   useEffect(() => {
     if (!autostart || !autostartReady || autostartFired) {
       return;
@@ -870,29 +927,39 @@ export default function StudioController() {
   const activeRun = latestMatchesSelection ? latest : null;
   const report = activeRun?.result.report ?? null;
   const artifacts = activeRun?.result.artifacts ?? null;
-  // From the lesson list, never from the script: Start render stays enabled
-  // for a script that will not parse, and the click reports why.
-  const selectedScriptLocale = source?.locale ?? null;
   const effectiveModeLabel = requestedMode ?? source?.runtimeMode ?? "?";
   // Disables Start render with its reason, so a locale/provider mismatch or a
   // lesson that is not there is caught before the screen picker opens
   // (renderLesson checks again).
-  const missingLesson = source ? null : missingLessonReason(lessons, planSlug);
-  const narrationSetupError = narrationSetupErrorOf(selectedScriptLocale, provider);
-  const startBlockedReason =
-    missingLesson ??
-    narrationSetupError ??
-    (narrationImportRunning ? NARRATION_IMPORT_RUNNING : null) ??
-    (provider === "athanlab" && !athanLabReadiness.ready
-      ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
-      : null);
+  // From the lesson list, never from the script: Start render stays enabled
+  // for a script that will not parse, and the click reports why.
+  const startBlockedReasonOf = (slug: string) => {
+    const listed = sources[slug];
+    return (
+      (listed ? null : missingLessonReason(lessons, slug)) ??
+      narrationSetupErrorOf(listed?.locale ?? null, provider) ??
+      (narrationImportRunning ? NARRATION_IMPORT_RUNNING : null) ??
+      (provider === "athanlab" && !athanLabReadiness.ready
+        ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
+        : null)
+    );
+  };
+  const startBlockedReason = startBlockedReasonOf(planSlug);
+  // What also keeps Start render disabled, without a line of its own under it:
+  // the narrator voice panel says these itself.
+  const voiceBlockedReason =
+    voiceTask.busy !== null || voiceTask.recording
+      ? "Finish the narrator voice task first."
+      : provider === "voxcpm2" && !selectedVoiceIsBurmeseReady
+        ? NARRATOR_REFERENCE_NEEDED
+        : null;
 
   // The workflow renders with whatever narration this console is set to, so
   // it takes the same settings Start render does, lesson after lesson.
   const workflow = useStudioWorkflow({
-    renderLesson: (slug, screenStream) => {
+    renderLesson: (slug, screenStream, { speed }) => {
       selectLesson(slug);
-      return renderLesson(slug, screenStream);
+      return renderLesson(slug, screenStream, { speed });
     },
     narrateLesson,
     narration: {
@@ -902,6 +969,7 @@ export default function StudioController() {
       runtimeMode: requestedMode,
     },
     isImported: (slug) => importedScripts[slug] !== undefined,
+    publishedIdOf: (slug) => sources[slug]?.id ?? null,
     screenRecording: screenRecordingEnabled && isScreenSupported,
   });
   const busy = running || workflow.active;
@@ -912,13 +980,10 @@ export default function StudioController() {
       ? "A render is running."
       : narrationImportRunning
         ? NARRATION_IMPORT_RUNNING
-        : voiceTask.busy !== null || voiceTask.recording
-          ? "Finish the narrator voice task first."
-          : provider === "voxcpm2" && !selectedVoiceIsBurmeseReady
-            ? NARRATOR_REFERENCE_NEEDED
-            : provider === "athanlab" && !athanLabReadiness.configured
-              ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
-              : null;
+        : (voiceBlockedReason ??
+          (provider === "athanlab" && !athanLabReadiness.configured
+            ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
+            : null));
   // A new workflow has all of its narration still to buy, so an empty AthanLab
   // balance stops it too. One that already ran may have every lesson narrated
   // (its own narration pass can be what emptied the balance): resuming it buys
@@ -940,6 +1005,72 @@ export default function StudioController() {
     const mismatch = narrationSetupErrorOf(listed.locale, provider);
     return mismatch ? { error: mismatch } : { title: listed.title };
   };
+
+  // The studio's controls for a harness (automation.ts): one object for the
+  // page's life, reading through this ref what the console shows now.
+  const [authorPlaylists, setAuthorPlaylists] = useState<readonly OwnedPlaylist[] | null>(null);
+  const automationDepsRef = useRef<StudioAutomationDeps | null>(null);
+  useLayoutEffect(() => {
+    automationDepsRef.current = {
+      waitingFor,
+      // Read when asked: a render started a moment ago has not re-rendered yet.
+      get busy() {
+        return runningRef.current || workflow.active;
+      },
+      renderBlockedReason: startBlockedReason ?? voiceBlockedReason,
+      renderBlockedReasonOf: (slug) => startBlockedReasonOf(slug) ?? voiceBlockedReason,
+      workflowBlockedReason,
+      workflowResumeBlockedReason,
+      signedIn: userId !== null,
+      provider,
+      voice:
+        provider === "athanlab" ? (athanLabVoice?.name ?? null) : (narratorVoice?.name ?? null),
+      screenRecording: screenRecordingEnabled && isScreenSupported,
+      lessons: {
+        status: lessons.status,
+        source:
+          queryClient.getQueryData(publishedScriptIndexQueryOptions().queryKey)?.source ?? null,
+        count: Object.keys(sources).length,
+        error: lessons.error,
+      },
+      lessonOf: workflowLessonOf,
+      titleOf: (slug) => sources[slug]?.title ?? null,
+      render: ({ slug, runtimeMode, speed }) => {
+        selectLesson(slug, { runtimeMode, speed });
+        // Null: nobody is at the page to answer the screen picker.
+        void renderLesson(slug, null, { runtimeMode, speed });
+      },
+      latestRun: () => {
+        const entry = runHistory.at(-1);
+        if (!entry) return null;
+        return {
+          slug: entry.slug,
+          title: entry.title,
+          current:
+            entry.sourceRevision ===
+            sourceRevisionOf(entry.slug, importedScripts, sources[entry.slug]?.id ?? null),
+          report: entry.result.report,
+          manifest: entry.result.manifest,
+          artifacts: entry.result.artifacts,
+        };
+      },
+      narrationCoverage: async (slugs) =>
+        narrationCoverageOf(await narrationLessonsOf(slugs, "counted")),
+      playlists: authorPlaylists,
+      workflow: {
+        current: workflow.workflow,
+        active: workflow.active,
+        start: workflow.start,
+        requestStop: workflow.requestStop,
+      },
+      findPublishedLesson,
+      // The lesson's lists refetch after a replacement.
+      replacePublishedLesson: (input) => replacePublishedLesson({ ...input, queryClient }),
+    };
+  });
+  const [automation] = useState(() => createStudioAutomation(() => automationDepsRef.current!));
+  useEffect(() => installStudioAutomation(automation), [automation]);
+
   const [consoleTab, setConsoleTab] = useState<"render" | "workflow">(() =>
     workflow.workflow ? "workflow" : "render",
   );
@@ -961,17 +1092,9 @@ export default function StudioController() {
     if (!activeRun || !artifacts) {
       return;
     }
-    const base = `lesson-${activeRun.result.report.planSlug}`;
-    downloadBlob(artifacts.neBlob, `${base}.ne`);
-    downloadBlob(artifacts.audioBlob, artifacts.audioFileName || `${base}.m4a`);
-    downloadBlob(
-      new Blob([canonicalJson(activeRun.result.manifest)], { type: "application/json" }),
-      "build-manifest.json",
-    );
-    downloadBlob(
-      new Blob([JSON.stringify(activeRun.result.report, null, 2)], { type: "application/json" }),
-      "render-report.json",
-    );
+    for (const file of runBundleFilesOf({ ...activeRun.result, artifacts })) {
+      downloadBlob(file.blob, file.name);
+    }
   };
 
   const downloadReport = () => {
@@ -1023,6 +1146,7 @@ export default function StudioController() {
           : `${consoleTab === "workflow" ? "w-[30rem]" : "w-96"} max-w-[calc(100vw-1.5rem)] max-h-[75vh] overflow-y-auto p-4`
       } ${recordingOnScreen ? "invisible" : ""}`}
     >
+      {automated && userId !== null ? <AuthorPlaylists onChange={setAuthorPlaylists} /> : null}
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-semibold text-white">Studio render</h2>
         <div className="flex items-center gap-1.5">
@@ -1238,6 +1362,24 @@ export default function StudioController() {
             </span>
           </label>
 
+          <label
+            className="mt-2 flex items-center gap-2 text-[12px] text-slate-300"
+            title="A lesson with no live preview and no real runtime then renders as fast as this computer runs, and its recording is the same. Other lessons, and a render that records the screen, stay in real time."
+          >
+            <input
+              type="checkbox"
+              checked={fullSpeed}
+              disabled={busy}
+              onChange={(event) => {
+                setFullSpeed(event.target.checked);
+                writeStoredPreference(FULL_SPEED_KEY, event.target.checked ? "true" : null);
+              }}
+              className="size-3.5 accent-sky-500 disabled:opacity-50"
+            />
+            Full speed
+            <span className="text-slate-400">— where the lesson allows it</span>
+          </label>
+
           <p className="mt-1 text-slate-400">
             runtime <span className="font-mono text-slate-300">{effectiveModeLabel}</span>
             {" · run #"}
@@ -1252,19 +1394,21 @@ export default function StudioController() {
             </p>
           ) : null}
 
+          {speedParam.invalid ? (
+            <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
+              Ignoring <span className="font-mono">speed={speedParam.raw}</span> — expected{" "}
+              <span className="font-mono">full</span> or <span className="font-mono">real</span>.
+              Using the Full speed setting (<span className="font-mono">{requestedSpeed}</span>).
+            </p>
+          ) : null}
+
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => {
                 void renderLesson(planSlug);
               }}
-              disabled={
-                busy ||
-                voiceTask.busy !== null ||
-                voiceTask.recording ||
-                (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady) ||
-                startBlockedReason !== null
-              }
+              disabled={busy || voiceBlockedReason !== null || startBlockedReason !== null}
               aria-describedby={
                 startBlockedReason && !running ? "studio-start-blocked-reason" : undefined
               }
@@ -1280,6 +1424,9 @@ export default function StudioController() {
             >
               Download bundle
             </button>
+            {artifacts && activeRun ? (
+              <ReplacePublishedLesson title={activeRun.title} artifacts={artifacts} />
+            ) : null}
             {report && !artifacts ? (
               <button
                 type="button"

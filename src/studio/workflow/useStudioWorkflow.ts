@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { invalidateLessonDerivedQueries } from "@next-editor/infra";
 import { acquireDisplayStream } from "../../utils/displayCapture";
 import type { StudioRenderReport } from "../report";
+import type { StudioWindowHandle } from "../studioWindowHandle";
 import { isWorkflowActive, restoreWorkflow, type StudioWorkflow } from "./workflowQueue";
 import {
   createWorkflowRunner,
@@ -23,10 +24,14 @@ import {
   uploadWorkflowDraft,
 } from "./workflowUpload";
 
-/** The workflow as `window.__NEXT_EDITOR_STUDIO__` carries it, for automation and Claude. */
-function publishWorkflowHandle(workflow: StudioWorkflow | null): void {
+/**
+ * The workflow's queue and its narration pass as `window.__NEXT_EDITOR_STUDIO__`
+ * carries them, for automation and Claude. The pass is there so that a long
+ * one is not mistaken for a stalled workflow.
+ */
+function publishWorkflowHandle(patch: Pick<StudioWindowHandle, "workflow" | "narration">): void {
   const handle = window.__NEXT_EDITOR_STUDIO__ ?? { runs: [], comparison: null, running: false };
-  window.__NEXT_EDITOR_STUDIO__ = { ...handle, workflow };
+  window.__NEXT_EDITOR_STUDIO__ = { ...handle, ...patch };
 }
 
 function restoredWorkflow(): StudioWorkflow | null {
@@ -53,13 +58,16 @@ export function useStudioWorkflow(deps: StudioWorkflowDeps) {
       commit: (next) => {
         setWorkflow(next);
         storeWorkflow(next);
-        publishWorkflowHandle(next);
+        publishWorkflowHandle({ workflow: next });
       },
       onActiveLesson: setActiveSlug,
       onUploadProgress: setUploadProgress,
       onFailedReport: setFailedReport,
       onSetupError: setSetupError,
-      onNarration: setNarration,
+      onNarration: (next) => {
+        setNarration(next);
+        publishWorkflowHandle({ narration: next });
+      },
       acquireScreen: () => acquireDisplayStream(true),
       storeThumbnails: storeWorkflowThumbnails,
       loadThumbnail: loadWorkflowThumbnail,
@@ -81,7 +89,7 @@ export function useStudioWorkflow(deps: StudioWorkflowDeps) {
   useEffect(() => {
     // A workflow the reload stopped is written back as stopped.
     storeWorkflow(workflow);
-    publishWorkflowHandle(workflow);
+    publishWorkflowHandle({ workflow, narration: NO_WORKFLOW_NARRATION });
     // Once, for the restored workflow; every later change goes through commit.
   }, []);
 

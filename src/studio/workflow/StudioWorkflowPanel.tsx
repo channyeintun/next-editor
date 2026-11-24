@@ -9,14 +9,14 @@ import {
   ImageOff,
   LoaderCircle,
 } from "lucide-react";
-import { THUMBNAIL_ACCEPT, useMyPlaylists } from "@next-editor/infra";
+import { useMyPlaylists } from "@next-editor/infra";
 import HoverRing from "../../components/hoverRing/HoverRing";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { downloadBlob } from "../../utils/downloadBlob";
 import type { OfflineNarrationApi } from "../narrationPack/offlineNarration";
 import OfflineNarrationSection from "../narrationPack/OfflineNarrationSection";
 import type { StudioWorkflowApi } from "./useStudioWorkflow";
-import { groupLessons, matchThumbnail, orderWorkflowLessons } from "./workflowLessons";
+import { groupLessons, matchThumbnail } from "./workflowLessons";
 import {
   workflowIssueOf,
   workflowProgressOf,
@@ -25,6 +25,7 @@ import {
   type WorkflowSettings,
   type WorkflowState,
 } from "./workflowQueue";
+import { acceptedThumbnails, planWorkflowStart } from "./workflowStart";
 
 /**
  * The studio console's Workflow tab: pick lessons (whole courses at once),
@@ -67,8 +68,6 @@ const SECONDARY_BUTTON =
   "rounded-md bg-[#222d3b] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50";
 const DANGER_BUTTON =
   "rounded-md bg-[#3b2a22] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#efb28d] transition-colors hover:bg-[#4d382a] disabled:cursor-not-allowed disabled:opacity-50";
-
-const ACCEPTED_THUMBNAIL_TYPES = new Set(THUMBNAIL_ACCEPT.split(","));
 
 const STATE_LABELS: Record<WorkflowState, string> = {
   ready: "ready",
@@ -124,13 +123,13 @@ function WorkflowSetup({
     defaultThumbnailWhenMissing: false,
     playlist: null,
     narrateFirst: true,
+    fullSpeed: false,
   });
   const { data: playlists } = useMyPlaylists({ fresh: true });
   const [thumbnails, setThumbnails] = useState<{ folder: string; files: Map<string, File> }>({
     folder: "",
     files: new Map(),
   });
-  const [startError, setStartError] = useState<string | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   // React has no prop for a folder picker; Chrome reads the attribute.
@@ -142,20 +141,14 @@ function WorkflowSetup({
   const groups = groupLessons(query ? slugs.filter((slug) => slug.includes(query)) : slugs);
   const thumbnailNames = [...thumbnails.files.keys()];
   const thumbnailOf = (slug: string) => matchThumbnail(slug, thumbnailNames);
-  const queue = orderWorkflowLessons(
-    [...selected].map((slug) => ({ slug, thumbnail: thumbnailOf(slug) })),
-  );
-  const missingThumbnails = settings.createDraft
-    ? queue.filter((lesson) => !lesson.thumbnail).map((lesson) => lesson.slug)
-    : [];
-
-  const startBlockedReason =
-    blockedReason ??
-    (queue.length === 0
-      ? "Pick at least one lesson."
-      : missingThumbnails.length > 0 && !settings.defaultThumbnailWhenMissing
-        ? `${missingThumbnails.length} of ${queue.length} lessons have no thumbnail in the picked folder (${missingThumbnails.slice(0, 3).join(", ")}${missingThumbnails.length > 3 ? ", …" : ""}). Pick the course's thumbnail folder, or allow the default thumbnail.`
-        : null);
+  const { queue, outcome } = planWorkflowStart({
+    slugs: selected,
+    settings,
+    thumbnails: thumbnails.files.values(),
+    lessonOf,
+    blockedReason,
+  });
+  const startBlockedReason = "refused" in outcome ? outcome.refused : null;
 
   const toggleLessons = (members: readonly string[], on: boolean) => {
     setSelected((current) => {
@@ -180,8 +173,7 @@ function WorkflowSetup({
   const pickFolder = (files: FileList | null) => {
     const picked = new Map<string, File>();
     let folder = "";
-    for (const file of Array.from(files ?? [])) {
-      if (!ACCEPTED_THUMBNAIL_TYPES.has(file.type)) continue;
+    for (const file of acceptedThumbnails(Array.from(files ?? []))) {
       picked.set(file.name, file);
       if (!folder) folder = file.webkitRelativePath.split("/")[0] ?? "";
     }
@@ -189,23 +181,9 @@ function WorkflowSetup({
   };
 
   const startWorkflow = () => {
-    setStartError(null);
-    const lessons = [];
-    for (const lesson of queue) {
-      const info = lessonOf(lesson.slug);
-      if ("error" in info) {
-        setStartError(`${lesson.slug}: ${info.error}`);
-        return;
-      }
-      lessons.push({ ...lesson, title: info.title });
-    }
-    const byLesson = new Map<string, File>();
-    for (const lesson of lessons) {
-      const file = lesson.thumbnail ? thumbnails.files.get(lesson.thumbnail) : undefined;
-      if (file) byLesson.set(lesson.slug, file);
-    }
+    if (!("start" in outcome)) return;
     onStarted();
-    void api.start({ lessons, settings, thumbnails: byLesson });
+    void api.start(outcome.start);
   };
 
   return (
@@ -357,6 +335,25 @@ function WorkflowSetup({
         <label className="mt-1.5 flex items-center gap-2 text-[12px] text-slate-300">
           <input
             type="checkbox"
+            checked={settings.fullSpeed === true}
+            onChange={(event) =>
+              setSettings((current) => ({ ...current, fullSpeed: event.target.checked }))
+            }
+            aria-describedby="studio-workflow-full-speed-help"
+            className="size-3.5 accent-sky-500"
+          />
+          Full speed
+        </label>
+        <p
+          id="studio-workflow-full-speed-help"
+          className="mt-0.5 pl-5.5 text-[12px] text-slate-400"
+        >
+          A lesson with no live preview and no real runtime renders as fast as this computer runs;
+          the others stay in real time.
+        </p>
+        <label className="mt-1.5 flex items-center gap-2 text-[12px] text-slate-300">
+          <input
+            type="checkbox"
             checked={settings.createDraft || settings.publish}
             disabled={settings.publish}
             onChange={(event) =>
@@ -434,12 +431,12 @@ function WorkflowSetup({
         />
       ) : null}
 
-      {api.setupError || startError ? (
+      {api.setupError ? (
         <p
           role="alert"
           className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200"
         >
-          {startError ?? api.setupError}
+          {api.setupError}
         </p>
       ) : null}
 
@@ -497,7 +494,9 @@ function WorkflowRun({
     : workflow.settings.createDraft
       ? "render → draft"
       : "render only";
-  const steps = workflow.settings.narrateFirst ? `narrate all → ${lessonSteps}` : lessonSteps;
+  const steps = `${workflow.settings.narrateFirst ? `narrate all → ${lessonSteps}` : lessonSteps}${
+    workflow.settings.fullSpeed ? " · full speed" : ""
+  }`;
   const { narration } = api;
   const narrated = new Set(narration.ready);
 

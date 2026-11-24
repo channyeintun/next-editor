@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { Recording } from "../../core/src";
+import type { RenderSpeed } from "../renderClock";
 import type { StudioRenderReport } from "../report";
 import { buildWorkflowIssueReport } from "./workflowIssue";
 import {
@@ -71,9 +72,14 @@ export const NO_WORKFLOW_NARRATION: WorkflowNarration = { active: null, ready: [
 export interface StudioWorkflowDeps {
   /**
    * Render one lesson with the studio's current narration settings, recording
-   * the screen into `screenStream` when one is given (and never asking for one).
+   * the screen into `screenStream` when one is given (and never asking for
+   * one), at the speed the workflow's settings ask for.
    */
-  renderLesson: (slug: string, screenStream: MediaStream | null) => Promise<LessonRenderAttempt>;
+  renderLesson: (
+    slug: string,
+    screenStream: MediaStream | null,
+    options: { speed: RenderSpeed },
+  ) => Promise<LessonRenderAttempt>;
   /**
    * Synthesize one lesson's narration with the studio's current narration
    * settings and keep it for that lesson's render, without rendering. Never
@@ -86,8 +92,25 @@ export interface StudioWorkflowDeps {
   /** What narrates the renders, for the issue report. */
   narration: { provider: string; voice: string | null; runtimeMode: string | null };
   isImported: (slug: string) => boolean;
+  /** The id of the published script a lesson renders from, for the issue report; null when imported or unknown. */
+  publishedIdOf: (slug: string) => string | null;
   /** Whether to record the screen: one stream, picked at Start, for every render. */
   screenRecording: boolean;
+}
+
+export interface WorkflowStartOptions {
+  /**
+   * False: never ask for a screen stream, whatever the studio's screen
+   * setting says. An unattended start passes it, because nobody is there to
+   * answer the screen picker.
+   */
+  recordScreen?: boolean;
+  /**
+   * Called once: with null when the queue begins to run, or with the reason
+   * it did not begin (one is running already, nothing to resume, the
+   * thumbnails could not be kept).
+   */
+  onBegin?: (refusal: string | null) => void;
 }
 
 export interface NewWorkflowInput {
@@ -183,6 +206,7 @@ export function createWorkflowRunner(
       slug: lesson.slug,
       title: lesson.title,
       imported: deps.isImported(lesson.slug),
+      publishedId: deps.publishedIdOf(lesson.slug),
       message: failure.message,
       phase: failure.phase ?? null,
       position: {
@@ -253,7 +277,9 @@ export function createWorkflowRunner(
       io.onFailedReport(null);
       // A clone per render: the recorder stops the tracks it is handed when
       // the lesson ends, and the next lesson needs the stream still live.
-      const attempt = await deps.renderLesson(slug, stream?.clone() ?? null);
+      const attempt = await deps.renderLesson(slug, stream?.clone() ?? null, {
+        speed: settings.fullSpeed ? "full" : "real",
+      });
       if (!attempt.ok) {
         return fail(lesson, "render", {
           message: attempt.error,
@@ -392,16 +418,23 @@ export function createWorkflowRunner(
    * lesson. Call it from the click: the screen picker needs the click's
    * activation, so it is asked for before anything else is awaited.
    */
-  const start = async (fresh?: NewWorkflowInput) => {
-    if (running) return;
-    if (!fresh && (!current || current.state === "finished")) return;
+  const start = async (fresh?: NewWorkflowInput, options: WorkflowStartOptions = {}) => {
+    let begun = false;
+    const begin = (refusal: string | null) => {
+      if (begun) return;
+      begun = true;
+      options.onBegin?.(refusal);
+    };
+    if (running) return begin("A workflow is already running.");
+    if (!fresh && !current) return begin("There is no workflow to resume.");
+    if (!fresh && current?.state === "finished") return begin("The workflow has finished.");
     running = true;
     io.onSetupError(null);
     // What an earlier run narrated says nothing now: the voice may have changed.
     setNarration(NO_WORKFLOW_NARRATION);
     let stream: MediaStream | null = null;
     try {
-      if (deps.screenRecording) {
+      if (deps.screenRecording && options.recordScreen !== false) {
         try {
           stream = await io.acquireScreen();
         } catch (error) {
@@ -414,9 +447,9 @@ export function createWorkflowRunner(
           try {
             await io.storeThumbnails(fresh.thumbnails);
           } catch (error) {
-            io.onSetupError(
-              `Could not keep the thumbnails in this browser: ${describeWorkflowError(error)}`,
-            );
+            const message = `Could not keep the thumbnails in this browser: ${describeWorkflowError(error)}`;
+            io.onSetupError(message);
+            begin(message);
             return;
           }
         } else {
@@ -439,12 +472,14 @@ export function createWorkflowRunner(
           lesson.status === "failed" ? { ...lesson, status: "queued" } : lesson,
         ),
       });
+      begin(null);
       await runQueue(stream);
     } catch (error) {
       // A bug in the loop itself: stop at the lesson it was on.
       const lesson = current ? current.lessons[nextLessonIndex(current)] : undefined;
       if (lesson)
         fail(lesson, "render", { message: `Workflow error: ${describeWorkflowError(error)}` });
+      begin(`Workflow error: ${describeWorkflowError(error)}`);
     } finally {
       running = false;
       io.onActiveLesson(null);
