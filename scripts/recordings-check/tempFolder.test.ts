@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { withTempFolder, type ProcessLike } from "./tempFolder.ts";
+import { StoppedBySignal, withTempFolder, type ProcessLike } from "./tempFolder.ts";
 
 /** A process stand-in: signals are emitted by the test, and exit is recorded. */
 function fakeProcess() {
@@ -28,6 +28,12 @@ afterEach(() => {
 });
 
 const download = (folder: string) => writeFileSync(join(folder, "lesson.ne"), "bytes");
+
+/**
+ * A Ctrl-C pressed during a check: a signal reaches its listener only when the event
+ * loop next turns, never in the middle of the check's own code.
+ */
+const pressCtrlCDuringCheck = (emitter: EventEmitter) => setImmediate(() => emitter.emit("SIGINT"));
 
 describe("the temporary folder", () => {
   it("is removed with what was downloaded into it when the run ends", async () => {
@@ -61,15 +67,46 @@ describe("the temporary folder", () => {
   it("is removed on Ctrl-C before the process exits", async () => {
     const { host, emitter, exits } = fakeProcess();
     let seen = "";
-    await withTempFolder({ keep: false, parent, process: host }, async (folder) => {
-      seen = folder;
-      download(folder);
-      emitter.emit("SIGINT");
-      expect(existsSync(folder)).toBe(false);
-      expect(exits).toEqual([130]);
-    });
+    await expect(
+      withTempFolder({ keep: false, parent, process: host }, async (folder) => {
+        seen = folder;
+        download(folder);
+        emitter.emit("SIGINT");
+        expect(existsSync(folder)).toBe(false);
+        expect(exits).toEqual([130]);
+      }),
+    ).rejects.toBeInstanceOf(StoppedBySignal);
     expect(existsSync(seen)).toBe(false);
     expect(emitter.listenerCount("SIGINT")).toBe(0);
+  });
+
+  it("ends the run at the next stop point after a Ctrl-C held during a check", async () => {
+    const { host, emitter, exits } = fakeProcess();
+    const reached: string[] = [];
+    let seen = "";
+    await expect(
+      withTempFolder({ keep: false, parent, process: host }, async (folder, stopPoint) => {
+        seen = folder;
+        download(folder);
+        pressCtrlCDuringCheck(emitter);
+        reached.push("first check");
+        await stopPoint();
+        reached.push("second check");
+      }),
+    ).rejects.toBeInstanceOf(StoppedBySignal);
+    expect(reached).toEqual(["first check"]);
+    expect(exits).toEqual([130]);
+    expect(existsSync(seen)).toBe(false);
+  });
+
+  it("does not return as if it ran when a Ctrl-C was held during the last check", async () => {
+    const { host, emitter, exits } = fakeProcess();
+    const run = withTempFolder({ keep: false, parent, process: host }, async () => {
+      pressCtrlCDuringCheck(emitter);
+      return "printed the whole table";
+    });
+    await expect(run).rejects.toMatchObject({ exitCode: 130 });
+    expect(exits).toEqual([130]);
   });
 
   it("is kept, and its path told, only when asked", async () => {

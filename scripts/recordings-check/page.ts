@@ -145,12 +145,10 @@ export function openReplayPage(recording: Recording): ReplayPage {
       // The preview's recorded DOM (rrweb) cannot be replayed without a browser.
       applyPreviewPatchReplay: () => {},
     },
-  });
-  // A damaged track is reported, not thrown, as in the app; the walk counts it.
-  machine.context = {
-    ...machine.context,
+    // A damaged track is reported, not thrown, as in the app, from the load's own apply
+    // on; the walk counts it.
     onError: (error) => errors.push(error.message),
-  };
+  });
 
   const handshake = () => {
     if (!machine.context.pendingPlaybackEditorSync) return;

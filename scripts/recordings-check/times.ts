@@ -1,6 +1,30 @@
 /** The times a check compares a recording at. */
 
 import type { Recording } from "../../src/core/src";
+import { PAGE_TRACKS, type PageTrack } from "./page.ts";
+
+/** The recorded events that drive each panel of the page. */
+const PANEL_EVENTS: Record<
+  PageTrack,
+  (recording: Recording) => ReadonlyArray<{ timestamp: number }>
+> = {
+  editor: (recording) => recording.frames,
+  workspace: (recording) => recording.workspaceEvents ?? [],
+  runtime: (recording) => recording.runtimeEvents ?? [],
+  chat: (recording) => recording.chatEvents ?? [],
+  whiteboard: (recording) => recording.whiteboardEvents ?? [],
+  slides: (recording) => recording.slideEvents ?? [],
+  preview: (recording) => recording.previewEvents ?? [],
+};
+
+/**
+ * Whether anything in the recording drives `track`'s panel. The editor with no
+ * frames still shows the open file's text, which the workspace's events set.
+ */
+export function panelHasEvents(recording: Recording, track: PageTrack): boolean {
+  if (PANEL_EVENTS[track](recording).length > 0) return true;
+  return track === "editor" && PANEL_EVENTS.workspace(recording).length > 0;
+}
 
 /**
  * Every stamp of a track the page replays (the pointer is replayed outside the
@@ -8,15 +32,7 @@ import type { Recording } from "../../src/core/src";
  * check looks at and around them.
  */
 export function replayedStamps(recording: Recording): number[] {
-  return [
-    ...recording.frames,
-    ...(recording.workspaceEvents ?? []),
-    ...(recording.runtimeEvents ?? []),
-    ...(recording.chatEvents ?? []),
-    ...(recording.whiteboardEvents ?? []),
-    ...(recording.slideEvents ?? []),
-    ...(recording.previewEvents ?? []),
-  ]
+  return PAGE_TRACKS.flatMap((track) => PANEL_EVENTS[track](recording))
     .map((event) => event.timestamp)
     .sort((left, right) => left - right);
 }

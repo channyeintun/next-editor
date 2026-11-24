@@ -12,11 +12,25 @@
  */
 
 import type { Recording } from "../../src/core/src";
-import { countOdd, createCheck, tallyOf, untilStopped, type CheckResult } from "./check.ts";
-import { openReplayPage, PAGE_TRACKS, type PageShown } from "./page.ts";
+import {
+  countErrors,
+  createCheck,
+  isCompared,
+  markNoEvents,
+  tallyOf,
+  untilStopped,
+  type CheckResult,
+} from "./check.ts";
+import {
+  openReplayPage,
+  PAGE_TRACKS,
+  type PageShown,
+  type PageTrack,
+  type ReplayPage,
+} from "./page.ts";
 import { seededRandom, shuffled } from "./random.ts";
-import { compare } from "./tally.ts";
-import { checkTimes } from "./times.ts";
+import { differenceAt, digestOf } from "./tally.ts";
+import { checkTimes, panelHasEvents } from "./times.ts";
 
 export const SEEK_VS_PLAY = "seek vs play";
 
@@ -26,6 +40,8 @@ export interface SeekVsPlayOptions {
   tickMs: number;
   /** The grid of check times, in ms, on top of every replayed stamp. */
   everyMs: number;
+  /** Opens each page; the real replay page unless a test hands in a broken one. */
+  openPage?: (recording: Recording) => ReplayPage;
 }
 
 export const DEFAULT_SEEK_VS_PLAY: Omit<SeekVsPlayOptions, "seed"> = {
@@ -40,33 +56,96 @@ function tickTimes(duration: number, tickMs: number, checks: readonly number[]):
   return [...times].sort((left, right) => left - right);
 }
 
+/**
+ * Plays `recording` tick by tick on a new page and hands `atCheck` what the page
+ * shows at each check time, until `until`. Errors the page reports go to `onErrors`.
+ */
+function play(
+  open: (recording: Recording) => ReplayPage,
+  recording: Recording,
+  ticks: readonly number[],
+  isCheck: ReadonlySet<number>,
+  until: number,
+  atCheck: (time: number, shown: PageShown) => void,
+  onErrors: (errors: string[]) => void,
+): void {
+  const played = open(recording);
+  for (const time of ticks) {
+    if (time > until) return;
+    played.send({ type: "TICK", currentTime: time });
+    onErrors(played.errors);
+    if (isCheck.has(time)) atCheck(time, played.shown());
+  }
+}
+
 export function checkSeekVsPlay(recording: Recording, options: SeekVsPlayOptions): CheckResult {
   const result = createCheck(
     SEEK_VS_PLAY,
     PAGE_TRACKS.map((track) => ({ track, scope: "in law" as const })),
   );
+  for (const track of PAGE_TRACKS) {
+    if (!panelHasEvents(recording, track)) markNoEvents(result, track);
+  }
+  const compared = PAGE_TRACKS.filter((track) => isCompared(result, track));
+  const open = options.openPage ?? openReplayPage;
   return untilStopped(result, () => {
     const checks = checkTimes(recording, options.everyMs);
     const isCheck = new Set(checks);
+    const ticks = tickTimes(recording.duration, options.tickMs, checks);
 
-    const played = openReplayPage(recording);
-    const playedAt = new Map<number, PageShown>();
-    for (const time of tickTimes(recording.duration, options.tickMs, checks)) {
-      played.send({ type: "TICK", currentTime: time });
-      countOdd(result, played.errors);
-      if (isCheck.has(time)) playedAt.set(time, structuredClone(played.shown()));
-    }
+    // A digest per track per time, not a copy of the page: the first difference of
+    // each track is described after the seeks, from one more walk to its time.
+    const playedAt = new Map<number, Map<PageTrack, string>>();
+    play(
+      open,
+      recording,
+      ticks,
+      isCheck,
+      Infinity,
+      (time, shown) =>
+        playedAt.set(time, new Map(compared.map((track) => [track, digestOf(shown[track])]))),
+      (errors) => countErrors(result, errors),
+    );
 
-    const seeked = openReplayPage(recording);
-    countOdd(result, seeked.errors);
+    const firstSeeked = new Map<PageTrack, { time: number; shown: unknown }>();
+    const seeked = open(recording);
+    countErrors(result, seeked.errors);
     for (const time of shuffled(checks, seededRandom(options.seed))) {
       seeked.send({ type: "SEEK", time });
-      countOdd(result, seeked.errors);
+      countErrors(result, seeked.errors);
       const shown = seeked.shown();
       const atTime = playedAt.get(time)!;
-      for (const track of PAGE_TRACKS) {
-        compare(tallyOf(result, track), time, atTime[track], shown[track]);
+      for (const track of compared) {
+        const tally = tallyOf(result, track);
+        tally.checks += 1;
+        if (digestOf(shown[track]) === atTime.get(track)) continue;
+        tally.diffs += 1;
+        if (!firstSeeked.has(track)) {
+          firstSeeked.set(track, { time, shown: structuredClone(shown[track]) });
+        }
       }
     }
+    if (firstSeeked.size === 0) return;
+
+    const wanted = new Set([...firstSeeked.values()].map(({ time }) => time));
+    play(
+      open,
+      recording,
+      ticks,
+      wanted,
+      Math.max(...wanted),
+      (time, shown) => {
+        for (const [track, first] of firstSeeked) {
+          if (first.time !== time) continue;
+          tallyOf(result, track).first = differenceAt(time, shown[track], first.shown) ?? {
+            time,
+            path: "",
+            a: "(equal on a second walk)",
+            b: "(digests differed)",
+          };
+        }
+      },
+      () => {},
+    );
   });
 }

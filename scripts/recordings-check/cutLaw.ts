@@ -14,6 +14,9 @@
  *   * whiteboard: exactly, away from a cut's edges, where replay animates toward the
  *     next event and a cut moves that event.
  *
+ * An error replaying the edited recording is counted as a difference in the law, on
+ * a row of its own; an error replaying the original is counted with the errors.
+ *
  * The pointer and captions are outside the law and are counted in rows of their own:
  * the pointer glides over the gap to its next sample, which a cut shortens, and a
  * caption said across a cut loses the words that were cut.
@@ -29,8 +32,11 @@ import {
 } from "../../src/core/src/utils/cursorReplay";
 import { normalizeMediaSpans, type MediaSpan } from "../../src/core/src/utils/mediaSpans";
 import {
-  countOdd,
+  countErrors,
+  countReplayErrorsAsDifference,
   createCheck,
+  isCompared,
+  markNoEvents,
   tallyOf,
   untilStopped,
   type CheckResult,
@@ -39,9 +45,15 @@ import {
 import { openReplayPage, PAGE_TRACKS, type PageShown } from "./page.ts";
 import { seededRandom } from "./random.ts";
 import { compare, roundedMs } from "./tally.ts";
-import { replayedStamps } from "./times.ts";
+import { panelHasEvents, replayedStamps } from "./times.ts";
 
 export const CUT_LAW = "cut law";
+
+/**
+ * The row for replaying what the cut produced. The edited recording is the code's
+ * output, so an error replaying it is a difference in the law.
+ */
+export const EDIT_ROW = "(edit)";
 
 /**
  * Comfortably more than replay's whiteboard animation window (private to
@@ -77,6 +89,7 @@ export const DEFAULT_CUT_LAW: Pick<CutLawOptions, "cuts" | "everyMs"> = {
 
 const CUT_TRACKS: ReadonlyArray<{ track: string; scope: LawScope }> = [
   ...PAGE_TRACKS.map((track) => ({ track, scope: "in law" as const })),
+  { track: EDIT_ROW, scope: "in law" },
   { track: "pointer", scope: "outside" },
   { track: "captions", scope: "outside" },
 ];
@@ -193,28 +206,35 @@ export function checkCutLaw(recording: Recording, options: CutLawOptions): Check
     const beforePointer = getCursorReplaySamples(original);
     const hasPointer = beforePointer.length > 0;
     const hasCaptions = (original.captions ?? []).some((track) => track.cues.length > 0);
+    if (!hasPointer) markNoEvents(result, "pointer");
+    if (!hasCaptions) markNoEvents(result, "captions");
+    for (const track of PAGE_TRACKS) {
+      if (!panelHasEvents(original, track)) markNoEvents(result, track);
+    }
+    const compared = PAGE_TRACKS.filter((track) => isCompared(result, track));
+    const editErrors = tallyOf(result, EDIT_ROW);
 
     for (const cuts of pickCuts(original, options.cuts, options.seed)) {
       const edited = edit(original, { cuts, mutes: [] });
       // Both pages are new and seek the same times in the same order. A panel keeps
       // what it showed when a seek lands before its first event, so pages with
       // different pasts would differ for a reason that is not the cut.
+      const note = `cut ${cuts.map((cut) => `${roundedMs(cut.start)}-${roundedMs(cut.end)}`).join(",")}`;
       const before = openReplayPage(original);
       const after = openReplayPage(edited);
-      countOdd(result, before.errors);
+      countErrors(result, before.errors);
       const afterPointer = getCursorReplaySamples(edited);
-      countOdd(result, after.errors);
+      countReplayErrorsAsDifference(editErrors, after.errors, 0, note);
 
-      const note = `cut ${cuts.map((cut) => `${roundedMs(cut.start)}-${roundedMs(cut.end)}`).join(",")}`;
       for (const time of lawTimes(original.duration, cuts, options.everyMs)) {
         const moved = mapTimeThroughCuts(time, cuts);
         before.send({ type: "SEEK", time });
         after.send({ type: "SEEK", time: moved });
-        countOdd(result, before.errors);
-        countOdd(result, after.errors);
+        countErrors(result, before.errors);
+        countReplayErrorsAsDifference(editErrors, after.errors, time, note);
         const was = underTheLaw(before.shown(), (at) => mapTimeThroughCuts(at, cuts));
         const is = underTheLaw(after.shown(), (at) => at);
-        for (const track of PAGE_TRACKS) {
+        for (const track of compared) {
           if (track === "whiteboard" && nearAnEdge(time, cuts)) continue;
           compare(tallyOf(result, track), time, was[track], is[track], note);
         }

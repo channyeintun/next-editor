@@ -20,32 +20,41 @@ export interface Row {
   scope: LawScope | "";
   checks: number;
   diffs: number;
-  /** Errors the recording itself caused: never a failure. */
-  odd: number;
-  /** The first difference, or the first odd error, or why the check stopped. */
+  /**
+   * Errors replaying or decoding the published recording. The table does not say
+   * whether the file or the code reading it is at fault: compare with a run on main.
+   */
+  errors: number;
+  /** The first difference, or the first error, or why the check stopped. */
   first: string;
 }
+
+/** What the row of a track the recording has no events for says. */
+export const NO_EVENTS = "no events";
 
 /** A first difference as one cell: the time, where, and both values cut short. */
 export function describeDifference(difference: Difference): string {
   const where = difference.path ? ` ${difference.path}` : "";
   const note = difference.note ? ` (${difference.note})` : "";
+  if (difference.error !== undefined) {
+    return `t=${roundedMs(difference.time)}: replay error ${difference.error}${note}`;
+  }
   return `t=${roundedMs(difference.time)}${where}: ${difference.a} vs ${difference.b}${note}`;
 }
 
 /** The rows of one check of one recording. */
 export function rowsOf(recording: string, result: CheckResult): Row[] {
-  const rows: Row[] = result.tracks.map(({ track, scope, tally }) => ({
+  const rows: Row[] = result.tracks.map(({ track, scope, tally, noEvents }) => ({
     recording,
     check: result.check,
     track,
     scope,
     checks: tally.checks,
     diffs: tally.diffs,
-    odd: 0,
-    first: tally.first ? describeDifference(tally.first) : "",
+    errors: 0,
+    first: noEvents ? NO_EVENTS : tally.first ? describeDifference(tally.first) : "",
   }));
-  if (result.odd.count > 0 || result.stopped !== null) {
+  if (result.errors.count > 0 || result.stopped !== null) {
     rows.push({
       recording,
       check: result.check,
@@ -54,14 +63,15 @@ export function rowsOf(recording: string, result: CheckResult): Row[] {
       checks: 0,
       // A check that stopped did not run to the end: a person must look at it.
       diffs: result.stopped === null ? 0 : 1,
-      odd: result.odd.count,
-      first: result.stopped === null ? `odd: ${result.odd.first}` : `stopped: ${result.stopped}`,
+      errors: result.errors.count,
+      first:
+        result.stopped === null ? `error: ${result.errors.first}` : `stopped: ${result.stopped}`,
     });
   }
   return rows;
 }
 
-/** The row for a recording that could not be read: an odd file, not a failure. */
+/** The row for a recording the app's decoder could not read. */
 export function unreadableRow(recording: string, reason: string): Row {
   return {
     recording,
@@ -70,8 +80,8 @@ export function unreadableRow(recording: string, reason: string): Row {
     scope: "",
     checks: 0,
     diffs: 0,
-    odd: 1,
-    first: `odd: ${reason}`,
+    errors: 1,
+    first: `error: ${reason}`,
   };
 }
 
@@ -82,7 +92,7 @@ const HEADER: Row = {
   scope: "law" as LawScope,
   checks: 0,
   diffs: 0,
-  odd: 0,
+  errors: 0,
   first: "first difference",
 };
 
@@ -100,7 +110,7 @@ function cells(row: Row, header: boolean): string[] {
     row.scope,
     header ? "checks" : String(row.checks),
     header ? "diffs" : String(row.diffs),
-    header ? "odd file" : String(row.odd),
+    header ? "errors" : String(row.errors),
     row.first,
   ];
 }
@@ -135,7 +145,7 @@ export function tableHash(rows: readonly Row[]): string {
         row.scope,
         row.checks,
         row.diffs,
-        row.odd,
+        row.errors,
         row.first,
       ]),
     );
@@ -162,7 +172,7 @@ export function totalsLine(rows: readonly Row[]): string {
     `${sum((row) => row.checks)} checks`,
     `${inLaw} differences in law`,
     `${outside} outside the law`,
-    `${sum((row) => row.odd)} odd file`,
+    `${sum((row) => row.errors)} errors`,
     `hash ${tableHash(rows)}`,
   ].join(", ");
 }

@@ -17,13 +17,20 @@ export const USAGE = [
   "",
   "Checks: seeking lands where playing does (replay owns the page), and a cut keeps",
   "what is outside it (the pointer and captions are reported as outside the law).",
-  "A file's own errors (decode, a damaged track) are counted under 'odd file'.",
+  "An error replaying the recording a cut produced is a difference in the law, on the",
+  "cut law's (edit) row. 'errors' counts errors replaying or decoding the published",
+  "recording; the table does not say whether the file or the code reading it is at",
+  "fault. A track the recording has no events for shows 'no events' and 0 checks.",
   "",
   "How to read it: run it on main before a change to replay or cutting, and again",
-  "after, with the same lessons and seed. The rule is no new difference: a row that",
-  "differs only after the change is a regression; one present on main already is a",
-  "finding to look at. The last line's hash is equal when two runs found the same.",
-  "Exit code 0 when it ran, 1 when it could not (no network, no lessons, bad options).",
+  "after, with the same lessons and seed. The newest lessons change as lessons are",
+  "published, so the first run prints a 'sample:' line: pass those options to the",
+  "second run. The rule is no new difference: a row that differs only after the",
+  "change is a regression; one present on main already is a finding to look at. The",
+  "last line's hash is equal when two runs found the same.",
+  "Exit code 0 when it ran, 1 when it could not (no network, no lessons, bad options),",
+  "and the signal's code (130 for Ctrl-C) when stopped; Ctrl-C takes effect when the",
+  "check under way ends.",
 ].join("\n");
 
 export interface Options {
@@ -61,4 +68,16 @@ export function parseArgs(argv: readonly string[]): { options: Options } | { err
     options[key] = number;
   }
   return { options };
+}
+
+/**
+ * The options that check `slugs` again exactly as this run did: the newest lessons
+ * change whenever one is published, so a second run names them.
+ */
+export function sampleArgs(slugs: readonly string[], options: Pick<Options, "cuts" | "seed">) {
+  return [
+    ...slugs.map((slug) => `--slug=${slug}`),
+    `--cuts=${options.cuts}`,
+    `--seed=${options.seed}`,
+  ].join(" ");
 }

@@ -12,7 +12,8 @@
  *
  * It is not a gate. A difference is information for a person: run it on main
  * before a change to replay or cutting and again after, and look for a new one
- * (USAGE in recordings-check/args.ts). Exit code 0 when it ran, 1 when it could not.
+ * (USAGE in recordings-check/args.ts). Exit code 0 when it ran, 1 when it could not,
+ * and the signal's own code when Ctrl-C or another signal stopped it.
  *
  * The checks are in scripts/recordings-check/; this file is the I/O shell.
  */
@@ -21,7 +22,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import type { Recording } from "../src/core/src";
-import { parseArgs, USAGE } from "./recordings-check/args.ts";
+import { parseArgs, sampleArgs, USAGE } from "./recordings-check/args.ts";
 import { checkCutLaw, DEFAULT_CUT_LAW } from "./recordings-check/cutLaw.ts";
 import {
   downloadRecording,
@@ -39,7 +40,7 @@ import {
   unreadableRow,
   type Row,
 } from "./recordings-check/table.ts";
-import { withTempFolder } from "./recordings-check/tempFolder.ts";
+import { StoppedBySignal, withTempFolder } from "./recordings-check/tempFolder.ts";
 
 const DMP_WASM_PATH = fileURLToPath(
   new URL("../src/core/dmp/build/next-editor-dmp.wasm", import.meta.url),
@@ -71,7 +72,7 @@ async function listLessons(): Promise<ListedLesson[]> {
 
 const elapsed = (since: number) => `${((performance.now() - since) / 1000).toFixed(1)} s`;
 
-async function run(folder: string) {
+async function run(folder: string, stopPoint: () => Promise<void>) {
   // The app's bundler loads the diff codec as a WASM-ESM import; under bun it is
   // built from its bytes and installed, as studio-compare.ts does.
   const { installDmpCodec, instantiateDmpCodec } = await import("../src/core/dmp/dmpCodec.ts");
@@ -114,6 +115,7 @@ async function run(folder: string) {
     const started = performance.now();
     const seek = checkSeekVsPlay(recording, { ...DEFAULT_SEEK_VS_PLAY, seed: options.seed });
     const seekTook = elapsed(started);
+    await stopPoint();
     const cutStarted = performance.now();
     const cut = checkCutLaw(recording, {
       ...DEFAULT_CUT_LAW,
@@ -124,6 +126,7 @@ async function run(folder: string) {
       `checked ${lesson.slug}: seek vs play ${seekTook}, cut law ${elapsed(cutStarted)}`,
     );
     rows.push(...rowsOf(lesson.slug, seek), ...rowsOf(lesson.slug, cut));
+    await stopPoint();
   }
   if (downloaded === 0) throw new CannotRun("no recording could be downloaded");
 
@@ -135,6 +138,12 @@ async function run(folder: string) {
   console.log(
     "The editor handshake arrives right after each file switch here; its delay is covered by\n" +
       "the generated frames property in pathIndependence.test.ts, not by this run.",
+  );
+  console.log(
+    `sample: ${sampleArgs(
+      lessons.map((lesson) => lesson.slug),
+      options,
+    )}`,
   );
   console.log(totalsLine(rows));
 }
@@ -150,6 +159,9 @@ try {
   );
   console.log(`took ${elapsed(startedAt)}`);
 } catch (error) {
+  // Exiting from the signal's listener ends the process before this; kept so a
+  // stopped run can never fall through to exit 0.
+  if (error instanceof StoppedBySignal) process.exit(error.exitCode);
   if (!(error instanceof CannotRun)) throw error;
   console.error(error.message);
   process.exit(1);

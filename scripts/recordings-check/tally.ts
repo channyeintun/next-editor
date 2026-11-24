@@ -3,6 +3,8 @@
  * differed, keeping the first difference to show a person.
  */
 
+import { createHash } from "node:crypto";
+
 /** How long one side of a difference may be in the table. */
 export const VALUE_WIDTH = 70;
 
@@ -17,6 +19,8 @@ export interface Difference {
   b: string;
   /** What else a person needs to see it again (the cut, for the cut law). */
   note?: string;
+  /** The error a replay reported, when the difference is that it failed. */
+  error?: string;
 }
 
 export interface Tally {
@@ -74,17 +78,56 @@ function at(value: unknown, path: readonly string[]): unknown {
   return current;
 }
 
-/** Counts one comparison of `a` and `b` at `time`. */
-export function compare(tally: Tally, time: number, a: unknown, b: unknown, note?: string): void {
-  tally.checks += 1;
+/** Where `a` and `b` first part at `time`, or null when they are equal. */
+export function differenceAt(
+  time: number,
+  a: unknown,
+  b: unknown,
+  note?: string,
+): Difference | null {
   const path = firstDifferencePath(a, b);
-  if (path === null) return;
-  tally.diffs += 1;
-  tally.first ??= {
+  if (path === null) return null;
+  return {
     time,
     path: path.join("."),
     a: clip(at(a, path)),
     b: clip(at(b, path)),
     ...(note === undefined ? {} : { note }),
   };
+}
+
+/** Counts one comparison of `a` and `b` at `time`. */
+export function compare(tally: Tally, time: number, a: unknown, b: unknown, note?: string): void {
+  tally.checks += 1;
+  const difference = differenceAt(time, a, b, note);
+  if (difference === null) return;
+  tally.diffs += 1;
+  tally.first ??= difference;
+}
+
+/**
+ * `value` as text that is equal for two values exactly when firstDifferencePath finds
+ * them equal: key order and keys holding undefined do not count, array order and
+ * length do, and numbers keep what Object.is tells apart (-0, NaN).
+ */
+export function stableText(value: unknown): string {
+  if (isObject(value)) {
+    const keys = definedKeys(value).sort();
+    const entries = keys.map((key) => `${JSON.stringify(key)}:${stableText(value[key])}`);
+    return Array.isArray(value)
+      ? `[${value.length}|${entries.join(",")}]`
+      : `{${entries.join(",")}}`;
+  }
+  if (typeof value === "number") return Object.is(value, -0) ? "n-0" : `n${value}`;
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "bigint") return `b${value}`;
+  return `${typeof value}:${String(value)}`;
+}
+
+/**
+ * A short digest of `value` under stableText. A walk keeps one per time instead of a
+ * copy of every panel, which for a long lesson with many files is gigabytes.
+ */
+export function digestOf(value: unknown): string {
+  return createHash("sha1").update(stableText(value)).digest("base64");
 }

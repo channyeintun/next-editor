@@ -267,7 +267,10 @@ a faster way to reach the same state. These are the cursor rules that keep it, i
   with `REPLAY_CURSORS_RESET`. The next apply is then a resync (`isReplayResync` in
   [cursor.ts](../src/core/src/machine/replayState/cursor.ts)). It lands on one state at T and
   never fires a recorded interaction again. Before their first event, the tracks that have a
-  baseline apply it on a resync: a closed deck, an empty transcript, an empty board.
+  baseline apply it on a resync: a closed deck, an empty transcript, an empty board, a closed
+  preview panel. The preview's baseline is applied but never retained, so the fold of its first
+  event starts from nothing as a cold resolve does. A recording with no preview events applies
+  none, and its frames' preview state (the fallback for older recordings) still stands.
 - **The workspace cursor is the one exception.** Panel widths replay as offsets added to the
   viewer's own widths, so the replay must know which offsets it has already added.
   `REPLAY_CURSORS_RESET` leaves `lastAppliedWorkspaceEventIndex` alone, and the workspace
@@ -342,13 +345,18 @@ recording it checks that seeking lands where playing does (a tick-by-tick walk a
 seeks, with the editor handshake right after each file switch) and that a cut keeps what is
 outside it (`--cuts=K` seeded cuts, `--seed=S`; the pointer and captions are reported outside the
 law). It prints each recording's length, size and events per track, then one row per recording
-and track, and a last line with totals and a hash of the table. A file's own errors (a decode
-error, a damaged track the machine reports) are counted under "odd file", never as a difference.
+and track, a `sample:` line with the options that check the same lessons again, and a last line
+with totals and a hash of the table. A track the recording has no events for shows "no events"
+and no checks. An error replaying the recording a cut produced is a difference in the law, on the
+cut law's `(edit)` row; the "errors" column counts errors replaying or decoding the published
+recording, without saying whether the file or the code reading it is at fault. Ctrl-C stops the
+run when the check under way ends, with exit code 130.
 
-It is not a gate, and it exits 0 whenever it ran. Both sides of a seek read the same bytes, so it
-cannot see a defect a file was captured with. Use it around a change to replay or cutting: run it
-on main, then on the change, with the same lessons and seed. The rule is no new difference: equal
-hashes mean the two runs found the same. The checks live in `scripts/recordings-check/`.
+It is not a gate: it exits 0 whenever it ran to its end, and with the signal's code when it was
+stopped. Both sides of a seek read the same bytes, so it cannot see a defect a file was captured
+with. Use it around a change to replay or cutting: run it on main, then on the change, passing the
+second run the `sample:` line the first one printed, so both check the same lessons, cuts and
+seed. The rule is no new difference: equal hashes mean the two runs found the same. The checks live in `scripts/recordings-check/`.
 
 ---
 
