@@ -3,6 +3,7 @@ import { POINTER_SETTLE_MS, easePointerDrag } from "../../core/src/utils/pointer
 import { isWorkspaceTextFile } from "../../types/workspace";
 import { StudioActionError, resolveAnchorOffset, tween, waitUntil } from "../async";
 import { chunkPlacements, easeInOutCubic } from "../cadence";
+import { createStepSeries } from "../renderClock";
 import type { StudioDriver, StudioDriverDeps } from "./index";
 import { roundPoint, type StudioPointer } from "./pointer";
 
@@ -155,8 +156,11 @@ export function editorCommands(
       // press that opens the line before its body is typed), so each chunk's
       // model offset is derived from what is already inserted before it.
       const { relativeOffsets, expectedText } = chunkPlacements(chunks);
+      // Each chunk is due at its planned time from the first, so late timers
+      // do not add up over a long insertion.
+      const keystrokes = createStepSeries(clock);
       for (const [index, chunk] of chunks.entries()) {
-        await clock.sleep(chunk.delayMs, signal);
+        await keystrokes.next(chunk.delayMs, signal);
         const { editor: liveEditor, model: liveModel } = requireEditorForPath(path);
         const insertOffset = startOffset + relativeOffsets[index];
         const position = liveModel.getPositionAt(insertOffset);

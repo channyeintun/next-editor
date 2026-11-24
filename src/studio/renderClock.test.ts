@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { RENDER_CANCELLED_MESSAGE, StudioActionError, abortableSleep } from "./async";
-import { REAL_RENDER_CLOCK, createVirtualRenderClock } from "./renderClock";
+import { REAL_RENDER_CLOCK, createStepSeries, createVirtualRenderClock } from "./renderClock";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -119,5 +119,51 @@ describe("createVirtualRenderClock", () => {
     await expect(frame).rejects.toThrow(RENDER_CANCELLED_MESSAGE);
 
     expect(clock.perfNow()).toBe(start);
+  });
+});
+
+describe("createStepSeries", () => {
+  /** A clock whose every sleep lands `late(step)` ms after it was due. */
+  function lateClock(late: (step: number) => number) {
+    let now = 0;
+    let step = 0;
+    const landed: number[] = [];
+    const clock = {
+      perfNow: () => now,
+      sleep: async (ms: number) => {
+        now += ms + late(step++);
+        landed.push(now);
+      },
+    };
+    return { clock, landed };
+  }
+  const signal = new AbortController().signal;
+
+  it("keeps each step one overshoot from its plan, however many came before", async () => {
+    const { clock, landed } = lateClock(() => 8);
+    const series = createStepSeries(clock);
+    for (let index = 0; index < 5; index++) await series.next(50, signal);
+    expect(landed).toEqual([58, 108, 158, 208, 258]);
+  });
+
+  it("goes on at its own pace after a stall instead of bunching steps to catch up", async () => {
+    // The second step stalls 51 ms, as the first drawn frame after the board
+    // opened did in Chrome.
+    const { clock, landed } = lateClock((step) => (step === 1 ? 51 : 0));
+    const series = createStepSeries(clock);
+    for (let index = 0; index < 5; index++) await series.next(50, signal);
+    expect(landed).toEqual([50, 151, 201, 251, 301]);
+  });
+
+  it("lands every step exactly on the virtual clock", async () => {
+    const clock = createVirtualRenderClock();
+    const start = clock.perfNow();
+    const series = createStepSeries(clock);
+    const landed: number[] = [];
+    for (const delay of [40, 70, 25]) {
+      await series.next(delay, signal);
+      landed.push(clock.perfNow() - start);
+    }
+    expect(landed).toEqual([40, 110, 135]);
   });
 });

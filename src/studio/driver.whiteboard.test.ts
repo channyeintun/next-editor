@@ -205,6 +205,34 @@ describe("StudioDriver whiteboard drawing on the render's clock", () => {
     expect(flush).toHaveBeenCalledWith(whiteboardStore);
   });
 
+  it("keeps each frame on its planned time when every timer fires late", async () => {
+    let now = 0;
+    const lateClock: RenderClock = {
+      kind: "real",
+      perfNow: () => now,
+      wallNow: () => now,
+      sleep: async (ms) => {
+        now += ms + 7;
+      },
+      frame: async () => {},
+    };
+    const { driver, events } = makeDriver(ASSETS, lateClock);
+    const publishedAt: number[] = [];
+    const notify = events.push.bind(events);
+    events.push = (...items) => {
+      publishedAt.push(now);
+      return notify(...items);
+    };
+
+    await driver.applyWhiteboard({ open: true, upsertIds: ["box", "label"], drawMs: 200 });
+
+    // Frame k is one overshoot past k frames, never k overshoots.
+    expect(publishedAt.length).toBeGreaterThan(2);
+    expect(publishedAt).toEqual(
+      publishedAt.map((_, index) => (index === 0 ? 0 : index * WHITEBOARD_DRAW_FRAME_MS + 7)),
+    );
+  });
+
   it("saves a one-step apply's canvas report too, and nothing on the real clock", async () => {
     const flush = vi.mocked(flushPendingWhiteboardChange);
     flush.mockReset();

@@ -35,6 +35,25 @@ import { abortableSleep, cancelledError } from "./async";
  * - Nothing recorded or read by the driver waits on a CSS transition, so no
  *   motion is switched off.
  *
+ * What a real and a full-speed render of the same lesson showed in Chrome
+ * (go-error-values, next-editor-state-machine, haskell-crash-course and a
+ * slide lesson, compared with scripts/studio-compare.ts):
+ * - The whiteboard drain holds: 206 canvas events of the Haskell lesson
+ *   matched one for one, the worst 54 ms apart, all of it the real render
+ *   being late. Console points and horizontal scrolls did not occur in those
+ *   lessons, so the xterm and Monaco drains above are not yet proved in a
+ *   browser.
+ * - A real render's typing and drawing ran late, not the virtual one's: 21
+ *   keystrokes 165 ms past plan, from timer lateness added up. Both now sleep
+ *   through `createStepSeries` (below), and the same insertion lands within
+ *   15 ms.
+ * - The hidden pointer is placed at the screen's centre as the take starts:
+ *   at 0 ms on the virtual clock (or at the first action), 44 to 240 ms in on
+ *   the real one. Nobody sees a hidden pointer, so nothing is drained.
+ * - A frame's slide state is copied into whichever editor frame is captured
+ *   next, on a real clock up to seconds after the slide opened. Playback
+ *   shows slides from the slide track instead, so this too is left alone.
+ *
  * The virtual clock serves one sleeper at a time, which is how the driver
  * performs: one action after another, its one background action (a runtime
  * start) excluded from virtual renders.
@@ -54,6 +73,41 @@ export interface RenderClock extends TimeSource {
   sleep(ms: number, signal: AbortSignal): Promise<void>;
   /** Let the page paint: one real animation frame. A no-op on the real clock. */
   frame(signal: AbortSignal): Promise<void>;
+}
+
+// How late a step of a series may land before the series takes the delay
+// instead of catching up. Ordinary timer lateness in Chrome is a few
+// milliseconds (21 keystrokes ran 165 ms late in all, about 8 ms each); a
+// stall of the page is a frame or more (the whiteboard's first drawn frame
+// after it opens landed 51 ms late).
+const SERIES_STALL_MS = 25;
+
+/**
+ * Sleeps for a series of steps (keystrokes, drawing frames) whose times are
+ * planned from where the series starts. `next(delayMs)` waits until the next
+ * step is due.
+ *
+ * A real timer always fires a little late. A series that slept each delay in
+ * turn added every overshoot up, so a long insertion ran well past its plan;
+ * sleeping to each step's planned time keeps only one overshoot. A stall is
+ * different: catching up after one would bunch the steps that follow into a
+ * jump the viewer sees, so after a step that landed more than SERIES_STALL_MS
+ * late the series takes the delay and goes on from there, at its own pace. On
+ * the virtual clock no step is ever late, because its time moves by exactly
+ * what is slept.
+ */
+export function createStepSeries(clock: Pick<RenderClock, "perfNow" | "sleep">): {
+  next(delayMs: number, signal: AbortSignal): Promise<void>;
+} {
+  let dueAt = clock.perfNow();
+  return {
+    async next(delayMs, signal) {
+      dueAt += delayMs;
+      await clock.sleep(Math.max(0, dueAt - clock.perfNow()), signal);
+      const now = clock.perfNow();
+      if (now - dueAt > SERIES_STALL_MS) dueAt = now;
+    },
+  };
 }
 
 /** The page's own clock: today's timers, read at call time so tests that fake them fake this. */

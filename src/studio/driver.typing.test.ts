@@ -110,6 +110,31 @@ describe("StudioDriver typing on the render's clock", () => {
     expect(at()).toBe(135);
   });
 
+  it("keeps each chunk on its planned time when every timer fires late", async () => {
+    // A real timer fires after its delay, never on it. Sleeping each delay in
+    // turn adds those overshoots up over a long insertion.
+    let now = 0;
+    const lateClock: RenderClock = {
+      kind: "real",
+      perfNow: () => now,
+      wallNow: () => now,
+      sleep: async (ms) => {
+        now += ms + 10;
+      },
+      frame: async () => {},
+    };
+    const { driver, log } = makeDriver(lateClock);
+
+    await driver.typeText({
+      path: "main.go",
+      anchor: { after: "", occurrence: 1 },
+      chunks: CHUNKS,
+    });
+
+    // Planned at 40, 110 and 135: each lands one overshoot late, not three.
+    expect(log).toEqual(['edit "fmt"@50', 'edit "."@120', 'edit "Println"@145']);
+  });
+
   it("leaves rendering to Monaco on the real clock", async () => {
     const { driver, log, getText } = makeDriver(REAL_RENDER_CLOCK);
 

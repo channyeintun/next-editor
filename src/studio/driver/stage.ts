@@ -6,6 +6,7 @@ import {
   selectPreviewState,
 } from "../../stores/slidesStore";
 import { StudioActionError, waitUntil } from "../async";
+import { createStepSeries } from "../renderClock";
 import type { StudioWhiteboardAsset } from "../plan";
 import { resolveSlideSurface } from "../targets";
 import {
@@ -270,6 +271,9 @@ export function stageCommands(
         // recorded ~20Hz frames come back as a continuous stroke, and the panel
         // opens on the first frame rather than after the drawing.
         let leadSteps = 0;
+        // Frames are due at fixed times from the first, so late timers and the
+        // work of drawing each frame do not stretch the drawing.
+        const drawingFrames = createStepSeries(clock);
         for (const frame of frames) {
           const asset = assets[frame.assetIndex];
           // `version` counts an asset's steps from 1.
@@ -301,7 +305,7 @@ export function stageCommands(
             }
           }
           await settleWhiteboardOnVirtualClock();
-          await clock.sleep(WHITEBOARD_DRAW_FRAME_MS, signal);
+          await drawingFrames.next(WHITEBOARD_DRAW_FRAME_MS, signal);
         }
       }
 
