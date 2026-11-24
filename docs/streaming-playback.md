@@ -283,18 +283,43 @@ a faster way to reach the same state. These are the cursor rules that keep it, i
   equals the fold at its index. So a resolver may restart from the nearest checkpoint at or before
   T instead of applying every delta before it.
 
+That rule holds while replay owns the page. Once the viewer has it, a second law applies:
+
+- **Replay owns the page** after a tick or a seek while ready or playing, a seek while paused or
+  ended, STOP, PLAY (ended then PLAY too), SET_EDITOR_REF when it re-syncs the editor
+  (`shouldSyncPlaybackEditorRef`), and streamed growth while replay owns. Each track then shows
+  what a cold resolve at T shows.
+- **The viewer owns the page** while paused or ended, and after a viewer's WORKSPACE_EVENT. A
+  tick, streamed growth, SET_EDITOR_REF and a panel view change (VIEWER_PANEL_VIEW_CHANGED) then
+  leave what every track shows as it is, the viewer's own changes included. Paused and ended take
+  a TICK and do nothing, growth only extends the recording (`isGrowthWhileViewerOwnsWorkspace`),
+  and the editor is re-synced only for replay. The next PLAY, SEEK or STOP hands the page back to
+  the first law.
+- **Editor frames wait for the editor.** A replayed file switch, a load that opens another file,
+  and PLAY after the viewer had the workspace set `pendingPlaybackEditorSync`. Until the app has
+  bound the new file's model and said so with SET_EDITOR_REF, no frame is applied: it would land
+  in the model the editor still shows.
+
 The tests that check the rule:
 
 - [pathIndependence.test.ts](../src/core/src/machine/replayState/pathIndependence.test.ts):
-  fast-check walks of ticks, seeks, resumes and appends for chat, runtime, workspace (widths and
-  files), whiteboard, slides and preview. The state is compared with a cold resolve after every
-  move. The walk runs the real actions from replayActions.ts on a context made by
-  `createInitialContext`, with fake host hooks that record what each track shows. For each
-  trigger it runs the actions in the order editorMachine.ts runs them, read from the machine's
-  own state nodes. So the cursor rules above are tested as they are, not as a copy. Each track
-  adapter only names the recording field, the host hook that shows the track, and the cold
-  resolve. A new trigger, or a new transition that resets replay cursors, must be added to the
-  test's `Move` union and `MACHINE_STEPS`, or the property cannot see it.
+  fast-check walks of ticks, seeks, PLAY, PAUSE, the end, STOP, a viewer's WORKSPACE_EVENT,
+  appends, SET_EDITOR_REF and panel view changes for chat, runtime, workspace (widths and files),
+  whiteboard, slides, preview and editor frames. After every move it checks the law the move falls
+  under: a cold resolve at T, or nothing changed for the viewer. The frames walk encodes its log
+  with the recorder's own frame encoder, replays it into an editor that counts every write, and
+  sends SET_EDITOR_REF a few moves after the machine starts waiting for it. Its cold resolve is
+  what the recorder captured, so an encoder that drops a change fails it too. The walk
+  ([replayWalk.ts](../src/core/src/machine/testing/replayWalk.ts)) runs the real actions from
+  replayActions.ts on a context made by `createInitialContext`, with fake host hooks that record
+  what each track shows. For each event it takes the branch xstate takes and runs the exit, the
+  branch's actions and the entry, all read from the machine's own state nodes. So the cursor
+  rules above are tested as they are, not as a copy. Each track adapter only names its recording
+  fields, the host hooks that show the track, and the cold resolve. A new trigger, or a new
+  transition that resets replay cursors or hands the page over, must be added to the test's
+  `Move` union and its walk, or the property cannot see it.
+- `REPLAY_CURSORS_RESET` is typed so that a `lastApplied…Index` field of the machine's context
+  that it neither resets nor names as kept (the workspace cursor) fails the typecheck.
 - [timedIndex.test.ts](../src/core/src/utils/timedIndex.test.ts): the "last event at or before
   T" search that every track uses, checked against a linear scan from every hint.
 - [recordingClock.test.ts](../src/core/src/machine/recordingClock.test.ts),
@@ -303,9 +328,27 @@ The tests that check the rule:
   placed at. The clock skips pauses exactly, and rrweb events are never placed after their true
   recording time.
 
-Editor frames keep the same rule in `applyFrameAtTime`, but the property test leaves them out,
-because that fold needs a Monaco editor. Their reconstruction is checked in
+The frames walk checks the machine's side of the editor: what `applyFrameAtTime` writes and when.
+Monaco's own rendering of those writes is not in it. Frame reconstruction is also checked in
 [frameStreamEncoder.test.ts](../src/core/src/utils/frameStreamEncoder.test.ts).
+
+### On real recordings, by hand
+
+The tests above use generated logs. `bun scripts/recordings-check.ts` runs the same two laws on
+published lessons: it downloads the newest 6 (`--count=N`, or `--slug=<slug>` for chosen ones,
+such as a human recording) from nexteditor.dev into a temporary folder of its own, and deletes the
+folder when it ends, also on an error or Ctrl-C (`--keep` leaves it, for debugging). For each
+recording it checks that seeking lands where playing does (a tick-by-tick walk against shuffled
+seeks, with the editor handshake right after each file switch) and that a cut keeps what is
+outside it (`--cuts=K` seeded cuts, `--seed=S`; the pointer and captions are reported outside the
+law). It prints each recording's length, size and events per track, then one row per recording
+and track, and a last line with totals and a hash of the table. A file's own errors (a decode
+error, a damaged track the machine reports) are counted under "odd file", never as a difference.
+
+It is not a gate, and it exits 0 whenever it ran. Both sides of a seek read the same bytes, so it
+cannot see a defect a file was captured with. Use it around a change to replay or cutting: run it
+on main, then on the change, with the same lessons and seed. The rule is no new difference: equal
+hashes mean the two runs found the same. The checks live in `scripts/recordings-check/`.
 
 ---
 

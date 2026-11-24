@@ -205,6 +205,8 @@ export default ({ mode }: { mode: string }) => {
         // The studio driver's pure parts (argument parsing, the published-id
         // check, the SQL for a local session); Node-side as well.
         "scripts/studio-driver/**/*.{test,spec}.ts",
+        // The hand-run check of real recordings: its table, hash and cleanup.
+        "scripts/recordings-check/**/*.{test,spec}.ts",
         // infra/worker/** deliberately excluded: it runs in the Workers runtime,
         // not a browser — that side is tested against real wrangler dev + local
         // D1/R2 (see docs/progress.md), not jsdom.
