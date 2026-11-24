@@ -123,7 +123,23 @@ next-editor-tube-media/
                               # the same image is stored once across all decks
   collaboration/
     rooms/<room-id>/assets/<sha256>  # private, membership-checked room assets
+  studio-scripts/
+    index.json                # which object is each lesson's script now; put
+                              # last by a publish (bun scripts/lesson-scripts.ts)
+    objects/<sha256>          # a lesson script's YAML bytes, plain text, keyed
+                              # by their own hash and never rewritten
+  webnode-deps/
+    <sha256>                  # prepared install plans and archives, stored
+                              # Brotli-compressed (bun scripts/webnode-deps.ts)
 ```
+
+Neither `studio-scripts/` nor `webnode-deps/` is served by `/media`. The studio
+reads its scripts from `/api/studio/scripts` (`routes/studioScripts.ts`): the
+index as `application/json` with `Cache-Control: no-cache` and its ETag (a
+current copy is answered with 304), each object as `text/plain; charset=utf-8`
+with `public, max-age=31536000, immutable`, and a malformed or unknown id as a
+404 with `no-store`. The webnode runtime host alone serves `webnode-deps/`, with
+the Brotli encoding its stored bytes need (`webnodePreviewHost.ts`).
 
 Bytes are served **through the Worker** at `/media/lessons/<id>/<file>` from the
 R2 binding (`env.BUCKET.get(key)`), with `Content-Type`, an ETag with
@@ -304,7 +320,9 @@ deletes the stored copy along with the intent.
 | `GET /api/auth/me`, `PATCH /username`, `POST /logout`              | cookie              | Session and profile lifecycle                                                                                         |
 | `GET /api/lessons`, `GET /api/lessons/:slug`                       | —                   | Published lesson reads straight from D1                                                                               |
 | `/api/lessons/mine`, create/update/publish/unpublish/delete routes | owner               | Draft and published lesson lifecycle                                                                                  |
+| `PATCH /api/lessons/:id`                                           | owner               | Edit title, description, tags, thumbnail, and `duration` (`m:ss` or `h:mm:ss`, as the gallery shows it)               |
 | `PUT /api/uploads/:id/media/:filename`                             | owner/sign-in       | Validate and stream a lesson object through the Worker to R2                                                          |
+| `DELETE /api/uploads/:id/media/:filename`                          | owner               | Delete one narration file of the lesson (never the `.ne`, a thumbnail, camera or captions) and forget its storage     |
 | `/api/playlists/*`                                                 | mixed               | Public playlist detail plus owner CRUD, membership, and ordering                                                      |
 | `/api/authors/:username`, `/api/search`                            | —                   | Public author/catalog discovery; search is intentionally uncached                                                     |
 | `/api/collaboration/rooms/*`, `/invitations/*`                     | member/role         | D1 control plane, private R2 assets, binary WebSockets, and room-local SQLite                                         |
@@ -318,6 +336,7 @@ deletes the stored copy along with the intent.
 | `/api/studio/athanlab/*` (key, voices, sample, usage)              | cookie + stored key | Connect, check, and remove the user's own AthanLab API key; list voices, play free samples, show the balance          |
 | `POST /api/studio/tts/athanlab`                                    | cookie + stored key | Burmese narration: one AthanLab job per uncached dialog, charged to the user's AthanLab balance                       |
 | `POST /api/studio/tts/voxcpm2`                                     | cookie + D1 flag    | Private Burmese narration on Modal                                                                                    |
+| `GET /api/studio/scripts/index`, `/objects/:id`                    | —                   | Published lesson scripts from R2 `studio-scripts/`: the index (no-cache, ETag) and immutable plain-text scripts       |
 
 ## Upload & publish sequence
 

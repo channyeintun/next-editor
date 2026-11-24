@@ -22,6 +22,8 @@ import { zigPlaygroundRoute } from "./routes/zigPlayground";
 import { collaborationRoute } from "./routes/collaboration";
 import { studioRoute } from "./routes/studio";
 import { athanlabRoute, athanlabTtsRoute } from "./routes/athanlab";
+import { studioScriptsRoute } from "./routes/studioScripts";
+import { PUBLISHED_SCRIPTS_PATH } from "../../src/studio/plans/publishedScripts";
 import { LANDING_DOCUMENT_URLS, serveAppShell, serveLandingDocument } from "./ssr/staticDocuments";
 import { serveLessonDetailDocument } from "./ssr/lessonDetailRoute";
 import { serveLearnGalleryDocument } from "./ssr/learnGalleryRoute";
@@ -145,6 +147,8 @@ app.route("/api/studio", studioRoute);
 // voices and usage, and the synthesis endpoint beside /api/studio/tts/voxcpm2.
 app.route("/api/studio/athanlab", athanlabRoute);
 app.route("/api/studio/tts/athanlab", athanlabTtsRoute);
+// The published lesson scripts the studio reads (public; routes/studioScripts.ts).
+app.route(PUBLISHED_SCRIPTS_PATH, studioScriptsRoute);
 // Slide-image R2 ingestion. The pre-/api/proxy-rename alias /api/slide-image
 // (singular) is gone: every persisted document that referenced it was
 // migrated to /media/slide-images/<hash> hrefs on 2026-07-11.
