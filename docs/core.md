@@ -47,6 +47,8 @@ The app layer is responsible for React composition, Node.js runtime integration,
 
 Core's dependencies point inward: nothing under `src/core` imports the app layer. The models the recording stores (`runtime.ts`, `cursor.ts`, `slides.ts`, `preview.ts`, `textEdit.ts`, `chat.ts`, `workspace.ts`) are defined in core, and `src/types/*` re-exports them for app code. `src/core/src/coreBoundary.test.ts` fails on any non-test module under `src/core` whose relative import resolves outside it.
 
+`editorMachine.ts` and `machine/types.ts` hold wiring, not bodies: `src/core/src/hubRules.test.ts` fails on a long function in the machine and on an event or context type declared in `types.ts` instead of the module of the domain it belongs to.
+
 ## Public API Surface
 
 `src/core/src/index.ts` re-exports the recording model's types, and nothing else:
