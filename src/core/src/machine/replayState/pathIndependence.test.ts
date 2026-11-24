@@ -1,6 +1,6 @@
 import fc from "fast-check";
+import type * as monaco from "monaco-editor";
 import { describe, expect, it } from "vite-plus/test";
-import type { UnknownAction } from "xstate";
 import type {
   ChatCheckpoint,
   ChatDelta,
@@ -21,27 +21,29 @@ import {
   type WorkspaceRecordingSnapshot,
 } from "../../workspace";
 import { diffRuntimeSnapshot, resolveRuntimeSnapshotAt } from "../../runtimeTrack";
-import type { PreviewEvent } from "../../preview";
+import type { PreviewEvent, PreviewState } from "../../preview";
 import type { Slide, SlideEvent } from "../../slides";
-import type { Recording, RecordingStreamDelta } from "../../types";
+import type { EditorFrame, EditorSelection, Recording } from "../../types";
+import type { TextEditEvent } from "../../textEdit";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "../../utils/chatDelta";
-import { createContentDelta } from "../../utils/contentDelta";
+import {
+  createContentDelta,
+  createContentEditDelta,
+  type CreatedContentEditDelta,
+} from "../../utils/contentDelta";
+import type { DeltaFrame } from "../../utils/deltaTypes";
+import { normalizeEditorFrame } from "../../utils/editorState";
+import { createFrameStreamEncoder, pushFrame } from "../../utils/frameStreamEncoder";
 import {
   EMPTY_WHITEBOARD_SCENE,
   type WhiteboardElementJSON,
   type WhiteboardEvent,
   type WhiteboardSceneState,
 } from "../../whiteboard";
-import { editorMachine } from "../editorMachine";
-import { setRecording } from "../replayActions";
-import {
-  createInitialContext,
-  type EditorActionArgs,
-  type EditorContextUpdate,
-  type EditorMachineContext,
-  type EditorMachineEvent,
-  type EditorMachineHostHooks,
-} from "../types";
+import { RECORDING_TRACK_NAMES, type RecordingTracks } from "../recordingAssembly";
+import { grow, load, send, type PlaybackMachine } from "../testing/replayWalk";
+import type { EditorMachineContext, EditorMachineHostHooks } from "../types";
+import type { ViewerPanel } from "../viewerPanels";
 import { getChatReplayResult } from "./chat";
 import { getPreviewReplayResult } from "./preview";
 import { getRuntimeReplayResult } from "./runtime";
@@ -51,50 +53,69 @@ import { getWhiteboardReplayResult } from "./whiteboard";
 // ============================================================================
 // Seeking lands where playing does.
 //
-// Whatever path of ticks, seeks, resumes and streamed appends brings playback
-// to time T, a track must show what a cold resolve at T shows. Each test below
-// generates a time-sorted event log and a walk, and checks this after the load
-// and after every move of the walk.
+// Whatever path of ticks, seeks, pauses, stops and streamed appends brings
+// playback to time T, what a track shows follows one of two laws:
 //
-// The walk runs the machine's real replay actions (replayActions.ts) on a small
-// context made by createInitialContext. For each trigger it runs the actions
-// editorMachine.ts runs, in the same order, and merges each returned patch into
-// the context the way `assign` does (MACHINE_STEPS below). So the cursor resets
-// (REPLAY_CURSORS_RESET), the resync rule (isReplayResync), the replay time and
-// every apply action under test are the real ones. Only the host hooks are
-// fakes: they record what the track shows, and before a PLAY the viewer may
-// change it, as a paused viewer can. PLAY must then show the recording again.
+// - Replay owns the page: after a tick or a seek while ready or playing, a seek
+//   while paused or ended, STOP, PLAY (ended then PLAY too), SET_EDITOR_REF when
+//   it re-syncs the editor, and growth while replay owns, the track shows what a
+//   cold resolve at T shows.
+// - The viewer owns the page: paused, ended, or after a viewer's WORKSPACE_EVENT,
+//   a tick, growth, SET_EDITOR_REF and a panel view change leave what the track
+//   shows as it was, the viewer's own changes included. The next PLAY, SEEK or
+//   STOP hands it back to the first law.
 //
-// Each track adapter says which recording field it replays, which host hook
-// shows it, and how to resolve it cold.
+// Each test below generates a time-sorted log and a walk of those moves, and
+// checks the law the move falls under after the load and after every move.
+//
+// The walk drives the real machine without an actor (testing/replayWalk.ts): for
+// each event it runs the actions editorMachine.ts runs, read from the machine's
+// own state nodes and setup(), on a context made by createInitialContext. So the
+// cursor resets (REPLAY_CURSORS_RESET), the resync rule (isReplayResync), the
+// replay time, the hand-over to the viewer and every apply action under test are
+// the real ones. Only the host hooks and the editor are fakes: they record what
+// each track shows, and the viewer may change it while they own the page.
+//
+// Each track adapter says which recording fields it replays, which host hooks
+// show it, and how to resolve it cold.
 // ============================================================================
 
 /** Enough runs to find a broken cursor rule, few enough to keep the suite fast. */
 const NUM_RUNS = 150;
 
 /**
- * A walk the machine can take once a recording is loaded. A new trigger, or a new
- * transition that resets replay cursors, must be added here and to MACHINE_STEPS,
- * or the property cannot see it.
+ * A move of a walk once a recording is loaded. A new trigger, or a new transition that
+ * resets replay cursors or hands the page over, must be added here and to `walk`, or
+ * the property cannot see it.
  */
 type Move =
   | { kind: "tick"; dt: number }
-  /** Seek near a recorded stamp: `pick` chooses the event, `offset` moves off its stamp. */
+  /** Seek near a recorded stamp: `pick` chooses the record, `offset` moves off its stamp. */
   | { kind: "seek"; pick: number; offset: number }
   /**
-   * PLAY: the first one from ready, later ones after a PAUSE at the same moment.
-   * Before it the viewer may change what the track shows (`viewerEdits`).
+   * PLAY. While playing, a PAUSE comes first, so this is also a resume. Before it the
+   * viewer may change what the track shows (`viewerEdits`).
    */
-  | { kind: "resume"; viewerEdits: boolean }
+  | { kind: "play"; viewerEdits: boolean }
+  | { kind: "pause" }
+  /** The viewer changes the workspace (WORKSPACE_EVENT), maybe after changing the track. */
+  | { kind: "viewerWorkspaceEvent"; viewerEdits: boolean }
+  /** The timeline reaches the end: its last TICK, then FINISHED. */
+  | { kind: "finish" }
+  | { kind: "stop" }
   /**
    * The next `count` records stream in: pushed into the loaded arrays in place
    * (APPEND_RECORDING_DELTA), or as a longer copy of the recording (EXTEND_RECORDING).
    */
-  | { kind: "append"; count: number; extend: boolean };
+  | { kind: "append"; count: number; extend: boolean }
+  /** The app tells the machine its editor again (SET_EDITOR_REF), as a re-render does. */
+  | { kind: "editorRef" }
+  /** The viewer opens, closes or resizes a replayed panel (VIEWER_PANEL_VIEW_CHANGED). */
+  | { kind: "panelView"; panel: ViewerPanel };
 
 const arbMove: fc.Arbitrary<Move> = fc.oneof(
   {
-    weight: 5,
+    weight: 10,
     arbitrary: fc.record({
       kind: fc.constant("tick"),
       // Zero-length and short ticks land inside whiteboard animation windows.
@@ -106,7 +127,7 @@ const arbMove: fc.Arbitrary<Move> = fc.oneof(
     }),
   },
   {
-    weight: 3,
+    weight: 6,
     arbitrary: fc.record({
       kind: fc.constant("seek"),
       pick: fc.nat(),
@@ -114,15 +135,33 @@ const arbMove: fc.Arbitrary<Move> = fc.oneof(
     }),
   },
   {
-    weight: 1,
-    arbitrary: fc.record({ kind: fc.constant("resume"), viewerEdits: fc.boolean() }),
+    weight: 3,
+    arbitrary: fc.record({ kind: fc.constant("play"), viewerEdits: fc.boolean() }),
   },
+  { weight: 2, arbitrary: fc.constant({ kind: "pause" } as const) },
   {
     weight: 2,
+    arbitrary: fc.record({
+      kind: fc.constant("viewerWorkspaceEvent"),
+      viewerEdits: fc.boolean(),
+    }),
+  },
+  { weight: 1, arbitrary: fc.constant({ kind: "finish" } as const) },
+  { weight: 1, arbitrary: fc.constant({ kind: "stop" } as const) },
+  {
+    weight: 4,
     arbitrary: fc.record({
       kind: fc.constant("append"),
       count: fc.integer({ min: 1, max: 4 }),
       extend: fc.boolean(),
+    }),
+  },
+  { weight: 1, arbitrary: fc.constant({ kind: "editorRef" } as const) },
+  {
+    weight: 1,
+    arbitrary: fc.record({
+      kind: fc.constant("panelView"),
+      panel: fc.constantFrom<ViewerPanel>("whiteboard", "slides", "runtimeDock"),
     }),
   },
 );
@@ -135,6 +174,12 @@ const arbMoves = fc.array(arbMove, SIZE);
 /** How many records the load has; the rest stream in through appends. Often few. */
 const arbInitialCount = fc.oneof(fc.constant(0), fc.nat({ max: 3 }), fc.nat({ max: 30 }));
 
+/**
+ * How many moves after the machine starts waiting for the editor the app tells it the
+ * editor again. Cycled through for each wait of a walk.
+ */
+const arbEditorRefDelays = fc.array(fc.nat({ max: 3 }), { minLength: 1, maxLength: 4 });
+
 /** The type of value an arbitrary generates. */
 type ValueOf<A> = A extends fc.Arbitrary<infer T> ? T : never;
 
@@ -145,163 +190,28 @@ const arbGap = fc.oneof(
 );
 
 // ============================================================================
-// The machine's side of the walk.
+// The recording a walk loads.
 // ============================================================================
 
-/**
- * An action as editorMachine's setup() holds it. xstate 5.33.2's `assign(fn)`
- * keeps `fn` as `assignment`; a plain action is the function itself, with no
- * `type`. Other built-ins (enqueueActions, sendTo, ...) carry their own `type`.
- */
-type MachineAction = ((args: EditorActionArgs) => void) & {
-  type?: string;
-  assignment?: (args: EditorActionArgs) => EditorContextUpdate;
-};
-
-/** The machine's own actions and guards, so the walk runs exactly what it runs. */
-const MACHINE_ACTIONS = editorMachine.implementations.actions as unknown as Record<
-  string,
-  MachineAction | undefined
->;
-const MACHINE_GUARDS = editorMachine.implementations.guards as unknown as Record<
-  string,
-  ((args: EditorActionArgs) => boolean) | undefined
->;
-
-/**
- * Actions that change no replay state: they drive the timeline and narration
- * actors, or keep the viewer's own workspace files (the walk edits none). Any
- * other action that is not an assign or a plain action stops the walk, because
- * it may move a replay cursor.
- */
-const SKIPPED_ACTIONS = new Set([
-  "spawnPlaybackAudio",
-  "startPlaybackActors",
-  "pausePlaybackActors",
-  "seekPlaybackActors",
-  "syncPlaybackAudioToTimeline",
-  "syncStreamedRecordingGrowth",
-  "preserveLearnerWorkspace",
-]);
-
-const { playback } = editorMachine.root.states;
-const { ready, playing, paused } = playback.states;
-
-/** The editor machine during playback, as far as the walk takes it. */
-interface PlaybackMachine {
-  context: EditorMachineContext;
-  state: "ready" | "playing";
-}
-
-/** One step of the walk: the actions the machine runs for `event` from where it is now. */
-type MachineStep = (
-  machine: PlaybackMachine,
-  event: EditorMachineEvent,
-) => readonly UnknownAction[];
-
-/**
- * The actions of the `node` transition the machine takes for `event`: like xstate,
- * the first branch whose guard holds, checked against the context before the step.
- */
-function takenActions(
-  node: typeof playback,
-  machine: PlaybackMachine,
-  event: EditorMachineEvent,
-): readonly UnknownAction[] {
-  const branch = (node.transitions.get(event.type) ?? []).find((each) => {
-    if (each.guard === undefined) return true;
-    const guard = typeof each.guard === "string" ? MACHINE_GUARDS[each.guard] : undefined;
-    if (!guard) throw new Error(`The walk cannot check the guard of ${node.key}.${event.type}`);
-    return guard({ context: machine.context, event });
-  });
-  if (!branch) {
-    throw new Error(`No branch of ${node.key}.${event.type} holds where the walk sends it`);
-  }
-  return branch.actions;
-}
-
-/** A transition of `playback` itself, which the walk takes from ready and from playing. */
-const playbackStep: MachineStep = (machine, event) => {
-  if (ready.transitions.has(event.type) || playing.transitions.has(event.type)) {
-    throw new Error(`ready or playing now handles ${event.type} itself; walk that transition`);
-  }
-  return takenActions(playback, machine, event);
-};
-
-/**
- * The actions the machine runs for each step of the walk. They are read from the
- * machine itself (editorMachine.ts: `loading`'s onDone near line 1026, and the
- * `playback` state near lines 1067-1265), so the walk follows the machine's lists,
- * guards and order: the source state's exit, the actions of the branch whose guard
- * holds, then the target's entry. Kept by hand here: which transition each step
- * takes, and loading's onDone, whose setRecording is an inline assign (see `load`).
- * A new trigger, or a new transition that resets replay cursors, belongs here and
- * in the Move union, or the walk cannot see it.
- *
- * The walk never stays paused (a resume is PAUSE then PLAY at once), so paused's
- * own TICK and SEEK, and growth while the viewer owns the workspace, are not
- * walked. Neither are STOP, the end (FINISHED, ended), WORKSPACE_EVENT and
- * SET_EDITOR_REF.
- */
-const MACHINE_STEPS = {
-  LOAD: () => [...playback.entry, ...ready.entry],
-  TICK: playbackStep,
-  SEEK: playbackStep,
-  // The first PLAY: ready -> playing.
-  PLAY: (machine, event) => [
-    ...ready.exit,
-    ...takenActions(ready, machine, event),
-    ...playing.entry,
-  ],
-  // playing -> paused hands the workspace to the viewer (detachPlaybackWorkspace) ...
-  PAUSE: (machine, event) => [
-    ...playing.exit,
-    ...takenActions(playing, machine, event),
-    ...paused.entry,
-  ],
-  // ... and paused -> playing takes it back (reattachPlaybackWorkspace).
-  RESUME: (machine, event) => [
-    ...paused.exit,
-    ...takenActions(paused, machine, event),
-    ...playing.entry,
-  ],
-  // Streamed growth. The replay owns the workspace here, so the branch that
-  // catches the replay up is the one that holds.
-  APPEND_RECORDING_DELTA: playbackStep,
-  EXTEND_RECORDING: playbackStep,
-} satisfies Record<string, MachineStep>;
-
-/**
- * Takes `step` for `event`. Like `assign`, each action sees what the ones before
- * it changed; a plain action only calls host hooks.
- */
-function run(machine: PlaybackMachine, event: EditorMachineEvent, step: MachineStep): void {
-  for (const action of step(machine, event)) {
-    if (typeof action !== "string") throw new Error("The walk cannot run an inline action");
-    if (SKIPPED_ACTIONS.has(action)) continue;
-    const implementation = MACHINE_ACTIONS[action];
-    const args = { context: machine.context, event };
-    if (implementation?.type === "xstate.assign" && implementation.assignment) {
-      machine.context = { ...machine.context, ...implementation.assignment(args) };
-    } else if (implementation && implementation.type === undefined) {
-      implementation(args);
-    } else {
-      throw new Error(
-        `The walk cannot run "${action}" (${implementation?.type ?? "unknown"}); ` +
-          "add it to SKIPPED_ACTIONS if it changes no replay state",
-      );
-    }
-  }
-}
-
-/** Longer than any walk, so the timeline never clamps the playhead. */
+/** Longer than any walk, so the timeline never clamps the playhead before `finish`. */
 const DURATION = 60_000;
 
+const START_SELECTION: EditorSelection = {
+  startLineNumber: 1,
+  startColumn: 1,
+  endLineNumber: 1,
+  endColumn: 1,
+  selectionStartLineNumber: 1,
+  selectionStartColumn: 1,
+  positionLineNumber: 1,
+  positionColumn: 1,
+};
+
 /**
- * The recording around one track's log. Its one frame makes it playable (canPlay).
- * The context has no editor, so applyFrameAtTime applies nothing (the frame track
- * needs Monaco and is left out), and with no current frame
- * adoptPlaybackWorkspaceAtPause adopts nothing at a pause either.
+ * The recording around a track's log. Its one frame makes it playable (canPlay). With
+ * no editor, applyFrameAtTime applies nothing, and with no current frame
+ * adoptPlaybackWorkspaceAtPause adopts nothing at a pause either. The frames property
+ * replaces the frame with its own log and gives the walk an editor.
  */
 const RECORDING: Recording = {
   version: 4,
@@ -316,16 +226,7 @@ const RECORDING: Recording = {
       isKeyframe: true,
       state: {
         content: "",
-        selection: {
-          startLineNumber: 1,
-          startColumn: 1,
-          endLineNumber: 1,
-          endColumn: 1,
-          selectionStartLineNumber: 1,
-          selectionStartColumn: 1,
-          positionLineNumber: 1,
-          positionColumn: 1,
-        },
+        selection: START_SELECTION,
         position: { lineNumber: 1, column: 1 },
         viewState: null,
       },
@@ -333,103 +234,91 @@ const RECORDING: Recording = {
   ],
 };
 
-/** loading's onDone: setRecording, then playback's entry. */
-function load(recording: Recording, hooks: EditorMachineHostHooks): PlaybackMachine {
-  const initial = createInitialContext({
-    editorRef: { current: null },
-    ...hooks,
-    // A replay action reports a damaged track here, and the walk's tracks are whole.
-    onError: (error) => {
-      throw error;
-    },
-  });
-  const loaded = { recording, duration: DURATION };
-  const machine: PlaybackMachine = {
-    context: { ...initial, ...setRecording({ context: initial }, loaded) },
-    state: "ready",
-  };
-  // The loadRecording invoke's done event. The replay actions read only its type,
-  // which is neither TICK nor SEEK.
-  const done = { type: "xstate.done.actor.0.editor.loading", output: loaded };
-  run(machine, done as unknown as EditorMachineEvent, MACHINE_STEPS.LOAD);
-  return machine;
+type TrackField = keyof RecordingTracks;
+
+/** One record of a walk's log, on the track it belongs to. */
+interface LogRecord {
+  field: TrackField;
+  record: { timestamp: number };
+  /** For a frame: what the editor shows from it, as the recorder captured it. */
+  shows?: EditorShows;
 }
 
-/** Where each track's records are, in a recording and in a streamed delta. */
-const TRACK_FIELDS = {
-  chatEvents: "newChatEvents",
-  runtimeEvents: "newRuntimeEvents",
-  workspaceEvents: "newWorkspaceEvents",
-  whiteboardEvents: "newWhiteboardEvents",
-  slideEvents: "newSlideEvents",
-  previewEvents: "newPreviewEvents",
-} as const satisfies { [F in keyof Recording]?: keyof RecordingStreamDelta };
+/** A single track's events as a log. */
+const logOf = (field: TrackField, events: ReadonlyArray<{ timestamp: number }>): LogRecord[] =>
+  events.map((record) => ({ field, record }));
 
-type TrackField = keyof typeof TRACK_FIELDS;
+/** The records of `log`, grouped into the recording fields they belong to. */
+function tracksOf(
+  fields: readonly TrackField[],
+  log: readonly LogRecord[],
+): Partial<RecordingTracks> {
+  const tracks: Partial<Record<TrackField, unknown[]>> = {};
+  for (const field of fields) tracks[field] = [];
+  for (const { field, record } of log) tracks[field]!.push(record);
+  return tracks as Partial<RecordingTracks>;
+}
 
-const NO_NEW_RECORDS: Omit<RecordingStreamDelta, "cursor" | "recordingId" | "duration"> = {
-  streamFinalized: false,
-  newFrames: [],
-  newSlideEvents: [],
-  newPreviewEvents: [],
-  newPreviewInitialDocuments: [],
-  newPreviewPatchBatches: [],
-  newWorkspaceEvents: [],
-  newRuntimeEvents: [],
-  newCursorEvents: [],
-  newWhiteboardEvents: [],
-  newChatEvents: [],
-};
-
-/** Streams `records` of one track in, in place (a delta) or as a longer copy (`extend`). */
-function grow(
-  machine: PlaybackMachine,
-  field: TrackField,
-  records: readonly unknown[],
-  extend: boolean,
-): void {
-  const recording = machine.context.recording!;
-  if (extend) {
-    const longer = { ...recording, [field]: [...(recording[field] ?? []), ...records] };
-    run(machine, { type: "EXTEND_RECORDING", recording: longer }, MACHINE_STEPS.EXTEND_RECORDING);
-    return;
+/** The recording with a copy of every track, so a cold resolve shares no cache with the walk. */
+function copyTracks(recording: Recording): Recording {
+  const copy = { ...recording };
+  const tracks = copy as Partial<Record<TrackField, unknown[]>>;
+  for (const name of RECORDING_TRACK_NAMES) {
+    const events = recording[name];
+    if (events) tracks[name] = [...events];
   }
-  const delta: RecordingStreamDelta = {
-    ...NO_NEW_RECORDS,
-    cursor: machine.context.recordingStreamCursor + 1,
-    recordingId: recording.id,
-    duration: DURATION,
-    [TRACK_FIELDS[field]]: records,
-  };
-  run(machine, { type: "APPEND_RECORDING_DELTA", delta }, MACHINE_STEPS.APPEND_RECORDING_DELTA);
+  return copy;
 }
 
 // ============================================================================
 // The walk.
 // ============================================================================
 
-interface ReplayTrack<Event extends { timestamp: number }> {
-  /** The recording field the track replays. */
-  field: TrackField;
+interface TrackHost {
+  hooks: EditorMachineHostHooks;
+  /** The editor the app has, or none (the machine then applies no frame). */
+  editor?: FramesEditor;
+  /** What the page shows of the track now, the viewer's own changes included. */
+  shown(context: EditorMachineContext): unknown;
+  /**
+   * What replay landed on, to compare with the cold resolve `expected`; `shown` when
+   * left out. A track whose machine state is what a seek lands on (the preview's
+   * retained state), or whose host may be waiting for the editor (frames), says so here.
+   * `handedBack` says the step gave the page back to the viewer as it ended (a seek
+   * while paused or ended), which drops the machine's record of what it applied.
+   */
+  landed?(context: EditorMachineContext, expected: unknown, handedBack: boolean): unknown;
+  /** The viewer changes what the track shows, as they may while they own the page. */
+  viewerEdit?(): void;
+  /** A move starts. */
+  startMove?(): void;
+  /** Whether the app has an editor change still to tell the machine about. */
+  awaitsEditorRef?(context: EditorMachineContext): boolean;
+  /** The app shows the open file's model in its editor, just before it says so. */
+  rebind?(): void;
+}
+
+interface ReplayTrack {
+  /** The recording fields the track's log fills. */
+  fields: readonly TrackField[];
   /** Anything else the recording needs (the slide deck). */
   recording?: Partial<Recording>;
+  /** How many records of the log the load always has. */
+  minLoaded?: number;
   /**
-   * The host hooks that show the track, made fresh for each walk, and what they
-   * show now. A track that lands on one state pushes each state its hook is
-   * given into `applied`.
+   * The host hooks that show the track, made fresh for each walk. A track that lands
+   * on one state pushes each state its hook is given into `applied`.
    */
-  host(applied: unknown[]): {
-    hooks: EditorMachineHostHooks;
-    shown(context: EditorMachineContext): unknown;
-    /** The viewer changes what the track shows, as they may before PLAY. */
-    viewerEdit?(): void;
-  };
-  /** What a cold resolve at `time` shows. `events` is a copy that shares no cache with the walk. */
-  cold(events: Event[], time: number): unknown;
+  host(applied: unknown[]): TrackHost;
+  /**
+   * What a cold resolve at `time` shows. `recording` has copies of the loaded tracks,
+   * and `loaded` is the part of the log they hold.
+   */
+  cold(recording: Recording, time: number, loaded: readonly LogRecord[]): unknown;
   /**
    * Tracks with transient interactions (slide hops, preview clicks) replay every
-   * event a tick or a streamed append crosses. A load, a seek or a resume lands on
-   * one state and must never fire the recorded interactions again.
+   * event a tick or a streamed append crosses. A load, a seek, a PLAY or a STOP lands
+   * on one state and must never fire the recorded interactions again.
    */
   replaysTransients?: true;
   /** What the host does on its own once playing starts. */
@@ -437,81 +326,227 @@ interface ReplayTrack<Event extends { timestamp: number }> {
 }
 
 /**
- * Loads the first `initialCount` records of `all`, plays `moves`, and checks the
- * track against a cold resolve after the load and after each move. Returns how
- * many states it compared.
+ * Loads the first `initialCount` records of `log`, plays `moves`, and checks the law
+ * each move falls under after the load and after each move. Returns how many states
+ * it compared.
  */
-function walk<Event extends { timestamp: number }>(
-  track: ReplayTrack<Event>,
-  all: Event[],
+function walk(
+  track: ReplayTrack,
+  log: LogRecord[],
   initialCount: number,
   moves: Move[],
+  editorRefDelays: number[],
 ): number {
-  const stamps = all.map((event) => event.timestamp);
+  const stamps = log.map(({ record }) => record.timestamp);
   const applied: unknown[] = [];
   const host = track.host(applied);
-  const machine = load(
-    { ...RECORDING, ...track.recording, [track.field]: all.slice(0, initialCount) },
-    host.hooks,
-  );
+  let loadedCount = Math.min(log.length, Math.max(initialCount, track.minLoaded ?? 0));
+  const machine: PlaybackMachine = load({
+    recording: {
+      ...RECORDING,
+      ...track.recording,
+      ...tracksOf(track.fields, log.slice(0, loadedCount)),
+    },
+    hooks: host.hooks,
+    duration: DURATION,
+    editor: (host.editor as unknown as monaco.editor.IStandaloneCodeEditor | undefined) ?? null,
+  });
   let time = 0;
+  // Who owns the page, from the transitions each move takes (see the laws above).
+  let owner: "replay" | "viewer" = "replay";
+  let compared = 1;
 
-  const loaded = (): Event[] => (machine.context.recording?.[track.field] ?? []) as Event[];
-  const check = (label: string, landsOnOneState: boolean) => {
+  // ---- The checks.
+  const playhead = (label: string) =>
+    expect(machine.context.timeline.currentTime, `the playhead ${label}`).toBe(time);
+  const replayOwns = (label: string, landsOnOneState: boolean, handedBack = false) => {
     if (track.replaysTransients && landsOnOneState) {
       expect(applied.length, `states applied ${label}`).toBeLessThanOrEqual(1);
     }
-    expect(machine.context.timeline.currentTime, `the playhead ${label}`).toBe(time);
-    expect(host.shown(machine.context), `what the track shows ${label}`).toEqual(
-      track.cold([...loaded()], time),
-    );
+    playhead(label);
+    const loaded = log.slice(0, loadedCount);
+    const expected = track.cold(copyTracks(machine.context.recording!), time, loaded);
+    const actual = host.landed
+      ? host.landed(machine.context, expected, handedBack)
+      : host.shown(machine.context);
+    expect(actual, `what the track shows ${label}`).toEqual(expected);
     applied.length = 0;
+    compared += 1;
+  };
+  const viewerOwns = (label: string, before: unknown) => {
+    expect(applied.length, `states applied ${label}`).toBe(0);
+    playhead(label);
+    expect(host.shown(machine.context), `what the viewer sees ${label}`).toEqual(before);
+    compared += 1;
+  };
+  /** Runs `act` under the viewer-owns law: what the track shows must not change. */
+  const keptForViewer = (label: string, act: () => void) => {
+    host.startMove?.();
+    const before = host.shown(machine.context);
+    act();
+    viewerOwns(label, before);
+  };
+  const hasRecords = () => loadedCount > 0;
+
+  // ---- The app telling the machine its editor again (SET_EDITOR_REF).
+  let editorRefIn: number | null = null;
+  let waits = 0;
+  const tellEditor = (label: string) => {
+    host.startMove?.();
+    const before = host.shown(machine.context);
+    host.rebind?.();
+    send(machine, { type: "SET_EDITOR_REF", editor: machine.context.editorRefs.editor });
+    // The machine re-syncs a real editor, and only while replay owns the page
+    // (shouldSyncPlaybackEditorRef). Without one, or for the viewer, nothing re-applies.
+    if (owner === "replay" && host.editor) replayOwns(label, true);
+    else viewerOwns(label, before);
+  };
+  // The app re-renders some moves after the change, and always before the viewer's
+  // next action, which comes from a later render.
+  const deliverEditorRef = (move: Move | "end", label: string) => {
+    if (editorRefIn === null) return;
+    const viewerActs = move === "end" || !["tick", "append"].includes(move.kind);
+    if (editorRefIn > 0 && !viewerActs) {
+      editorRefIn -= 1;
+      return;
+    }
+    editorRefIn = null;
+    tellEditor(`when the app tells the editor again, ${label}`);
+  };
+  const awaitEditorRef = () => {
+    if (editorRefIn === null && host.awaitsEditorRef?.(machine.context)) {
+      editorRefIn = editorRefDelays[waits++ % editorRefDelays.length];
+    }
   };
 
-  check("after the load", true);
+  host.startMove?.();
+  replayOwns("after the load", true);
+  awaitEditorRef();
+
   moves.forEach((move, index) => {
-    if (move.kind === "tick") {
-      // The timeline ticks only once playing, but a TICK in ready runs the same
-      // playback.TICK, so the walk also ticks from the cursors the load left.
-      time += move.dt;
-      run(machine, { type: "TICK", currentTime: time }, MACHINE_STEPS.TICK);
-    } else if (move.kind === "seek") {
-      const stamp = stamps.length ? stamps[move.pick % stamps.length] : 0;
-      time = Math.max(0, stamp + move.offset);
-      run(machine, { type: "SEEK", time }, MACHINE_STEPS.SEEK);
-    } else if (move.kind === "resume") {
-      const wasPlaying = machine.state === "playing";
-      if (wasPlaying) run(machine, { type: "PAUSE" }, MACHINE_STEPS.PAUSE);
-      // Paused, or not yet playing, the app is the viewer's. With no records
-      // loaded the machine has nothing to put back, so the viewer's state stays.
-      if (move.viewerEdits && loaded().length) host.viewerEdit?.();
-      run(machine, { type: "PLAY" }, wasPlaying ? MACHINE_STEPS.RESUME : MACHINE_STEPS.PLAY);
-      machine.state = "playing";
-      track.onPlaying?.(machine.context);
-    } else {
-      const next = all.slice(loaded().length, loaded().length + move.count);
-      grow(machine, track.field, next, move.extend);
+    const label = `after move ${index} (${move.kind})`;
+    deliverEditorRef(move, `before move ${index} (${move.kind})`);
+    host.startMove?.();
+    const at = () => `${label} at ${time}ms`;
+    switch (move.kind) {
+      case "tick": {
+        if (machine.state === "paused" || machine.state === "ended") {
+          // Paused and ended take a TICK and do nothing.
+          keptForViewer(at(), () => send(machine, { type: "TICK", currentTime: time + move.dt }));
+        } else if (owner === "replay") {
+          // The timeline ticks only once playing, but a TICK in ready runs the same
+          // playback.TICK, so the walk also ticks from the cursors the load left.
+          time += move.dt;
+          send(machine, { type: "TICK", currentTime: time });
+          replayOwns(at(), false);
+        }
+        // Ready after a viewer's WORKSPACE_EVENT gets no TICK: its timeline is not
+        // running, and only PLAY starts it.
+        break;
+      }
+      case "seek": {
+        const stamp = stamps.length ? stamps[move.pick % stamps.length] : 0;
+        time = Math.max(0, stamp + move.offset);
+        const handedOver = machine.state === "paused" || machine.state === "ended";
+        send(machine, { type: "SEEK", time });
+        replayOwns(at(), true, handedOver);
+        // A seek while paused or ended takes the page for that step only.
+        owner = handedOver ? "viewer" : "replay";
+        break;
+      }
+      case "play": {
+        if (machine.state === "playing") {
+          keptForViewer(`${at()}, paused to resume`, () => send(machine, { type: "PAUSE" }));
+          owner = "viewer";
+          host.startMove?.();
+        }
+        // With no records loaded the machine has nothing to put back, so the viewer's
+        // change would stay.
+        if (move.viewerEdits && hasRecords()) host.viewerEdit?.();
+        // From the end, PLAY starts the lesson again.
+        const restarts = machine.state === "ended" && time === DURATION;
+        send(machine, { type: "PLAY" });
+        if (restarts) time = 0;
+        owner = "replay";
+        track.onPlaying?.(machine.context);
+        replayOwns(at(), true);
+        break;
+      }
+      case "pause": {
+        if (machine.state !== "playing") break;
+        keptForViewer(at(), () => send(machine, { type: "PAUSE" }));
+        owner = "viewer";
+        break;
+      }
+      case "viewerWorkspaceEvent": {
+        if (move.viewerEdits && hasRecords()) host.viewerEdit?.();
+        // Playing, it pauses; otherwise it detaches the replay from the workspace.
+        keptForViewer(at(), () => send(machine, { type: "WORKSPACE_EVENT" }));
+        owner = "viewer";
+        break;
+      }
+      case "finish": {
+        if (machine.state !== "playing") break;
+        time = DURATION;
+        send(machine, { type: "TICK", currentTime: time });
+        replayOwns(`${at()}, the last tick`, false);
+        keptForViewer(at(), () => send(machine, { type: "FINISHED" }));
+        owner = "viewer";
+        break;
+      }
+      case "stop": {
+        send(machine, { type: "STOP" });
+        time = 0;
+        owner = "replay";
+        replayOwns(at(), true);
+        break;
+      }
+      case "append": {
+        const next = log.slice(loadedCount, loadedCount + move.count);
+        loadedCount += next.length;
+        const records = tracksOf(track.fields, next);
+        if (owner === "replay") {
+          grow(machine, records, move.extend);
+          replayOwns(at(), false);
+        } else {
+          // PLAY, SEEK or STOP picks the new records up.
+          keptForViewer(at(), () => grow(machine, records, move.extend));
+        }
+        break;
+      }
+      case "editorRef": {
+        tellEditor(at());
+        break;
+      }
+      case "panelView": {
+        keptForViewer(at(), () =>
+          send(machine, { type: "VIEWER_PANEL_VIEW_CHANGED", panel: move.panel }),
+        );
+        break;
+      }
     }
-    const landsOnOneState = move.kind === "seek" || move.kind === "resume";
-    check(`after move ${index} (${move.kind}) at ${time}ms`, landsOnOneState);
+    awaitEditorRef();
   });
-  return moves.length + 1;
+  deliverEditorRef("end", "at the end of the walk");
+  return compared;
 }
 
 /**
- * Generates event logs from `arbSteps` and walks over each one. Returns how many
- * states were compared, so a test can see that its walks really ran.
+ * Generates logs from `arbLog` and walks over each one. Returns how many states were
+ * compared, so a test can see that its walks really ran.
  */
-function checkWalks<Step, Event extends { timestamp: number }>(
-  arbSteps: fc.Arbitrary<Step[]>,
-  record: (steps: Step[]) => Event[],
-  track: ReplayTrack<Event>,
-): number {
+function checkWalks(arbLog: fc.Arbitrary<LogRecord[]>, track: ReplayTrack): number {
   let compared = 0;
   fc.assert(
-    fc.property(arbSteps, arbInitialCount, arbMoves, (steps, initialCount, moves) => {
-      compared += walk(track, record(steps), initialCount, moves);
-    }),
+    fc.property(
+      arbLog,
+      arbInitialCount,
+      arbMoves,
+      arbEditorRefDelays,
+      (log, initialCount, moves, editorRefDelays) => {
+        compared += walk(track, log, initialCount, moves, editorRefDelays);
+      },
+    ),
     { numRuns: NUM_RUNS },
   );
   return compared;
@@ -635,8 +670,8 @@ function recordChat(steps: Array<[gap: number, op: ChatOp]>): ChatRecordingEvent
   return events;
 }
 
-const chatTrack: ReplayTrack<ChatRecordingEvent> = {
-  field: "chatEvents",
+const chatTrack: ReplayTrack = {
+  fields: ["chatEvents"],
   host() {
     let shown: ChatCheckpoint | undefined;
     return {
@@ -653,9 +688,9 @@ const chatTrack: ReplayTrack<ChatRecordingEvent> = {
   },
   // A cold resolve is a resync, which shows the empty transcript before the
   // first chat event (setRecording shows it too, before any chat event loads).
-  cold: (events, time) =>
+  cold: ({ chatEvents }, time) =>
     getChatReplayResult({
-      chatEvents: events,
+      chatEvents: chatEvents!,
       currentTime: time,
       lastAppliedIndex: -1,
       isResync: true,
@@ -762,8 +797,8 @@ function recordRuntime(
   return events;
 }
 
-const runtimeTrack: ReplayTrack<RuntimeRecordingEvent> = {
-  field: "runtimeEvents",
+const runtimeTrack: ReplayTrack = {
+  fields: ["runtimeEvents"],
   host() {
     let shown: RuntimeRecordingSnapshot | undefined;
     return {
@@ -782,9 +817,12 @@ const runtimeTrack: ReplayTrack<RuntimeRecordingEvent> = {
       },
     };
   },
-  cold: (events, time) =>
-    getRuntimeReplayResult({ runtimeEvents: events, currentTime: time, lastAppliedIndex: -1 })
-      .snapshotToApply,
+  cold: ({ runtimeEvents }, time) =>
+    getRuntimeReplayResult({
+      runtimeEvents: runtimeEvents!,
+      currentTime: time,
+      lastAppliedIndex: -1,
+    }).snapshotToApply,
   // When playing starts, the runtime dock also resolves index 0 on its own
   // (useRuntimeDockRecordedSnapshot). That moves the shared fold cache back to
   // the start, and the cache must not change any result.
@@ -876,13 +914,13 @@ function describeWorkspace(snapshot: WorkspaceRecordingSnapshot) {
 // The machine keeps the workspace cursor through seeks and pauses (it is not in
 // REPLAY_CURSORS_RESET): the widths are relative, so the replay must know which
 // offsets it has already added. Resetting the cursor to -1 would add them all a
-// second time. A pause also hands the workspace to the viewer (it detaches and
-// sets hasManualWorkspaceOverride) and the PLAY after it takes it back, and the
-// walk's resume runs both. The viewer edits no files here: PLAY keeps their
+// second time. A pause, the end and a viewer's WORKSPACE_EVENT hand the workspace
+// to the viewer (they detach and set hasManualWorkspaceOverride), and PLAY, SEEK
+// and STOP take it back. The viewer edits no files here: PLAY keeps their
 // edits on purpose until the recording changes the workspace again (see the
 // "learner workspace" tests in learnerWorkspace.test.ts).
-const workspaceTrack: ReplayTrack<WorkspaceRecordingEvent> = {
-  field: "workspaceEvents",
+const workspaceTrack: ReplayTrack = {
+  fields: ["workspaceEvents"],
   host() {
     const live = {
       snapshot: VIEWER_WORKSPACE,
@@ -910,7 +948,8 @@ const workspaceTrack: ReplayTrack<WorkspaceRecordingEvent> = {
   },
   // The law: each width is the viewer's width plus every offset recorded at or
   // before `time`, and the files are those of the latest event.
-  cold: (events, time) => {
+  cold: ({ workspaceEvents }, time) => {
+    const events = workspaceEvents!;
     const index = events.findLastIndex((event) => event.timestamp <= time);
     let sidebarWidth = BASE_SIDEBAR_WIDTH;
     let previewDockWidth = BASE_PREVIEW_DOCK_WIDTH;
@@ -976,8 +1015,8 @@ function recordWhiteboard(steps: Array<ValueOf<typeof arbWhiteboardStep>>): Whit
   return steps.map(({ gap, ...change }) => ({ timestamp: (time += gap), ...change }));
 }
 
-const whiteboardTrack: ReplayTrack<WhiteboardEvent> = {
-  field: "whiteboardEvents",
+const whiteboardTrack: ReplayTrack = {
+  fields: ["whiteboardEvents"],
   host() {
     let shown: WhiteboardSceneState | undefined;
     return {
@@ -1000,10 +1039,10 @@ const whiteboardTrack: ReplayTrack<WhiteboardEvent> = {
   // An interpolated scene depends only on the time and the events around it,
   // and ticks only move forward, so the walk matches inside animation windows too.
   // Without whiteboard events the load shows the empty board, as before the first event.
-  cold: (events, time) =>
-    events.length
+  cold: ({ whiteboardEvents }, time) =>
+    whiteboardEvents!.length
       ? getWhiteboardReplayResult({
-          whiteboardEvents: events,
+          whiteboardEvents: whiteboardEvents!,
           currentTime: time,
           lastAppliedIndex: -1,
         }).stateToApply
@@ -1064,8 +1103,8 @@ function recordSlides(steps: Array<ValueOf<typeof arbSlideStep>>): SlideEvent[] 
   });
 }
 
-const slideTrack: ReplayTrack<SlideEvent> = {
-  field: "slideEvents",
+const slideTrack: ReplayTrack = {
+  fields: ["slideEvents"],
   recording: { slides: SLIDES },
   host(applied) {
     let shown: SlideReplayApplication | undefined;
@@ -1087,10 +1126,10 @@ const slideTrack: ReplayTrack<SlideEvent> = {
   },
   // A resync applies exactly one state: before the first event, the closed deck.
   // Without slide events the machine applies nothing.
-  cold: (events, time) =>
-    events.length
+  cold: ({ slideEvents }, time) =>
+    slideEvents!.length
       ? getSlideReplayResult({
-          slideEvents: events,
+          slideEvents: slideEvents!,
           slides: SLIDES,
           currentTime: time,
           lastAppliedIndex: -1,
@@ -1175,24 +1214,31 @@ function recordPreview(steps: Array<ValueOf<typeof arbPreviewStep>>): PreviewEve
   });
 }
 
-const previewTrack: ReplayTrack<PreviewEvent> = {
-  field: "previewEvents",
+const previewTrack: ReplayTrack = {
+  fields: ["previewEvents"],
   host(applied) {
+    let shown: PreviewState | undefined;
     return {
       hooks: {
         applyPreviewState: (state) => {
+          shown = state;
           applied.push(state);
         },
       },
-      // The retained state the machine keeps (lastAppliedPreviewState), not the
-      // last state the hook was given, which carries the transient parts. So a
-      // viewer's change to the live preview is not what the walk compares.
-      shown: (context) => context.lastAppliedPreviewState,
+      // While the viewer owns the page, the preview must keep what it was last given.
+      shown: () => shown,
+      // Where replay lands is the retained state the machine keeps
+      // (lastAppliedPreviewState), not the last state the hook was given, which
+      // carries the transient parts. A seek that hands the page back drops it; the
+      // one state such a seek applies is the retained state (none before the first
+      // event, as the machine keeps none there either).
+      landed: (context, _expected, handedBack) =>
+        handedBack ? applied.at(-1) : context.lastAppliedPreviewState,
     };
   },
-  cold: (events, time) =>
+  cold: ({ previewEvents }, time) =>
     getPreviewReplayResult({
-      previewEvents: events,
+      previewEvents: previewEvents!,
       currentTime: time,
       lastAppliedIndex: -1,
       isResync: true,
@@ -1200,42 +1246,467 @@ const previewTrack: ReplayTrack<PreviewEvent> = {
   replaysTransients: true,
 };
 
+// ============================================================================
+// Frames: the editor's text, caret and scroll, encoded by the recorder's own
+// frame encoder, and replayed into an editor the walk holds.
+//
+// Frames carry no file path: which file a frame's text belongs to comes from the
+// workspace track. So this log holds both, and the walk also checks which file
+// the editor shows. A file switch, the load of another file, and PLAY after the
+// viewer had the workspace make the machine wait for the app to bind the new
+// model and say so (SET_EDITOR_REF). Until then the frame must not be applied:
+// it would land in the model the editor still shows.
+// ============================================================================
+
+/** What the editor shows from a frame: its text, caret and selection, and scroll. */
+interface EditorShows {
+  content: string;
+  selection: EditorSelection;
+  viewState: EditorFrame["state"]["viewState"];
+}
+
+const FRAME_FILES = ["index.html", "app.html"] as const;
+
+type FrameFile = (typeof FRAME_FILES)[number];
+
+/**
+ * The Monaco surface the frame step writes to, one model per file. The app binds the
+ * open file's model when it re-renders (`bind`), then sends SET_EDITOR_REF. Every write
+ * replay makes is counted, so a law can say none was made.
+ */
+class FramesEditor {
+  private readonly models = new Map<string, { content: string }>();
+  boundPath: string;
+  private selection: EditorSelection | null = null;
+  private viewState: unknown = null;
+  writes = 0;
+  viewStateWrites = 0;
+
+  constructor(boundPath: string) {
+    for (const path of FRAME_FILES) this.models.set(path, { content: "" });
+    this.boundPath = boundPath;
+  }
+
+  private get model() {
+    return this.models.get(this.boundPath)!;
+  }
+
+  bind(path: string): void {
+    if (!this.models.has(path)) this.models.set(path, { content: "" });
+    this.boundPath = path;
+  }
+
+  // The part of IStandaloneCodeEditor the frame step uses. A model that can undo takes
+  // the whole text in one write (applyContentDiff).
+  getModel() {
+    const { model } = this;
+    return {
+      getValue: () => model.content,
+      setValue: (content: string) => {
+        model.content = content;
+        this.writes += 1;
+      },
+      canUndo: () => true,
+    };
+  }
+  getSelection() {
+    return this.selection;
+  }
+  getSelections() {
+    return this.selection ? [this.selection] : null;
+  }
+  setSelection(selection: EditorSelection) {
+    this.selection = selection;
+    this.writes += 1;
+  }
+  restoreViewState(viewState: unknown) {
+    this.viewState = viewState;
+    this.writes += 1;
+    this.viewStateWrites += 1;
+  }
+  hasTextFocus() {
+    return true;
+  }
+
+  /** The viewer types in the open file. */
+  type(text: string): void {
+    this.model.content += text;
+  }
+
+  /** Everything the editor shows, in every model, and how many writes replay made. */
+  view() {
+    return {
+      contents: Object.fromEntries([...this.models].map(([path, { content }]) => [path, content])),
+      selection: this.selection,
+      viewState: this.viewState,
+      writes: this.writes,
+    };
+  }
+
+  /**
+   * The open file and what it shows, as a frame would set it. A frame without a view
+   * state leaves the scroll where it is, so then the editor must only not have been
+   * given one since `viewStateWritesBefore`.
+   */
+  frameView(viewState: EditorShows["viewState"], viewStateWritesBefore: number) {
+    const restored = this.viewStateWrites > viewStateWritesBefore;
+    return {
+      path: this.boundPath,
+      content: this.model.content,
+      selection: this.selection,
+      viewState:
+        viewState !== null ? this.viewState : restored ? { restoredOneTheFrameHasNot: true } : null,
+    };
+  }
+}
+
+const arbFrameStep = fc.oneof(
+  {
+    weight: 5,
+    arbitrary: fc.record({
+      k: fc.constant("type"),
+      gap: arbGap,
+      at: fc.nat(),
+      cut: fc.nat({ max: 2 }),
+      text: fc.constantFrom("a", "bc", "\n"),
+      // Typed edits reach the encoder with their own delta; others it diffs itself.
+      asEdit: fc.boolean(),
+    }),
+  },
+  {
+    weight: 2,
+    arbitrary: fc.record({
+      k: fc.constant("select"),
+      gap: arbGap,
+      anchor: fc.nat(),
+      caret: fc.nat(),
+    }),
+  },
+  {
+    weight: 2,
+    arbitrary: fc.record({
+      k: fc.constant("scroll"),
+      gap: arbGap,
+      // No view state after one: the encoder must write a keyframe to say so.
+      top: fc.option(fc.nat({ max: 300 }), { nil: null }),
+    }),
+  },
+  {
+    weight: 2,
+    arbitrary: fc.record({
+      k: fc.constant("switch"),
+      gap: arbGap,
+      // The open file again is a same-file snapshot, as studio writes after typing.
+      path: fc.constantFrom<FrameFile>(...FRAME_FILES),
+    }),
+  },
+);
+
+/** The line and column of `offset` in `text`. */
+function positionAt(text: string, offset: number) {
+  const lines = text.slice(0, offset).split("\n");
+  return { lineNumber: lines.length, column: lines[lines.length - 1].length + 1 };
+}
+
+function selectionOf(text: string, anchor: number, caret: number): EditorSelection {
+  const from = positionAt(text, anchor);
+  const to = positionAt(text, caret);
+  const [start, end] = anchor <= caret ? [from, to] : [to, from];
+  return {
+    startLineNumber: start.lineNumber,
+    startColumn: start.column,
+    endLineNumber: end.lineNumber,
+    endColumn: end.column,
+    selectionStartLineNumber: from.lineNumber,
+    selectionStartColumn: from.column,
+    positionLineNumber: to.lineNumber,
+    positionColumn: to.column,
+  };
+}
+
+function framesWorkspace(
+  activeFilePath: FrameFile,
+  contents: Record<FrameFile, string>,
+): WorkspaceRecordingSnapshot {
+  return {
+    activeFilePath,
+    collapsedFolders: [],
+    sidebarScrollTop: 0,
+    project: {
+      id: "project-1",
+      name: "Project",
+      lessonType: "html-css",
+      entryFilePath: "index.html",
+      folders: [],
+      files: Object.fromEntries(
+        FRAME_FILES.map((path) => [
+          path,
+          { path, name: path, language: "html", content: contents[path] },
+        ]),
+      ),
+    },
+  };
+}
+
+/** The viewer's own workspace before the recording loads, on index.html. */
+const FRAMES_VIEWER_WORKSPACE = framesWorkspace("index.html", {
+  "index.html": "my notes",
+  "app.html": "",
+});
+
+/**
+ * Records `steps` as the recorder does: a workspace event at t=0 and on every file
+ * switch, and each change of the editor captured as a frame through the frame encoder
+ * (pushFrame). A switch captures the new file's first frame at the same stamp. Each
+ * frame record keeps what the recorder captured, which is what replay must show: an
+ * encoder that drops a change shows up as a frame that replays differently.
+ */
+function recordFrames({
+  firstFile,
+  steps,
+}: {
+  firstFile: FrameFile;
+  steps: Array<ValueOf<typeof arbFrameStep>>;
+}): LogRecord[] {
+  const log: LogRecord[] = [];
+  const contents: Record<FrameFile, string> = { "index.html": "", "app.html": "" };
+  let active = firstFile;
+  let selection = START_SELECTION;
+  let viewState: EditorShows["viewState"] = null;
+  let encoder = createFrameStreamEncoder();
+  let version = 1;
+  let time = 0;
+
+  const switchTo = (path: FrameFile) => {
+    active = path;
+    const event: WorkspaceRecordingEvent = {
+      timestamp: time,
+      snapshot: framesWorkspace(path, { ...contents }),
+    };
+    log.push({ field: "workspaceEvents", record: event });
+  };
+  const capture = (contentEditDelta?: CreatedContentEditDelta) => {
+    const frame = normalizeEditorFrame({
+      timestamp: time,
+      state: {
+        content: contents[active],
+        selection,
+        position: { lineNumber: selection.positionLineNumber, column: selection.positionColumn },
+        viewState,
+      },
+    });
+    const pushed = pushFrame(encoder, frame, contentEditDelta);
+    encoder = pushed.state;
+    if (!pushed.emitted) return;
+    const { content, selection: shownSelection, viewState: shownViewState } = frame.state;
+    log.push({
+      field: "frames",
+      record: pushed.emitted as DeltaFrame,
+      shows: { content, selection: shownSelection, viewState: shownViewState },
+    });
+  };
+
+  switchTo(firstFile);
+  capture();
+  for (const step of steps) {
+    time += step.gap;
+    if (step.k === "type") {
+      const base = contents[active];
+      const at = step.at % (base.length + 1);
+      const deleteLength = Math.min(step.cut, base.length - at);
+      const next = base.slice(0, at) + step.text + base.slice(at + deleteLength);
+      const caret = at + step.text.length;
+      const edit: TextEditEvent = {
+        fileId: active,
+        path: active,
+        beforeVersion: version,
+        afterVersion: (version += 1),
+        beforeLength: base.length,
+        afterLength: next.length,
+        changes: [{ offset: at, deleteLength, text: step.text }],
+      };
+      const contentEditDelta = step.asEdit ? createContentEditDelta(base, edit) : null;
+      contents[active] = next;
+      selection = selectionOf(next, caret, caret);
+      capture(contentEditDelta ?? undefined);
+    } else if (step.k === "select") {
+      const text = contents[active];
+      selection = selectionOf(
+        text,
+        step.anchor % (text.length + 1),
+        step.caret % (text.length + 1),
+      );
+      capture();
+    } else if (step.k === "scroll") {
+      viewState =
+        step.top === null
+          ? null
+          : ({
+              cursorState: [],
+              viewState: {
+                scrollLeft: 0,
+                firstPosition: { lineNumber: 1, column: 1 },
+                firstPositionDeltaTop: -step.top,
+              },
+              contributionsState: {},
+            } as unknown as EditorShows["viewState"]);
+      capture();
+    } else {
+      const switches = step.path !== active;
+      switchTo(step.path);
+      if (switches) {
+        // The new model opens at its start, without the old file's scroll.
+        selection = START_SELECTION;
+        viewState = null;
+        capture();
+      }
+    }
+  }
+  return log;
+}
+
+/** A frame replay leaves out on purpose: it belongs to the file open before a switch. */
+const FRAME_SKIPPED = "the frame before the open file's last switch is not shown";
+
+const framesTrack: ReplayTrack = {
+  fields: ["frames", "workspaceEvents"],
+  // The workspace event and the frame the recorder writes at t=0.
+  minLoaded: 2,
+  host() {
+    const live = { snapshot: FRAMES_VIEWER_WORKSPACE };
+    const editor = new FramesEditor(live.snapshot.activeFilePath);
+    let writesBefore = 0;
+    let viewStateWritesBefore = 0;
+    return {
+      hooks: {
+        getWorkspaceSnapshot: () => live.snapshot,
+        applyWorkspaceSnapshot: (snapshot) => {
+          const { sidebarWidthDelta: _sidebar, previewDockWidthDelta: _dock, ...files } = snapshot;
+          live.snapshot = files;
+        },
+      },
+      editor,
+      startMove: () => {
+        writesBefore = editor.writes;
+        viewStateWritesBefore = editor.viewStateWrites;
+      },
+      // A model swap the app has not told the machine about yet: the machine waits for
+      // it, or the editor shows another file than the workspace.
+      awaitsEditorRef: (context) =>
+        context.pendingPlaybackEditorSync || editor.boundPath !== live.snapshot.activeFilePath,
+      rebind: () => editor.bind(live.snapshot.activeFilePath),
+      shown: () => editor.view(),
+      landed: (context, expected) => {
+        const written = editor.writes - writesBefore;
+        // Waiting for the editor, the frame is not applied: it would land in the model
+        // the editor shows now.
+        if (
+          context.pendingPlaybackEditorSync ||
+          editor.boundPath !== live.snapshot.activeFilePath
+        ) {
+          return written === 0 ? expected : { appliedWhileWaitingForTheEditor: written };
+        }
+        if (expected === FRAME_SKIPPED) {
+          return written === 0 && context.currentFrame === null
+            ? FRAME_SKIPPED
+            : { appliedASkippedFrame: context.currentFrame?.state };
+        }
+        return editor.frameView((expected as EditorShows).viewState, viewStateWritesBefore);
+      },
+      viewerEdit: () => editor.type("!"),
+    };
+  },
+  // The law, read from the log rather than from replay's own folds: the frame on screen
+  // at `time` is the last one at or before it (the first one before them all), and it
+  // shows what the recorder captured, in the file the workspace has open at `time`.
+  // Unless the open file switched after that frame: it belongs to the file before.
+  cold: ({ frames, workspaceEvents }, time, loaded) => {
+    const shows = loaded.filter(({ field }) => field === "frames").map((frame) => frame.shows!);
+    expect(shows.length).toBe(frames.length);
+    const frameIndex = Math.max(
+      0,
+      frames.findLastIndex((frame) => frame.timestamp <= time),
+    );
+    const events = workspaceEvents!;
+    const eventIndex = events.findLastIndex((event) => event.timestamp <= time);
+    let lastSwitch = events[0].timestamp;
+    for (let index = 1; index <= eventIndex; index++) {
+      if (events[index].snapshot.activeFilePath !== events[index - 1].snapshot.activeFilePath) {
+        lastSwitch = events[index].timestamp;
+      }
+    }
+    if (frames[frameIndex].timestamp < lastSwitch) return FRAME_SKIPPED;
+    return { path: events[eventIndex].snapshot.activeFilePath, ...shows[frameIndex] };
+  },
+};
+
 describe("seeking lands where playing does", () => {
   it("chat", () => {
-    const compared = checkWalks(fc.array(fc.tuple(arbGap, arbChatOp), SIZE), recordChat, chatTrack);
+    const compared = checkWalks(
+      fc
+        .array(fc.tuple(arbGap, arbChatOp), SIZE)
+        .map((steps) => logOf("chatEvents", recordChat(steps))),
+      chatTrack,
+    );
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 
   it("runtime", () => {
     const compared = checkWalks(
-      fc.array(fc.tuple(arbGap, arbRuntimeOp, fc.boolean()), SIZE),
-      recordRuntime,
+      fc
+        .array(fc.tuple(arbGap, arbRuntimeOp, fc.boolean()), SIZE)
+        .map((steps) => logOf("runtimeEvents", recordRuntime(steps))),
       runtimeTrack,
     );
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 
   it("workspace panel widths and files", () => {
-    const compared = checkWalks(fc.array(arbWorkspaceStep, SIZE), recordWorkspace, workspaceTrack);
+    const compared = checkWalks(
+      fc
+        .array(arbWorkspaceStep, SIZE)
+        .map((steps) => logOf("workspaceEvents", recordWorkspace(steps))),
+      workspaceTrack,
+    );
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 
   it("whiteboard", () => {
     const compared = checkWalks(
-      fc.array(arbWhiteboardStep, SIZE),
-      recordWhiteboard,
+      fc
+        .array(arbWhiteboardStep, SIZE)
+        .map((steps) => logOf("whiteboardEvents", recordWhiteboard(steps))),
       whiteboardTrack,
     );
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 
   it("slides", () => {
-    const compared = checkWalks(fc.array(arbSlideStep, SIZE), recordSlides, slideTrack);
+    const compared = checkWalks(
+      fc.array(arbSlideStep, SIZE).map((steps) => logOf("slideEvents", recordSlides(steps))),
+      slideTrack,
+    );
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 
   it("preview retained state", () => {
-    const compared = checkWalks(fc.array(arbPreviewStep, SIZE), recordPreview, previewTrack);
+    const compared = checkWalks(
+      fc.array(arbPreviewStep, SIZE).map((steps) => logOf("previewEvents", recordPreview(steps))),
+      previewTrack,
+    );
+    expect(compared).toBeGreaterThan(NUM_RUNS);
+  });
+
+  it("editor frames, with the file switches they follow", () => {
+    const compared = checkWalks(
+      fc
+        .record({
+          firstFile: fc.constantFrom<FrameFile>(...FRAME_FILES),
+          steps: fc.array(arbFrameStep, SIZE),
+        })
+        .map(recordFrames),
+      framesTrack,
+    );
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 });

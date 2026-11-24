@@ -1,4 +1,4 @@
-import type { EditorActionArgs, EditorContextUpdate } from "./types";
+import type { EditorActionArgs, EditorContextUpdate, EditorMachineContext } from "./types";
 import type { Recording, RecordingStreamDelta } from "../types";
 import type { WorkspaceRecordingSnapshot } from "../workspace";
 import { areWorkspaceProjectsEqual, areWorkspaceSnapshotsEqual } from "../workspace";
@@ -69,6 +69,9 @@ import {
  * every pause/resume (detachPlaybackWorkspace runs on each entry into `paused`), made the
  * panels grow or shrink without bound. Keeping the true index lets the replay reverse or
  * advance the exact net delta. Only loading or clearing a recording resets it.
+ *
+ * The type makes a context cursor (`lastApplied…Index`) that is neither listed here nor
+ * named in KeptReplayCursor a compile error, so a new track cannot be left out by accident.
  */
 const REPLAY_CURSORS_RESET = {
   lastAppliedFrameIndex: -1,
@@ -77,7 +80,13 @@ const REPLAY_CURSORS_RESET = {
   lastAppliedRuntimeEventIndex: -1,
   lastAppliedWhiteboardEventIndex: -1,
   lastAppliedChatEventIndex: -1,
-} as const satisfies EditorContextUpdate;
+} as const satisfies Record<Exclude<ReplayCursor, KeptReplayCursor>, -1>;
+
+/** Every replay cursor in the machine's context. */
+type ReplayCursor = Extract<keyof EditorMachineContext, `lastApplied${string}Index`>;
+
+/** The workspace cursor survives a seek: its panel widths are offsets (see above). */
+type KeptReplayCursor = "lastAppliedWorkspaceEventIndex";
 
 /**
  * The replay cursors plus what the last apply rendered: the Monaco frame and the preview
@@ -221,8 +230,9 @@ type StreamDeltaKeyOf<K extends RecordingTrackName> = {
 /**
  * Where each track's new records sit in a streamed delta. A track left out fails the
  * typecheck, so streamed growth cannot silently drop a track added to RecordingTracks.
+ * Exported for the replay tests, which stream records in through the same table.
  */
-const STREAM_DELTA_KEY: { readonly [K in RecordingTrackName]: StreamDeltaKeyOf<K> } = {
+export const STREAM_DELTA_KEY: { readonly [K in RecordingTrackName]: StreamDeltaKeyOf<K> } = {
   frames: "newFrames",
   slideEvents: "newSlideEvents",
   previewEvents: "newPreviewEvents",

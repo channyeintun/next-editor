@@ -57,7 +57,7 @@ const editorModelBoundaryTimeCache = new WeakMap<readonly WorkspaceRecordingEven
  * that captured the visible edit. Treating every workspace event as a boundary
  * drops that typed frame until the next cursor/selection frame.
  */
-function latestEditorModelBoundaryTime(
+export function latestEditorModelBoundaryTime(
   workspaceEvents: readonly WorkspaceRecordingEvent[] | undefined,
   lastAppliedIndex: number,
 ): number | null {
@@ -294,20 +294,28 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
 
   const frameIndex = findFrameIndexAtTime(frames, currentTime, lastAppliedFrameIndex);
 
-  if (frameIndex === lastAppliedFrameIndex) {
-    return {};
-  }
-
   const editorModelBoundaryTime = latestEditorModelBoundaryTime(
     recording.workspaceEvents,
     context.lastAppliedWorkspaceEventIndex,
   );
 
+  // Checked before the "same frame as last time" return below: a file can be
+  // opened between two applies with no new frame captured (away from the open
+  // file and back). The frame on screen then predates the file's model, and a
+  // seek to this time would not apply it, so a tick must stop counting it as
+  // applied too.
   if (editorModelBoundaryTime !== null && frames[frameIndex].timestamp < editorModelBoundaryTime) {
+    if (frameIndex === lastAppliedFrameIndex && currentFrame === null) {
+      return {};
+    }
     return {
       lastAppliedFrameIndex: frameIndex,
       currentFrame: null,
     };
+  }
+
+  if (frameIndex === lastAppliedFrameIndex) {
+    return {};
   }
 
   // A skipped frame leaves no fold at its index for the next tick to build on.

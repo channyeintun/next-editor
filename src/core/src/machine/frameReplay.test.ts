@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type * as monaco from "monaco-editor";
-import type { EditorFrame, EditorSelection } from "../types";
+import type { EditorFrame, EditorSelection, Recording } from "../types";
+import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../workspace";
 import { applyFrameState } from "./frameReplay";
 import { isLearnerCaretHeld, trackLearnerCaret } from "./playbackCaret";
+import { load, send, type PlaybackMachine } from "./testing/replayWalk";
 
 describe("applyFrameState cursor", () => {
   // Monaco's selection carries the caret, so one setSelection is the whole cursor
@@ -198,5 +200,115 @@ describe("applyFrameState cursor", () => {
     expect(selection).toEqual(caretAt(20, 7));
 
     tracking.dispose();
+  });
+});
+
+describe("applyFrameAtTime across a switch away from the open file and back", () => {
+  const caret: EditorSelection = {
+    startLineNumber: 1,
+    startColumn: 1,
+    endLineNumber: 1,
+    endColumn: 1,
+    selectionStartLineNumber: 1,
+    selectionStartColumn: 1,
+    positionLineNumber: 1,
+    positionColumn: 1,
+  };
+  const workspaceOn = (activeFilePath: string): WorkspaceRecordingSnapshot => ({
+    activeFilePath,
+    collapsedFolders: [],
+    sidebarScrollTop: 0,
+    project: {
+      id: "project-1",
+      name: "Project",
+      lessonType: "html-css",
+      entryFilePath: "index.html",
+      folders: [],
+      files: {
+        "index.html": { path: "index.html", name: "index.html", language: "html", content: "" },
+        "app.html": { path: "app.html", name: "app.html", language: "html", content: "" },
+      },
+    },
+  });
+  const workspaceEvents: WorkspaceRecordingEvent[] = [
+    { timestamp: 0, snapshot: workspaceOn("index.html") },
+    { timestamp: 1, snapshot: workspaceOn("app.html") },
+    { timestamp: 1, snapshot: workspaceOn("index.html") },
+  ];
+  const recording: Recording = {
+    version: 4,
+    id: "switch-and-back",
+    name: "Switch and back",
+    createdAt: 0,
+    duration: 10,
+    keyframeInterval: 120,
+    // One keyframe, before the switch; nothing is captured after it.
+    frames: [
+      {
+        timestamp: 0,
+        isKeyframe: true,
+        state: {
+          content: "<p>hi</p>",
+          selection: caret,
+          position: { lineNumber: 1, column: 1 },
+          viewState: null,
+        },
+      },
+    ],
+    workspaceEvents,
+  };
+
+  const loaded = (): PlaybackMachine => {
+    let shown = workspaceOn("index.html");
+    let content = "";
+    let selection: EditorSelection | null = null;
+    const editor = {
+      getModel: () => ({
+        getValue: () => content,
+        setValue: (next: string) => {
+          content = next;
+        },
+        canUndo: () => true,
+      }),
+      getSelection: () => selection,
+      getSelections: () => (selection ? [selection] : null),
+      setSelection: (next: EditorSelection) => {
+        selection = next;
+      },
+      restoreViewState: () => {},
+      hasTextFocus: () => true,
+    } as unknown as monaco.editor.IStandaloneCodeEditor;
+    return load({
+      recording,
+      hooks: {
+        getWorkspaceSnapshot: () => shown,
+        applyWorkspaceSnapshot: (snapshot) => {
+          shown = snapshot;
+        },
+      },
+      duration: recording.duration,
+      editor,
+    });
+  };
+
+  // The keyframe belongs to the model index.html had before it was opened again, so a
+  // seek to after the switch shows no frame. Playing there must agree: the frame index
+  // does not move between the two applies, and the step must still stop counting the
+  // keyframe as applied.
+  it("counts no frame as applied, whether it plays or seeks to after the switch", () => {
+    const played = loaded();
+    send(played, { type: "PLAY" });
+    expect(played.context.currentFrame).not.toBeNull();
+    send(played, { type: "TICK", currentTime: 2 });
+
+    const sought = loaded();
+    send(sought, { type: "PLAY" });
+    send(sought, { type: "SEEK", time: 2 });
+
+    expect(sought.context.lastAppliedWorkspaceEventIndex).toBe(2);
+    expect(played.context.lastAppliedWorkspaceEventIndex).toBe(2);
+    expect(sought.context.currentFrame).toBeNull();
+    expect(played.context.currentFrame).toBeNull();
+    expect(played.context.lastAppliedFrameIndex).toBe(sought.context.lastAppliedFrameIndex);
   });
 });
