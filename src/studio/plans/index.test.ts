@@ -13,12 +13,17 @@ import {
   DEFAULT_ENGLISH_STUDIO_PLAN_SLUG,
   DEFAULT_STUDIO_PLAN_SLUG,
   defaultStudioPlanSlugFor,
+  lessonUsabilityOf,
   missingLessonReason,
   parseLessonScriptYaml,
   studioLessonSourcesOf,
 } from "./index";
 import type { PublishedScriptTexts } from "./publishedScriptFetch";
-import { parsePublishedScriptIndex, type PublishedScriptIndex } from "./publishedScripts";
+import {
+  parsePublishedScriptIndex,
+  WORKING_TREE_SOURCE,
+  type PublishedScriptIndex,
+} from "./publishedScripts";
 
 interface LessonScriptFile {
   slug: string;
@@ -171,15 +176,69 @@ describe("studio lesson sources", () => {
 
   it("says why a lesson is not listed", () => {
     const sources = {};
-    expect(missingLessonReason({ status: "loading", error: null, sources }, "x")).toMatch(
-      /Reading the list/,
+    expect(
+      missingLessonReason({ status: "loading", error: null, source: null, sources }, "x"),
+    ).toMatch(/Reading the list/);
+    expect(
+      missingLessonReason({ status: "error", error: "HTTP 500.", source: null, sources }, "x"),
+    ).toMatch(/published lessons could not be read, so "x" is not available: HTTP 500\./);
+    expect(
+      missingLessonReason({ status: "ready", error: null, source: "abc123", sources }, "x"),
+    ).toBe('Unknown lesson "x": it is not published on this site and not imported.');
+  });
+
+  it("points at the dev server's terminal for a lesson its folder index left out", () => {
+    expect(
+      missingLessonReason(
+        { status: "ready", error: null, source: WORKING_TREE_SOURCE, sources: {} },
+        "x",
+      ),
+    ).toBe(
+      'Unknown lesson "x": it is not published on this site and not imported. The dev server leaves out a script that does not parse or is not named x.yaml; its terminal says why.',
     );
-    expect(missingLessonReason({ status: "error", error: "HTTP 500.", sources }, "x")).toMatch(
-      /published lessons could not be read, so "x" is not available: HTTP 500\./,
+  });
+
+  it("loads the script the index names now when asked for the latest", async () => {
+    const { yamlText, script } = lessonScriptOf(DEFAULT_ENGLISH_STUDIO_PLAN_SLUG);
+    const slug = DEFAULT_ENGLISH_STUDIO_PLAN_SLUG;
+    const source = studioLessonSourcesOf(
+      indexOf({ [slug]: ID_A }),
+      {},
+      textsOf({ [ID_A]: "not read", [ID_B]: yamlText }),
+      async () => indexOf({ [slug]: ID_B }),
+    )[slug];
+    const loaded = await source.load({ latest: true });
+    expect(loaded.id).toBe(ID_B);
+    expect(loaded.script.lesson.title).toBe(script.lesson.title);
+  });
+
+  it("decides in one place whether a lesson can be narrated in a language, and why not", () => {
+    const sources = studioLessonSourcesOf(
+      indexOf({ english: ID_A }),
+      { broken: "lesson: {}\n" },
+      textsOf({}),
+      noRefetch,
     );
-    expect(missingLessonReason({ status: "ready", error: null, sources }, "x")).toBe(
-      'Unknown lesson "x": it is not published on this site and not imported.',
-    );
+    const lessons = { status: "ready" as const, error: null, source: "abc123", sources };
+
+    expect(lessonUsabilityOf(lessons, "english", "en")).toEqual({ source: sources.english });
+    expect(lessonUsabilityOf(lessons, "english", "my")).toEqual({
+      error: validateNarrationLanguage("en-US", "my"),
+    });
+    expect(lessonUsabilityOf(lessons, "broken", "en")).toEqual({
+      error: sources.broken.problem,
+    });
+    expect(lessonUsabilityOf(lessons, "missing", "en")).toEqual({
+      error: missingLessonReason(lessons, "missing"),
+    });
+    // An unreadable index says so, not that the lesson is unknown.
+    expect(
+      lessonUsabilityOf(
+        { status: "error", error: "HTTP 500.", source: null, sources: {} },
+        "english",
+        "en",
+      ),
+    ).toEqual({ error: expect.stringMatching(/published lessons could not be read/) });
   });
 });
 

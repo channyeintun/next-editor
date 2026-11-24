@@ -3,6 +3,7 @@ import { sha256Hex } from "../../shared/sha256Hex";
 import {
   createPublishedScriptTexts,
   fetchPublishedScriptIndex,
+  loadLatestPublishedScriptText,
   loadPublishedScriptText,
   MAX_SCRIPT_FETCHES,
   PublishedScriptMissingError,
@@ -71,6 +72,21 @@ describe("fetchPublishedScriptIndex", () => {
     );
   });
 
+  it("takes the route's media type whatever its parameters, and nothing that only starts like it", async () => {
+    const answer = (contentType: string) => async () =>
+      new Response(JSON.stringify(indexNaming(OLD_ID)), {
+        headers: { "content-type": contentType },
+      });
+    const index = await fetchPublishedScriptIndex(
+      undefined,
+      answer("Application/JSON; charset=utf-8"),
+    );
+    expect(index.lessons.a.id).toBe(OLD_ID);
+    await expect(
+      fetchPublishedScriptIndex(undefined, answer("application/json-seq")),
+    ).rejects.toThrow(/answered with application\/json-seq/);
+  });
+
   it("says when nothing is published", async () => {
     await expect(
       fetchPublishedScriptIndex(undefined, async () => new Response("", { status: 404 })),
@@ -95,6 +111,13 @@ describe("published script texts", () => {
   it("refuses a 200 with the app shell", async () => {
     const texts = createPublishedScriptTexts(async () => appShell());
     await expect(texts.textOf(OLD_ID)).rejects.toThrow(/answered with text\/html/);
+  });
+
+  it("refuses a type that only starts like a script's", async () => {
+    const texts = createPublishedScriptTexts(
+      async () => new Response(OLD_TEXT, { headers: { "content-type": "text/plain-patch" } }),
+    );
+    await expect(texts.textOf(OLD_ID)).rejects.toThrow(/answered with text\/plain-patch/);
   });
 
   it("shares a fetch in flight and forgets a failed one", async () => {
@@ -213,5 +236,48 @@ describe("loadPublishedScriptText", () => {
       ),
     ).rejects.toThrow(/text\/html/);
     expect(refetchIndex).not.toHaveBeenCalled();
+  });
+});
+
+describe("loadLatestPublishedScriptText", () => {
+  it("loads the script the index names now, though the old one is kept", async () => {
+    const fetchImpl = siteWith({ [OLD_ID]: OLD_TEXT, [NEW_ID]: NEW_TEXT });
+    const texts = createPublishedScriptTexts(fetchImpl);
+    // The page already performed the old script once.
+    expect(await texts.textOf(OLD_ID)).toBe(OLD_TEXT);
+
+    const refetchIndex = vi.fn<RefetchIndex>(async () => indexNaming(NEW_ID));
+    expect(await loadLatestPublishedScriptText(texts, "a", OLD_ID, refetchIndex)).toEqual({
+      id: NEW_ID,
+      text: NEW_TEXT,
+    });
+    expect(refetchIndex).toHaveBeenCalledTimes(1);
+  });
+
+  it("goes on with the id it knows when the index cannot be read", async () => {
+    const refetchIndex = vi.fn<RefetchIndex>(async () => {
+      throw new Error("offline");
+    });
+    expect(
+      await loadLatestPublishedScriptText(
+        createPublishedScriptTexts(siteWith({ [OLD_ID]: OLD_TEXT })),
+        "a",
+        OLD_ID,
+        refetchIndex,
+      ),
+    ).toEqual({ id: OLD_ID, text: OLD_TEXT });
+  });
+
+  it("says when the lesson is no longer published", async () => {
+    const refetchIndex = async () =>
+      parsePublishedScriptIndex({ version: 1, source: "abc123", lessons: {} });
+    await expect(
+      loadLatestPublishedScriptText(
+        createPublishedScriptTexts(siteWith({ [OLD_ID]: OLD_TEXT })),
+        "a",
+        OLD_ID,
+        refetchIndex,
+      ),
+    ).rejects.toThrow(/"a" is no longer in this site's published lessons/);
   });
 });

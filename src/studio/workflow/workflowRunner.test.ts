@@ -222,6 +222,27 @@ describe("createWorkflowRunner", () => {
     expect(run.latest().state).toBe("finished");
   });
 
+  it("is running from the moment start is called until the run ends", async () => {
+    const seen: boolean[] = [];
+    const run = harness({
+      renders: { a: [passed("A")] },
+      duringRender: () => seen.push(runnerRef.current!.isRunning()),
+    });
+    expect(run.runner.isRunning()).toBe(false);
+
+    const started = run.runner.start({
+      lessons: [lessons[0]],
+      settings: { ...SETTINGS, createDraft: false, publish: false },
+      thumbnails: new Map(),
+    });
+    // Before anything was awaited, so before any commit reached React.
+    expect(run.runner.isRunning()).toBe(true);
+    await started;
+
+    expect(seen).toEqual([true]);
+    expect(run.runner.isRunning()).toBe(false);
+  });
+
   it("says once why a start did not begin", async () => {
     const run = harness({ renders: {}, thumbnailStoreFails: true });
     const begun: (string | null)[] = [];

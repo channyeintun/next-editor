@@ -16,6 +16,7 @@ import type {
   StudioAutomationStatus,
   StudioAutomationWorkflowInput,
 } from "./studioWindowHandle";
+import { patchStudioWindowHandle } from "./studioWindowHandle";
 import type { StudioWorkflow, WorkflowSettings } from "./workflow/workflowQueue";
 import type { NewWorkflowInput, WorkflowStartOptions } from "./workflow/workflowRunner";
 import { planWorkflowStart, type WorkflowLessonInfo } from "./workflow/workflowStart";
@@ -45,7 +46,10 @@ export interface StudioAutomationRun {
 export interface StudioAutomationDeps {
   /** What a start still waits for (studioWaitingFor); null when the studio is ready. */
   waitingFor: string | null;
-  /** A render or a workflow is running. */
+  /**
+   * A render or a workflow is running, read when asked: a start made a moment
+   * ago counts although React has not rendered it yet.
+   */
   busy: boolean;
   /** Why Start render is disabled for the selected lesson, as its tooltip says. */
   renderBlockedReason: string | null;
@@ -269,7 +273,9 @@ export function createStudioAutomation(deps: () => StudioAutomationDeps): Studio
       const studio = deps();
       const waiting = notReady(studio);
       if (waiting) return { refused: waiting };
-      if (studio.workflow.active) return { refused: "A workflow is running." };
+      // `busy`, not the blocked reason alone: that reason is from the last
+      // render, and a render or workflow started since has not reached it.
+      if (studio.busy) return { refused: "A render or a workflow is running." };
 
       const { playlistId, ...choices } = input.settings;
       let playlist: WorkflowSettings["playlist"] = null;
@@ -312,7 +318,7 @@ export function createStudioAutomation(deps: () => StudioAutomationDeps): Studio
       if (waiting) return { refused: waiting };
       const current = studio.workflow.current;
       if (!current) return { refused: "There is no workflow to resume." };
-      if (studio.workflow.active) return { refused: "A workflow is running." };
+      if (studio.busy) return { refused: "A render or a workflow is running." };
       if (current.state === "finished") return { refused: "The workflow has finished." };
       // A workflow that was built but never ran starts like a new one.
       const blocked =
@@ -372,12 +378,9 @@ export function createStudioAutomation(deps: () => StudioAutomationDeps): Studio
  */
 export function installStudioAutomation(automation: StudioAutomation): () => void {
   if (typeof navigator === "undefined" || navigator.webdriver !== true) return () => {};
-  const handle = window.__NEXT_EDITOR_STUDIO__ ?? { runs: [], comparison: null, running: false };
-  window.__NEXT_EDITOR_STUDIO__ = { ...handle, automation };
+  patchStudioWindowHandle({ automation });
   return () => {
-    const current = window.__NEXT_EDITOR_STUDIO__;
-    if (current?.automation !== automation) return;
-    const { automation: _removed, ...rest } = current;
-    window.__NEXT_EDITOR_STUDIO__ = rest;
+    if (window.__NEXT_EDITOR_STUDIO__?.automation !== automation) return;
+    patchStudioWindowHandle({ automation: undefined });
   };
 }

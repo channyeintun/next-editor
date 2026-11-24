@@ -306,6 +306,20 @@ describe("createStudioAutomation", () => {
       for (const studio of [blocked]) expect(studio.starts).toHaveLength(0);
     });
 
+    it("refuses while a render or a workflow runs, though the blocked reason has not caught up", async () => {
+      // A render started a moment ago: React has not rendered it, so the
+      // blocked reason still says nothing.
+      const busy = fakeStudio({ busy: true });
+      expect(
+        await busy.automation.startWorkflow({
+          slugs: ["go-01-basics"],
+          settings: { ...WORKFLOW_SETTINGS, createDraft: false, publish: false },
+          thumbnails: [],
+        }),
+      ).toEqual({ refused: "A render or a workflow is running." });
+      expect(busy.starts).toHaveLength(0);
+    });
+
     it("passes on the runner's own refusal", async () => {
       const { automation } = fakeStudio({
         workflow: {
@@ -338,6 +352,15 @@ describe("createStudioAutomation", () => {
 
       automation.stopWorkflow();
       expect(studio.workflow.requestStop).toHaveBeenCalledTimes(1);
+    });
+
+    it("refuses while a render or a workflow runs", async () => {
+      const { studio, automation, starts } = fakeStudio({ busy: true });
+      studio.workflow.current = stored("stopped");
+      expect(await automation.resumeWorkflow()).toEqual({
+        refused: "A render or a workflow is running.",
+      });
+      expect(starts).toHaveLength(0);
     });
 
     it("refuses when there is nothing to resume or it is blocked", async () => {
@@ -441,5 +464,22 @@ describe("installStudioAutomation", () => {
     expect(window.__NEXT_EDITOR_STUDIO__).toMatchObject({ running: true, automation });
     remove();
     expect(window.__NEXT_EDITOR_STUDIO__).toEqual({ runs: [], comparison: null, running: true });
+  });
+
+  it("keeps the fields other parts of the studio wrote, and leaves another automation in place", () => {
+    Object.defineProperty(navigator, "webdriver", { configurable: true, get: () => true });
+    const first = fakeStudio().automation;
+    const second = fakeStudio().automation;
+    const removeFirst = installStudioAutomation(first);
+    window.__NEXT_EDITOR_STUDIO__!.phase = "perform";
+    installStudioAutomation(second);
+    removeFirst();
+    expect(window.__NEXT_EDITOR_STUDIO__).toEqual({
+      runs: [],
+      comparison: null,
+      running: false,
+      phase: "perform",
+      automation: second,
+    });
   });
 });

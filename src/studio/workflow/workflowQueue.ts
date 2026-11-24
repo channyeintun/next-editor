@@ -106,6 +106,20 @@ export interface WorkflowLessonInput {
   thumbnail: string | null;
 }
 
+/**
+ * The settings a workflow actually runs with: publishing needs a draft to
+ * publish, and only a published lesson can join a playlist. The start rules
+ * (workflowStart.ts) check these, not the settings as asked, so a start that
+ * asks to publish without drafts is held to the drafts' rules too.
+ */
+export function effectiveWorkflowSettings(settings: WorkflowSettings): WorkflowSettings {
+  return {
+    ...settings,
+    createDraft: settings.createDraft || settings.publish,
+    playlist: settings.publish ? (settings.playlist ?? null) : null,
+  };
+}
+
 export function createWorkflow(input: {
   id: string;
   createdAtIso: string;
@@ -116,13 +130,7 @@ export function createWorkflow(input: {
     version: 1,
     id: input.id,
     createdAtIso: input.createdAtIso,
-    // Publishing needs a draft to publish, and only a published lesson can
-    // join a playlist.
-    settings: {
-      ...input.settings,
-      createDraft: input.settings.createDraft || input.settings.publish,
-      playlist: input.settings.publish ? (input.settings.playlist ?? null) : null,
-    },
+    settings: effectiveWorkflowSettings(input.settings),
     state: "ready",
     lessons: input.lessons.map((lesson) => ({
       ...lesson,

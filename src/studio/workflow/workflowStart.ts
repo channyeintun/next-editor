@@ -1,6 +1,10 @@
 import { THUMBNAIL_ACCEPT } from "@next-editor/infra";
 import { matchThumbnail, orderWorkflowLessons } from "./workflowLessons";
-import type { WorkflowLessonInput, WorkflowSettings } from "./workflowQueue";
+import {
+  effectiveWorkflowSettings,
+  type WorkflowLessonInput,
+  type WorkflowSettings,
+} from "./workflowQueue";
 import type { NewWorkflowInput } from "./workflowRunner";
 
 /**
@@ -47,7 +51,10 @@ export function planWorkflowStart(request: WorkflowStartRequest): WorkflowStartP
   const queue = orderWorkflowLessons(
     [...new Set(request.slugs)].map((slug) => ({ slug, thumbnail: matchThumbnail(slug, names) })),
   );
-  const missingThumbnails = request.settings.createDraft
+  // As the workflow will run: publishing turns drafts on, so it needs the
+  // drafts' thumbnails too.
+  const settings = effectiveWorkflowSettings(request.settings);
+  const missingThumbnails = settings.createDraft
     ? queue.filter((lesson) => !lesson.thumbnail).map((lesson) => lesson.slug)
     : [];
   const refused = (reason: string): WorkflowStartPlan => ({
@@ -58,7 +65,7 @@ export function planWorkflowStart(request: WorkflowStartRequest): WorkflowStartP
 
   if (request.blockedReason !== null) return refused(request.blockedReason);
   if (queue.length === 0) return refused("Pick at least one lesson.");
-  if (missingThumbnails.length > 0 && !request.settings.defaultThumbnailWhenMissing) {
+  if (missingThumbnails.length > 0 && !settings.defaultThumbnailWhenMissing) {
     const named = `${missingThumbnails.slice(0, 3).join(", ")}${missingThumbnails.length > 3 ? ", …" : ""}`;
     return refused(
       `${missingThumbnails.length} of ${queue.length} lessons have no thumbnail in the picked folder (${named}). Pick the course's thumbnail folder, or allow the default thumbnail.`,
@@ -79,6 +86,6 @@ export function planWorkflowStart(request: WorkflowStartRequest): WorkflowStartP
   return {
     queue,
     missingThumbnails,
-    outcome: { start: { lessons, settings: request.settings, thumbnails } },
+    outcome: { start: { lessons, settings, thumbnails } },
   };
 }

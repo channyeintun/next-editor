@@ -21,8 +21,9 @@ type Step =
       lesson: FoundLesson;
       change: StudioAutomationLessonChange;
       audioFile: string;
-      removedAudioFile: string | null;
+      previousAudioFile: string | null;
     }
+  | { kind: "unchanged"; lesson: FoundLesson; change: StudioAutomationLessonChange }
   | { kind: "refused"; message: string };
 
 const QUIET_BUTTON =
@@ -118,8 +119,10 @@ export function ReplacePublishedLesson({
         lesson,
         change: result.replaced,
         audioFile: result.replaced.audioFile,
-        removedAudioFile: result.replaced.removedAudioFile,
+        previousAudioFile: result.replaced.previousAudioFile,
       });
+    } else if ("unchanged" in result) {
+      setStep({ kind: "unchanged", lesson, change: result.unchanged });
     } else if ("refused" in result) {
       setStep({ kind: "refused", message: result.refused });
     }
@@ -186,15 +189,24 @@ export function ReplacePublishedLesson({
           <p className="text-[12px] font-semibold text-emerald-300">Replaced.</p>
           <LessonChangeSummary lesson={step.lesson} change={step.change} />
           <p className="mt-1 text-[12px] text-slate-400">
-            Narration: <span className="font-mono">{step.audioFile}</span>
-            {step.removedAudioFile ? (
+            The lesson now plays <span className="font-mono">{step.audioFile}</span>.
+            {step.previousAudioFile ? (
               <>
-                ; removed <span className="font-mono">{step.removedAudioFile}</span>
+                {" "}
+                The earlier narration <span className="font-mono">{step.previousAudioFile}</span> is
+                kept for viewers who are already watching.
               </>
-            ) : (
-              "; no old narration file was removed"
-            )}
-            .
+            ) : null}
+          </p>
+        </div>
+      ) : null}
+
+      {step.kind === "unchanged" ? (
+        <div role="status" className="basis-full rounded-lg border border-slate-600/40 p-2">
+          <p className="text-[12px] font-semibold text-slate-200">Nothing to replace.</p>
+          <LessonChangeSummary lesson={step.lesson} change={step.change} />
+          <p className="mt-1 text-[12px] text-slate-400">
+            This run is exactly what the lesson already plays, so nothing was written.
           </p>
         </div>
       ) : null}

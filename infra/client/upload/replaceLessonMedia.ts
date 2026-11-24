@@ -4,7 +4,6 @@ import { withNarrationInMemory } from "@app/storage/recordingSiblingMedia";
 import { sha256Hex } from "@app/shared/sha256Hex";
 import { formatMediaBytes, MAX_MEDIA_BYTES } from "../../lessons/uploadLimits";
 import { updateLessonDuration } from "../library/myLessonsApi";
-import { deleteLessonAudioFile } from "./deleteMediaFile";
 import { formatDuration, UploadLimitError } from "./uploadLesson";
 import { uploadFile, type UploadTarget } from "./uploadFile";
 
@@ -16,8 +15,12 @@ import { uploadFile, type UploadTarget } from "./uploadFile";
  * served at one fixed name, so it is the switch: the narration goes up first
  * under a name taken from its own bytes, then the `.ne` that names it, so a
  * viewer gets either the old pair or the new pair, never the new `.ne` with
- * the old narration. Only then does the gallery's duration change, and the
- * old narration is deleted last, once nothing names it.
+ * the old narration. Only then does the gallery's duration change.
+ *
+ * The narration the lesson named before stays where it is: a viewer who opened
+ * the lesson before the change is still streaming that file by its name, and
+ * would lose the narration mid-lesson if it went away. Deleting the lesson
+ * clears its whole folder, old narrations included.
  */
 
 export interface ReplaceLessonMediaInput {
@@ -26,17 +29,31 @@ export interface ReplaceLessonMediaInput {
   recording: Recording;
   /** The narration file the lesson's current `.ne` names; null when it names none. */
   previousAudioFile: string | null;
+  /** The bytes of the lesson's current `.ne`, to see whether the new one is the same. */
+  publishedNe: Uint8Array | null;
   onProgress?: (fraction: number) => void;
   signal?: AbortSignal;
 }
 
-export interface ReplacedLessonMedia {
-  /** The narration file the lesson's `.ne` names now. */
-  audioFile: string;
-  /** The narration file that was deleted; null when none was, or deleting it failed. */
-  removedAudioFile: string | null;
-  /** The duration the lesson row shows now, as formatDuration writes it. */
-  duration: string;
+export type ReplacedLessonMedia =
+  /** The new `.ne` is byte for byte the published one, naming the same narration: nothing was written. */
+  | { outcome: "unchanged"; audioFile: string }
+  | {
+      outcome: "replaced";
+      /** The narration file the lesson's `.ne` names now. */
+      audioFile: string;
+      /** The narration file it named before, when that is another file; it is left in place. */
+      previousAudioFile: string | null;
+      /** The duration the lesson row shows now, as formatDuration writes it. */
+      duration: string;
+    };
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) return false;
+  }
+  return true;
 }
 
 /**
@@ -87,6 +104,16 @@ export async function replaceLessonMedia(
   const audioTarget: UploadTarget = { filename: files.audio.name, blob: files.audio.blob };
   const neTarget: UploadTarget = { filename: `${lessonId}.ne`, blob: files.ne };
 
+  // Writing the same bytes again would still give the .ne a new ETag, so every
+  // viewer would fetch the lesson again for nothing.
+  if (
+    input.publishedNe &&
+    input.previousAudioFile === audioTarget.filename &&
+    sameBytes(new Uint8Array(await files.ne.arrayBuffer()), input.publishedNe)
+  ) {
+    return { outcome: "unchanged", audioFile: audioTarget.filename };
+  }
+
   // Checked before the first PUT: the edge refuses an oversized body with a
   // bare 413, after the narration ahead of it went up for nothing.
   const oversized = [audioTarget, neTarget].find((target) => target.blob.size > MAX_MEDIA_BYTES);
@@ -128,18 +155,12 @@ export async function replaceLessonMedia(
   );
   done.push(`set the lesson's duration to ${duration}`);
 
-  let removedAudioFile: string | null = null;
   const previous = input.previousAudioFile;
-  // Same name means same bytes: the PUT above overwrote it with itself.
-  if (previous && previous !== audioTarget.filename) {
-    try {
-      await deleteLessonAudioFile(lessonId, previous);
-      removedAudioFile = previous;
-    } catch (error) {
-      // The replacement already stands; the old narration is only an orphan.
-      console.warn(`Could not delete the old narration ${previous}:`, error);
-    }
-  }
-
-  return { audioFile: audioTarget.filename, removedAudioFile, duration };
+  return {
+    outcome: "replaced",
+    audioFile: audioTarget.filename,
+    // Same name means same bytes: the PUT above overwrote it with itself.
+    previousAudioFile: previous && previous !== audioTarget.filename ? previous : null,
+    duration,
+  };
 }

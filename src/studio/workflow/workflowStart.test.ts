@@ -43,7 +43,7 @@ describe("planWorkflowStart", () => {
       },
     ]);
     expect(plan.outcome.start.thumbnails.get("css-course-01-basics")?.name).toBe("01-basics.png");
-    expect(plan.outcome.start.settings).toBe(SETTINGS);
+    expect(plan.outcome.start.settings).toEqual(SETTINGS);
   });
 
   it("refuses with the studio's own reason first", () => {
@@ -81,6 +81,34 @@ describe("planWorkflowStart", () => {
     });
     expect(renderOnly.missingThumbnails).toEqual([]);
     expect("start" in renderOnly.outcome).toBe(true);
+  });
+
+  it("holds a start that publishes without asking for drafts to the drafts' thumbnail rule", () => {
+    // The workflow turns drafts on to publish, so it would upload these.
+    const plan = planWorkflowStart(
+      request({
+        thumbnails: [],
+        settings: { ...SETTINGS, createDraft: false, publish: true },
+      }),
+    );
+    expect(plan.missingThumbnails).toEqual(["css-course-01-basics", "css-course-02-box-model"]);
+    expect("refused" in plan.outcome && plan.outcome.refused).toMatch(
+      /^2 of 2 lessons have no thumbnail/,
+    );
+
+    const allowed = planWorkflowStart(
+      request({
+        thumbnails: [],
+        settings: {
+          ...SETTINGS,
+          createDraft: false,
+          publish: true,
+          defaultThumbnailWhenMissing: true,
+        },
+      }),
+    );
+    if (!("start" in allowed.outcome)) throw new Error(allowed.outcome.refused);
+    expect(allowed.outcome.start.settings.createDraft).toBe(true);
   });
 
   it("ignores a file that is not an accepted image type", () => {

@@ -26,7 +26,9 @@ const studio = vi.hoisted(() => ({
   screenCapture: false,
   acquireDisplay: vi.fn<() => Promise<MediaStream>>(),
   /** Every script load, whichever lesson it was. */
-  loadScript: vi.fn<(slug: string) => void>(),
+  loadScript: vi.fn<(slug: string, options?: { latest?: boolean }) => void>(),
+  /** Every change the studio makes to the URL, as the updater it hands react-router. */
+  setSearchParams: vi.fn<(update: (current: URLSearchParams) => URLSearchParams) => void>(),
   /** The lesson list as useStudioLessons reports it. */
   lessons: { status: "ready", error: null } as {
     status: "loading" | "ready" | "error";
@@ -35,7 +37,7 @@ const studio = vi.hoisted(() => ({
 }));
 
 vi.mock("react-router", () => ({
-  useSearchParams: () => [studio.searchParams, () => {}],
+  useSearchParams: () => [studio.searchParams, studio.setSearchParams],
 }));
 
 vi.mock("@next-editor/infra", () => ({
@@ -140,8 +142,8 @@ vi.mock("./plans", async (importOriginal) => {
     imported: false,
     id: slug.charAt(0).repeat(64),
     problem: null,
-    load: async () => {
-      studio.loadScript(slug);
+    load: async (options?: { latest?: boolean }) => {
+      studio.loadScript(slug, options);
       return { id: slug.charAt(0).repeat(64), script: script() };
     },
   });
@@ -437,10 +439,27 @@ describe("StudioController status messages", () => {
       expect(studio.loadScript).not.toHaveBeenCalled();
 
       await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
-      expect(studio.loadScript).toHaveBeenCalledWith("english-script");
+      // Read as it is published now: the index is asked for again first.
+      expect(studio.loadScript).toHaveBeenCalledWith(
+        "english-script",
+        expect.objectContaining({ latest: true }),
+      );
     } finally {
       studio.screenCapture = false;
     }
+  });
+
+  it("shows the lesson the URL names in the picker when the list does not have it", () => {
+    studio.searchParams = new URLSearchParams("plan=no-such-lesson");
+    renderController();
+
+    const picker = screen.getByRole("combobox", { name: "Lesson to render" });
+    expect(picker).toHaveValue("no-such-lesson");
+    expect(screen.getByRole("option", { name: "no-such-lesson (not available)" })).toBeDisabled();
+    // Every listed lesson is a change away, the first one too.
+    fireEvent.change(picker, { target: { value: "broken-script" } });
+    const update = studio.setSearchParams.mock.calls.at(-1)?.[0];
+    expect(update?.(new URLSearchParams("plan=no-such-lesson")).get("plan")).toBe("broken-script");
   });
 });
 
@@ -758,6 +777,11 @@ describe("StudioController workflow", () => {
       studio.runRender.mock.invocationCallOrder[0],
     );
     expect(window.__NEXT_EDITOR_STUDIO__?.workflow?.state).toBe("finished");
+    // The narration pass and the render both read the script as published now.
+    expect(studio.loadScript.mock.calls).toEqual([
+      ["english-script", expect.objectContaining({ latest: true })],
+      ["english-script", expect.objectContaining({ latest: true })],
+    ]);
   });
 
   it("renders a narrated lesson although the narration pass emptied the AthanLab balance", async () => {
@@ -936,6 +960,17 @@ describe("StudioController render speed", () => {
     expect(studio.runRender.mock.calls[0][3]).toMatchObject({ speed: "real" });
   });
 
+  it("shows the URL's speed on the checkbox, and says the URL sets it", async () => {
+    studio.searchParams = new URLSearchParams("speed=full");
+    renderController();
+    await settle();
+
+    const fullSpeed = screen.getByRole("checkbox", { name: /^Full speed/ });
+    expect(fullSpeed).toBeChecked();
+    expect(fullSpeed).toBeDisabled();
+    expect(fullSpeed).toHaveAccessibleDescription(/The URL sets the speed \(speed=full\)/);
+  });
+
   it("says it ignores a speed it does not know", () => {
     studio.searchParams = new URLSearchParams("speed=warp");
     renderController();
@@ -1006,6 +1041,99 @@ describe("StudioController window handle", () => {
       automation,
       narration: { active: null, ready: [], stopped: null },
     });
+  });
+
+  it("publishes the step the render is at, and null once it ends", async () => {
+    let failRender: (error: Error) => void = () => {};
+    studio.runRender.mockImplementation((_plan, _mode, deps) => {
+      deps.onPhase?.("perform");
+      return new Promise((_resolve, reject) => {
+        failRender = reject;
+      });
+    });
+    renderController(await freshStudioController());
+    await settle();
+
+    act(() => {
+      window.__NEXT_EDITOR_STUDIO__?.automation?.startRender({ slug: "english-script" });
+    });
+    await waitFor(() => expect(window.__NEXT_EDITOR_STUDIO__?.phase).toBe("perform"));
+    failRender(new Error("stopped"));
+    await waitFor(() => expect(window.__NEXT_EDITOR_STUDIO__?.running).toBe(false));
+    expect(window.__NEXT_EDITOR_STUDIO__?.phase).toBeNull();
+  });
+
+  it("renders an automation start that names no launch at the lesson's own, and takes the URL's off", async () => {
+    studio.searchParams = new URLSearchParams("plan=english-script&runtime=live&speed=full");
+    studio.runRender.mockReturnValue(new Promise(() => {}));
+    renderController(await freshStudioController());
+    await settle();
+
+    act(() => {
+      expect(
+        window.__NEXT_EDITOR_STUDIO__?.automation?.startRender({ slug: "english-script" }),
+      ).toEqual({ started: true });
+    });
+    await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+    // The lesson's default mode and the unchecked box, not what the URL held.
+    expect(studio.runRender.mock.calls[0][1]).toBe("fixture");
+    expect(studio.runRender.mock.calls[0][3]).toMatchObject({ speed: "real" });
+    const update = studio.setSearchParams.mock.calls.at(-1)?.[0];
+    const next = update?.(new URLSearchParams("plan=a&runtime=live&speed=full"));
+    expect(next?.toString()).toBe("plan=english-script");
+  });
+
+  it("refuses a workflow while a render it just started has not re-rendered", async () => {
+    studio.runRender.mockReturnValue(new Promise(() => {}));
+    renderController(await freshStudioController());
+    await settle();
+    const automation = window.__NEXT_EDITOR_STUDIO__?.automation;
+
+    let workflowStart: Promise<unknown> = Promise.resolve();
+    act(() => {
+      automation?.startRender({ slug: "english-script" });
+      workflowStart = automation!.startWorkflow({
+        slugs: ["english-script"],
+        settings: {
+          createDraft: false,
+          publish: false,
+          defaultThumbnailWhenMissing: false,
+          playlistId: null,
+          narrateFirst: false,
+          fullSpeed: false,
+        },
+        thumbnails: [],
+      });
+    });
+    expect(await workflowStart).toEqual({ refused: "A render or a workflow is running." });
+  });
+
+  it("refuses a workflow's lesson for the reason the render gives when the list cannot be read", async () => {
+    studio.lessons = { status: "error", error: "HTTP 500." };
+    try {
+      renderController(await freshStudioController());
+      await settle();
+      expect(
+        await window.__NEXT_EDITOR_STUDIO__?.automation?.startWorkflow({
+          slugs: ["english-script"],
+          settings: {
+            createDraft: false,
+            publish: false,
+            defaultThumbnailWhenMissing: false,
+            playlistId: null,
+            narrateFirst: false,
+            fullSpeed: false,
+          },
+          thumbnails: [],
+        }),
+      ).toEqual({
+        refused: expect.stringMatching(
+          /^english-script: The published lessons could not be read, so "english-script" is not available: HTTP 500\./,
+        ),
+      });
+    } finally {
+      studio.lessons = { status: "ready", error: null };
+    }
   });
 
   it("says at once why a request for an unknown lesson never became a run", async () => {

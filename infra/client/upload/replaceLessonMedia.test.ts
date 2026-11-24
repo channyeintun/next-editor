@@ -9,13 +9,11 @@ vi.mock("../apiClient", () => ({
   apiClient: {
     put: vi.fn<(url: string, body: unknown, config?: unknown) => Promise<{ data: unknown }>>(),
     patch: vi.fn<(url: string, body?: unknown) => Promise<{ data: unknown }>>(),
-    delete: vi.fn<(url: string) => Promise<{ data: unknown }>>(),
   },
 }));
 
 const mockedPut = vi.mocked(apiClient.put);
 const mockedPatch = vi.mocked(apiClient.patch);
-const mockedDelete = vi.mocked(apiClient.delete);
 
 function createRecording(overrides: Partial<Recording> = {}): Recording {
   return {
@@ -57,7 +55,6 @@ beforeEach(() => {
   calls.length = 0;
   mockedPut.mockReset();
   mockedPatch.mockReset();
-  mockedDelete.mockReset();
   mockedPut.mockImplementation((url: string) => {
     calls.push(`PUT ${url}`);
     return Promise.resolve({ data: { path: url.replace("/uploads/", "lessons/") } });
@@ -66,14 +63,10 @@ beforeEach(() => {
     calls.push(`PATCH ${url} ${JSON.stringify(body)}`);
     return Promise.resolve({ data: {} });
   });
-  mockedDelete.mockImplementation((url: string) => {
-    calls.push(`DELETE ${url}`);
-    return Promise.resolve({ data: "" });
-  });
 });
 
 describe("replaceLessonMedia", () => {
-  it("puts the narration, then the .ne that names it, then the duration, then deletes the old narration", async () => {
+  it("puts the narration, then the .ne that names it, then the duration, and leaves the old narration", async () => {
     const recording = createRecording();
     const sha8 = (await sha256Hex("new narration")).slice(0, 8);
     const audioFile = `lesson-1-${sha8}.ogg`;
@@ -82,15 +75,21 @@ describe("replaceLessonMedia", () => {
       lessonId: "lesson-1",
       recording,
       previousAudioFile: "lesson-1.ogg",
+      publishedNe: new Uint8Array([1, 2, 3]),
     });
 
+    // No DELETE: a viewer who opened the lesson earlier still streams lesson-1.ogg.
     expect(calls).toEqual([
       `PUT /uploads/lesson-1/media/${audioFile}`,
       "PUT /uploads/lesson-1/media/lesson-1.ne",
       'PATCH /lessons/lesson-1 {"duration":"1:35"}',
-      "DELETE /uploads/lesson-1/media/lesson-1.ogg",
     ]);
-    expect(result).toEqual({ audioFile, removedAudioFile: "lesson-1.ogg", duration: "1:35" });
+    expect(result).toEqual({
+      outcome: "replaced",
+      audioFile,
+      previousAudioFile: "lesson-1.ogg",
+      duration: "1:35",
+    });
 
     // The .ne that went up names the new narration and carries the recording's id.
     const neBody = mockedPut.mock.calls[1][1] as Blob;
@@ -99,32 +98,40 @@ describe("replaceLessonMedia", () => {
     expect(decoded.id).toBe("1700000000000");
   });
 
-  it("deletes nothing when the narration's name did not change", async () => {
+  it("names no previous narration when the narration's name did not change", async () => {
     const sha8 = (await sha256Hex("new narration")).slice(0, 8);
 
     const result = await replaceLessonMedia({
       lessonId: "lesson-1",
-      recording: createRecording(),
+      recording: createRecording({ name: "Edited" }),
       previousAudioFile: `lesson-1-${sha8}.ogg`,
+      publishedNe: new Uint8Array([1, 2, 3]),
     });
 
-    expect(mockedDelete).not.toHaveBeenCalled();
-    expect(result.removedAudioFile).toBeNull();
+    expect(result).toMatchObject({ outcome: "replaced", previousAudioFile: null });
+    expect(calls).toHaveLength(3);
   });
 
-  it("still reports the replacement when deleting the old narration fails", async () => {
-    mockedDelete.mockRejectedValueOnce(new Error("Request failed with status code 500"));
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("writes nothing when the .ne and its narration are the ones the lesson has", async () => {
+    await replaceLessonMedia({
+      lessonId: "lesson-1",
+      recording: createRecording(),
+      previousAudioFile: "lesson-1.ogg",
+      publishedNe: null,
+    });
+    const published = new Uint8Array(await (mockedPut.mock.calls[1][1] as Blob).arrayBuffer());
+    const audioFile = (await decompressBinaryToRecording(published)).audioFile ?? null;
+    calls.length = 0;
 
     const result = await replaceLessonMedia({
       lessonId: "lesson-1",
       recording: createRecording(),
-      previousAudioFile: "lesson-1.ogg",
+      previousAudioFile: audioFile,
+      publishedNe: published,
     });
 
-    expect(result.removedAudioFile).toBeNull();
-    expect(result.audioFile).toMatch(/^lesson-1-[0-9a-f]{8}\.ogg$/);
-    warn.mockRestore();
+    expect(result).toEqual({ outcome: "unchanged", audioFile });
+    expect(calls).toEqual([]);
   });
 
   it("stops on a failed .ne PUT and says the narration was already put", async () => {
@@ -136,6 +143,7 @@ describe("replaceLessonMedia", () => {
       lessonId: "lesson-1",
       recording: createRecording(),
       previousAudioFile: "lesson-1.ogg",
+      publishedNe: null,
     }).catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(LessonReplaceError);
@@ -144,7 +152,6 @@ describe("replaceLessonMedia", () => {
     expect(error.done).toHaveLength(1);
     expect(error.done[0]).toMatch(/^put the new narration lesson-1-[0-9a-f]{8}\.ogg/);
     expect(mockedPatch).not.toHaveBeenCalled();
-    expect(mockedDelete).not.toHaveBeenCalled();
   });
 
   it("refuses a recording with no narration before any request", async () => {
@@ -153,6 +160,7 @@ describe("replaceLessonMedia", () => {
         lessonId: "lesson-1",
         recording: createRecording({ audioBlob: undefined }),
         previousAudioFile: "lesson-1.ogg",
+        publishedNe: null,
       }),
     ).rejects.toThrow("no narration");
     expect(mockedPut).not.toHaveBeenCalled();
@@ -164,9 +172,9 @@ describe("replaceLessonMedia", () => {
       lessonId: "lesson-1",
       recording: createRecording(),
       previousAudioFile: null,
+      publishedNe: null,
       onProgress: (fraction) => progress.push(fraction),
     });
     expect(progress[0]).toBe(0);
-    expect(mockedDelete).not.toHaveBeenCalled();
   });
 });

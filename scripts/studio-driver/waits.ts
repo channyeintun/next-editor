@@ -10,6 +10,12 @@ import {
 } from "../../src/studio/renderLaunch.ts";
 import { extractScriptNarration } from "../../src/studio/script/markers.ts";
 import { parseLessonScriptYaml } from "../../src/studio/script/parseYaml.ts";
+import {
+  BEFORE_TAKE_STALL_MS,
+  beforeTakeWaitMs,
+  type RenderWatchLimits,
+  VANISHED_GRACE_MS,
+} from "./renderWatch.ts";
 
 /** How often the driver reads the studio's window handle. */
 export const POLL_MS = 1_000;
@@ -58,6 +64,17 @@ export function estimatedNarrationMs(yamlText: string | null): number {
 /** How long one render of a lesson may take, sized as the studio-render command always has. */
 export function renderWaitMsFor(yamlText: string | null): number {
   return studioRenderWaitMs(estimatedNarrationMs(yamlText));
+}
+
+/** Every bound a render is watched by, sized from the local script (null: none). */
+export function renderWatchLimitsFor(yamlText: string | null): RenderWatchLimits {
+  const narrationMs = estimatedNarrationMs(yamlText);
+  return {
+    takeMs: studioRenderWaitMs(narrationMs),
+    beforeTakeMs: beforeTakeWaitMs(narrationMs),
+    stallMs: BEFORE_TAKE_STALL_MS,
+    vanishedGraceMs: VANISHED_GRACE_MS,
+  };
 }
 
 /**

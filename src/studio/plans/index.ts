@@ -1,15 +1,20 @@
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { StudioNarrationLanguage } from "../narrationLanguage";
+import { validateNarrationLanguage, type StudioNarrationLanguage } from "../narrationLanguage";
 import { defaultRuntimeModeOf, type StudioRuntimeMode } from "../plan";
 import { parseLessonScriptYaml } from "../script/parseYaml";
 import type { LessonScript } from "../script/schema";
 import {
   createPublishedScriptTexts,
   fetchPublishedScriptIndex,
+  loadLatestPublishedScriptText,
   loadPublishedScriptText,
   type PublishedScriptTexts,
 } from "./publishedScriptFetch";
-import type { PublishedScriptEntry, PublishedScriptIndex } from "./publishedScripts";
+import {
+  WORKING_TREE_SOURCE,
+  type PublishedScriptEntry,
+  type PublishedScriptIndex,
+} from "./publishedScripts";
 
 /**
  * The lessons the studio can render, by slug. The scripts are not part of the
@@ -37,8 +42,18 @@ export interface StudioLessonSource {
   id: string | null;
   /** Why the script cannot render, when that is known without loading it: an imported script that does not parse. */
   problem: string | null;
-  /** The script as it is now, with the id of the published object it came from (null when imported). */
-  load(signal?: AbortSignal): Promise<{ id: string | null; script: LessonScript }>;
+  /** The script, with the id of the published object it came from (null when imported). */
+  load(options?: StudioLessonLoadOptions): Promise<{ id: string | null; script: LessonScript }>;
+}
+
+export interface StudioLessonLoadOptions {
+  signal?: AbortSignal;
+  /**
+   * Ask for the index again first, so a page that stayed open performs the
+   * script as it is published now, not as it was when the page read the
+   * index. When that read fails, the script the page knows is loaded.
+   */
+  latest?: boolean;
 }
 
 export interface StudioLessons {
@@ -46,6 +61,11 @@ export interface StudioLessons {
   status: "loading" | "ready" | "error";
   /** Why the published index could not be read. */
   error: string | null;
+  /**
+   * What the index the page read was built from (a commit, or
+   * WORKING_TREE_SOURCE under the dev server); null before it is read.
+   */
+  source: string | null;
   /** The published lessons and the imported ones, in a null-prototype record. */
   sources: Record<string, StudioLessonSource>;
 }
@@ -112,8 +132,8 @@ function publishedSourceOf(
     imported: false,
     id: entry.id,
     problem: null,
-    load: async (signal) => {
-      const { id, text } = await loadPublishedScriptText(
+    load: async ({ signal, latest = false } = {}) => {
+      const { id, text } = await (latest ? loadLatestPublishedScriptText : loadPublishedScriptText)(
         texts,
         slug,
         entry.id,
@@ -153,9 +173,9 @@ export function studioLessonSourcesOf(
 }
 
 /**
- * The published index, read once per page: a lesson published while the page
- * is open is seen after a reload, or when a missing script makes the studio
- * read the index again.
+ * The published index, read once per page for the lesson list. A render and
+ * a narration pass read it again before they load a script (`latest`), and so
+ * does a script that turns out to be missing; the list follows those reads.
  */
 export function publishedScriptIndexQueryOptions() {
   return queryOptions({
@@ -177,7 +197,12 @@ export function useStudioLessons(imported: Readonly<Record<string, string>>): St
   // A failed read after a successful one (the second look at the index)
   // keeps the lessons the first one listed.
   const status = index.data ? "ready" : index.isError ? "error" : "loading";
-  return { status, error: index.error ? messageOf(index.error) : null, sources };
+  return {
+    status,
+    error: index.error ? messageOf(index.error) : null,
+    source: index.data?.source ?? null,
+    sources,
+  };
 }
 
 /**
@@ -189,7 +214,34 @@ export function missingLessonReason(lessons: StudioLessons, slug: string): strin
   if (lessons.status === "error") {
     return `The published lessons could not be read, so "${slug}" is not available: ${lessons.error ?? "unknown error"} Reload to try again, or import the lesson's YAML.`;
   }
-  return `Unknown lesson "${slug}": it is not published on this site and not imported.`;
+  const unknown = `Unknown lesson "${slug}": it is not published on this site and not imported.`;
+  // The dev server builds its index from the folder and leaves a broken
+  // script out of it, saying why only in its own terminal: point there, not
+  // at publishing.
+  return lessons.source === WORKING_TREE_SOURCE
+    ? `${unknown} The dev server leaves out a script that does not parse or is not named ${slug}.yaml; its terminal says why.`
+    : unknown;
+}
+
+/**
+ * Whether the lesson `slug` can be narrated in `language`, from what the
+ * lesson list knows without loading the script: it is listed, an imported
+ * script parses, and its locale is one the narration speaks. The render, its
+ * Start button and the workflow all ask this, so they refuse a lesson for the
+ * same reason in the same words.
+ */
+export function lessonUsabilityOf(
+  lessons: StudioLessons,
+  slug: string,
+  language: StudioNarrationLanguage,
+): { source: StudioLessonSource } | { error: string } {
+  const source = lessons.sources[slug];
+  if (!source) return { error: missingLessonReason(lessons, slug) };
+  if (source.problem) return { error: source.problem };
+  // A locale the list does not know is checked once the script is loaded.
+  const mismatch =
+    source.locale === null ? null : validateNarrationLanguage(source.locale, language);
+  return mismatch ? { error: mismatch } : { source };
 }
 
 /** The lesson Studio opens on when the URL names none. Burmese, like most of the courses. */
@@ -203,6 +255,21 @@ export const DEFAULT_STUDIO_PLAN_SLUG = "rust-borrow";
  */
 export const DEFAULT_ENGLISH_STUDIO_PLAN_SLUG = "go-error-values";
 
+/**
+ * The default lesson of every narration language. Studio opens on one of
+ * these, so a publish must not leave one out or publish it in another language.
+ */
+export const STUDIO_DEFAULT_LESSONS: readonly {
+  language: StudioNarrationLanguage;
+  slug: string;
+}[] = [
+  { language: "my", slug: DEFAULT_STUDIO_PLAN_SLUG },
+  { language: "en", slug: DEFAULT_ENGLISH_STUDIO_PLAN_SLUG },
+];
+
 export function defaultStudioPlanSlugFor(language: StudioNarrationLanguage): string {
-  return language === "en" ? DEFAULT_ENGLISH_STUDIO_PLAN_SLUG : DEFAULT_STUDIO_PLAN_SLUG;
+  return (
+    STUDIO_DEFAULT_LESSONS.find((lesson) => lesson.language === language)?.slug ??
+    DEFAULT_STUDIO_PLAN_SLUG
+  );
 }

@@ -17,14 +17,12 @@ vi.mock("../../../infra/client/apiClient", () => ({
     get: vi.fn<(url: string) => Promise<{ data: unknown }>>(),
     put: vi.fn<(url: string, body: unknown, config?: unknown) => Promise<{ data: unknown }>>(),
     patch: vi.fn<(url: string, body?: unknown) => Promise<{ data: unknown }>>(),
-    delete: vi.fn<(url: string) => Promise<{ data: unknown }>>(),
   },
 }));
 
 const mockedGet = vi.mocked(apiClient.get);
 const mockedPut = vi.mocked(apiClient.put);
 const mockedPatch = vi.mocked(apiClient.patch);
-const mockedDelete = vi.mocked(apiClient.delete);
 
 function lesson(overrides: Partial<OwnedLesson> = {}): OwnedLesson {
   return {
@@ -100,6 +98,8 @@ async function publishedNe(): Promise<Blob> {
   const files = await buildRecordingFiles(
     withCues(PUBLISHED_CUES, {
       id: "published-recording",
+      name: "Published take",
+      createdAt: 1_600_000_000_000,
       duration: 60_000,
       audioBlob: new Blob(["old narration"], { type: "audio/ogg" }),
     }),
@@ -131,7 +131,7 @@ const calls: string[] = [];
 
 beforeEach(async () => {
   calls.length = 0;
-  for (const mock of [mockedGet, mockedPut, mockedPatch, mockedDelete]) mock.mockReset();
+  for (const mock of [mockedGet, mockedPut, mockedPatch]) mock.mockReset();
   mockedGet.mockResolvedValue({ data: { lessons: [lesson()] } });
   mockedPut.mockImplementation((url: string) => {
     calls.push(`PUT ${url}`);
@@ -141,12 +141,11 @@ beforeEach(async () => {
     calls.push(`PATCH ${url} ${JSON.stringify(body)}`);
     return Promise.resolve({ data: {} });
   });
-  mockedDelete.mockImplementation((url: string) => {
-    calls.push(`DELETE ${url}`);
-    return Promise.resolve({ data: "" });
-  });
   // jsdom's Blob is not one fetch's Response can read, so hand it bytes.
-  const ne = new Uint8Array(await (await publishedNe()).arrayBuffer());
+  serveNe(new Uint8Array(await (await publishedNe()).arrayBuffer()));
+});
+
+function serveNe(ne: Uint8Array) {
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string) =>
@@ -157,7 +156,7 @@ beforeEach(async () => {
       ),
     ),
   );
-});
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -298,7 +297,7 @@ describe("replacePublishedLesson", () => {
     expect(calls).toEqual([]);
   });
 
-  it("puts the content-named narration, then the .ne, then the duration, then deletes the old narration", async () => {
+  it("puts the content-named narration, then the .ne, then the duration, and keeps the old narration", async () => {
     const result = await replacePublishedLesson({
       lessonId: "lesson-1",
       run: run(PUBLISHED_CUES),
@@ -313,34 +312,46 @@ describe("replacePublishedLesson", () => {
       `PUT /uploads/lesson-1/media/${audioFile}`,
       "PUT /uploads/lesson-1/media/lesson-1.ne",
       'PATCH /lessons/lesson-1 {"duration":"1:05"}',
-      "DELETE /uploads/lesson-1/media/lesson-1.ogg",
     ]);
-    expect(result.replaced.removedAudioFile).toBe("lesson-1.ogg");
+    expect(result.replaced.previousAudioFile).toBe("lesson-1.ogg");
     expect(result.replaced.newDurationMs).toBe(65_000);
   });
 
-  it("keeps the published recording's id and nothing else from it", async () => {
+  it("keeps the published recording's identity and nothing else from it", async () => {
     await replacePublishedLesson({ lessonId: "lesson-1", run: run(PUBLISHED_CUES), replace: true });
 
     const neBody = mockedPut.mock.calls[1][1] as Blob;
     const uploaded = await decompressBinaryToRecording(new Uint8Array(await neBody.arrayBuffer()));
     expect(uploaded.id).toBe("published-recording");
+    expect(uploaded.name).toBe("Published take");
+    expect(uploaded.createdAt).toBe(1_600_000_000_000);
     expect(uploaded.duration).toBe(65_000);
     expect(uploaded.audioFile).toMatch(/^lesson-1-[0-9a-f]{8}\.ogg$/);
   });
 
-  it("still reports the replacement when deleting the old narration fails", async () => {
-    mockedDelete.mockRejectedValue(new Error("Request failed with status code 500"));
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("writes nothing when the run is what the lesson already plays", async () => {
+    await replacePublishedLesson({ lessonId: "lesson-1", run: run(PUBLISHED_CUES), replace: true });
+    serveNe(new Uint8Array(await (mockedPut.mock.calls[1][1] as Blob).arrayBuffer()));
+    calls.length = 0;
 
+    // A second render of the same script: a new recording id, name and time.
+    const again = run(PUBLISHED_CUES);
+    again.artifacts.recording = {
+      ...again.artifacts.recording,
+      id: "another-run",
+      name: "Recording 1800000000000",
+      createdAt: 1_800_000_000_000,
+    };
     const result = await replacePublishedLesson({
       lessonId: "lesson-1",
-      run: run(PUBLISHED_CUES),
+      run: again,
       replace: true,
     });
 
-    expect("replaced" in result && result.replaced.removedAudioFile).toBeNull();
-    warn.mockRestore();
+    expect(result).toEqual({
+      unchanged: expect.objectContaining({ lessonId: "lesson-1", changedCues: 0 }),
+    });
+    expect(calls).toEqual([]);
   });
 
   it("refuses a failed .ne PUT and says the narration was already put", async () => {
@@ -358,7 +369,6 @@ describe("replacePublishedLesson", () => {
     expect(result.refused).toContain("Putting the lesson file lesson-1.ne failed: Network Error");
     expect(result.refused).toMatch(/Already done: put the new narration lesson-1-[0-9a-f]{8}\.ogg/);
     expect(mockedPatch).not.toHaveBeenCalled();
-    expect(mockedDelete).not.toHaveBeenCalled();
   });
 
   it("refuses a lesson that is not the author's", async () => {

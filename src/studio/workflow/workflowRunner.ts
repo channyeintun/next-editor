@@ -497,7 +497,10 @@ export function createWorkflowRunner(
     deps = next;
   };
 
-  return { start, requestStop, setDeps };
+  /** Whether a start or a run is in progress, from the moment start is called. */
+  const isRunning = () => running;
+
+  return { start, requestStop, setDeps, isRunning };
 }
 
 export type WorkflowRunner = ReturnType<typeof createWorkflowRunner>;

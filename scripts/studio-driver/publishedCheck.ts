@@ -3,9 +3,9 @@
  * each local script file.
  */
 
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { lessonScriptPath } from "../lessonScriptsDir.ts";
+import { publishedScriptIdOf } from "../../src/studio/plans/publishedScriptEntry.ts";
 import {
   parsePublishedScriptIndex,
   type PublishedScriptIndex,
@@ -21,10 +21,10 @@ export function localScriptText(slug: string): string | null {
   return existsSync(path) ? readFileSync(path, "utf8") : null;
 }
 
-/** The local script's id: the SHA-256 of its bytes, as a publish names it. */
-function localScriptId(slug: string): string | null {
+/** The local script's id, computed as a publish names it. */
+export async function localScriptId(slug: string): Promise<string | null> {
   const path = lessonScriptPath(slug);
-  return existsSync(path) ? createHash("sha256").update(readFileSync(path)).digest("hex") : null;
+  return existsSync(path) ? publishedScriptIdOf(readFileSync(path)) : null;
 }
 
 async function fetchIndex(site: string): Promise<PublishedScriptIndex> {
@@ -65,7 +65,9 @@ export async function resolveRenderedScripts(input: {
       `could not read the site's lesson index, so cannot tell what it would render: ${reason}`,
     );
   }
-  const localIds = new Map(input.slugs.map((slug) => [slug, localScriptId(slug)]));
+  const localIds = new Map(
+    await Promise.all(input.slugs.map(async (slug) => [slug, await localScriptId(slug)] as const)),
+  );
   const check = checkRenderedScripts({
     slugs: input.slugs,
     index,

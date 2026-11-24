@@ -1,5 +1,8 @@
 import { sha256Hex } from "../../shared/sha256Hex";
 import {
+  mediaTypeOf,
+  PUBLISHED_SCRIPT_CONTENT_TYPE,
+  PUBLISHED_SCRIPT_INDEX_CONTENT_TYPE,
   PUBLISHED_SCRIPT_INDEX_PATH,
   parsePublishedScriptIndex,
   publishedScriptObjectPath,
@@ -36,6 +39,11 @@ function contentTypeOf(response: Response): string {
   return response.headers.get("content-type")?.toLowerCase() ?? "";
 }
 
+/** Whether the answer is of the media type the route sends, whatever its parameters. */
+function answersWith(response: Response, expected: string): boolean {
+  return mediaTypeOf(response.headers.get("content-type")) === mediaTypeOf(expected);
+}
+
 /** The published index, checked and with a null-prototype `lessons` record. */
 export async function fetchPublishedScriptIndex(
   signal?: AbortSignal,
@@ -48,7 +56,7 @@ export async function fetchPublishedScriptIndex(
   if (!response.ok) {
     throw new Error(`The lesson index could not be read (HTTP ${response.status}).`);
   }
-  if (!contentTypeOf(response).startsWith("application/json")) {
+  if (!answersWith(response, PUBLISHED_SCRIPT_INDEX_CONTENT_TYPE)) {
     throw new Error(
       `The lesson index could not be read: the site answered with ${contentTypeOf(response) || "no content type"}, not the index. The site's server may be older than this studio.`,
     );
@@ -152,7 +160,7 @@ export function createPublishedScriptTexts(
       if (!response.ok) {
         throw new Error(`The lesson script ${id} could not be read (HTTP ${response.status}).`);
       }
-      if (!contentTypeOf(response).startsWith("text/plain")) {
+      if (!answersWith(response, PUBLISHED_SCRIPT_CONTENT_TYPE)) {
         throw new Error(
           `The lesson script ${id} could not be read: the site answered with ${contentTypeOf(response) || "no content type"}, not a script. The site's server may be older than this studio.`,
         );
@@ -200,6 +208,10 @@ export interface PublishedScriptText {
   text: string;
 }
 
+function noLongerPublishedMessage(slug: string): string {
+  return `"${slug}" is no longer in this site's published lessons. Reload the studio, or publish the lessons again.`;
+}
+
 function missingObjectMessage(slug: string, id: string): string {
   return `The published lesson object for "${slug}" (${id}) is missing from this site. The lessons must be published again.`;
 }
@@ -224,9 +236,7 @@ export async function loadPublishedScriptText(
   }
   const fresh = (await refetchIndex()).lessons[slug];
   if (!fresh) {
-    throw new Error(
-      `"${slug}" is no longer in this site's published lessons. Reload the studio, or publish the lessons again.`,
-    );
+    throw new Error(noLongerPublishedMessage(slug));
   }
   if (fresh.id === id) throw new Error(missingObjectMessage(slug, id));
   try {
@@ -237,4 +247,32 @@ export async function loadPublishedScriptText(
     }
     throw error;
   }
+}
+
+/**
+ * The text of the published lesson `slug` as the site publishes it now: the
+ * index is read again first, and the id it names for `slug` is loaded. A
+ * script is kept by id for the life of the page, so without this read a page
+ * that stayed open would perform the script it first saw after the lesson was
+ * edited or published again. When the read fails, `id` (what the page knows)
+ * is loaded.
+ */
+export async function loadLatestPublishedScriptText(
+  texts: PublishedScriptTexts,
+  slug: string,
+  id: string,
+  refetchIndex: () => Promise<PublishedScriptIndex>,
+  signal?: AbortSignal,
+): Promise<PublishedScriptText> {
+  let latest: PublishedScriptIndex | null = null;
+  try {
+    latest = await refetchIndex();
+  } catch {
+    // The index the page has is still a published one: go on with it.
+  }
+  signal?.throwIfAborted();
+  if (latest && !latest.lessons[slug]) {
+    throw new Error(noLongerPublishedMessage(slug));
+  }
+  return loadPublishedScriptText(texts, slug, latest?.lessons[slug].id ?? id, refetchIndex, signal);
 }

@@ -24,9 +24,11 @@ import { describeWorkflowError } from "../workflow/workflowRunner";
  * saying what the new render changes, and replacing the lesson's recording
  * while its id, URL, thumbnail, playlist position and publish date stay.
  *
- * The new recording keeps the published recording's id, because learners'
- * saved workspace versions are keyed by it; nothing else is taken from the
- * old recording.
+ * The new recording keeps the published recording's identity: its id, because
+ * learners' saved workspace versions are keyed by it, and its name and
+ * creation time, so a render that changed nothing encodes to the very bytes
+ * the lesson already has and nothing is written. Nothing else is taken from
+ * the old recording.
  */
 
 /** How many changed cues a comparison quotes. */
@@ -180,13 +182,16 @@ export function compareCaptions(
   };
 }
 
-async function loadPublishedRecording(neUrl: string): Promise<Recording> {
+async function loadPublishedRecording(
+  neUrl: string,
+): Promise<{ bytes: Uint8Array; recording: Recording }> {
   // Always the bytes viewers get now, not a copy this browser kept.
   const response = await fetch(neUrl, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`${neUrl} answered HTTP ${response.status}`);
   }
-  return decompressBinaryToRecording(new Uint8Array(await response.arrayBuffer()));
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  return { bytes, recording: await decompressBinaryToRecording(bytes) };
 }
 
 function describeReplaceFailure(error: unknown): string {
@@ -233,8 +238,9 @@ export async function replacePublishedLesson(input: {
   }
 
   let published: Recording;
+  let publishedNe: Uint8Array;
   try {
-    published = await loadPublishedRecording(neUrl);
+    ({ recording: published, bytes: publishedNe } = await loadPublishedRecording(neUrl));
   } catch (error) {
     return {
       refused: `Could not read the recording of ${describeLesson(lesson)}: ${describeWorkflowError(error)}`,
@@ -257,16 +263,23 @@ export async function replacePublishedLesson(input: {
   try {
     const replaced = await replaceLessonMedia({
       lessonId: lesson.id,
-      recording: { ...next, id: published.id },
+      recording: {
+        ...next,
+        id: published.id,
+        name: published.name,
+        createdAt: published.createdAt,
+      },
       previousAudioFile: published.audioFile ?? null,
+      publishedNe,
       onProgress: input.onProgress,
     });
+    if (replaced.outcome === "unchanged") return { unchanged: change };
     lessonChanged();
     return {
       replaced: {
         ...change,
         audioFile: replaced.audioFile,
-        removedAudioFile: replaced.removedAudioFile,
+        previousAudioFile: replaced.previousAudioFile,
       },
     };
   } catch (error) {

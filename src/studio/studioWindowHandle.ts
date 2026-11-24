@@ -8,9 +8,11 @@ import type { WorkflowNarration } from "./workflow/workflowRunner";
  * What /studio publishes on `window.__NEXT_EDITOR_STUDIO__` so an automation
  * harness can read its renders without scraping the DOM. StudioController
  * writes it and scripts/studio-render.ts reads it; both use this one type, so
- * renaming a field fails the typecheck instead of a render. Types only — the
- * CLI imports it with `import type`, which bun strips, and gets the window
- * slot's declaration below with it.
+ * renaming a field fails the typecheck instead of a render. The CLI imports
+ * it with `import type`, which bun strips, and gets the window slot's
+ * declaration below with it; the page writes the slot only through
+ * patchStudioWindowHandle, so each part of the studio changes its own fields
+ * and keeps everyone else's.
  */
 export interface StudioWindowHandle {
   runs: StudioWindowRun[];
@@ -29,6 +31,13 @@ export interface StudioWindowHandle {
    */
   waitingFor?: string | null;
   /**
+   * The step the render in hand is at, in the words the studio shows (reading
+   * the lesson, loading the speech model, narrating dialog 3 of 12, preparing
+   * the workspace, performing); null when no render is running. A harness
+   * tells a long step from a stalled render by watching it change.
+   */
+  phase?: string | null;
+  /**
    * The studio workflow's queue (useStudioWorkflow), with the issue report of
    * a lesson it stopped at; absent until the workflow hook publishes it.
    */
@@ -42,6 +51,28 @@ export interface StudioWindowHandle {
    * it can do nothing a person at the page could not.
    */
   automation?: StudioAutomation;
+}
+
+/**
+ * Merge `patch` into the window handle: every field it names is replaced, and
+ * every other field is kept as it was. A field given as undefined is removed.
+ * The one writer of the handle, so no part of the studio overwrites a field
+ * another part owns (the controller's runs, the workflow's queue, the
+ * automation).
+ */
+export function patchStudioWindowHandle(patch: Partial<StudioWindowHandle>): void {
+  const next: StudioWindowHandle = {
+    runs: [],
+    comparison: null,
+    running: false,
+    ...window.__NEXT_EDITOR_STUDIO__,
+  };
+  const fields = next as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) delete fields[key];
+    else fields[key] = value;
+  }
+  window.__NEXT_EDITOR_STUDIO__ = next;
 }
 
 /** One finished render as the window handle carries it. */
@@ -141,12 +172,18 @@ export interface StudioAutomationLessonChange {
 
 export type StudioAutomationReplacement =
   | { compared: StudioAutomationLessonChange }
+  /** The run is, byte for byte, what the lesson already plays: nothing was written. */
+  | { unchanged: StudioAutomationLessonChange }
   | {
       replaced: StudioAutomationLessonChange & {
         /** The narration file the lesson names now. */
         audioFile: string;
-        /** The narration file that was deleted; null when it could not be, or there was none. */
-        removedAudioFile: string | null;
+        /**
+         * The narration file it named before, when that is another file. It is
+         * left in place: a viewer who opened the lesson before the change is
+         * still playing it.
+         */
+        previousAudioFile: string | null;
       };
     }
   | { refused: string };

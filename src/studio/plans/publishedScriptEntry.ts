@@ -23,12 +23,22 @@ export interface PublishedScriptFile {
 // bytes, and the id names the bytes.
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 
+/**
+ * A script's id: the SHA-256 of its YAML bytes, exactly as they are on disk.
+ * Everything that names a script by id (the index, the stored object, the dev
+ * server's map, the driver's check of a local file against the published one)
+ * computes it here.
+ */
+export function publishedScriptIdOf(bytes: Uint8Array): Promise<string> {
+  return sha256Hex(bytes);
+}
+
 /** The entry for one script's YAML bytes. Throws when the bytes are not a LessonScript. */
 export async function publishedScriptFileOf(bytes: Uint8Array): Promise<PublishedScriptFile> {
   const script = parseLessonScriptYaml(utf8.decode(bytes));
   return {
     entry: {
-      id: await sha256Hex(bytes),
+      id: await publishedScriptIdOf(bytes),
       bytes: bytes.byteLength,
       title: script.lesson.title,
       locale: script.lesson.locale,

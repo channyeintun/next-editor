@@ -66,7 +66,7 @@ describe("ReplacePublishedLesson", () => {
               replaced: {
                 ...change,
                 audioFile: "lesson-1-0123abcd.ogg",
-                removedAudioFile: "lesson-1.ogg",
+                previousAudioFile: "lesson-1.ogg",
               },
             }
           : { compared: change },
@@ -92,6 +92,22 @@ describe("ReplacePublishedLesson", () => {
     expect(await screen.findByText("Replaced.")).toBeTruthy();
     expect(screen.getByText("lesson-1-0123abcd.ogg")).toBeTruthy();
     expect(screen.getByText("lesson-1.ogg")).toBeTruthy();
+    expect(screen.getByText(/kept for viewers who are already watching/)).toBeTruthy();
+  });
+
+  it("says nothing was written when the run is what the lesson plays", async () => {
+    const user = userEvent.setup();
+    mockedReplace.mockImplementation((input) =>
+      Promise.resolve(input.replace ? { unchanged: change } : { compared: change }),
+    );
+    renderButton();
+
+    await user.click(screen.getByRole("button", { name: "Replace published lesson…" }));
+    await user.click(await screen.findByRole("button", { name: "Replace “Go error values”" }));
+
+    expect(await screen.findByText("Nothing to replace.")).toBeTruthy();
+    expect(screen.getByText(/nothing was written/)).toBeTruthy();
+    expect(screen.queryByText("Replaced.")).toBeNull();
   });
 
   it("replaces nothing when the person cancels", async () => {

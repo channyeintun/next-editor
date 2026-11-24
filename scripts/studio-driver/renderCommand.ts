@@ -23,14 +23,16 @@ import {
 } from "./browser.ts";
 import { pageEnvironmentWarning, renderVerdict } from "./guards.ts";
 import { localScriptText, resolveRenderedScripts } from "./publishedCheck.ts";
+import { replacementOutcome } from "./updateOutcome.ts";
 import type { RenderedScript } from "./scriptIds.ts";
 import { guardStart, waitForReady } from "./studioSession.ts";
 import {
   BUNDLE_TIMEOUT_MS,
   POLL_MS,
-  renderWaitMsFor,
+  renderWatchLimitsFor,
   WORKFLOW_UPLOAD_ALLOWANCE_MS,
 } from "./waits.ts";
+import { observeRender, type RenderWatchLimits, startRenderWatch } from "./renderWatch.ts";
 
 /** A folder for one command's output, named so runs never overwrite each other. */
 export function outputFolder(out: string, name: string): string {
@@ -59,27 +61,40 @@ async function recordPageEnvironment(page: Page, folder: string): Promise<void> 
   if (warning) console.warn(`studio-render: warning: ${warning}`);
 }
 
-/** Poll the handle until the run count passes `before` and nothing runs; fail at once on `fatal`. */
+/**
+ * Poll the handle until the run count passes `before` and nothing runs,
+ * printing each change of the render's phase. Fails at once on `fatal`, on a
+ * page that lost the render, and on what renderWatch calls stalled or late.
+ */
 async function waitForRun(
   page: Page,
   slug: string,
   before: number,
-  waitMs: number,
+  limits: RenderWatchLimits,
 ): Promise<StudioWindowHandle> {
-  const deadline = Date.now() + waitMs;
+  const watch = startRenderWatch(limits, before, Date.now());
   let waitingFor: string | null = null;
   for (;;) {
     const handle = await readHandle(page);
     if (handle?.fatal) throw new DriverError(`${slug}: ${handle.fatal}`);
-    if (handle && handle.runs.length > before && !handle.running) return handle;
+    const verdict = observeRender(watch, {
+      now: Date.now(),
+      runs: handle?.runs.length ?? 0,
+      running: handle?.running ?? false,
+      phase: handle ? handle.phase : null,
+    });
+    if (verdict.kind === "finished" && handle) return handle;
+    if (verdict.kind === "failed") {
+      throw new DriverError(
+        `${slug}: ${verdict.reason}${waitingFor ? ` (waiting for ${waitingFor})` : ""}`,
+      );
+    }
+    if (verdict.kind === "waiting" && verdict.phaseChanged) {
+      console.log(`  phase: ${verdict.phaseChanged}`);
+    }
     const now = handle?.waitingFor ?? null;
     if (now && now !== waitingFor) console.log(`  waiting for ${now}`);
     waitingFor = now;
-    if (Date.now() > deadline) {
-      throw new DriverError(
-        `${slug}: the render did not finish in ${Math.round(waitMs / 60_000)} min${waitingFor ? ` (waiting for ${waitingFor})` : ""}`,
-      );
-    }
     await sleep(POLL_MS);
   }
 }
@@ -104,9 +119,9 @@ async function renderLessonRuns(input: {
   const { page, slug, folder } = input;
   // Sized from the local script when there is one; the studio renders the
   // site's, which the published check has already said is the same or chosen.
-  const waitMs = renderWaitMsFor(localScriptText(slug));
+  const limits = renderWatchLimitsFor(localScriptText(slug));
   console.log(
-    `${slug}: ${input.runtime ?? "default runtime"}, ${input.speed} speed, ×${input.runs} → ${folder} (up to ${Math.round(waitMs / 60_000)} min per render)`,
+    `${slug}: ${input.runtime ?? "default runtime"}, ${input.speed} speed, ×${input.runs} → ${folder} (up to ${Math.round(limits.takeMs / 60_000)} min per take; the narration before it may run long while its phase keeps changing)`,
   );
   await recordPageEnvironment(page, folder);
 
@@ -122,7 +137,7 @@ async function renderLessonRuns(input: {
     if ("refused" in started)
       throw new DriverError(`${slug}: the studio did not start: ${started.refused}`);
     try {
-      handle = await waitForRun(page, slug, before, waitMs);
+      handle = await waitForRun(page, slug, before, limits);
     } catch (error) {
       await page
         .screenshot({ path: join(folder, `run-${run}-stopped.png`), fullPage: true })
@@ -278,8 +293,9 @@ export async function runUpdateCommand(
     return false;
   }
 
-  // Comparing and replacing put the run's recording and narration in the
-  // site's storage, which takes as long as an upload.
+  // A compare downloads the published recording to read its captions and
+  // writes nothing; a replace uploads the run's narration and recording,
+  // which takes as long as an upload on a slow line.
   const compared = await callAutomation(
     page,
     "replacePublishedLesson",
@@ -287,10 +303,11 @@ export async function runUpdateCommand(
     WORKFLOW_UPLOAD_ALLOWANCE_MS,
   );
   if ("refused" in compared) throw new DriverError(`${slug}: ${compared.refused}`);
-  if (!("compared" in compared))
+  if ("replaced" in compared)
     throw new DriverError(`${slug}: the studio replaced the lesson when asked only to compare`);
-  writeJson(folder, "update-compared.json", compared.compared);
-  printChange("would change", compared.compared);
+  const change = "compared" in compared ? compared.compared : compared.unchanged;
+  writeJson(folder, "update-compared.json", change);
+  printChange("would change", change);
   if (!command.replace) {
     console.log("  nothing on the site changed; pass --replace to put this render in its place");
     return true;
@@ -302,21 +319,13 @@ export async function runUpdateCommand(
     { lessonId: lesson.lessonId, replace: true },
     WORKFLOW_UPLOAD_ALLOWANCE_MS,
   );
-  if ("refused" in replaced) throw new DriverError(`${slug}: not replaced: ${replaced.refused}`);
-  if (!("replaced" in replaced))
+  if ("compared" in replaced)
     throw new DriverError(`${slug}: the studio compared again instead of replacing`);
-  writeJson(folder, "update-replaced.json", replaced.replaced);
+  const outcome = replacementOutcome(replaced);
+  if (!outcome.ok) throw new DriverError(`${slug}: ${outcome.lines.join("; ")}`);
+  if ("replaced" in replaced) writeJson(folder, "update-replaced.json", replaced.replaced);
   // The change was printed just above; the examples are not repeated.
-  console.log(`  replaced: /learn/${replaced.replaced.urlSlug} now plays this render`);
-  // null covers two cases the result does not tell apart: the new narration has
-  // the old one's name (same bytes, nothing to delete), or the delete failed.
-  console.log(
-    `  narration: ${replaced.replaced.audioFile}${
-      replaced.replaced.removedAudioFile
-        ? `, removed ${replaced.replaced.removedAudioFile}`
-        : "; nothing deleted (the old narration had this name, or deleting it failed)"
-    }`,
-  );
+  for (const line of outcome.lines) console.log(`  ${line}`);
   return true;
 }
 

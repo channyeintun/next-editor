@@ -29,6 +29,22 @@ export const PUBLISHED_SCRIPT_INDEX_KEY = `${PUBLISHED_SCRIPTS_KEY_PREFIX}index.
 export const PUBLISHED_SCRIPT_CONTENT_TYPE = "text/plain; charset=utf-8";
 export const PUBLISHED_SCRIPT_INDEX_CONTENT_TYPE = "application/json";
 
+/**
+ * How long an answer may be kept, the same from the Worker and from the dev
+ * server that stands in for it. The index is asked for again on every read (it
+ * changes with every publish); an object never changes, because its name is the
+ * hash of its bytes; a miss is never kept, so a script published a moment
+ * later is found.
+ */
+export const PUBLISHED_SCRIPT_INDEX_CACHE_CONTROL = "no-cache";
+export const PUBLISHED_SCRIPT_OBJECT_CACHE_CONTROL = "public, max-age=31536000, immutable";
+export const PUBLISHED_SCRIPT_MISS_CACHE_CONTROL = "no-store";
+
+/** The media type of a content-type header, without its parameters, for comparing an answer with what was expected. */
+export function mediaTypeOf(contentType: string | null | undefined): string {
+  return (contentType ?? "").split(";")[0].trim().toLowerCase();
+}
+
 const PUBLISHED_SCRIPT_ID = /^[0-9a-f]{64}$/;
 
 /** A script's id: the lowercase hex SHA-256 of its YAML bytes. */
