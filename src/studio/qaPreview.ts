@@ -1,6 +1,6 @@
 import type { Recording } from "../core/src";
 import type { RuntimeRecordingSnapshot } from "../core/src/runtime";
-import type { StudioPlan, StudioPlanAction } from "./plan";
+import type { StudioPlan, StudioPlanAction, StudioRuntimeMode } from "./plan";
 import { previewExpectationMismatches } from "./previewExpectation";
 import type { StudioCheckResult } from "./report";
 
@@ -37,6 +37,59 @@ export function planUsesPreview(plan: StudioPlan): boolean {
   return plan.actions.some(
     (action) => action.type.startsWith("preview.") || action.type === "expect.preview",
   );
+}
+
+/**
+ * Whether one action waits on something that runs in real time: a live
+ * preview (a dev server, the frame's own clock in its recorded events), a
+ * runtime that boots and installs, or a run that goes over the network.
+ * Exhaustive on purpose: a new action type does not compile until someone
+ * decides which side it is on.
+ */
+function actionNeedsWallClock(action: StudioPlanAction, runtimeMode: StudioRuntimeMode): boolean {
+  switch (action.type) {
+    case "preview.open":
+    case "preview.click":
+    case "preview.input":
+    case "preview.scroll":
+    case "preview.route":
+    case "preview.point":
+    case "expect.preview":
+    case "runtime.start":
+    case "runtime.waitForReady":
+      return true;
+    // A fixture run replays its pinned result after a simulated latency.
+    case "runtime.run":
+      return runtimeMode !== "fixture";
+    // Aiming at a preview element asks the preview frame where it is.
+    case "cursor.moveTo":
+      return action.target.kind === "preview";
+    case "workspace.openFile":
+    case "editor.type":
+    case "editor.select":
+    case "console.point":
+    case "runtime.collapseDock":
+    case "runtime.expandDock":
+    case "slide.show":
+    case "slide.close":
+    case "slide.point":
+    case "whiteboard.apply":
+    case "whiteboard.point":
+    case "expect.output":
+    case "expect.file":
+      return false;
+  }
+}
+
+/**
+ * Whether a render of `plan` in `runtimeMode` can run off the wall clock
+ * (renderClock.ts): nothing in it waits on a live preview, a runtime that
+ * boots, or a network run, so every wait it has is performance time or the
+ * page itself. The render adds what it alone knows (full speed asked for, no
+ * screen recording, no camera).
+ */
+export function planRunsOffWallClock(plan: StudioPlan, runtimeMode: StudioRuntimeMode): boolean {
+  return !plan.actions.some((action) => actionNeedsWallClock(action, runtimeMode));
 }
 
 function isPreviewCommandAction(action: StudioPlanAction): action is PreviewCommandAction {

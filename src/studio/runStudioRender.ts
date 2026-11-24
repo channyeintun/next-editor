@@ -25,7 +25,16 @@ import { runtimeDockStartsCollapsed } from "./plan";
 import type { StudioPlan, StudioRuntimeMode } from "./plan";
 import { performPlan } from "./performer";
 import { runArtifactChecks } from "./qa";
+import { planRunsOffWallClock } from "./qaPreview";
+import {
+  REAL_RENDER_CLOCK,
+  createVirtualRenderClock,
+  type RenderClock,
+  type RenderClockKind,
+  type RenderSpeed,
+} from "./renderClock";
 import { encodeWavToOggOpus } from "./tts/opus";
+import { decodeWavPcm16 } from "./tts/wav";
 import {
   computeTimingStats,
   timingGateCheck,
@@ -145,6 +154,39 @@ export interface StudioRenderOptions {
    * wall duration should cover that too. Defaults to now.
    */
   startedAt?: { iso: string; performanceNowMs: number };
+  /**
+   * "full" asks for the render to run off the wall clock when it can
+   * (renderClockFor); "real", the default, performs the lesson in real time.
+   */
+  speed?: RenderSpeed;
+}
+
+/**
+ * The clock a render performs on (renderClock.ts). Virtual only when every
+ * condition holds: full speed was asked for; nothing in the plan waits on a
+ * live preview, a booting runtime or a network run (planRunsOffWallClock); no
+ * screen stream records the tab, which is a real-time video; and the camera
+ * is off, since a camera records in real time against the take's start.
+ */
+export function renderClockFor(input: {
+  plan: StudioPlan;
+  runtimeMode: StudioRuntimeMode;
+  speed: RenderSpeed;
+  recordsScreen: boolean;
+  cameraOn: boolean;
+}): RenderClockKind {
+  return input.speed === "full" &&
+    !input.recordsScreen &&
+    !input.cameraOn &&
+    planRunsOffWallClock(input.plan, input.runtimeMode)
+    ? "virtual"
+    : "real";
+}
+
+/** How long a PCM16 WAV plays: its sample count over its sample rate. */
+function wavDurationMs(bytes: Uint8Array): number {
+  const { pcm, sampleRate } = decodeWavPcm16(bytes);
+  return (pcm.length / sampleRate) * 1000;
 }
 
 export async function runStudioRender(
@@ -160,6 +202,9 @@ export async function runStudioRender(
   const receipts: ActionReceipt[] = [];
   const errors: string[] = [];
   const phase = (name: string) => deps.onPhase?.(name);
+  // The page's clock until the take chooses one; a render that fails before
+  // then performed nothing on any clock.
+  let renderClock: RenderClock = REAL_RENDER_CLOCK;
 
   let audioHash: string | null = null;
   // Hashed once: the plan embeds slides and word-level captions, and both the
@@ -189,6 +234,7 @@ export async function runStudioRender(
         outcome: "failed",
         planSlug: plan.lesson.slug,
         runtimeMode,
+        clock: renderClock.kind,
         startedAtIso,
         wallDurationMs: Math.round(performance.now() - wallStart),
         recordingDurationMs: null,
@@ -197,7 +243,7 @@ export async function runStudioRender(
         checks: [],
         errors,
       },
-      manifest: await baseManifest(plan, runtimeMode, audioHash, planHash, null),
+      manifest: await baseManifest(plan, runtimeMode, renderClock.kind, audioHash, planHash, null),
       semantics: null,
       artifacts: null,
     };
@@ -388,10 +434,37 @@ export async function runStudioRender(
 
   // ---- Start recording with the external narration -------------------------
   phase("start-recording");
+  const clockKind = renderClockFor({
+    plan,
+    runtimeMode,
+    speed: options.speed ?? "real",
+    recordsScreen: options.screenStream !== undefined,
+    // The studio never asks for the camera, so the take uses the recorder's
+    // default.
+    cameraOn: deps.actor.getSnapshot().context.defaultEnableCameraRecording === true,
+  });
+  // A virtual take keeps the narration but does not play it (nothing would
+  // end it in time), so its length is read from the WAV itself — not copied
+  // from the plan, or the mismatch check below would pass by construction.
+  let silentNarrationMs: number | null = null;
+  if (clockKind === "virtual") {
+    try {
+      silentNarrationMs = wavDurationMs(audioBytes);
+    } catch (error) {
+      return failedResult(
+        `The narration could not be read for a full-speed render: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    renderClock = createVirtualRenderClock();
+  }
   // From here the recorder machine owns any screenStream (it stops the tracks on
   // the recording-state exit that every finalize path — pass or fail — takes).
   screenHandedOff = true;
-  deps.nextEditor.startRecording({ audioBlob, screenStream: options.screenStream });
+  deps.nextEditor.startRecording(
+    silentNarrationMs === null
+      ? { audioBlob, screenStream: options.screenStream }
+      : { audioBlob, timeSource: renderClock, externalAudioDurationMs: silentNarrationMs },
+  );
   try {
     await waitUntil(
       () => {
@@ -428,7 +501,9 @@ export async function runStudioRender(
     );
   }
 
-  const clock = { nowMs: () => performance.now() - sessionStartPerf };
+  // The take's session started on the render's clock (START_RECORDING.timeSource),
+  // so receipts and recorded tracks share one origin and one time.
+  const clock = { nowMs: () => renderClock.perfNow() - sessionStartPerf };
 
   // ---- Perform -------------------------------------------------------------
   phase("perform");
@@ -450,12 +525,14 @@ export async function runStudioRender(
     nodeRuntime: deps.nodeRuntime,
     preview: deps.preview,
     signal,
+    clock: renderClock,
   });
 
   const performOutcome = await performPlan({
     plan,
     driver,
     clock,
+    renderClock,
     signal,
     abort: (reason) => {
       errors.push(reason);
@@ -481,9 +558,27 @@ export async function runStudioRender(
     } catch {
       // The machine may already have left `recording` via an audio error.
     }
+  } else if (renderClock.kind === "virtual") {
+    // No narration plays to end the take: the lesson's time runs on to the
+    // narration's end, and the render stops the take there itself.
+    // A fresh signal, as for finalize: nothing cancels a performance that has
+    // completed, and the take must be stopped either way.
+    await renderClock.sleep(
+      Math.max(0, measuredAudioMs - clock.nowMs()),
+      new AbortController().signal,
+    );
+    try {
+      await deps.nextEditor.stopRecording();
+    } catch {
+      // Finalize below reports a take that did not stop.
+    }
   }
 
-  const remainingMs = Math.max(0, measuredAudioMs - clock.nowMs());
+  // Real time the take still has to run: the rest of the narration as it
+  // plays. A virtual take was stopped above and has none, whatever its own
+  // clock says.
+  const remainingMs =
+    renderClock.kind === "virtual" ? 0 : Math.max(0, measuredAudioMs - clock.nowMs());
   try {
     // Deliberately not the perform signal: finalize must still be awaited (and
     // diagnostics collected) after a failed performance aborted that signal.
@@ -561,7 +656,7 @@ export async function runStudioRender(
     checks = artifactChecks;
     const timing = computeTimingStats(receipts, plan.dependencies);
     if (plan.gates?.timingP95MaxMs !== undefined) {
-      checks.push(timingGateCheck(timing, plan.gates.timingP95MaxMs));
+      checks.push(timingGateCheck(timing, plan.gates.timingP95MaxMs, renderClock.kind));
     }
 
     const semantics = await extractRenderSemantics(artifactRecording, receipts, {
@@ -575,7 +670,7 @@ export async function runStudioRender(
       errors.push("One or more artifact checks failed");
     }
 
-    const manifest = await baseManifest(plan, runtimeMode, audioHash, planHash, {
+    const manifest = await baseManifest(plan, runtimeMode, renderClock.kind, audioHash, planHash, {
       neBytes: neBytes.byteLength,
       neHash: await sha256Hex(neBytes),
       audioFileName,
@@ -589,6 +684,7 @@ export async function runStudioRender(
         outcome,
         planSlug: plan.lesson.slug,
         runtimeMode,
+        clock: renderClock.kind,
         startedAtIso,
         wallDurationMs: Math.round(performance.now() - wallStart),
         recordingDurationMs: artifactRecording.duration,
@@ -656,6 +752,7 @@ export function narrationTimelineOnRecordingClock(
 async function baseManifest(
   plan: StudioPlan,
   runtimeMode: StudioRuntimeMode,
+  clock: RenderClockKind,
   audioHash: string | null,
   planHash: string,
   artifact: StudioBuildManifest["artifact"],
@@ -697,6 +794,7 @@ async function baseManifest(
     environment: {
       userAgent: typeof navigator === "undefined" ? "unknown" : navigator.userAgent,
       appMode: import.meta.env.MODE,
+      clock,
     },
     artifact,
   };

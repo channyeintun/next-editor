@@ -79,6 +79,11 @@ export function CheckList({ report }: { report: StudioRenderReport }) {
           {report.timing ? ` · p95 ${report.timing.p95Ms}ms` : ""})
         </span>
       </h3>
+      <p className="mt-0.5 text-[12px] text-slate-400">
+        {report.clock === "virtual"
+          ? "Performed at full speed, on a virtual clock"
+          : "Performed in real time"}
+      </p>
       <ul className="mt-1 space-y-0.5 text-[12px]">
         {report.checks.map((check) => {
           const screenshot = check.diagnostic?.previewScreenshot;

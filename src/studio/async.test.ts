@@ -11,6 +11,7 @@ import {
   waitForVisibleDocument,
   waitUntil,
 } from "./async";
+import { REAL_RENDER_CLOCK, createVirtualRenderClock } from "./renderClock";
 
 describe("resolveAnchorOffset", () => {
   const content = "aaa bbb aaa bbb aaa";
@@ -125,7 +126,7 @@ describe("tween", () => {
 
   it("steps once, straight to the end, when the duration is zero", async () => {
     const steps: [number, number][] = [];
-    await tween(0, square, new AbortController().signal, (eased, progress) => {
+    await tween(REAL_RENDER_CLOCK, 0, square, new AbortController().signal, (eased, progress) => {
       steps.push([eased, progress]);
     });
     expect(steps).toEqual([[1, 1]]);
@@ -136,6 +137,7 @@ describe("tween", () => {
     const started = performance.now();
     const steps: { atMs: number; eased: number; progress: number }[] = [];
     const done = tween(
+      REAL_RENDER_CLOCK,
       4 * CURSOR_STEP_MS,
       square,
       new AbortController().signal,
@@ -159,13 +161,30 @@ describe("tween", () => {
   it("fails with the cancellation error when the signal aborts mid-way", async () => {
     const controller = new AbortController();
     let stepCount = 0;
-    const run = tween(10_000, square, controller.signal, () => {
+    const run = tween(REAL_RENDER_CLOCK, 10_000, square, controller.signal, () => {
       stepCount += 1;
       if (stepCount === 2) controller.abort();
     });
     await expect(run).rejects.toThrow(StudioActionError);
     await expect(run).rejects.toThrow(RENDER_CANCELLED_MESSAGE);
     expect(stepCount).toBe(2);
+  });
+
+  it("steps exactly CURSOR_STEP_MS apart on a virtual clock", async () => {
+    const clock = createVirtualRenderClock();
+    const started = clock.perfNow();
+    const steps: { atMs: number; progress: number }[] = [];
+    await tween(clock, 4 * CURSOR_STEP_MS, square, new AbortController().signal, (_, progress) => {
+      steps.push({ atMs: clock.perfNow() - started, progress });
+    });
+
+    expect(steps).toEqual([
+      { atMs: 0, progress: 0 },
+      { atMs: 16, progress: 0.25 },
+      { atMs: 32, progress: 0.5 },
+      { atMs: 48, progress: 0.75 },
+      { atMs: 64, progress: 1 },
+    ]);
   });
 });
 

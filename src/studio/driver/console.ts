@@ -73,14 +73,20 @@ function visibleConsole(): { container: Element; terminal: Terminal } | null {
 export function consoleCommands(
   deps: Pick<
     StudioDriverDeps,
-    "runtime" | "runtimeMode" | "runtimePanelStore" | "workspace" | "notifyRuntimeEvent" | "signal"
+    | "runtime"
+    | "runtimeMode"
+    | "runtimePanelStore"
+    | "workspace"
+    | "notifyRuntimeEvent"
+    | "signal"
+    | "clock"
   >,
   pointer: StudioPointer,
 ): Pick<
   StudioDriver,
   "runWorkspace" | "pointConsole" | "waitForOutput" | "expandRuntimeDock" | "collapseRuntimeDock"
 > {
-  const { signal } = deps;
+  const { signal, clock } = deps;
   // The header line the latest Playground run printed, so pointing at the
   // console reads that run's output and not an earlier one's identical line.
   let lastRunHeader: string | null = null;
@@ -149,6 +155,7 @@ export function consoleCommands(
         surface: container,
         durationMs,
         signal,
+        clock,
       });
       return { line: visible.line.text, travelMs };
     },
@@ -179,6 +186,7 @@ export function consoleCommands(
         project: deps.workspace.getProject(),
         timeoutMs,
         signal,
+        clock,
       });
       lastRunHeader = prepared.startedLines.at(-1) ?? null;
       beginRunnerOperation(deps.runtimePanelStore, prepared.startedLines);

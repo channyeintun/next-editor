@@ -3,6 +3,7 @@ import type { StudioDriver } from "./driver";
 import { RENDER_CANCELLED_MESSAGE, StudioActionError, abortableSleep } from "./async";
 import { parseStudioPlan, type StudioPlan, type StudioPlanAction } from "./plan";
 import { actionAwaitsRuntimeStart, performPlan, performsInBackground } from "./performer";
+import { createVirtualRenderClock } from "./renderClock";
 
 function makePlan(overrides?: { failRun?: boolean }): {
   plan: StudioPlan;
@@ -175,6 +176,62 @@ describe("performPlan", () => {
       expect(receipt.startedAtMs!).toBeGreaterThanOrEqual(receipt.plannedAtMs - 5);
       expect(receipt.endedAtMs!).toBeGreaterThanOrEqual(receipt.startedAtMs!);
     }
+  });
+
+  it("on a virtual clock, starts every action exactly at its planned time, after a frame", async () => {
+    const { plan, calls, driver } = makePlan();
+    const renderClock = createVirtualRenderClock();
+    const origin = renderClock.perfNow();
+    const clock = { nowMs: () => renderClock.perfNow() - origin };
+    const events: string[] = [];
+    const frame = renderClock.frame;
+    renderClock.frame = async (signal) => {
+      events.push(`frame@${clock.nowMs()}`);
+      await frame(signal);
+    };
+    // Typing spends its chunk delays on the render's clock, as the driver does.
+    driver.typeText = async ({ path, chunks }) => {
+      for (const chunk of chunks) await renderClock.sleep(chunk.delayMs, controller.signal);
+      calls.push(`type:${path}`);
+      return { path };
+    };
+    const controller = new AbortController();
+
+    const result = await performPlan({
+      plan,
+      driver,
+      clock,
+      renderClock,
+      signal: controller.signal,
+      abort: () => controller.abort(),
+      onProgress: (receipt) => events.push(`ack:${receipt.actionId}`),
+    });
+
+    expect(result.status).toBe("completed");
+    expect(calls).toEqual(["open:main.go", "type:main.go", "run", "wait:ok"]);
+    expect(
+      result.receipts.map(({ actionId, plannedAtMs, startedAtMs, endedAtMs }) => ({
+        actionId,
+        drift: startedAtMs! - plannedAtMs,
+        busy: endedAtMs! - startedAtMs!,
+      })),
+    ).toEqual([
+      { actionId: "a-open", drift: 0, busy: 0 },
+      { actionId: "b-type", drift: 0, busy: 5 },
+      { actionId: "c-run", drift: 0, busy: 0 },
+      { actionId: "d-out", drift: 0, busy: 0 },
+    ]);
+    // A frame at the planned time of each action, before it starts.
+    expect(events).toEqual([
+      "frame@20",
+      "ack:a-open",
+      "frame@60",
+      "ack:b-type",
+      "frame@120",
+      "ack:c-run",
+      "frame@130",
+      "ack:d-out",
+    ]);
   });
 
   it("hands a late pointer move's lateness back out of its budget, pressing as planned", async () => {

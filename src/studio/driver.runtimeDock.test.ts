@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createRuntimePanelStore, selectIsCollapsed } from "../stores/runtimePanelStore";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
+import { REAL_RENDER_CLOCK } from "./renderClock";
 
 vi.mock("../monaco", () => ({
   monaco: {},
@@ -33,6 +34,7 @@ function makeDriver() {
     nodeRuntime: {} as StudioDriverDeps["nodeRuntime"],
     preview: {} as StudioDriverDeps["preview"],
     signal: new AbortController().signal,
+    clock: REAL_RENDER_CLOCK,
   } satisfies StudioDriverDeps;
 
   return { driver: createStudioDriver(deps), runtimePanelStore, runtimeEvents };

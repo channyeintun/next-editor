@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   estimateNarrationMsForRenderWait,
+  parseRenderSpeedParam,
   parseRuntimeModeParam,
   shouldAutostartRender,
   studioRenderWaitMs,
@@ -64,5 +65,22 @@ describe("parseRuntimeModeParam (STUDIO-05)", () => {
     });
     expect(parseRuntimeModeParam("Live").invalid).toBe(true);
     expect(parseRuntimeModeParam("FIXTURE").invalid).toBe(true);
+  });
+});
+
+describe("parseRenderSpeedParam", () => {
+  it("accepts full and real", () => {
+    expect(parseRenderSpeedParam("full")).toEqual({ speed: "full", invalid: false, raw: "full" });
+    expect(parseRenderSpeedParam("real")).toEqual({ speed: "real", invalid: false, raw: "real" });
+  });
+
+  it("leaves the speed to the default when none is given", () => {
+    expect(parseRenderSpeedParam(null)).toEqual({ speed: null, invalid: false, raw: null });
+    expect(parseRenderSpeedParam("")).toEqual({ speed: null, invalid: false, raw: "" });
+  });
+
+  it("flags any other value instead of picking a speed for it", () => {
+    expect(parseRenderSpeedParam("fast")).toEqual({ speed: null, invalid: true, raw: "fast" });
+    expect(parseRenderSpeedParam("FULL")).toEqual({ speed: null, invalid: true, raw: "FULL" });
   });
 });

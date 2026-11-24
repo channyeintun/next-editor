@@ -9,6 +9,7 @@ import {
   type StudioPlaygroundRuntime,
   type StudioPlaygroundRuntimeKind,
 } from "./plan";
+import type { RenderClock } from "./renderClock";
 
 /**
  * Execution-kind adapters for `runtime.run` (docs/agent-lesson-production.md
@@ -208,6 +209,12 @@ export interface PlaygroundRunInput {
   project: Pick<WorkspaceProject, "files">;
   timeoutMs: number;
   signal: AbortSignal;
+  /**
+   * The render's clock. A fixture run's latency and its simulated retry are
+   * performance time and wait on it; a live run is real network work and
+   * keeps real timers.
+   */
+  clock: RenderClock;
 }
 
 export interface PlaygroundRunPrepared {
@@ -241,7 +248,7 @@ export function preparePlaygroundRun(input: PlaygroundRunInput): PlaygroundRunPr
         if (input.mode === "fixture") {
           engine.checkEntry(files);
           const fixture = input.runtime.fixture;
-          await abortableSleep(fixture.latencyMs, input.signal);
+          await input.clock.sleep(fixture.latencyMs, input.signal);
           const transientKind = fixture.transientErrorKinds[attempt - 1];
           if (transientKind) {
             throw new ServiceFailure(transientKind, `Simulated transient ${transientKind}`);
@@ -265,7 +272,10 @@ export function preparePlaygroundRun(input: PlaygroundRunInput): PlaygroundRunPr
           const retryable = RETRYABLE_KINDS.has(error.kind) && attempt < MAX_RUN_ATTEMPTS;
           if (retryable) {
             transientFailures.push({ attempt, kind: error.kind, message: error.message });
-            await abortableSleep(RETRY_DELAY_MS, input.signal);
+            // A fixture's transient failure is simulated, so its retry is too.
+            await (input.mode === "fixture"
+              ? input.clock.sleep(RETRY_DELAY_MS, input.signal)
+              : abortableSleep(RETRY_DELAY_MS, input.signal));
             continue;
           }
           throw new PlaygroundTerminalError(

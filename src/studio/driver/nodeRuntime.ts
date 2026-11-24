@@ -123,7 +123,7 @@ export function previewPointAim(box: StudioPreviewTargetBox): { x: number; y: nu
 export function nodeRuntimeCommands(
   deps: Pick<
     StudioDriverDeps,
-    "runtime" | "nodeRuntime" | "preview" | "notifyPreviewEvent" | "signal"
+    "runtime" | "nodeRuntime" | "preview" | "notifyPreviewEvent" | "signal" | "clock"
   >,
   pointer: StudioPointer,
 ): Pick<
@@ -135,7 +135,10 @@ export function nodeRuntimeCommands(
   | "pointPreview"
   | "expectPreview"
 > {
-  const { signal } = deps;
+  // Everything here waits on real work (a boot, an install, a dev server, the
+  // preview frame), so it keeps real timers; only the point's motion is
+  // performance time.
+  const { signal, clock } = deps;
 
   // The Node.js runtime commands' guard. Returns the narrowed runtime so a caller
   // that captures it keeps the narrowing inside its closures. `verb` agrees
@@ -360,7 +363,7 @@ export function nodeRuntimeCommands(
           `The ${described} is covered on screen — is a slide or the whiteboard open over the preview?`,
         );
       }
-      const { travelMs } = await pointAndRest(pointer, { aim, surface, durationMs, signal });
+      const { travelMs } = await pointAndRest(pointer, { aim, surface, durationMs, signal, clock });
       return { testId: target.value, travelMs };
     },
 

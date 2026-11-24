@@ -6,7 +6,8 @@ import {
   pointerAimDurationMs,
 } from "../../core/src/utils/pointerMotion";
 import { dispatchRecordedCursorVisibility } from "../../core/src/utils/recordedCursorVisibility";
-import { StudioActionError, abortableSleep, throwIfAborted, tween, waitUntil } from "../async";
+import { StudioActionError, throwIfAborted, tween, waitUntil } from "../async";
+import type { RenderClock } from "../renderClock";
 import { describeStudioTarget, resolveStudioTarget, studioTargetAimPoint } from "../targets";
 import type { StudioDriver, StudioDriverDeps } from "./index";
 import { previewAimPoint } from "./nodeRuntime";
@@ -96,7 +97,12 @@ export interface StudioPointer {
   hideOver(surface: Element | null): void;
 }
 
-export function createStudioPointer(): StudioPointer {
+/**
+ * The pointer's sense of "how long since it last moved" is performance time,
+ * on the render's clock, so the pen's lead-in decision (whiteboardPen.ts) reads
+ * the same time the recorded samples are stamped with.
+ */
+export function createStudioPointer(clock: Pick<RenderClock, "perfNow">): StudioPointer {
   let lastCursorPoint: PointerPoint | null = null;
   // Whether the recorded pointer is hidden right now (mouseTrackingActor records
   // every sample hidden until it is shown again).
@@ -122,7 +128,7 @@ export function createStudioPointer(): StudioPointer {
       }),
     );
     lastCursorPoint = { x, y };
-    lastSampleAt = performance.now();
+    lastSampleAt = clock.perfNow();
   };
 
   const dispatch = (x: number, y: number, element: Element, buttons = 0) =>
@@ -140,7 +146,7 @@ export function createStudioPointer(): StudioPointer {
     };
     dispatchRecordedCursorVisibility({ x: at.x, y: at.y, visible: false });
     pointerHidden = true;
-    lastSampleAt = performance.now();
+    lastSampleAt = clock.perfNow();
   };
 
   const hideOver = (surface: Element | null) => {
@@ -159,7 +165,7 @@ export function createStudioPointer(): StudioPointer {
     dispatchRecordedCursorVisibility({ x: point.x, y: point.y, visible: true });
     pointerHidden = false;
     lastCursorPoint = point;
-    lastSampleAt = performance.now();
+    lastSampleAt = clock.perfNow();
   };
 
   // Pin a resting pointer to the app itself just before the layout under it
@@ -196,7 +202,7 @@ export function createStudioPointer(): StudioPointer {
     dispatchOn,
     isHidden: () => pointerHidden,
     lastPoint: () => lastCursorPoint,
-    restedMs: () => performance.now() - lastSampleAt,
+    restedMs: () => clock.perfNow() - lastSampleAt,
     hideOver,
   };
 }
@@ -221,12 +227,14 @@ export async function pointAndRest(
     surface,
     durationMs,
     signal,
+    clock,
     exact = false,
   }: {
     aim: () => PointerPoint;
     surface: Element;
     durationMs: number;
     signal: AbortSignal;
+    clock: RenderClock;
     exact?: boolean;
   },
 ): Promise<{ travelMs: number }> {
@@ -246,7 +254,7 @@ export async function pointAndRest(
     durationMs,
     pointerAimDurationMs(Math.hypot(first.x - from.x, first.y - from.y)),
   );
-  await tween(travelMs, easePointerAim, signal, (eased) => {
+  await tween(clock, travelMs, easePointerAim, signal, (eased) => {
     const to = aim();
     send(
       Math.round(from.x + (to.x - from.x) * eased),
@@ -258,12 +266,14 @@ export async function pointAndRest(
 }
 
 export async function moveCursor(
-  deps: Pick<StudioDriverDeps, "preview" | "signal">,
+  deps: Pick<StudioDriverDeps, "preview" | "signal" | "clock">,
   pointer: StudioPointer,
   { target, durationMs, press = false }: Parameters<StudioDriver["moveCursor"]>[0],
 ): ReturnType<StudioDriver["moveCursor"]> {
-  const { signal } = deps;
-  const started = performance.now();
+  const { signal, clock } = deps;
+  // Performance time: the target's real wait below costs the rest only the
+  // time it took on the render's clock (none on a virtual one).
+  const started = clock.perfNow();
   // A control can take a frame to appear — the Run button renders once the
   // dock it lives in has opened — so give it a moment before failing.
   if (!resolveStudioTarget(target)) {
@@ -341,15 +351,15 @@ export async function moveCursor(
         pointerAimDurationMs(Math.hypot(aim.x - from.x, aim.y - from.y)),
       )
     : 0;
-  const restMs = travelBudgetMs - travelMs - (performance.now() - started);
+  const restMs = travelBudgetMs - travelMs - (clock.perfNow() - started);
   if (restMs > 0) {
-    await abortableSleep(restMs, signal);
+    await clock.sleep(restMs, signal);
   }
 
   if (!from) {
     pointer.revealAt(roundPoint(destination().point));
   } else {
-    await tween(travelMs, easePointerAim, signal, (eased) => {
+    await tween(clock, travelMs, easePointerAim, signal, (eased) => {
       const { point, element } = destination();
       pointer.dispatch(
         Math.round(from.x + (point.x - from.x) * eased),
@@ -363,11 +373,11 @@ export async function moveCursor(
     // Rest on the control, then click it: press, hold, release. Only the
     // recorded button state changes — no pointerdown/click reaches the
     // page, so the action itself stays the semantic command it always was.
-    await abortableSleep(POINTER_SETTLE_MS, signal);
+    await clock.sleep(POINTER_SETTLE_MS, signal);
     const { point, element } = destination();
     const { x, y } = roundPoint(point);
     pointer.dispatch(x, y, element, 1);
-    await abortableSleep(POINTER_PRESS_MS, signal);
+    await clock.sleep(POINTER_PRESS_MS, signal);
     pointer.dispatch(x, y, element, 0);
   }
 

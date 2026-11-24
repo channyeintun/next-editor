@@ -14,6 +14,7 @@ import { DEFAULT_PREVIEW_STATE, type SlidesContext } from "../stores/slidesStore
 import type { SlidePreviewState } from "../types/slides";
 import { measureLineWithCanvas } from "../utils/whiteboardTextFit";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
+import { REAL_RENDER_CLOCK } from "./renderClock";
 import { studioWhiteboardAssetSchema } from "./plan";
 import { whiteboardPointAim } from "./whiteboardPen";
 
@@ -112,6 +113,7 @@ function makeDriver() {
     nodeRuntime: {} as StudioDriverDeps["nodeRuntime"],
     preview: {} as StudioDriverDeps["preview"],
     signal: new AbortController().signal,
+    clock: REAL_RENDER_CLOCK,
   } satisfies StudioDriverDeps;
 
   return { driver: createStudioDriver(deps), events };

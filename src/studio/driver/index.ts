@@ -29,6 +29,7 @@ import type {
   TextAnchor,
   TypingChunk,
 } from "../plan";
+import type { RenderClock } from "../renderClock";
 import { consoleCommands } from "./console";
 import { editorCommands } from "./editor";
 import { createStudioPointer, moveCursor } from "./pointer";
@@ -81,6 +82,12 @@ export interface StudioDriverDeps {
     captureScreenshot: PreviewScreenshotCapturer;
   };
   signal: AbortSignal;
+  /**
+   * The clock every performance wait runs on (renderClock.ts): typing delays,
+   * pointer steps and rests, drags, whiteboard frames, a fixture run's
+   * latency. Waits for the page or the network stay on real timers.
+   */
+  clock: RenderClock;
 }
 
 export interface StudioDriver {
@@ -167,7 +174,7 @@ export interface StudioDriver {
  * stage); only the pointer is shared, and only through its own controller.
  */
 export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
-  const pointer = createStudioPointer();
+  const pointer = createStudioPointer(deps.clock);
   return {
     ...editorCommands(deps, pointer),
     moveCursor: (input) => moveCursor(deps, pointer, input),

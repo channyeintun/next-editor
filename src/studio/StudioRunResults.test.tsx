@@ -132,6 +132,19 @@ describe("CheckList", () => {
     );
     expect(screen.getByText("Screenshot: bridge gone")).toBeInTheDocument();
   });
+
+  it("says which clock the render performed on, real when the report predates the field", () => {
+    const { rerender } = render(<CheckList report={report({ clock: "virtual" })} />);
+    expect(screen.getByText("Performed at full speed, on a virtual clock")).toHaveClass(
+      "text-slate-400",
+    );
+
+    rerender(<CheckList report={report({ clock: "real" })} />);
+    expect(screen.getByText("Performed in real time")).toBeInTheDocument();
+
+    rerender(<CheckList report={report({})} />);
+    expect(screen.getByText("Performed in real time")).toBeInTheDocument();
+  });
 });
 
 describe("RepeatabilityVerdict", () => {

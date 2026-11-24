@@ -1,10 +1,11 @@
 import { applyWhiteboardEvent, type WhiteboardEvent } from "../../core/src/whiteboard";
+import { flushPendingWhiteboardChange } from "../../hooks/useWhiteboardController";
 import {
   DEFAULT_PREVIEW_STATE,
   openedSlidePreviewState,
   selectPreviewState,
 } from "../../stores/slidesStore";
-import { StudioActionError, abortableSleep, waitUntil } from "../async";
+import { StudioActionError, waitUntil } from "../async";
 import type { StudioWhiteboardAsset } from "../plan";
 import { resolveSlideSurface } from "../targets";
 import {
@@ -40,14 +41,27 @@ export function stageCommands(
     | "whiteboardAssets"
     | "planSeed"
     | "signal"
+    | "clock"
   >,
   pointer: StudioPointer,
 ): Pick<
   StudioDriver,
   "showSlide" | "closeSlide" | "pointSlide" | "applyWhiteboard" | "pointWhiteboard"
 > {
-  const { signal } = deps;
+  const { signal, clock } = deps;
   const pen = createWhiteboardPen(deps, pointer);
+
+  // Excalidraw reports what its canvas shows through the whiteboard
+  // controller's real 100 ms throttle, and the recorder stamps that report when
+  // the throttle fires. In real time that is within 100 ms of its cause; on a
+  // virtual clock it could land seconds of lesson later. So, on a virtual clock
+  // only, let the page settle after each step (the canvas takes the new scene
+  // and reports it) and save the report at once, at the step's own time.
+  const settleWhiteboardOnVirtualClock = async () => {
+    if (clock.kind !== "virtual") return;
+    await clock.sleep(0, signal);
+    flushPendingWhiteboardChange(deps.whiteboardStore);
+  };
 
   const requireAsset = (assetId: string): StudioWhiteboardAsset => {
     const asset = deps.whiteboardAssets.find((candidate) => candidate.id === assetId);
@@ -144,6 +158,7 @@ export function stageCommands(
         surface,
         durationMs,
         signal,
+        clock,
         exact: true,
       });
       return { x: target.x, y: target.y, travelMs };
@@ -179,6 +194,7 @@ export function stageCommands(
         surface,
         durationMs,
         signal,
+        clock,
         exact: true,
       });
       return { assetId: asset.id, travelMs };
@@ -246,6 +262,7 @@ export function stageCommands(
           ...wipe(),
           ...panelFlags(),
         });
+        await settleWhiteboardOnVirtualClock();
       } else {
         // A drawn apply is the same delta track at a finer grain: one event per
         // step, each carrying only the element being drawn right then. Replay
@@ -283,7 +300,8 @@ export function stageCommands(
               pen.draw(asset, progress, { ends: progress >= 1 });
             }
           }
-          await abortableSleep(WHITEBOARD_DRAW_FRAME_MS, signal);
+          await settleWhiteboardOnVirtualClock();
+          await clock.sleep(WHITEBOARD_DRAW_FRAME_MS, signal);
         }
       }
 

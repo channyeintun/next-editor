@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { RECORDED_CURSOR_VISIBILITY_EVENT } from "../core/src/utils/recordedCursorVisibility";
 import type { StudioPreviewTargetBox } from "../utils/iframeStudioCommandBridge";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
+import { REAL_RENDER_CLOCK } from "./renderClock";
 import { previewPointAim } from "./driver/nodeRuntime";
 
 vi.mock("../monaco", () => ({
@@ -131,6 +132,7 @@ function makeDriver(runtime?: StudioDriverDeps["runtime"]) {
       captureScreenshot: async () => ({ dataUrl: "data:image/png;base64,", width: 1, height: 1 }),
     },
     signal: new AbortController().signal,
+    clock: REAL_RENDER_CLOCK,
   } satisfies StudioDriverDeps;
 
   return { driver: createStudioDriver(deps), executeCommand };

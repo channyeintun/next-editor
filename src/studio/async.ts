@@ -1,4 +1,5 @@
 import type { TextAnchor } from "./plan";
+import type { RenderClock } from "./renderClock";
 
 /**
  * Monaco-free primitives shared by the driver, Performer, and controller.
@@ -91,6 +92,12 @@ export interface WaitUntilOptions {
   intervalMs?: number;
 }
 
+/**
+ * Poll `predicate` until it holds. A real wait in every render: what it waits
+ * for (a React commit, a model swap, output a terminal parses) takes real
+ * time, so its deadline and polls stay on the page's own timers, never on the
+ * render's clock.
+ */
 export async function waitUntil(
   predicate: () => boolean,
   { timeoutMs, signal, description, intervalMs = 16 }: WaitUntilOptions,
@@ -121,25 +128,27 @@ export const CURSOR_STEP_MS = 16;
  * eased value, ending on the step that reaches 1. A zero duration still steps
  * once, straight to the end, so a zero-length move lands where it was going.
  * Pointer moves, drags and editor scrolls all run on it, so their recorded
- * cadence has one home.
+ * cadence has one home. The motion is performance time, so it runs on the
+ * render's clock (renderClock.ts).
  */
 export async function tween(
+  clock: Pick<RenderClock, "perfNow" | "sleep">,
   durationMs: number,
   ease: (progress: number) => number,
   signal: AbortSignal,
   step: (eased: number, progress: number) => void,
 ): Promise<void> {
-  const started = performance.now();
+  const started = clock.perfNow();
   for (;;) {
     throwIfAborted(signal);
-    const progress = durationMs > 0 ? Math.min(1, (performance.now() - started) / durationMs) : 1;
+    const progress = durationMs > 0 ? Math.min(1, (clock.perfNow() - started) / durationMs) : 1;
     step(ease(progress), progress);
     if (progress >= 1) {
       return;
     }
-    // setTimeout stepping (not rAF): rAF pauses in background tabs and would
-    // stall an unattended render mid-tween.
-    await abortableSleep(CURSOR_STEP_MS, signal);
+    // Timer stepping (not rAF) on the real clock: rAF pauses in background
+    // tabs and would stall an unattended render mid-tween.
+    await clock.sleep(CURSOR_STEP_MS, signal);
   }
 }
 

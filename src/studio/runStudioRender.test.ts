@@ -4,10 +4,12 @@ import { sha256HexOfJson } from "./hash";
 import type { StudioPlan } from "./plan";
 import {
   narrationTimelineOnRecordingClock,
+  renderClockFor,
   runStudioRender,
   WAITING_FOR_VISIBLE_TAB_PHASE,
   type StudioRunDeps,
 } from "./runStudioRender";
+import { encodeWavPcm16 } from "./tts/wav";
 
 vi.mock("../monaco", () => ({
   monaco: {},
@@ -128,7 +130,7 @@ describe("runStudioRender visible-tab gate", () => {
    * Deps that carry a render through workspace pinning to startRecording, where
    * the recorder reports an error so the render ends without performing.
    */
-  function depsUpToRecording() {
+  function depsUpToRecording({ cameraOn = false } = {}) {
     const phases: string[] = [];
     let projectId = "";
     vi.mocked(workspacePathFromMonacoModelUri).mockReturnValue(entryFilePath);
@@ -139,7 +141,10 @@ describe("runStudioRender visible-tab gate", () => {
     const startSidebarCollapsed = vi.fn<() => void>();
     const deps = {
       actor: {
-        getSnapshot: () => ({ context: { error: "stopped by the test" }, matches: () => false }),
+        getSnapshot: () => ({
+          context: { error: "stopped by the test", defaultEnableCameraRecording: cameraOn },
+          matches: () => false,
+        }),
       },
       nextEditor: { clearRecording: vi.fn<() => void>(), startRecording },
       getEditor: () => ({ getModel: () => ({ uri: {} }) }),
@@ -230,5 +235,93 @@ describe("runStudioRender visible-tab gate", () => {
       "start-recording",
       "startRecording called",
     ]);
+  });
+
+  describe("the render's clock", () => {
+    // One second of silence at 24 kHz: the narration a virtual take keeps.
+    const wav = encodeWavPcm16(new Int16Array(24_000), 24_000);
+    const wavNarration = {
+      narration: { blob: new Blob([wav.slice()]), bytes: wav, audioSha256: "0".repeat(64) },
+    };
+
+    it("records on a virtual clock only at full speed, without a screen stream or camera", async () => {
+      const full = depsUpToRecording();
+      const virtual = await runStudioRender(gatedPlan, "fixture", full.deps, {
+        ...wavNarration,
+        speed: "full",
+      });
+      expect(full.startRecording).toHaveBeenCalledTimes(1);
+      const event = (full.startRecording.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
+      expect(event.audioBlob).toBe(wavNarration.narration.blob);
+      // The narration's length is read from the WAV, not from the plan.
+      expect(event.externalAudioDurationMs).toBe(1_000);
+      expect((event.timeSource as { kind: string }).kind).toBe("virtual");
+      expect(event).not.toHaveProperty("screenStream");
+      expect(virtual.report.clock).toBe("virtual");
+      expect(virtual.manifest.environment.clock).toBe("virtual");
+
+      for (const [options, cameraOn] of [
+        [{ ...wavNarration }, false],
+        [{ ...wavNarration, speed: "real" as const }, false],
+        [{ ...wavNarration, speed: "full" as const, screenStream: { getTracks: () => [] } }, false],
+        [{ ...wavNarration, speed: "full" as const }, true],
+      ] as const) {
+        const real = depsUpToRecording({ cameraOn });
+        const result = await runStudioRender(
+          gatedPlan,
+          "fixture",
+          real.deps,
+          options as Parameters<typeof runStudioRender>[3],
+        );
+        const realEvent = (real.startRecording.mock.calls[0] as unknown[])[0] as Record<
+          string,
+          unknown
+        >;
+        expect(realEvent).not.toHaveProperty("timeSource");
+        expect(realEvent).not.toHaveProperty("externalAudioDurationMs");
+        expect(result.report.clock).toBe("real");
+        expect(result.manifest.environment.clock).toBe("real");
+      }
+    });
+
+    it("fails a full-speed render whose narration is not a readable WAV, before recording", async () => {
+      const { deps, startRecording } = depsUpToRecording();
+      const result = await runStudioRender(gatedPlan, "fixture", deps, {
+        ...narration,
+        speed: "full",
+      });
+      expect(startRecording).not.toHaveBeenCalled();
+      expect(result.report.errors[0]).toMatch(
+        /^The narration could not be read for a full-speed render: /,
+      );
+    });
+  });
+});
+
+describe("renderClockFor", () => {
+  const base = {
+    plan: { actions: [{ id: "a", type: "editor.type" }] } as unknown as StudioPlan,
+    runtimeMode: "fixture" as const,
+    speed: "full" as const,
+    recordsScreen: false,
+    cameraOn: false,
+  };
+
+  it("is virtual only when every condition holds", () => {
+    expect(renderClockFor(base)).toBe("virtual");
+    expect(renderClockFor({ ...base, speed: "real" })).toBe("real");
+    expect(renderClockFor({ ...base, recordsScreen: true })).toBe("real");
+    expect(renderClockFor({ ...base, cameraOn: true })).toBe("real");
+    const live = {
+      ...base,
+      plan: { actions: [{ id: "r", type: "runtime.run" }] } as unknown as StudioPlan,
+    };
+    expect(renderClockFor(live)).toBe("virtual");
+    expect(renderClockFor({ ...live, runtimeMode: "live" })).toBe("real");
+    const preview = {
+      ...base,
+      plan: { actions: [{ id: "p", type: "preview.open" }] } as unknown as StudioPlan,
+    };
+    expect(renderClockFor(preview)).toBe("real");
   });
 });

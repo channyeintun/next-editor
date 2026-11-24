@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { RECORDED_CURSOR_VISIBILITY_EVENT } from "../../core/src/utils/recordedCursorVisibility";
+import { REAL_RENDER_CLOCK, createVirtualRenderClock } from "../renderClock";
 import { createStudioPointer } from "./pointer";
 
 type Sample =
@@ -51,7 +52,7 @@ describe("createStudioPointer", () => {
   });
 
   it("starts hidden in the middle of the window, with no resting point yet", () => {
-    const pointer = createStudioPointer();
+    const pointer = createStudioPointer(REAL_RENDER_CLOCK);
 
     expect(samples).toEqual([
       {
@@ -66,7 +67,7 @@ describe("createStudioPointer", () => {
   });
 
   it("hides only once while already hidden", () => {
-    const pointer = createStudioPointer();
+    const pointer = createStudioPointer(REAL_RENDER_CLOCK);
     samples = [];
 
     pointer.hide();
@@ -77,7 +78,7 @@ describe("createStudioPointer", () => {
   });
 
   it("reveals only a hidden pointer, resting it where it reappears", () => {
-    const pointer = createStudioPointer();
+    const pointer = createStudioPointer(REAL_RENDER_CLOCK);
     samples = [];
 
     pointer.revealAt({ x: 40, y: 60 });
@@ -90,7 +91,7 @@ describe("createStudioPointer", () => {
 
   it("hides a visible pointer where it last rested", () => {
     const { control } = mountAppRoot();
-    const pointer = createStudioPointer();
+    const pointer = createStudioPointer(REAL_RENDER_CLOCK);
     pointer.revealAt({ x: 40, y: 60 });
     pointer.dispatch(120, 80, control);
     samples = [];
@@ -103,7 +104,7 @@ describe("createStudioPointer", () => {
 
   it("records each dispatched sample as the resting point, with its button state", () => {
     const { control } = mountAppRoot();
-    const pointer = createStudioPointer();
+    const pointer = createStudioPointer(REAL_RENDER_CLOCK);
     samples = [];
 
     pointer.dispatch(10, 20, control, 1);
@@ -118,7 +119,7 @@ describe("createStudioPointer", () => {
 
   it("pins only a visible, resting pointer to the app root", () => {
     const { app, control } = mountAppRoot();
-    const pointer = createStudioPointer();
+    const pointer = createStudioPointer(REAL_RENDER_CLOCK);
     samples = [];
 
     // Hidden: nothing to pin.
@@ -136,12 +137,26 @@ describe("createStudioPointer", () => {
   });
 
   it("pins nothing without an app root to pin to", () => {
-    const pointer = createStudioPointer();
+    const pointer = createStudioPointer(REAL_RENDER_CLOCK);
     pointer.revealAt({ x: 40, y: 60 });
     samples = [];
 
     pointer.pinToApp();
 
     expect(samples).toEqual([]);
+  });
+
+  it("measures how long it has rested on the render's clock", async () => {
+    const { control } = mountAppRoot();
+    const clock = createVirtualRenderClock();
+    const pointer = createStudioPointer(clock);
+    pointer.revealAt({ x: 10, y: 10 });
+    expect(pointer.restedMs()).toBe(0);
+
+    await clock.sleep(119, new AbortController().signal);
+    expect(pointer.restedMs()).toBe(119);
+
+    pointer.dispatch(20, 20, control);
+    expect(pointer.restedMs()).toBe(0);
   });
 });

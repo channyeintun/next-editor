@@ -8,6 +8,7 @@ import {
 } from "./async";
 import { previewCommandTarget } from "./previewExpectation";
 import type { ActionReceipt } from "./report";
+import { REAL_RENDER_CLOCK, type RenderClock } from "./renderClock";
 
 /**
  * The deterministic Performer (docs/agent-lesson-production.md §4): walks a
@@ -35,6 +36,11 @@ export interface PerformPlanOptions {
   plan: StudioPlan;
   driver: StudioDriver;
   clock: StudioClock;
+  /**
+   * What the wait to each action's planned time sleeps on (renderClock.ts);
+   * `clock` must read the same time. The page's own clock when absent.
+   */
+  renderClock?: RenderClock;
   signal: AbortSignal;
   abort: (reason: string) => void;
   onProgress?: (receipt: ActionReceipt) => void;
@@ -173,7 +179,9 @@ async function invokeWithDeadline(
   // Typing spends its planned chunk delays, a select its drag-glide, a point
   // its travel and a drawn whiteboard apply its frames before
   // acknowledging; expect/run actions own their internal waits. The outer
-  // deadline covers the whole command either way.
+  // deadline covers the whole command either way. It and the retry delay stay
+  // on real timers on every clock: they bound real work, and virtual busy time
+  // costs little real time, so on a virtual clock the bound only loosens.
   const deadlineMs = action.timeoutMs + planActionBusyMs(action);
 
   let deadlineTimer: number | undefined;
@@ -299,6 +307,7 @@ export async function performPlan({
   plan,
   driver,
   clock,
+  renderClock = REAL_RENDER_CLOCK,
   signal,
   abort,
   onProgress,
@@ -400,8 +409,14 @@ export async function performPlan({
 
     try {
       const waitMs = action.at - clock.nowMs();
-      if (waitMs > 0) {
-        await abortableSleep(waitMs, signal);
+      if (renderClock.kind === "virtual") {
+        // Settle, move time to exactly the planned start, then give the page
+        // one real frame: xterm paints its rows on a frame, and what an action
+        // reads from the screen (a console line's painted end) must be there.
+        await renderClock.sleep(Math.max(0, waitMs), signal);
+        await renderClock.frame(signal);
+      } else if (waitMs > 0) {
+        await renderClock.sleep(waitMs, signal);
       }
       // A runtime action — or one authored `afterAction` the start — begins
       // once the start has settled, and records that as its start, so any

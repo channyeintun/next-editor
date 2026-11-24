@@ -15,6 +15,7 @@ import {
   type StudioPlaygroundRuntimeKind,
   type StudioRuntime,
 } from "./plan";
+import { REAL_RENDER_CLOCK, createVirtualRenderClock, type RenderClock } from "./renderClock";
 
 type Transient = ("rate-limited" | "timeout" | "unavailable")[];
 
@@ -119,6 +120,7 @@ function prepare(
   runtime: StudioRuntime,
   project: { files: Record<string, unknown> },
   runActionId = "run",
+  clock: RenderClock = REAL_RENDER_CLOCK,
 ) {
   if (runtime.kind === "none" || runtime.kind === "webcontainer") {
     throw new Error("test misuse");
@@ -130,6 +132,7 @@ function prepare(
     project: project as Parameters<typeof preparePlaygroundRun>[0]["project"],
     timeoutMs: 1_000,
     signal: new AbortController().signal,
+    clock,
   });
 }
 
@@ -320,8 +323,25 @@ describe("preparePlaygroundRun", () => {
       project: projectWith("main.go") as Parameters<typeof preparePlaygroundRun>[0]["project"],
       timeoutMs: 1_000,
       signal: controller.signal,
+      clock: REAL_RENDER_CLOCK,
     });
     await expect(prepared.run()).rejects.toThrow(StudioActionError);
+  });
+
+  it("spends a fixture's latency and simulated retry on the render's clock", async () => {
+    const runtime = goRuntime(["unavailable"]);
+    if (runtime.kind !== "go-playground") throw new Error("unreachable");
+    // A minute of latency per attempt: on real timers the test would time out.
+    runtime.fixture.latencyMs = 60_000;
+    const clock = createVirtualRenderClock();
+    const started = clock.perfNow();
+
+    const outcome = await prepare(runtime, projectWith("main.go"), "run", clock).run();
+
+    expect(outcome.ok).toBe(true);
+    expect(outcome.attempts).toBe(2);
+    // Two latencies and the 500 ms retry delay between them, exactly.
+    expect(clock.perfNow() - started).toBe(60_000 + 500 + 60_000);
   });
 });
 

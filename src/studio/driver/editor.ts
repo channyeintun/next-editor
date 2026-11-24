@@ -1,7 +1,7 @@
 import { monaco, workspacePathFromMonacoModelUri } from "../../monaco";
 import { POINTER_SETTLE_MS, easePointerDrag } from "../../core/src/utils/pointerMotion";
 import { isWorkspaceTextFile } from "../../types/workspace";
-import { StudioActionError, abortableSleep, resolveAnchorOffset, tween, waitUntil } from "../async";
+import { StudioActionError, resolveAnchorOffset, tween, waitUntil } from "../async";
 import { chunkPlacements, easeInOutCubic } from "../cadence";
 import type { StudioDriver, StudioDriverDeps } from "./index";
 import { roundPoint, type StudioPointer } from "./pointer";
@@ -21,10 +21,22 @@ const DRAG_PRESS_HOLD_MS = 120;
 const MIN_SELECT_SCROLL_MS = 150;
 
 export function editorCommands(
-  deps: Pick<StudioDriverDeps, "getEditor" | "workspace" | "notifyWorkspaceEvent" | "signal">,
+  deps: Pick<
+    StudioDriverDeps,
+    "getEditor" | "workspace" | "notifyWorkspaceEvent" | "signal" | "clock"
+  >,
   pointer: StudioPointer,
 ): Pick<StudioDriver, "openFile" | "typeText" | "selectRange" | "expectFile"> {
-  const { signal } = deps;
+  const { signal, clock } = deps;
+
+  // Monaco applies a horizontal reveal (typing past the right edge) only when
+  // it next renders, on an animation frame. In real time that frame comes
+  // within a step; on a virtual clock the steps outrun it, and every
+  // horizontal scroll of an action would land at its end. Rendering now, a
+  // public and synchronous call, records the scroll at the step that caused it.
+  const renderOnVirtualClock = (editor: monaco.editor.IStandaloneCodeEditor) => {
+    if (clock.kind === "virtual") editor.render();
+  };
 
   const activeModelPath = (): string | null => {
     const model = deps.getEditor()?.getModel();
@@ -88,7 +100,7 @@ export function editorCommands(
       editor.setScrollTop(targetTop, monaco.editor.ScrollType.Immediate);
       return;
     }
-    await tween(durationMs, easeInOutCubic, signal, (eased) => {
+    await tween(clock, durationMs, easeInOutCubic, signal, (eased) => {
       editor.setScrollTop(
         Math.round(fromTop + (targetTop - fromTop) * eased),
         monaco.editor.ScrollType.Immediate,
@@ -144,7 +156,7 @@ export function editorCommands(
       // model offset is derived from what is already inserted before it.
       const { relativeOffsets, expectedText } = chunkPlacements(chunks);
       for (const [index, chunk] of chunks.entries()) {
-        await abortableSleep(chunk.delayMs, signal);
+        await clock.sleep(chunk.delayMs, signal);
         const { editor: liveEditor, model: liveModel } = requireEditorForPath(path);
         const insertOffset = startOffset + relativeOffsets[index];
         const position = liveModel.getPositionAt(insertOffset);
@@ -172,6 +184,7 @@ export function editorCommands(
           new monaco.Selection(caret.lineNumber, caret.column, caret.lineNumber, caret.column),
         );
         liveEditor.revealPositionInCenterIfOutsideViewport(caret);
+        renderOnVirtualClock(liveEditor);
       }
 
       const expected = expectedText;
@@ -277,7 +290,7 @@ export function editorCommands(
         await smoothScrollTo(editor, gap.target, scrollMs);
       }
       if (settleMs > 0) {
-        await abortableSleep(settleMs, signal);
+        await clock.sleep(settleMs, signal);
       }
 
       // Endpoints come from Monaco's own layout, read *after* any scroll settles
@@ -303,7 +316,7 @@ export function editorCommands(
         const pressHoldMs = Math.min(DRAG_PRESS_HOLD_MS, Math.round(sweepBudgetMs * 0.2));
         pointer.dispatch(from.x, from.y, node, 1);
         if (pressHoldMs > 0) {
-          await abortableSleep(pressHoldMs, signal);
+          await clock.sleep(pressHoldMs, signal);
         }
         const dragMs = Math.max(1, sweepBudgetMs - pressHoldMs);
 
@@ -319,7 +332,7 @@ export function editorCommands(
         // crosses each line's vertical band. It is never a synthetic
         // per-character crawl down a multi-line block.
         let activePosition: monaco.IPosition = startPosition;
-        await tween(dragMs, easePointerDrag, signal, (eased) => {
+        await tween(clock, dragMs, easePointerDrag, signal, (eased) => {
           const px = Math.round(from.x + (to.x - from.x) * eased);
           const py = Math.round(from.y + (to.y - from.y) * eased);
           pointer.dispatch(px, py, node, 1);
@@ -338,6 +351,7 @@ export function editorCommands(
               activePosition.column,
             ),
           );
+          renderOnVirtualClock(editor);
         });
         // Release at the range end so the recorded button state returns to idle.
         // The selection then simply holds here while the narration continues —

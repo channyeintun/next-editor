@@ -1,4 +1,5 @@
 import type { StudioPlanActionType, StudioRuntimeKind, StudioRuntimeMode } from "./plan";
+import type { RenderClockKind } from "./renderClock";
 
 /**
  * Receipts, render reports, and build manifests
@@ -47,6 +48,11 @@ export interface StudioRenderReport {
   outcome: StudioRenderOutcome;
   planSlug: string;
   runtimeMode: StudioRuntimeMode;
+  /**
+   * The clock the render performed on (renderClock.ts). Absent from reports
+   * made before renders could run off the wall clock, which were all real.
+   */
+  clock?: RenderClockKind;
   startedAtIso: string;
   wallDurationMs: number;
   recordingDurationMs: number | null;
@@ -88,6 +94,8 @@ export interface StudioBuildManifest {
   environment: {
     userAgent: string;
     appMode: string;
+    /** The clock the render performed on (renderClock.ts). */
+    clock: RenderClockKind;
   };
   artifact: {
     neBytes: number;
@@ -104,15 +112,28 @@ export interface StudioBuildManifest {
  * The plan's timing gate (§8): reject builds whose actions started too far
  * from their planned marks. No successful timed receipts also fails — a build
  * that performed nothing measurable must not pass a timing gate.
+ *
+ * On a virtual clock the performer moves time to each action's planned start
+ * before starting it, so the starts are exact by construction and the gate
+ * proves little about pacing. It still runs (a render that timed nothing
+ * still fails), and its detail says which clock the starts were read on.
  */
-export function timingGateCheck(timing: TimingStats | null, maxP95Ms: number): StudioCheckResult {
+export function timingGateCheck(
+  timing: TimingStats | null,
+  maxP95Ms: number,
+  clock: RenderClockKind = "real",
+): StudioCheckResult {
   if (!timing) {
     return { id: "timing.p95", ok: false, detail: "no timed receipts to gate" };
   }
+  const measured = `p95 |actual − planned| = ${timing.p95Ms}ms (max ${maxP95Ms}ms; worst ${timing.maxMs}ms over ${timing.samples} actions)`;
   return {
     id: "timing.p95",
     ok: timing.p95Ms <= maxP95Ms,
-    detail: `p95 |actual − planned| = ${timing.p95Ms}ms (max ${maxP95Ms}ms; worst ${timing.maxMs}ms over ${timing.samples} actions)`,
+    detail:
+      clock === "virtual"
+        ? `${measured}; virtual clock: every start is exact by construction`
+        : measured,
   };
 }
 
@@ -169,21 +190,26 @@ export function computeTimingStats(
   /** The plan's afterAction dependencies — see {@link actionStartDriftsMs}. */
   dependencies?: Readonly<Record<string, string>>,
 ): TimingStats | null {
-  const deltas = Object.values(actionStartDriftsMs(receipts, dependencies))
-    .map(Math.abs)
-    .sort((left, right) => left - right);
+  return timingStatsOf(Object.values(actionStartDriftsMs(receipts, dependencies)).map(Math.abs));
+}
 
-  if (deltas.length === 0) {
+/**
+ * Nearest-rank statistics, rounded, over time differences that are already
+ * absolute; null when there are none. The timing gate and the comparison of
+ * two recordings' tracks both report these, so they are computed in one place.
+ */
+export function timingStatsOf(deltasMs: readonly number[]): TimingStats | null {
+  if (deltasMs.length === 0) {
     return null;
   }
-
+  const sorted = [...deltasMs].sort((left, right) => left - right);
   const percentile = (p: number) =>
-    deltas[Math.min(deltas.length - 1, Math.ceil((p / 100) * deltas.length) - 1)];
+    sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
 
   return {
-    samples: deltas.length,
+    samples: sorted.length,
     p50Ms: Math.round(percentile(50)),
     p95Ms: Math.round(percentile(95)),
-    maxMs: Math.round(deltas[deltas.length - 1]),
+    maxMs: Math.round(sorted[sorted.length - 1]),
   };
 }

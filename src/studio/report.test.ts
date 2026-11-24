@@ -97,5 +97,17 @@ describe("timingGateCheck", () => {
 
   it("fails when nothing measurable was performed", () => {
     expect(timingGateCheck(null, 300).ok).toBe(false);
+    expect(timingGateCheck(null, 300, "virtual").ok).toBe(false);
+  });
+
+  it("still gates a virtual render, and says its starts are exact by construction", () => {
+    const timing = { samples: 5, p50Ms: 0, p95Ms: 0, maxMs: 0 };
+    const real = timingGateCheck(timing, 300);
+    const virtual = timingGateCheck(timing, 300, "virtual");
+    expect(virtual.ok).toBe(true);
+    expect(virtual.detail).toContain(real.detail);
+    expect(virtual.detail).toMatch(/virtual clock: every start is exact by construction/);
+    expect(real.detail).not.toMatch(/virtual/);
+    expect(timingGateCheck({ ...timing, p95Ms: 400 }, 300, "virtual").ok).toBe(false);
   });
 });

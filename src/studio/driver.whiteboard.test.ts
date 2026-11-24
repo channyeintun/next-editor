@@ -6,12 +6,18 @@ import {
   type WhiteboardSceneState,
 } from "../core/src/whiteboard";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
+import { flushPendingWhiteboardChange } from "../hooks/useWhiteboardController";
+import { REAL_RENDER_CLOCK, createVirtualRenderClock, type RenderClock } from "./renderClock";
 import { studioWhiteboardAssetSchema } from "./plan";
-import { buildWhiteboardElement } from "./whiteboardAssets";
+import { WHITEBOARD_DRAW_FRAME_MS, buildWhiteboardElement } from "./whiteboardAssets";
 
 vi.mock("../monaco", () => ({
   monaco: {},
   workspacePathFromMonacoModelUri: vi.fn<() => string | null>(),
+}));
+
+vi.mock("../hooks/useWhiteboardController", () => ({
+  flushPendingWhiteboardChange: vi.fn<() => void>(),
 }));
 
 const ASSETS = [
@@ -21,7 +27,7 @@ const ASSETS = [
 
 const PLAN_SEED = 29;
 
-function makeDriver(whiteboardAssets = ASSETS) {
+function makeDriver(whiteboardAssets = ASSETS, clock: RenderClock = REAL_RENDER_CLOCK) {
   let scene: WhiteboardSceneState = EMPTY_WHITEBOARD_SCENE;
   const events: WhiteboardEvent[] = [];
 
@@ -56,9 +62,15 @@ function makeDriver(whiteboardAssets = ASSETS) {
     nodeRuntime: {} as StudioDriverDeps["nodeRuntime"],
     preview: {} as StudioDriverDeps["preview"],
     signal: new AbortController().signal,
+    clock,
   } satisfies StudioDriverDeps;
 
-  return { driver: createStudioDriver(deps), events, getScene: () => scene };
+  return {
+    driver: createStudioDriver(deps),
+    events,
+    getScene: () => scene,
+    whiteboardStore: deps.whiteboardStore,
+  };
 }
 
 /** Fold the recorded deltas the way replay does, to see what the board ends on. */
@@ -163,5 +175,46 @@ describe("StudioDriver whiteboard drawing", () => {
     expect(counts).toHaveLength(3);
     expect(counts[0]).toBeLessThan(counts[1]);
     expect(counts[1]).toBeLessThan(counts[2]);
+  });
+});
+
+describe("StudioDriver whiteboard drawing on the render's clock", () => {
+  it("draws a frame every WHITEBOARD_DRAW_FRAME_MS exactly, saving the canvas report after each", async () => {
+    const flush = vi.mocked(flushPendingWhiteboardChange);
+    flush.mockReset();
+    const clock = createVirtualRenderClock();
+    const started = clock.perfNow();
+    const { driver, events, whiteboardStore } = makeDriver(ASSETS, clock);
+    const publishedAt: number[] = [];
+    const flushedAt: number[] = [];
+    const notify = events.push.bind(events);
+    events.push = (...items) => {
+      publishedAt.push(clock.perfNow() - started);
+      return notify(...items);
+    };
+    flush.mockImplementation(() => {
+      flushedAt.push(clock.perfNow() - started);
+    });
+
+    await driver.applyWhiteboard({ open: true, upsertIds: ["box", "label"], drawMs: 200 });
+
+    expect(publishedAt.length).toBeGreaterThan(1);
+    expect(publishedAt).toEqual(publishedAt.map((_, index) => index * WHITEBOARD_DRAW_FRAME_MS));
+    // Saved right after each step settles, at the step's own time.
+    expect(flushedAt).toEqual(publishedAt);
+    expect(flush).toHaveBeenCalledWith(whiteboardStore);
+  });
+
+  it("saves a one-step apply's canvas report too, and nothing on the real clock", async () => {
+    const flush = vi.mocked(flushPendingWhiteboardChange);
+    flush.mockReset();
+    const virtual = makeDriver(ASSETS, createVirtualRenderClock());
+    await virtual.driver.applyWhiteboard({ open: true, upsertIds: ["box"] });
+    expect(flush).toHaveBeenCalledTimes(1);
+
+    flush.mockReset();
+    const real = makeDriver();
+    await real.driver.applyWhiteboard({ open: true, upsertIds: ["box", "label"], drawMs: 100 });
+    expect(flush).not.toHaveBeenCalled();
   });
 });

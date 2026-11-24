@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import type { PreviewEvent, PreviewPanelMode, PreviewState } from "../types/slides";
 import { StudioActionError } from "./async";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
+import { REAL_RENDER_CLOCK } from "./renderClock";
 
 vi.mock("../monaco", () => ({
   monaco: {},
@@ -91,6 +92,7 @@ function makeDriver(options: { runtime?: StudioDriverDeps["runtime"] } = {}) {
       captureScreenshot,
     },
     signal: new AbortController().signal,
+    clock: REAL_RENDER_CLOCK,
   } satisfies StudioDriverDeps;
 
   return {

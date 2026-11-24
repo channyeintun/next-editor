@@ -1,8 +1,9 @@
 import type { StudioRuntimeMode } from "./plan";
+import type { RenderSpeed } from "./renderClock";
 
 /**
- * How a studio render is launched: the /studio route's `?runtime=` and
- * `?autostart=` contract, and how long the studio-render CLI waits for one
+ * How a studio render is launched: the /studio route's `?runtime=`, `?speed=`
+ * and `?autostart=` contract, and how long the studio-render CLI waits for one
  * render. These change with the route or the CLI, not with the plan contract.
  */
 
@@ -28,6 +29,28 @@ export function parseRuntimeModeParam(raw: string | null): RuntimeModeParam {
     return { mode: raw, invalid: false, raw };
   }
   return { mode: null, invalid: raw !== null && raw !== "", raw };
+}
+
+export interface RenderSpeedParam {
+  /** The requested speed, or null when no usable `speed` value was supplied. */
+  speed: RenderSpeed | null;
+  /** True when a non-empty `speed` value was supplied that is neither allowed value. */
+  invalid: boolean;
+  /** The raw value, echoed back for error messages. */
+  raw: string | null;
+}
+
+/**
+ * Parse the `speed` query parameter, `full | real`. A missing (or empty) param
+ * yields `speed: null` so the caller renders in real time; an unrecognized
+ * value is surfaced as `invalid`, as an unknown `runtime` is, rather than
+ * quietly rendered at a speed nobody asked for.
+ */
+export function parseRenderSpeedParam(raw: string | null): RenderSpeedParam {
+  if (raw === "full" || raw === "real") {
+    return { speed: raw, invalid: false, raw };
+  }
+  return { speed: null, invalid: raw !== null && raw !== "", raw };
 }
 
 /**

@@ -5,6 +5,7 @@ import { RECORDED_CURSOR_VISIBILITY_EVENT } from "../core/src/utils/recordedCurs
 import type { Terminal } from "@xterm/xterm";
 import { registerXtermTerminal } from "../components/xtermRegistry";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
+import { REAL_RENDER_CLOCK } from "./renderClock";
 
 vi.mock("../monaco", () => ({
   monaco: {},
@@ -109,6 +110,7 @@ function makeDriver(preview: Partial<StudioDriverDeps["preview"]> = {}) {
     nodeRuntime: {} as StudioDriverDeps["nodeRuntime"],
     preview: preview as StudioDriverDeps["preview"],
     signal: new AbortController().signal,
+    clock: REAL_RENDER_CLOCK,
   } satisfies StudioDriverDeps;
   return { driver: createStudioDriver(deps), runtimePanelStore };
 }
