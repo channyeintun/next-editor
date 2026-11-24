@@ -36,6 +36,13 @@ export interface BuildRecordingFilesOptions {
    * new siblings are the only ones guaranteed to exist.
    */
   captionFiles?: string[];
+  /**
+   * The narration file's name without its extension, when it differs from
+   * `baseFilename` (the extension still follows the audio's type). A lesson
+   * replaced in place names its new narration after the bytes, so a viewer
+   * who loaded the previous `.ne` keeps streaming the file it names.
+   */
+  audioBaseFilename?: string;
 }
 
 /**
@@ -68,7 +75,7 @@ export async function buildRecordingFiles(
   const audioBlob = recording.audioBlob instanceof Blob ? recording.audioBlob : null;
   let audioName: string | null = null;
   if (audioBlob && audioBlob.size > 0) {
-    audioName = `${baseFilename}.${audioExtensionFromMime(audioBlob.type)}`;
+    audioName = `${options?.audioBaseFilename ?? baseFilename}.${audioExtensionFromMime(audioBlob.type)}`;
     recordingToEncode = {
       ...recordingToEncode,
       audioBlob: undefined,

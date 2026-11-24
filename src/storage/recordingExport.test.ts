@@ -79,6 +79,22 @@ describe("buildRecordingFiles", () => {
     expect(files.camera).toEqual({ name: "my-lesson.webm", blob: cameraBlob });
   });
 
+  it("names the narration file by audioBaseFilename, and the .ne records that name", async () => {
+    const audioBlob = new Blob(["audio"], { type: "audio/ogg" });
+    const cameraBlob = new Blob(["camera"], { type: "video/webm" });
+    const recording = createRecording({ audioBlob, cameraBlob });
+
+    const files = await buildRecordingFiles(recording, "lesson-1", {
+      audioBaseFilename: "lesson-1-0123abcd",
+    });
+
+    expect(files.audio).toEqual({ name: "lesson-1-0123abcd.ogg", blob: audioBlob });
+    // Only the narration is renamed; the camera keeps the base name.
+    expect(files.camera?.name).toBe("lesson-1.webm");
+    const decoded = await decompressBinaryToRecording(new Uint8Array(await files.ne.arrayBuffer()));
+    expect(decoded.audioFile).toBe("lesson-1-0123abcd.ogg");
+  });
+
   it("declares sibling caption files in the encoded .ne, replacing any stale declaration", async () => {
     const recording = createRecording({ captionFiles: ["stale.en.vtt"] });
 
