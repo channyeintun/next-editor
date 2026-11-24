@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import { useSearchParams } from "react-router";
 import { ChevronDown, ChevronUp, Info, TriangleAlert } from "lucide-react";
@@ -49,7 +49,13 @@ import {
   runExposedForSelection,
   sourceRevisionOf,
 } from "./runSelection";
-import { defaultStudioPlanSlugFor, mergeStudioSources, parseLessonScriptYaml } from "./plans";
+import {
+  defaultStudioPlanSlugFor,
+  missingLessonReason,
+  parseLessonScriptYaml,
+  useStudioLessons,
+  type StudioLessonSource,
+} from "./plans";
 import type { ActionReceipt, StudioCheckResult } from "./report";
 import { CheckList, ReceiptList, RepeatabilityVerdict } from "./StudioRunResults";
 import type { StudioWindowHandle } from "./studioWindowHandle";
@@ -89,7 +95,7 @@ import type { LessonRenderAttempt, StudioWorkflowDeps } from "./workflow/workflo
 import { workflowProgressOf } from "./workflow/workflowQueue";
 
 /**
- * The studio render console: pick a lesson (checked-in scripts auto-register;
+ * The studio render console: pick a lesson (the published ones are listed;
  * additional LessonScript YAML can be imported right here), render it into a
  * recorded lesson entirely client-side, and read receipts, QA gates, and the
  * two-render repeatability verdict (docs/agent-lesson-production.md). Results
@@ -149,8 +155,9 @@ const ATHANLAB_NOT_REPORTED = {
 
 /**
  * Why the selected lesson cannot be narrated by the selected provider, or null.
- * Shared by the Start guard and renderLesson. `scriptLocale` is null when no
- * script is selected or it fails to parse (renderLesson reports the schema error).
+ * Shared by the Start guard and renderLesson. `scriptLocale` is null when the
+ * lesson list does not know it (no lesson selected, or an imported script that
+ * does not parse); renderLesson then reports what is wrong.
  */
 function narrationSetupErrorOf(
   scriptLocale: string | null,
@@ -423,10 +430,8 @@ export default function StudioController() {
     selectNarrationImportRunning(snapshot.context),
   );
 
-  // Memoized (this module is uncompiled) so `sources[planSlug]` keeps its
-  // identity across the per-receipt/phase/output-chunk re-renders, which lets
-  // the runtime label below skip re-parsing the lesson YAML each time.
-  const sources = useMemo(() => mergeStudioSources(importedScripts), [importedScripts]);
+  const lessons = useStudioLessons(importedScripts);
+  const sources = lessons.sources;
 
   const selectLesson = (slug: string) => {
     if (slug !== planSlug) {
@@ -475,19 +480,19 @@ export default function StudioController() {
   }, []);
 
   /**
-   * A lesson's script and the voice this console narrates it with now, for a
-   * render and for the workflow's narration pass alike, so both ask the
-   * Director for the same takes. Throws what can be checked without a network
-   * round trip: an unknown lesson, a script that does not parse, a locale the
-   * provider cannot speak, and the provider's own requirements.
+   * The voice this console narrates a lesson with now, for a render and for
+   * the workflow's narration pass alike, so both ask the Director for the
+   * same takes. Synchronous, from what the lesson list already says: a render
+   * runs it before the screen picker opens. Throws what can be checked
+   * without loading the script: an unknown lesson, one that is known not to
+   * parse, a locale the provider cannot speak, and the provider's own
+   * requirements.
    */
-  const narrationSetupOf = (slug: string) => {
+  const narrationVoiceOf = (slug: string) => {
     const source = sources[slug];
-    if (!source) {
-      throw new Error(`Unknown lesson "${slug}" — available: ${Object.keys(sources).join(", ")}`);
-    }
-    const script = source.load();
-    const setupError = narrationSetupErrorOf(script.lesson.locale, provider);
+    if (!source) throw new Error(missingLessonReason(lessons, slug));
+    if (source.problem) throw new Error(source.problem);
+    const setupError = narrationSetupErrorOf(source.locale, provider);
     if (setupError) throw new Error(setupError);
     let voiceProfile: VoiceProfile | undefined;
     let voiceName: string | null = null;
@@ -526,7 +531,26 @@ export default function StudioController() {
       voiceName = narratorVoice.name;
       voiceKind = "cloned";
     }
-    return { script, voiceProfile, voiceName, voiceKind };
+    return { source, voiceProfile, voiceName, voiceKind };
+  };
+
+  /**
+   * The lesson's script, loaded and parsed, with the id it was loaded from.
+   * Its locale is checked again: the list's facts and the script agree unless
+   * the lesson was published again since the list was read.
+   */
+  const loadLessonScript = async (source: StudioLessonSource, signal?: AbortSignal) => {
+    const loaded = await source.load(signal);
+    const setupError = narrationSetupErrorOf(loaded.script.lesson.locale, provider);
+    if (setupError) throw new Error(setupError);
+    return loaded;
+  };
+
+  /** A lesson's script and its voice, for the passes that may wait for the script first. */
+  const narrationSetupOf = async (slug: string, signal?: AbortSignal) => {
+    const { source, voiceProfile } = narrationVoiceOf(slug);
+    const { script } = await loadLessonScript(source, signal);
+    return { script, voiceProfile };
   };
 
   /**
@@ -573,7 +597,7 @@ export default function StudioController() {
     try {
       // Everything checkable without a network round trip fails here, before
       // the screen picker below opens for a render that cannot run.
-      const { script, voiceProfile, voiceName, voiceKind } = narrationSetupOf(slug);
+      const { source, voiceProfile, voiceName, voiceKind } = narrationVoiceOf(slug);
 
       setBuildWarnings([]);
 
@@ -593,6 +617,12 @@ export default function StudioController() {
           console.warn("Studio screen capture not started; rendering without it:", error);
         }
       }
+
+      // The script only now, after the picker: fetching it first would spend
+      // the click's activation. Its identity is the one this render performs,
+      // whatever the lesson list names by the time it ends.
+      const { id: loadedId, script } = await loadLessonScript(source);
+      const sourceRevision = sourceRevisionOf(slug, importedScripts, loadedId);
 
       // The in-page Director: per-dialog synthesis (cached; seeded where the
       // provider allows), joint scheduling, stitching, compilation.
@@ -650,7 +680,7 @@ export default function StudioController() {
         index: runHistory.length + 1,
         mode,
         slug: plan.lesson.slug,
-        sourceRevision: sourceRevisionOf(slug, importedScripts),
+        sourceRevision,
         title: script.lesson.title,
         voiceName,
         voiceKind,
@@ -734,7 +764,7 @@ export default function StudioController() {
    */
   const narrateLesson: StudioWorkflowDeps["narrateLesson"] = async (slug, options) => {
     try {
-      const { script, voiceProfile } = narrationSetupOf(slug);
+      const { script, voiceProfile } = await narrationSetupOf(slug);
       return await synthesizeNarrationAhead(script, { ...options, voiceProfile });
     } catch (error) {
       return { outcome: "failed", error: error instanceof Error ? error.message : String(error) };
@@ -752,15 +782,24 @@ export default function StudioController() {
   // Only where the Burmese voice exists at all: without it no render looks
   // these takes up.
   /** These lessons as a render narrates them; throws naming the ones it cannot. */
-  const narrationLessonsOf = (slugs: readonly string[], cannotBe: string) => {
-    const lessons = [];
+  const narrationLessonsOf = async (
+    slugs: readonly string[],
+    cannotBe: string,
+    signal?: AbortSignal,
+  ) => {
+    // All at once: the script fetches queue for their few slots themselves.
+    const settled = await Promise.allSettled(
+      slugs.map(async (slug) => ({ slug, ...(await narrationSetupOf(slug, signal)) })),
+    );
+    signal?.throwIfAborted();
+    const narrated = [];
     const failures: string[] = [];
-    for (const slug of slugs) {
-      try {
-        const { script, voiceProfile } = narrationSetupOf(slug);
-        lessons.push({ slug, script, voiceProfile });
-      } catch (error) {
-        failures.push(`${slug}: ${error instanceof Error ? error.message : String(error)}`);
+    for (const [at, outcome] of settled.entries()) {
+      if (outcome.status === "fulfilled") {
+        narrated.push(outcome.value);
+      } else {
+        const error: unknown = outcome.reason;
+        failures.push(`${slugs[at]}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
     if (failures.length > 0) {
@@ -771,7 +810,7 @@ export default function StudioController() {
           : shown,
       );
     }
-    return lessons;
+    return narrated;
   };
   const offlineNarration: OfflineNarrationApi | null = studioCapabilities.burmeseVoxCpm2
     ? {
@@ -782,10 +821,10 @@ export default function StudioController() {
               ? NARRATOR_REFERENCE_NEEDED
               : null,
         exportRequests: async (slugs) =>
-          buildNarrationRequestPack(narrationLessonsOf(slugs, "exported")),
+          buildNarrationRequestPack(await narrationLessonsOf(slugs, "exported")),
         importAudio: (files, onProgress) => importNarrationAudio(files, { onProgress }),
         coverageOf: async (slugs, signal) =>
-          narrationCoverageOf(narrationLessonsOf(slugs, "counted"), { signal }),
+          narrationCoverageOf(await narrationLessonsOf(slugs, "counted", signal), { signal }),
       }
     : null;
 
@@ -800,7 +839,10 @@ export default function StudioController() {
   // its capabilities (and the VoxCPM2 fallback they trigger), the saved
   // voices, and — for AthanLab, whose Start stays disabled until then — a
   // ready panel. Before that, renderLesson would read the mount-time defaults.
+  // It also waits for the lesson list to be read or to fail, never for a
+  // script: an unknown lesson or an unreadable list then fails at once.
   const autostartReady =
+    lessons.status !== "loading" &&
     !authLoading &&
     !studioCapabilitiesLoading &&
     (provider !== "voxcpm2" || studioCapabilities.burmeseVoxCpm2) &&
@@ -822,33 +864,23 @@ export default function StudioController() {
   const latestMatchesSelection = runExposedForSelection(
     latest,
     planSlug,
-    sourceRevisionOf(planSlug, importedScripts),
+    sourceRevisionOf(planSlug, importedScripts, source?.id ?? null),
     running,
   );
   const activeRun = latestMatchesSelection ? latest : null;
   const report = activeRun?.result.report ?? null;
   const artifacts = activeRun?.result.artifacts ?? null;
-  // Parsing validates the whole YAML (5–14 ms per call), so it runs once per
-  // selection or import, not on every receipt/phase re-render. An imported
-  // script re-parsed against a since-tightened schema can fail here: that
-  // yields null (the label reads "?") instead of a throw during render, which
-  // would drop the route into its error boundary; Start render parses again
-  // and reports the schema error.
-  const selectedScript = useMemo(() => {
-    if (!source) return null;
-    try {
-      return source.load();
-    } catch {
-      return null;
-    }
-  }, [source]);
-  const selectedScriptLocale = selectedScript?.lesson.locale ?? null;
-  const effectiveModeLabel =
-    requestedMode ?? (selectedScript ? defaultRuntimeModeOf(selectedScript.runtime) : "?");
-  // Disables Start render with its reason, so a locale/provider mismatch is
-  // caught before the screen picker opens (renderLesson checks again).
+  // From the lesson list, never from the script: Start render stays enabled
+  // for a script that will not parse, and the click reports why.
+  const selectedScriptLocale = source?.locale ?? null;
+  const effectiveModeLabel = requestedMode ?? source?.runtimeMode ?? "?";
+  // Disables Start render with its reason, so a locale/provider mismatch or a
+  // lesson that is not there is caught before the screen picker opens
+  // (renderLesson checks again).
+  const missingLesson = source ? null : missingLessonReason(lessons, planSlug);
   const narrationSetupError = narrationSetupErrorOf(selectedScriptLocale, provider);
   const startBlockedReason =
+    missingLesson ??
     narrationSetupError ??
     (narrationImportRunning ? NARRATION_IMPORT_RUNNING : null) ??
     (provider === "athanlab" && !athanLabReadiness.ready
@@ -891,23 +923,22 @@ export default function StudioController() {
   // balance stops it too. One that already ran may have every lesson narrated
   // (its own narration pass can be what emptied the balance): resuming it buys
   // nothing for those, and narration it does still need fails at its first
-  // dialog with AthanLab's own refusal (narrationSetupOf).
+  // dialog with AthanLab's own refusal (narrationVoiceOf).
   const workflowBlockedReason =
     workflowResumeBlockedReason ??
     (provider === "athanlab" && !athanLabReadiness.ready
       ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
       : null);
   // A lesson the workflow cannot narrate fails before the workflow starts, not
-  // hours in: its script must parse and its locale suit the chosen narration.
+  // hours in: it must be listed, and its locale suit the chosen narration.
+  // From the lesson list alone: a published script that does not parse fails
+  // at its own narration or render.
   const workflowLessonOf = (slug: string): { title: string } | { error: string } => {
-    try {
-      const script = sources[slug]?.load();
-      if (!script) return { error: "unknown lesson" };
-      const mismatch = narrationSetupErrorOf(script.lesson.locale, provider);
-      return mismatch ? { error: mismatch } : { title: script.lesson.title };
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : String(error) };
-    }
+    const listed = sources[slug];
+    if (!listed) return { error: "unknown lesson" };
+    if (listed.problem) return { error: listed.problem };
+    const mismatch = narrationSetupErrorOf(listed.locale, provider);
+    return mismatch ? { error: mismatch } : { title: listed.title };
   };
   const [consoleTab, setConsoleTab] = useState<"render" | "workflow">(() =>
     workflow.workflow ? "workflow" : "render",

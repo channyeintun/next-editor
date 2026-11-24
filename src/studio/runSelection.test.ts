@@ -26,51 +26,79 @@ function semanticsWithHash(planSha256: string): RenderSemantics {
 }
 
 describe("sourceRevisionOf", () => {
-  it("is stable for a built-in source across the session", () => {
-    expect(sourceRevisionOf("rust-borrow", {})).toBe(sourceRevisionOf("rust-borrow", {}));
-    expect(sourceRevisionOf("rust-borrow", {})).toBe("builtin:rust-borrow");
-  });
+  const id = "a".repeat(64);
 
-  it("changes when an imported script of the same slug is re-imported with new content", () => {
-    const first = sourceRevisionOf("my-lesson", { "my-lesson": "lesson:\n  slug: my-lesson\n" });
-    const edited = sourceRevisionOf("my-lesson", { "my-lesson": "lesson:\n  slug: my-lesson\n#" });
-    expect(first).not.toBe(edited);
-    // Re-importing the same content is deterministic.
-    expect(first).toBe(
-      sourceRevisionOf("my-lesson", { "my-lesson": "lesson:\n  slug: my-lesson\n" }),
+  it("names a published script by the id it was loaded with", () => {
+    expect(sourceRevisionOf("rust-borrow", {}, id)).toBe(`published:${id}`);
+    expect(sourceRevisionOf("rust-borrow", {}, id)).toBe(sourceRevisionOf("rust-borrow", {}, id));
+    // Published again with new content: a new revision.
+    expect(sourceRevisionOf("rust-borrow", {}, "b".repeat(64))).not.toBe(
+      sourceRevisionOf("rust-borrow", {}, id),
     );
   });
 
-  it("distinguishes an imported script from a built-in of the same slug", () => {
-    expect(sourceRevisionOf("shared", {})).not.toBe(sourceRevisionOf("shared", { shared: "yaml" }));
+  it("gives a slug with no source no published identity", () => {
+    expect(sourceRevisionOf("gone", {}, null)).toBe("unknown:gone");
+  });
+
+  it("changes when an imported script of the same slug is re-imported with new content", () => {
+    const first = sourceRevisionOf(
+      "my-lesson",
+      { "my-lesson": "lesson:\n  slug: my-lesson\n" },
+      null,
+    );
+    const edited = sourceRevisionOf(
+      "my-lesson",
+      { "my-lesson": "lesson:\n  slug: my-lesson\n#" },
+      null,
+    );
+    expect(first).not.toBe(edited);
+    // Re-importing the same content is deterministic.
+    expect(first).toBe(
+      sourceRevisionOf("my-lesson", { "my-lesson": "lesson:\n  slug: my-lesson\n" }, null),
+    );
+  });
+
+  it("distinguishes an imported script from a published one of the same slug", () => {
+    expect(sourceRevisionOf("shared", {}, id)).not.toBe(
+      sourceRevisionOf("shared", { shared: "yaml" }, id),
+    );
   });
 
   it("uses exact imported bytes rather than a collision-prone short hash", () => {
     const yaml = "lesson:\n  slug: exact\n";
-    expect(sourceRevisionOf("exact", { exact: yaml })).toBe(`imported:${yaml}`);
+    expect(sourceRevisionOf("exact", { exact: yaml }, null)).toBe(`imported:${yaml}`);
   });
 
-  it("keeps imported bytes disjoint from the built-in identity namespace", () => {
-    const builtinRevision = sourceRevisionOf("exact", {});
-    expect(sourceRevisionOf("exact", { exact: builtinRevision })).not.toBe(builtinRevision);
+  it("keeps imported bytes disjoint from the published identity namespace", () => {
+    const publishedRevision = sourceRevisionOf("exact", {}, id);
+    expect(sourceRevisionOf("exact", { exact: publishedRevision }, null)).not.toBe(
+      publishedRevision,
+    );
   });
 });
 
 describe("runExposedForSelection (STUDIO-02)", () => {
-  const runA = { slug: "lesson-a", sourceRevision: "builtin:lesson-a" };
+  const runA = { slug: "lesson-a", sourceRevision: `published:${"a".repeat(64)}` };
 
   it("exposes a completed run only for its own slug and revision when idle", () => {
-    expect(runExposedForSelection(runA, "lesson-a", "builtin:lesson-a", false)).toBe(true);
+    expect(runExposedForSelection(runA, "lesson-a", `published:${"a".repeat(64)}`, false)).toBe(
+      true,
+    );
   });
 
   it("does NOT expose run A's bundle once lesson B is selected", () => {
     // The core STUDIO-02 scenario: render A, then select B → A's artifact/draft
     // must not be offered under B.
-    expect(runExposedForSelection(runA, "lesson-b", "builtin:lesson-b", false)).toBe(false);
+    expect(runExposedForSelection(runA, "lesson-b", `published:${"b".repeat(64)}`, false)).toBe(
+      false,
+    );
   });
 
   it("does NOT expose a run while a new render is in flight", () => {
-    expect(runExposedForSelection(runA, "lesson-a", "builtin:lesson-a", true)).toBe(false);
+    expect(runExposedForSelection(runA, "lesson-a", `published:${"a".repeat(64)}`, true)).toBe(
+      false,
+    );
   });
 
   it("does NOT expose a run whose source revision changed (script re-imported)", () => {
@@ -78,7 +106,9 @@ describe("runExposedForSelection (STUDIO-02)", () => {
   });
 
   it("exposes nothing when there is no completed run", () => {
-    expect(runExposedForSelection(null, "lesson-a", "builtin:lesson-a", false)).toBe(false);
+    expect(runExposedForSelection(null, "lesson-a", `published:${"a".repeat(64)}`, false)).toBe(
+      false,
+    );
   });
 });
 

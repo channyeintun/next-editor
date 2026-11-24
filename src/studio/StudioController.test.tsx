@@ -22,6 +22,16 @@ const studio = vi.hoisted(() => ({
   narrateAhead: vi.fn<typeof synthesizeNarrationAhead>(),
   /** The lesson a Burmese voice opens on; the English one unless a test says otherwise. */
   burmeseDefaultSlug: "english-script",
+  /** Screen recording switched on, on a browser that has it. */
+  screenCapture: false,
+  acquireDisplay: vi.fn<() => Promise<MediaStream>>(),
+  /** Every script load, whichever lesson it was. */
+  loadScript: vi.fn<(slug: string) => void>(),
+  /** The lesson list as useStudioLessons reports it. */
+  lessons: { status: "ready", error: null } as {
+    status: "loading" | "ready" | "error";
+    error: string | null;
+  },
 }));
 
 vi.mock("react-router", () => ({
@@ -79,11 +89,11 @@ vi.mock("../contexts/PreviewAdapterHandleContext", () => ({
 }));
 vi.mock("../components/tour/productTour", () => ({ markTourSeen: () => {} }));
 vi.mock("../hooks/useRecordingSettings", () => ({
-  useRecordingSettings: () => ({ screenRecordingEnabled: false }),
+  useRecordingSettings: () => ({ screenRecordingEnabled: studio.screenCapture }),
 }));
 vi.mock("../utils/displayCapture", () => ({
-  acquireDisplayStream: () => Promise.reject(new Error("unsupported")),
-  isScreenCaptureSupported: () => false,
+  acquireDisplayStream: studio.acquireDisplay,
+  isScreenCaptureSupported: () => studio.screenCapture,
 }));
 // The plan carries what the controller reads back: the slug and title it
 // records and the runtime its mode defaults from.
@@ -115,34 +125,50 @@ vi.mock("./tts/customVoices", async (importOriginal) => ({
   deleteCustomVoice: () => Promise.resolve(),
 }));
 // One English script that can start with the default English provider, one
-// Burmese script that cannot, and one imported-style script that no longer
-// parses against the schema.
-vi.mock("./plans", () => {
-  const sources = {
-    "english-script": {
-      load: () => ({
-        lesson: { slug: "english-script", title: "English script", locale: "en-US" },
-        runtime: { kind: "none" },
-        scenes: [],
-      }),
+// Burmese script that cannot, and one published script that this studio's
+// schema no longer accepts. Their facts are the lesson list's; only load()
+// reads a script.
+vi.mock("./plans", async (importOriginal) => {
+  const published = (
+    slug: string,
+    locale: string,
+    script: () => { lesson: unknown; runtime: unknown; scenes: unknown[] },
+  ) => ({
+    title: slug,
+    locale,
+    runtimeMode: "fixture",
+    imported: false,
+    id: slug.charAt(0).repeat(64),
+    problem: null,
+    load: async () => {
+      studio.loadScript(slug);
+      return { id: slug.charAt(0).repeat(64), script: script() };
     },
-    "burmese-script": {
-      load: () => ({
-        lesson: { slug: "burmese-script", title: "Burmese script", locale: "my-MM" },
-        runtime: { kind: "none" },
-        scenes: [],
-      }),
-    },
-    "broken-script": {
-      load: () => {
-        throw new Error('Unrecognized key: "legacyField"');
-      },
-    },
-  };
+  });
+  const sources = Object.assign(Object.create(null) as Record<string, unknown>, {
+    "english-script": published("english-script", "en-US", () => ({
+      lesson: { slug: "english-script", title: "English script", locale: "en-US" },
+      runtime: { kind: "none" },
+      scenes: [],
+    })),
+    "burmese-script": published("burmese-script", "my-MM", () => ({
+      lesson: { slug: "burmese-script", title: "Burmese script", locale: "my-MM" },
+      runtime: { kind: "none" },
+      scenes: [],
+    })),
+    "broken-script": published("broken-script", "en-US", () => {
+      throw new Error('Unrecognized key: "legacyField"');
+    }),
+  });
   return {
+    ...(await importOriginal<typeof import("./plans")>()),
     defaultStudioPlanSlugFor: (language: string) =>
       language === "my" ? studio.burmeseDefaultSlug : "english-script",
-    mergeStudioSources: () => sources,
+    // No published lessons until the list is read.
+    useStudioLessons: () => ({
+      ...studio.lessons,
+      sources: studio.lessons.status === "ready" ? sources : Object.create(null),
+    }),
     parseLessonScriptYaml: () => {
       throw new Error("unused");
     },
@@ -363,13 +389,58 @@ describe("StudioController status messages", () => {
     studio.searchParams = new URLSearchParams("plan=broken-script");
     renderController();
 
-    expect(screen.getByText(/^runtime/).textContent).toMatch(/^runtime \? · run #/);
+    // The label comes from the lesson list, which knows the mode without the script.
+    expect(screen.getByText(/^runtime/).textContent).toMatch(/^runtime fixture · run #/);
     const start = startButton();
     expect(start).toBeEnabled();
 
     fireEvent.click(start);
     expect(await screen.findByRole("alert")).toHaveTextContent('Unrecognized key: "legacyField"');
     expect(studio.runRender).not.toHaveBeenCalled();
+  });
+
+  it("says the lesson the URL names is not there, and keeps Start from it", () => {
+    studio.searchParams = new URLSearchParams("plan=no-such-lesson");
+    renderController();
+
+    const start = startButton();
+    expect(start).toBeDisabled();
+    expect(start).toHaveAccessibleDescription(/Unknown lesson "no-such-lesson"/);
+    expect(screen.getByText(/^runtime/).textContent).toMatch(/^runtime \? · run #/);
+  });
+
+  it("says the published lessons could not be read", () => {
+    studio.lessons = { status: "error", error: "HTTP 500." };
+    try {
+      renderController();
+      const start = startButton();
+      expect(start).toBeDisabled();
+      expect(start).toHaveAccessibleDescription(/published lessons could not be read.*HTTP 500/);
+    } finally {
+      studio.lessons = { status: "ready", error: null };
+    }
+  });
+
+  // getDisplayMedia needs the click's user activation, which an earlier await
+  // (such as fetching the script) would spend.
+  it("asks for the screen before it waits for the script", async () => {
+    studio.screenCapture = true;
+    studio.acquireDisplay.mockRejectedValue(new Error("dismissed"));
+    studio.runRender.mockReturnValue(new Promise(() => {}));
+    try {
+      renderController();
+      await settle();
+
+      fireEvent.click(startButton());
+      // Before anything the click handler awaits.
+      expect(studio.acquireDisplay).toHaveBeenCalledTimes(1);
+      expect(studio.loadScript).not.toHaveBeenCalled();
+
+      await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+      expect(studio.loadScript).toHaveBeenCalledWith("english-script");
+    } finally {
+      studio.screenCapture = false;
+    }
   });
 });
 
@@ -473,6 +544,42 @@ describe("StudioController unattended render", () => {
     });
     await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("waits while the lesson list is being read", async () => {
+    studio.lessons = { status: "loading", error: null };
+    try {
+      studio.searchParams = new URLSearchParams("autostart=1");
+      renderController(await freshStudioController());
+      await settle();
+      expect(studio.runRender).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alert")).toBeNull();
+    } finally {
+      studio.lessons = { status: "ready", error: null };
+    }
+  });
+
+  it("fails at once on a lesson the list does not name", async () => {
+    studio.searchParams = new URLSearchParams("plan=no-such-lesson&autostart=1");
+    renderController(await freshStudioController());
+
+    expect(await screen.findByRole("alert")).toHaveTextContent('Unknown lesson "no-such-lesson"');
+    expect(studio.runRender).not.toHaveBeenCalled();
+  });
+
+  it("fails at once when the published lessons cannot be read", async () => {
+    studio.lessons = { status: "error", error: "HTTP 500." };
+    try {
+      studio.searchParams = new URLSearchParams("autostart=1");
+      renderController(await freshStudioController());
+
+      expect((await screen.findByRole("alert")).textContent).toMatch(
+        /published lessons could not be read.*HTTP 500/,
+      );
+      expect(studio.runRender).not.toHaveBeenCalled();
+    } finally {
+      studio.lessons = { status: "ready", error: null };
+    }
   });
 
   it("refuses a script the provider cannot narrate with the Start guard's own reason", async () => {

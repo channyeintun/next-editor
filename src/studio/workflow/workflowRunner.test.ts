@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "../../core/src";
+import { LESSON_SCRIPTS_FOLDER } from "../plans/publishedScripts";
 import type { StudioRenderReport } from "../report";
 import {
   createWorkflowRunner,
@@ -247,7 +248,7 @@ describe("createWorkflowRunner", () => {
     const issue = stopped.lessons[1].issue!;
     expect(issue).toMatchObject({ step: "render", phase: "perform" });
     expect(issue.report).toContain("## Studio workflow stopped at b");
-    expect(issue.report).toContain("`src/studio/scripts/b.yaml`");
+    expect(issue.report).toContain(`\`${LESSON_SCRIPTS_FOLDER}/b.yaml\``);
     expect(issue.report).toContain("text not found");
     expect(issue.report).toContain("lesson 2 of 2; 1 done before it stopped");
     // A skipped action says nothing about the failure.

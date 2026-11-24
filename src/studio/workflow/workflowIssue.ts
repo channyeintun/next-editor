@@ -1,3 +1,4 @@
+import { LESSON_SCRIPTS_FOLDER } from "../plans/publishedScripts";
 import type { StudioRenderReport } from "../report";
 import type { WorkflowStep } from "./workflowQueue";
 
@@ -12,8 +13,14 @@ export interface WorkflowIssueInput {
   step: WorkflowStep;
   slug: string;
   title: string;
-  /** Whether the lesson came from an imported YAML instead of src/studio/scripts. */
+  /** Whether the lesson came from an imported YAML instead of the published lessons. */
   imported: boolean;
+  /**
+   * The id of the published script the studio renders for this lesson, so
+   * whoever fixes it can tell whether the file in the folder has moved on
+   * since. Null or absent when it is not known.
+   */
+  publishedId?: string | null;
   message: string;
   /** The render phase the failure happened in; null outside the render step. */
   phase: string | null;
@@ -53,7 +60,7 @@ function inlineCode(text: string): string {
 export function buildWorkflowIssueReport(input: WorkflowIssueInput): string {
   const source = input.imported
     ? "imported in the studio (not a checked-in script)"
-    : `\`src/studio/scripts/${input.slug}.yaml\``;
+    : `\`${LESSON_SCRIPTS_FOLDER}/${input.slug}.yaml\`${input.publishedId ? `, published as \`${input.publishedId}\`` : ""}`;
   const voice = input.narration.voice ? `, voice "${input.narration.voice}"` : "";
   const lines = [
     `## Studio workflow stopped at ${input.slug}`,

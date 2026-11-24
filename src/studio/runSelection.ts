@@ -13,17 +13,25 @@ import type { StudioCheckResult, StudioRenderOutcome } from "./report";
 /**
  * A synchronous identity for a selected source, so a completed run's metadata
  * can be matched against the current selection without recompiling the plan.
- * Built-in scripts are stable across the session; an imported script's revision
- * tracks its YAML so a re-import (same slug, new content) invalidates the
- * previous run's downloadable bundle (STUDIO-02).
+ * A published script is named by its id, the hash of its bytes, so a lesson
+ * published again (same slug, new content) is a new revision. An imported
+ * script's revision tracks its YAML, so a re-import invalidates the previous
+ * run's downloadable bundle (STUDIO-02). A render passes the id its script
+ * was loaded with when it started, not whatever the index names when it ends.
  */
-export function sourceRevisionOf(slug: string, importedScripts: Record<string, string>): string {
+export function sourceRevisionOf(
+  slug: string,
+  importedScripts: Record<string, string>,
+  publishedId: string | null,
+): string {
   const yamlText = importedScripts[slug];
   // Use the exact imported bytes as the identity. A 32-bit convenience hash can
   // collide, which would re-expose an older recording for different YAML—the
   // precise cross-revision mix-up this guard exists to prevent. Keep imported
-  // and built-in identities in disjoint namespaces as well.
-  return yamlText === undefined ? `builtin:${slug}` : `imported:${yamlText}`;
+  // and published identities in disjoint namespaces as well.
+  if (yamlText !== undefined) return `imported:${yamlText}`;
+  // A slug that is neither imported nor published has no content to name.
+  return publishedId === null ? `unknown:${slug}` : `published:${publishedId}`;
 }
 
 /** The immutable per-run identity a completed run carries for reconciliation. */
