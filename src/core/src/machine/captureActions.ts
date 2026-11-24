@@ -6,7 +6,11 @@ import type {
   EditorMachineContext,
   RecordingSession,
 } from "./types";
-import { createIdleAudioState } from "./audioCaptureActions";
+import {
+  createIdleAudioState,
+  getExternalAudioBlob,
+  getKeptExternalAudioDurationMs,
+} from "./audioCaptureActions";
 import { createIdleCameraState } from "./cameraCaptureActions";
 import type { MouseCursorPosition } from "../types";
 import type { RuntimeRecordingEvent } from "../runtime";
@@ -37,6 +41,7 @@ import { chapterTitle } from "../utils/chapters";
 import { markFramesNormalized } from "../utils/editorState";
 import { assembleRecording } from "./recordingAssembly";
 import { getRunningRecorders } from "./runningRecorders";
+import type { TimeSource } from "./timeSource";
 
 // ============================================================================
 // Recording-capture action bodies
@@ -54,11 +59,26 @@ import { getRunningRecorders } from "./runningRecorders";
 // void only mutate the session in place and are registered as plain actions.
 // ============================================================================
 
+/**
+ * The source a take reads time from. A microphone take starts when its recorder does,
+ * on the recorder's own readings of the page's clock, so it keeps the page's clock. Any
+ * other take starts on START_RECORDING, which may name a source. The camera, a screen
+ * capture and a narration file that plays run in real time and are stamped against the
+ * take's origin on the page's clock, so a take that uses any of them keeps the page's
+ * clock even when the start names another source: a source that moves at its own pace
+ * would shift every one of those tracks by however far it drifted.
+ */
+const timeSourceOfTake = ({ context, event }: EditorActionArgs): TimeSource | undefined => {
+  if (event.type !== "START_RECORDING" || !event.timeSource) return undefined;
+  const usesCamera = event.enableCamera ?? context.defaultEnableCameraRecording;
+  const playsNarration =
+    getExternalAudioBlob(event) !== null && getKeptExternalAudioDurationMs(event) === null;
+  if (usesCamera || event.screenStream || playsNarration) return undefined;
+  return event.timeSource;
+};
+
 export const initRecordingSession = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  // A microphone take starts when its recorder does, on the recorder's own readings of
-  // the page's clock, so it keeps the page's clock. Any other take starts on
-  // START_RECORDING, which may name the source the take reads time from.
-  const timeSource = event.type === "START_RECORDING" ? event.timeSource : undefined;
+  const timeSource = timeSourceOfTake({ context, event });
   const origin = readRecordingTimeSource({ timeSource });
   const startedAt =
     event.type === "AUDIO_RECORDING_STARTED" && Number.isFinite(event.startedAtMs)

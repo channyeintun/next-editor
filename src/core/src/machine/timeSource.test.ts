@@ -1,3 +1,4 @@
+import { fromCallback } from "xstate";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { RuntimeRecordingSnapshot } from "../runtime";
 import type {
@@ -145,6 +146,82 @@ describe("a take's time source", () => {
     advance(5);
     expect(SYSTEM_TIME_SOURCE.perfNow()).toBe(1_005);
     expect(SYSTEM_TIME_SOURCE.wallNow()).toBe(50_005);
+  });
+});
+
+describe("a take that uses a real-time device", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // The devices' recorders are stubbed: the take only needs to start, so its session's
+  // clock can be read.
+  const deviceMachine = takeMachine.provide({
+    actors: {
+      cameraRecording: fromCallback(() => {}),
+      screenRecording: fromCallback(() => {}),
+      audioPlayback: fromCallback(() => {}),
+    },
+  });
+
+  // Every case starts the take on a source far from the page's pinned clock, so a session
+  // that kept it would start at the source's reading, not the page's.
+  const startOn = (
+    start: Omit<Parameters<typeof startTake>[3], "timeSource">,
+    input: Parameters<typeof startTake>[1] = {},
+  ) => {
+    pinClocks();
+    const time = createManualTimeSource();
+    const actor = startTake(new RecordingEditor(), input, deviceMachine, {
+      ...start,
+      timeSource: time.source,
+    });
+    return { actor, time };
+  };
+
+  it("keeps the page's clock when the take records the camera", () => {
+    const { actor } = startOn({ enableCamera: true });
+    expect(sessionOf(actor).timeSource).toBeUndefined();
+    expect(sessionOf(actor).startedAtPerf).toBe(1_000);
+    actor.stop();
+  });
+
+  it("keeps the page's clock when the camera is on by default", () => {
+    const { actor } = startOn({}, { enableCameraRecording: true });
+    expect(sessionOf(actor).timeSource).toBeUndefined();
+    expect(sessionOf(actor).startedAtPerf).toBe(1_000);
+    actor.stop();
+  });
+
+  it("keeps the page's clock when the take records the screen", () => {
+    const { actor } = startOn({ screenStream: { getTracks: () => [] } as unknown as MediaStream });
+    expect(sessionOf(actor).timeSource).toBeUndefined();
+    expect(sessionOf(actor).startedAtPerf).toBe(1_000);
+    actor.stop();
+  });
+
+  it("keeps the page's clock when the take plays its narration", () => {
+    const { actor } = startOn({ audioBlob: new Blob(["narration"], { type: "audio/wav" }) });
+    expect(actor.getSnapshot().context.audio.isRecording).toBe(true);
+    expect(sessionOf(actor).timeSource).toBeUndefined();
+    expect(sessionOf(actor).startedAtPerf).toBe(1_000);
+    actor.stop();
+  });
+
+  it("keeps the given source when the narration is kept and not played", () => {
+    const { actor, time } = startOn({
+      audioBlob: new Blob(["narration"], { type: "audio/wav" }),
+      externalAudioDurationMs: 3_000,
+    });
+    expect(sessionOf(actor).timeSource).toBe(time.source);
+    expect(sessionOf(actor).startedAtPerf).toBe(time.clock.perf);
+    actor.stop();
+  });
+
+  it("keeps the given source when the camera is turned off for a take it defaults on for", () => {
+    const { actor, time } = startOn({ enableCamera: false }, { enableCameraRecording: true });
+    expect(sessionOf(actor).timeSource).toBe(time.source);
+    actor.stop();
   });
 });
 

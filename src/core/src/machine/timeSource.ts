@@ -11,8 +11,8 @@
 // The source covers the take's own time only: its origin, every recorded
 // timestamp, and the pause, resume and chapter anchors. A microphone, a
 // camera, a screen capture and a narration element that plays are real-time
-// devices and keep the page's clock, so a take that uses one of them must
-// keep the default source.
+// devices and keep the page's clock, so a take that uses one of them keeps
+// the default source: the start's source is ignored (captureActions.ts).
 // ============================================================================
 
 export interface TimeSource {
