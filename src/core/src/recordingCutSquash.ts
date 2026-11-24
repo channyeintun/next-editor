@@ -10,7 +10,12 @@ import {
   type WhiteboardEvent,
   type WhiteboardSceneState,
 } from "./whiteboard";
-import { withFileContent, type WorkspaceRecordingEvent } from "./workspace";
+import { latestEditorModelBoundaryTime } from "./machine/frameReplay";
+import {
+  withFileContent,
+  type WorkspaceRecordingEvent,
+  type WorkspaceRecordingSnapshot,
+} from "./workspace";
 
 // ============================================================================
 // Squashing what a track recorded inside a cut into its state at the cut's end.
@@ -23,7 +28,8 @@ import { withFileContent, type WorkspaceRecordingEvent } from "./workspace";
 // replaced by that one event:
 //
 //   * workspace: each event is a whole snapshot, so the last one stands for all
-//     of them, with the width changes of the others added to it;
+//     of them, with the width changes of the others added to it (and, when the
+//     cut opens another file, the moment it did so: frames replay by it);
 //   * runtime:   a `snapshot` event (the track's checkpoint) of the resolved state;
 //   * chat:      a `checkpoint` event of the folded transcript and draft;
 //   * whiteboard: the net delta between the scenes before and after the cut,
@@ -87,6 +93,18 @@ function hasRunToSquash(events: readonly { timestamp: number }[], cutOf: CutOf):
 
 const WORKSPACE_WIDTH_DELTAS = ["sidebarWidthDelta", "previewDockWidthDelta"] as const;
 
+/** `snapshot`'s files and panels, in the editor model (project and open file) of `other`. */
+function withEditorModelOf(
+  snapshot: WorkspaceRecordingSnapshot,
+  other: WorkspaceRecordingSnapshot,
+): WorkspaceRecordingSnapshot {
+  return {
+    ...snapshot,
+    project: { ...snapshot.project, id: other.project.id },
+    activeFilePath: other.activeFilePath,
+  };
+}
+
 /**
  * A cut's workspace events become its last one. The panel widths are recorded as
  * changes since the previous event, so the survivor carries the sum of the run's.
@@ -96,12 +114,67 @@ const WORKSPACE_WIDTH_DELTAS = ["sidebarWidthDelta", "previewDockWidthDelta"] as
  * in that snapshot. `lastFrameOfCut` is the editor's state at the cut's end. When that
  * frame is later than the surviving event it belongs to the snapshot's active file (a
  * file switch would have been a later event), so its text replaces that file's.
+ *
+ * Frames carry no file: replay gives a frame to the open file only when the frame is no
+ * earlier than the workspace event that last opened another file or project
+ * (latestEditorModelBoundaryTime). The survivor alone would move that event to its own
+ * time, or remove it when the cut switches away and back, and replay would then skip
+ * the cut's last frame where it showed it, or put another file's text in the open one.
+ * So when the run opens the file the cut ends on before its last event, the event that
+ * opened it is kept too, with the one before it, so that it still opens a file. Both
+ * carry the survivor's files, and no width change, so nothing from inside the cut is
+ * kept but where that file was opened.
  */
 export function squashWorkspaceEvents(
   events: readonly WorkspaceRecordingEvent[],
   cutOf: CutOf,
   lastFrameOfCut: (cut: number) => EditorFrame | undefined,
 ): WorkspaceRecordingEvent[] {
+  // When replay last saw the editor's file or project change, at or before an event.
+  const modelOpenedAt = (index: number) => latestEditorModelBoundaryTime(events, index);
+
+  /**
+   * The events before the survivor that make replay see its file opened when the
+   * recording saw it, or none when the run opened no other file or project.
+   */
+  const openingEvents = (
+    first: number,
+    last: number,
+    snapshot: WorkspaceRecordingSnapshot,
+  ): WorkspaceRecordingEvent[] => {
+    // The first event is never in a run, so `first - 1` is the event kept before it.
+    const opened = modelOpenedAt(last);
+    if (opened === modelOpenedAt(first - 1)) return [];
+
+    // The event that opened the survivor's model.
+    let opener = last;
+    while (opener > first && modelOpenedAt(opener - 1) === opened) opener -= 1;
+    // The one it switched away from is kept too, unless the event kept before the run
+    // is already in that model (no other was opened between them), and so serves.
+    const switchedFrom =
+      opener - 1 >= first && modelOpenedAt(opener - 1) !== modelOpenedAt(first - 1)
+        ? opener - 1
+        : opener;
+    // Events stamped at the very moment the model opened can switch it again; each is
+    // kept, so replay sees the same switches at that moment.
+    let end = opener;
+    while (end + 1 < last && events[end + 1].timestamp === opened) end += 1;
+
+    const {
+      sidebarWidthDelta: _sidebarWidthDelta,
+      previewDockWidthDelta: _previewDockWidthDelta,
+      ...withoutWidths
+    } = snapshot;
+    const kept: WorkspaceRecordingEvent[] = [];
+    for (let index = switchedFrom; index <= Math.min(end, last - 1); index += 1) {
+      kept.push({
+        timestamp: events[index].timestamp,
+        snapshot: withEditorModelOf(withoutWidths, events[index].snapshot),
+      });
+    }
+    return kept;
+  };
+
   const squashRun = (first: number, last: number, cut: number): WorkspaceRecordingEvent[] => {
     const survivor = events[last];
     let snapshot = survivor.snapshot;
@@ -124,7 +197,10 @@ export function squashWorkspaceEvents(
       snapshot = withFileContent(snapshot, snapshot.activeFilePath, frame.state.content);
     }
 
-    return [snapshot === survivor.snapshot ? survivor : { ...survivor, snapshot }];
+    return [
+      ...openingEvents(first, last, snapshot),
+      snapshot === survivor.snapshot ? survivor : { ...survivor, snapshot },
+    ];
   };
   return squashCutRuns(events, cutOf, squashRun, { keepFirst: true });
 }

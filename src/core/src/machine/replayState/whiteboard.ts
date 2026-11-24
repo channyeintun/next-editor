@@ -177,7 +177,7 @@ function getWhiteboardSceneAt(events: WhiteboardEvent[], index: number): Whitebo
 // between events is about this size and the whole gap animates; after an idle
 // pause only the tail of the gap does (the points were drawn just before the
 // flush, not across the idle time).
-const INTERPOLATION_WINDOW_MS = 150;
+export const INTERPOLATION_WINDOW_MS = 150;
 
 const lerp = (from: number, to: number, fraction: number) => from + (to - from) * fraction;
 

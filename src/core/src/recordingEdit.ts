@@ -17,6 +17,7 @@ import {
 import { hasAudioEdit, type AudioEdit } from "./utils/audioEditSpec";
 import { captionTextFromWords } from "./utils/captionCues";
 import { getRrwebReplayLead } from "./utils/previewReplayLead";
+import type { RecordingTrackName } from "./machine/recordingAssembly";
 import {
   squashChatEvents,
   squashRuntimeEvents,
@@ -274,9 +275,10 @@ export function applyRecordingEdit(recording: Recording, edit: RecordingEdit): R
   ]);
   const hasCamera = Boolean(recording.cameraBlob || recording.cameraUrl || recording.cameraFile);
 
-  return {
-    ...recording,
-    id: Date.now().toString(),
+  // Every track but frames is optional on Recording, so a track left out here would
+  // still compile and pass through from `...recording` on the old clock, out of step
+  // after the first cut; `satisfies` makes leaving one out a type error.
+  const trackFields = {
     frames,
     slideEvents: retimeByTimestamp(recording.slideEvents, validCuts),
     previewEvents: retimeByTimestamp(recording.previewEvents, validCuts),
@@ -302,6 +304,12 @@ export function applyRecordingEdit(recording: Recording, edit: RecordingEdit): R
       recording.chatEvents && squashChatEvents(recording.chatEvents, cutOf),
       validCuts,
     ),
+  } satisfies Record<RecordingTrackName, unknown>;
+
+  return {
+    ...recording,
+    id: Date.now().toString(),
+    ...trackFields,
     captions: editCaptions(recording.captions, validCuts),
     // A chapter inside a cut starts where the cut now is.
     chapters: recording.chapters?.map((chapter) => ({
