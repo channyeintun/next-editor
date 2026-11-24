@@ -14,6 +14,7 @@ function serve() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("fetchBundleAsset", () => {
@@ -62,5 +63,59 @@ describe("fetchBundleAsset", () => {
 
     expect(new Uint8Array(bytes)).toEqual(cached);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("asks again for a file whose connection dropped", async () => {
+    vi.stubGlobal("caches", undefined);
+    vi.useFakeTimers();
+    const fetchSpy = vi
+      .fn<(url: string) => Promise<Response>>()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockImplementation(async () => new Response(BYTES.slice()));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const loading = fetchBundleAsset(BASE, "flow_lm_flow_int8.onnx");
+    await vi.runAllTimersAsync();
+
+    expect(new Uint8Array(await loading)).toEqual(BYTES);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("gives up on a file after a few tries and says what is kept", async () => {
+    vi.stubGlobal("caches", undefined);
+    vi.useFakeTimers();
+    const fetchSpy = vi
+      .fn<(url: string) => Promise<Response>>()
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const loading = fetchBundleAsset(BASE, "voices.bin");
+    // Take the rejection at once: it arrives while the timers are being run.
+    const settled = loading.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await vi.runAllTimersAsync();
+    const failure = await settled;
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(
+      /Failed to download voices\.bin after 4 tries: Failed to fetch\. Files already downloaded are kept/,
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not ask again for a file the server refuses", async () => {
+    vi.stubGlobal("caches", undefined);
+    const fetchSpy = vi
+      .fn<(url: string) => Promise<Response>>()
+      .mockResolvedValue(new Response(null, { status: 404 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(fetchBundleAsset(BASE, "missing.onnx")).rejects.toThrow(
+      "Failed to fetch missing.onnx: HTTP 404",
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });
