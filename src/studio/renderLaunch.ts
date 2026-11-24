@@ -68,9 +68,11 @@ export function shouldAutostartRender(raw: string | null, automated: boolean): b
 }
 
 /**
- * Fixed part of how long scripts/studio-render.ts waits for one render: a
- * first-ever render downloads the ~125MB pocket-tts bundle into the browser
- * cache before it synthesizes anything.
+ * Fixed part of how long scripts/studio-render.ts allows one take: a margin
+ * for preparing the workspace, starting the recorder and finishing the
+ * recording. What comes before the take (reading the lesson, the first
+ * download of the speech model, narration) is not counted here: the driver
+ * judges that stretch by whether the render's phase keeps changing.
  */
 const STUDIO_RENDER_WAIT_BASE_MS = 420_000;
 

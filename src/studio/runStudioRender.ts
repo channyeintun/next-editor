@@ -202,9 +202,12 @@ export async function runStudioRender(
   const receipts: ActionReceipt[] = [];
   const errors: string[] = [];
   const phase = (name: string) => deps.onPhase?.(name);
-  // The page's clock until the take chooses one; a render that fails before
-  // then performed nothing on any clock.
+  // The page's clock until the take chooses one.
   let renderClock: RenderClock = REAL_RENDER_CLOCK;
+  // What the report and manifest name as the render's clock: none until the
+  // take has started, since a render that fails before then performed nothing
+  // on any clock.
+  let performedOn: RenderClockKind | null = null;
 
   let audioHash: string | null = null;
   // Hashed once: the plan embeds slides and word-level captions, and both the
@@ -234,7 +237,7 @@ export async function runStudioRender(
         outcome: "failed",
         planSlug: plan.lesson.slug,
         runtimeMode,
-        clock: renderClock.kind,
+        clock: performedOn,
         startedAtIso,
         wallDurationMs: Math.round(performance.now() - wallStart),
         recordingDurationMs: null,
@@ -243,7 +246,7 @@ export async function runStudioRender(
         checks: [],
         errors,
       },
-      manifest: await baseManifest(plan, runtimeMode, renderClock.kind, audioHash, planHash, null),
+      manifest: await baseManifest(plan, runtimeMode, performedOn, audioHash, planHash, null),
       semantics: null,
       artifacts: null,
     };
@@ -490,6 +493,7 @@ export async function runStudioRender(
     return failedResult(error instanceof Error ? error.message : String(error));
   }
 
+  performedOn = renderClock.kind;
   const startSnapshot = deps.actor.getSnapshot();
   const sessionStartPerf = startSnapshot.context.session!.startedAtPerf;
   const measuredAudioMs = startSnapshot.context.audio.externalDurationMs!;
@@ -752,7 +756,7 @@ export function narrationTimelineOnRecordingClock(
 async function baseManifest(
   plan: StudioPlan,
   runtimeMode: StudioRuntimeMode,
-  clock: RenderClockKind,
+  clock: RenderClockKind | null,
   audioHash: string | null,
   planHash: string,
   artifact: StudioBuildManifest["artifact"],

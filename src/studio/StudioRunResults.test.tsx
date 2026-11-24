@@ -145,6 +145,11 @@ describe("CheckList", () => {
     rerender(<CheckList report={report({})} />);
     expect(screen.getByText("Performed in real time")).toBeInTheDocument();
   });
+
+  it("names no clock for a render that failed before its take started", () => {
+    render(<CheckList report={report({ outcome: "failed", clock: null })} />);
+    expect(screen.queryByText(/^Performed /)).not.toBeInTheDocument();
+  });
 });
 
 describe("RepeatabilityVerdict", () => {

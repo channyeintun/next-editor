@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { workspacePathFromMonacoModelUri } from "../monaco";
+import { waitUntil } from "./async";
 import { sha256HexOfJson } from "./hash";
 import type { StudioPlan } from "./plan";
 import {
@@ -10,6 +11,12 @@ import {
   type StudioRunDeps,
 } from "./runStudioRender";
 import { encodeWavPcm16 } from "./tts/wav";
+
+// waitUntil runs as written; the tests read the options each wait was given.
+vi.mock("./async", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./async")>();
+  return { ...actual, waitUntil: vi.fn<typeof actual.waitUntil>(actual.waitUntil) };
+});
 
 vi.mock("../monaco", () => ({
   monaco: {},
@@ -105,6 +112,10 @@ describe("runStudioRender report timing", () => {
     // The narration is not taken up before preflight passes.
     expect(result.manifest.planHash).toBe(await sha256HexOfJson(failingPlan));
     expect(result.manifest.narrationAudioHash).toBe("unfetched");
+    // Nothing was performed, so the render names no clock, though full speed was not
+    // even asked for.
+    expect(result.report.clock).toBeNull();
+    expect(result.manifest.environment.clock).toBeNull();
   });
 });
 
@@ -257,8 +268,9 @@ describe("runStudioRender visible-tab gate", () => {
       expect(event.externalAudioDurationMs).toBe(1_000);
       expect((event.timeSource as { kind: string }).kind).toBe("virtual");
       expect(event).not.toHaveProperty("screenStream");
-      expect(virtual.report.clock).toBe("virtual");
-      expect(virtual.manifest.environment.clock).toBe("virtual");
+      // The recorder refused the take, so nothing was performed on that clock.
+      expect(virtual.report.clock).toBeNull();
+      expect(virtual.manifest.environment.clock).toBeNull();
 
       for (const [options, cameraOn] of [
         [{ ...wavNarration }, false],
@@ -279,8 +291,8 @@ describe("runStudioRender visible-tab gate", () => {
         >;
         expect(realEvent).not.toHaveProperty("timeSource");
         expect(realEvent).not.toHaveProperty("externalAudioDurationMs");
-        expect(result.report.clock).toBe("real");
-        expect(result.manifest.environment.clock).toBe("real");
+        expect(result.report.clock).toBeNull();
+        expect(result.manifest.environment.clock).toBeNull();
       }
     });
 
@@ -294,6 +306,115 @@ describe("runStudioRender visible-tab gate", () => {
       expect(result.report.errors[0]).toMatch(
         /^The narration could not be read for a full-speed render: /,
       );
+      expect(result.report.clock).toBeNull();
+      expect(result.manifest.environment.clock).toBeNull();
+    });
+
+    /**
+     * A recorder that starts a take on the event's time source and finalizes it when
+     * stopped. Adding the caption track drops the recording, so the render ends right
+     * after finalize, before encoding, without needing an encoder.
+     */
+    function virtualTake(stop: (elapsedMs: number) => Promise<void> = async () => {}) {
+      const base = depsUpToRecording();
+      let source: { perfNow(): number } | null = null;
+      let session: { startedAtPerf: number } | null = null;
+      let externalDurationMs: number | null = null;
+      let recording: { id: string; duration: number; audioStartOffsetMs: number } | null = null;
+      const stoppedAt: number[] = [];
+      const startRecording = vi.fn<(event: Record<string, unknown>) => void>((event) => {
+        source = event.timeSource as { perfNow(): number };
+        session = { startedAtPerf: source.perfNow() };
+        externalDurationMs = event.externalAudioDurationMs as number;
+      });
+      const stopRecording = vi.fn<() => Promise<void>>(async () => {
+        const elapsedMs = source!.perfNow() - session!.startedAtPerf;
+        stoppedAt.push(elapsedMs);
+        await stop(elapsedMs);
+        session = null;
+        recording = { id: "take", duration: elapsedMs, audioStartOffsetMs: 0 };
+      });
+      const deps = {
+        ...base.deps,
+        actor: {
+          getSnapshot: () => ({
+            context: {
+              error: null,
+              defaultEnableCameraRecording: false,
+              session,
+              audio: { externalDurationMs },
+              recording,
+            },
+            matches: (state: string) => state === "recording" && session !== null,
+          }),
+        },
+        nextEditor: {
+          ...(base.deps.nextEditor as object),
+          startRecording,
+          stopRecording,
+          addCaptionTrack: vi.fn<() => void>(() => {
+            recording = null;
+          }),
+          setChapters: vi.fn<() => void>(),
+        },
+      } as unknown as StudioRunDeps;
+      return { deps, startRecording, stopRecording, stoppedAt };
+    }
+
+    // The narration in wavNarration plays for one second; the plan pins that length.
+    const oneSecondPlan = {
+      ...gatedPlan,
+      narration: { ...gatedPlan.narration, expectedDurationMs: 1_000 },
+    } as unknown as StudioPlan;
+
+    const finalizeWait = () =>
+      vi
+        .mocked(waitUntil)
+        .mock.calls.find(([, options]) => options.description === "the recording to finalize");
+
+    it("runs a virtual take on to the narration's end, stops it there and finalizes", async () => {
+      vi.mocked(waitUntil).mockClear();
+      const { deps, startRecording, stopRecording, stoppedAt } = virtualTake();
+      const result = await runStudioRender(oneSecondPlan, "fixture", deps, {
+        ...wavNarration,
+        speed: "full",
+      });
+
+      expect(startRecording).toHaveBeenCalledTimes(1);
+      // Nothing played to end the take: the render slept on its own clock to the
+      // narration's end and stopped the take there, once.
+      expect(stopRecording).toHaveBeenCalledTimes(1);
+      expect(stoppedAt).toEqual([1_000]);
+      // The take was stopped already, so finalize waits only its grace, not the
+      // rest of a narration read off the virtual clock.
+      expect(finalizeWait()?.[1].timeoutMs).toBe(10_000);
+      expect(result.report.errors).toEqual(["The finalized recording disappeared before encoding"]);
+      expect(result.report.clock).toBe("virtual");
+      expect(result.manifest.environment.clock).toBe("virtual");
+    });
+
+    it("reports a virtual take whose stop fails as one that never finalized", async () => {
+      vi.mocked(waitUntil).mockClear();
+      const realNow = performance.now.bind(performance);
+      let skipMs = 0;
+      const { deps, stopRecording, stoppedAt } = virtualTake(async () => {
+        // The finalize grace passes in a few polls rather than ten real seconds.
+        vi.spyOn(performance, "now").mockImplementation(() => realNow() + (skipMs += 5_000));
+        throw new Error("the recorder is gone");
+      });
+      const result = await runStudioRender(oneSecondPlan, "fixture", deps, {
+        ...wavNarration,
+        speed: "full",
+      });
+
+      expect(stopRecording).toHaveBeenCalledTimes(1);
+      expect(stoppedAt).toEqual([1_000]);
+      expect(finalizeWait()?.[1].timeoutMs).toBe(10_000);
+      expect(result.report.outcome).toBe("failed");
+      expect(result.report.errors).toEqual([
+        "Timed out after 10000ms waiting for the recording to finalize",
+      ]);
+      expect(result.report.clock).toBe("virtual");
     });
   });
 });

@@ -100,14 +100,24 @@ describe("timingGateCheck", () => {
     expect(timingGateCheck(null, 300, "virtual").ok).toBe(false);
   });
 
-  it("still gates a virtual render, and says its starts are exact by construction", () => {
+  it("still gates a virtual render, and says where drift on it comes from", () => {
     const timing = { samples: 5, p50Ms: 0, p95Ms: 0, maxMs: 0 };
     const real = timingGateCheck(timing, 300);
     const virtual = timingGateCheck(timing, 300, "virtual");
     expect(virtual.ok).toBe(true);
     expect(virtual.detail).toContain(real.detail);
-    expect(virtual.detail).toMatch(/virtual clock: every start is exact by construction/);
+    expect(virtual.detail).toMatch(
+      /virtual clock: an action waits for nothing real, so any drift comes from the actions before it overrunning their plan/,
+    );
     expect(real.detail).not.toMatch(/virtual/);
-    expect(timingGateCheck({ ...timing, p95Ms: 400 }, 300, "virtual").ok).toBe(false);
+  });
+
+  it("does not call a late start on a virtual clock exact", () => {
+    // An action that ran past its gap (a retried run) delays the next start even on a
+    // virtual clock; the detail beside a non-zero p95 must not claim the starts are exact.
+    const late = timingGateCheck({ samples: 5, p50Ms: 0, p95Ms: 900, maxMs: 900 }, 300, "virtual");
+    expect(late.ok).toBe(false);
+    expect(late.detail).toMatch(/p95 \|actual − planned\| = 900ms/);
+    expect(late.detail).not.toMatch(/exact/);
   });
 });

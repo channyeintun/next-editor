@@ -49,10 +49,12 @@ export interface StudioRenderReport {
   planSlug: string;
   runtimeMode: StudioRuntimeMode;
   /**
-   * The clock the render performed on (renderClock.ts). Absent from reports
-   * made before renders could run off the wall clock, which were all real.
+   * The clock the render performed on (renderClock.ts). Null when the render
+   * failed before its take started, so it performed nothing on any clock.
+   * Absent from reports made before renders could run off the wall clock,
+   * which were all real.
    */
-  clock?: RenderClockKind;
+  clock?: RenderClockKind | null;
   startedAtIso: string;
   wallDurationMs: number;
   recordingDurationMs: number | null;
@@ -94,8 +96,11 @@ export interface StudioBuildManifest {
   environment: {
     userAgent: string;
     appMode: string;
-    /** The clock the render performed on (renderClock.ts). */
-    clock: RenderClockKind;
+    /**
+     * The clock the render performed on (renderClock.ts); null when the render
+     * failed before its take started.
+     */
+    clock: RenderClockKind | null;
   };
   artifact: {
     neBytes: number;
@@ -113,10 +118,12 @@ export interface StudioBuildManifest {
  * from their planned marks. No successful timed receipts also fails — a build
  * that performed nothing measurable must not pass a timing gate.
  *
- * On a virtual clock the performer moves time to each action's planned start
- * before starting it, so the starts are exact by construction and the gate
- * proves little about pacing. It still runs (a render that timed nothing
- * still fails), and its detail says which clock the starts were read on.
+ * On a virtual clock the performer moves time to an action's planned start
+ * when it is not there yet, and no action waits for anything real. An action
+ * can still start late when the actions before it took longer than their plan
+ * allowed (a retried run, say), since time never moves back. The gate runs
+ * the same way, and its detail says which clock the starts were read on and
+ * where any drift on it comes from.
  */
 export function timingGateCheck(
   timing: TimingStats | null,
@@ -132,7 +139,7 @@ export function timingGateCheck(
     ok: timing.p95Ms <= maxP95Ms,
     detail:
       clock === "virtual"
-        ? `${measured}; virtual clock: every start is exact by construction`
+        ? `${measured}; virtual clock: an action waits for nothing real, so any drift comes from the actions before it overrunning their plan`
         : measured,
   };
 }
