@@ -28,6 +28,22 @@ export interface PreviewReplayResult {
 
 const previewReplayIndexCache = new WeakMap<PreviewEvent[], PreviewReplayIndex>();
 
+/**
+ * The preview panel before a recording's first preview event: closed, at the size and
+ * mode a fresh page opens it with. The recorder writes a preview event at t=0 only when
+ * the preview is open, so a track whose first event is later began with it closed. A
+ * resync there applies this, so a seek back, STOP or a restart closes what a later
+ * position, an earlier lesson or the viewer left open, as a fresh page shows it.
+ *
+ * It is applied, never retained: the fold of the first event still starts from nothing,
+ * so an event without isOpen keeps meaning open.
+ */
+export const PREVIEW_PANEL_BEFORE_FIRST_EVENT: Readonly<PreviewState> = {
+  size: "medium",
+  isOpen: false,
+  mode: "docked",
+};
+
 // API client interactions inherently happen in the API frame, so a request or
 // response implies API mode even if the explicit mode-switch event wasn't
 // captured (e.g. the user was already in API mode when recording started).
@@ -192,7 +208,7 @@ export function getPreviewReplayResult({
 
     if (nextIndex < 0) {
       return {
-        appliedStates: [],
+        appliedStates: previewEvents.length ? [{ ...PREVIEW_PANEL_BEFORE_FIRST_EVENT }] : [],
         nextIndex,
         retainedState: undefined,
       };

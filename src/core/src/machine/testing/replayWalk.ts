@@ -151,7 +151,10 @@ export function send(machine: PlaybackMachine, event: EditorMachineEvent): void 
   throw new Error(`No branch takes ${event.type} in ${machine.state}`);
 }
 
-/** What `load` needs. Every field is required: a replay test states what it loads. */
+/**
+ * What `load` needs. Every field but `onError` is required: a replay test states what
+ * it loads.
+ */
 export interface WalkLoad {
   recording: Recording;
   hooks: EditorMachineHostHooks;
@@ -159,18 +162,27 @@ export interface WalkLoad {
   duration: number;
   /** The editor the host has when the recording loads, or null for none. */
   editor: monaco.editor.IStandaloneCodeEditor | null;
+  /**
+   * Where a replay action reports a damaged track, from the load's own apply on. A
+   * test's tracks are whole, so by default the report is thrown; a check of real
+   * recordings counts it instead.
+   */
+  onError?: (error: Error) => void;
 }
 
+const throwReport = (error: Error) => {
+  throw error;
+};
+
 /** loading's onDone: setRecording, then playback's entry and ready's. */
-export function load({ recording, hooks, duration, editor }: WalkLoad): PlaybackMachine {
-  const initial = createInitialContext({
-    editorRef: { current: editor },
-    ...hooks,
-    // A replay action reports a damaged track here, and a walk's tracks are whole.
-    onError: (error) => {
-      throw error;
-    },
-  });
+export function load({
+  recording,
+  hooks,
+  duration,
+  editor,
+  onError = throwReport,
+}: WalkLoad): PlaybackMachine {
+  const initial = createInitialContext({ editorRef: { current: editor }, ...hooks, onError });
   const loaded = { recording, duration };
   const machine: PlaybackMachine = {
     // setRecording is loading's onDone as an inline assign, so it is called by name.

@@ -1140,8 +1140,9 @@ const slideTrack: ReplayTrack = {
 };
 
 // ============================================================================
-// Preview: forward ticks re-emit transient interactions on purpose, so only the
-// retained state (what a seek lands on) is compared.
+// Preview: forward ticks re-emit transient interactions on purpose, so what the
+// panel shows is compared without them, along with the retained state (what a seek
+// lands on).
 // ============================================================================
 
 const API_REQUEST = { method: "GET", path: "/api/todos", headers: {}, body: undefined };
@@ -1214,6 +1215,17 @@ function recordPreview(steps: Array<ValueOf<typeof arbPreviewStep>>): PreviewEve
   });
 }
 
+/**
+ * What the panel shows of a state it is given. It never reads the interaction
+ * (usePreviewPlaybackRegistration.ts), and never takes the scroll from a state: the
+ * iframe keeps its own. Both stay in the retained state, which is compared as well.
+ */
+function previewPanelShows(state: PreviewState | undefined) {
+  if (!state) return state;
+  const { currentInteraction: _interaction, scrollTop: _top, scrollLeft: _left, ...shown } = state;
+  return shown;
+}
+
 const previewTrack: ReplayTrack = {
   fields: ["previewEvents"],
   host(applied) {
@@ -1227,22 +1239,31 @@ const previewTrack: ReplayTrack = {
       },
       // While the viewer owns the page, the preview must keep what it was last given.
       shown: () => shown,
-      // Where replay lands is the retained state the machine keeps
-      // (lastAppliedPreviewState), not the last state the hook was given, which
-      // carries the transient parts. A seek that hands the page back drops it; the
-      // one state such a seek applies is the retained state (none before the first
-      // event, as the machine keeps none there either).
-      landed: (context, _expected, handedBack) =>
-        handedBack ? applied.at(-1) : context.lastAppliedPreviewState,
+      // Two things must match a cold resolve: what the panel shows of the last state
+      // it was given, and the retained state the machine keeps (lastAppliedPreviewState),
+      // which a tick carries forward with the scroll a mode change did not re-assert. A
+      // seek that hands the page back drops the machine's record, so then the panel
+      // alone is compared.
+      landed: (context, expected, handedBack) => ({
+        page: previewPanelShows(shown),
+        retained: handedBack
+          ? (expected as { retained: unknown }).retained
+          : context.lastAppliedPreviewState,
+      }),
     };
   },
-  cold: ({ previewEvents }, time) =>
-    getPreviewReplayResult({
+  cold: ({ previewEvents }, time) => {
+    const resolved = getPreviewReplayResult({
       previewEvents: previewEvents!,
       currentTime: time,
       lastAppliedIndex: -1,
       isResync: true,
-    }).retainedState,
+    });
+    return {
+      page: previewPanelShows(resolved.appliedStates.at(-1)),
+      retained: resolved.retainedState,
+    };
+  },
   replaysTransients: true,
 };
 
@@ -1689,7 +1710,7 @@ describe("seeking lands where playing does", () => {
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 
-  it("preview retained state", () => {
+  it("preview panel and retained state", () => {
     const compared = checkWalks(
       fc.array(arbPreviewStep, SIZE).map((steps) => logOf("previewEvents", recordPreview(steps))),
       previewTrack,
@@ -1708,5 +1729,36 @@ describe("seeking lands where playing does", () => {
       framesTrack,
     );
     expect(compared).toBeGreaterThan(NUM_RUNS);
+  });
+});
+
+describe("the walk's load", () => {
+  // More item-list deltas than the chat fold takes between checkpoints, all at t=0, so
+  // the load's own apply finds the track damaged.
+  const damagedChat: Recording = {
+    ...RECORDING,
+    chatEvents: Array.from({ length: 2_001 }, (_, index): ChatRecordingEvent => ({
+      timestamp: 0,
+      event: { k: "message_start", id: `msg-${index}`, role: "user" },
+    })),
+  };
+  const loadDamaged = (onError?: (error: Error) => void) =>
+    load({
+      recording: damagedChat,
+      hooks: { applyChatSnapshot: () => {} },
+      duration: DURATION,
+      editor: null,
+      onError,
+    });
+
+  it("throws a damaged track by default", () => {
+    expect(() => loadDamaged()).toThrow("too many changes between checkpoints");
+  });
+
+  it("reports a damaged track found by the load itself to the reporter it is given", () => {
+    const reported: string[] = [];
+    const machine = loadDamaged((error) => reported.push(error.message));
+    expect(reported).toEqual([expect.stringContaining("too many changes between checkpoints")]);
+    expect(machine.state).toBe("ready");
   });
 });
