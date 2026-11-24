@@ -8,6 +8,7 @@ import { openrouterProxyPlugin } from "./tube/vite/openrouterProxyPlugin";
 import { DEV_SERVER_FS_DENY } from "./tube/vite/devServerFsDeny";
 import { rrwebRecorderBundlePlugin } from "./build/rrwebRecorderBundlePlugin";
 import { webnodeBundlePlugin } from "./build/webnodeBundlePlugin";
+import { excalidrawFontsPlugin } from "./build/excalidrawFontsPlugin";
 import { posthogReleasePlugins } from "./build/posthogReleasePlugins";
 import { landingPrerenderPlugin } from "./build/landingPrerenderPlugin";
 import { precompressAssetsPlugin } from "./build/precompressAssetsPlugin";
@@ -81,6 +82,8 @@ export default ({ mode }: { mode: string }) => {
       // The webnode runtime's worker scripts and, in dev, its preview hosts
       // (`*.localhost`); see src/runtime/node/engine.ts.
       webnodeBundlePlugin(),
+      // Excalidraw's fonts on the app's own origin, instead of esm.sh at runtime.
+      excalidrawFontsPlugin(),
       // Dev-server equivalent of infra/worker/routes/proxy.ts: lets
       // `bun run dev` resolve the same /api/proxy route the Worker
       // serves in production.

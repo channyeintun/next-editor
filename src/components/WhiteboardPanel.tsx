@@ -13,12 +13,17 @@ import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useWhiteboardStore } from "../contexts/WhiteboardStoreContext";
 import { planWhiteboardCanvasView } from "../stores/whiteboardStore";
 import { clearTextMeasurements, fitTextElement } from "../utils/whiteboardTextFit";
+import { installWhiteboardFonts } from "../utils/whiteboardFonts";
 import {
   registerCursorCellAnchor,
   unregisterCursorCellAnchor,
 } from "../core/src/utils/cursorCellAnchors";
 import HoverRing from "./hoverRing/HoverRing";
 import { WHITEBOARD_CANVAS_TARGET_ID, createWhiteboardSceneAnchor } from "./whiteboardSceneAnchor";
+
+// Before any canvas mounts: Excalidraw reads where its fonts are, and which
+// faces each family has, when it first loads a scene's fonts.
+installWhiteboardFonts();
 
 // Image embeds are out of scope for v1 (binary files aren't recorded into the
 // .ne, see whiteboard-plan.md §4) — this also gates paste/drag-drop of images,

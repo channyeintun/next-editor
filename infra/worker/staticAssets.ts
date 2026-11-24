@@ -10,6 +10,9 @@ import type { Env } from "./env";
  * so a name always means the same bytes: nothing else is ever written there,
  * and the build never emits HTML into it. The build's Brotli copies
  * (`<name>-<hash>.js.br`, src/shared/precompressedAssets.ts) sit beside them.
+ * The one folder in it, `excalidraw-<version>/`, holds Excalidraw's fonts under
+ * their own names (build/excalidrawFontsPlugin.ts): the package's version in
+ * the path keeps a name to the same bytes.
  */
 const HASHED_ASSET_PREFIX = "/assets/";
 

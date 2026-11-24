@@ -6,9 +6,10 @@ import type { WhiteboardElementJSON } from "../core/src/whiteboard";
  * that width are cut off. It measures text only when someone types it on this
  * machine; a width that arrives from elsewhere (a studio-authored asset, a
  * recording, another person's board) is drawn as stored. Burmese made the gap
- * visible: no Excalidraw font has Myanmar glyphs, so the browser draws them in
- * its system fallback (Noto Sans Myanmar on macOS), much wider than the
- * authored widths, and board titles lost their last syllables.
+ * visible: no Excalidraw font has Myanmar glyphs, so they are drawn in Noto
+ * Sans Myanmar (whiteboardFonts.ts adds it to each family; until it loads, the
+ * system's Myanmar font), much wider than the authored widths, and board
+ * titles lost their last syllables.
  *
  * So the board widens free-standing text to what it measures here with the
  * font string Excalidraw draws with. A box only ever grows, and the glyphs stay
@@ -26,7 +27,7 @@ import type { WhiteboardElementJSON } from "../core/src/whiteboard";
 
 // Excalidraw 0.18's FONT_FAMILY ids and their fallbacks (getFontFamilyString).
 // Copied rather than imported so tests that mock @excalidraw/excalidraw keep working.
-const FONT_FAMILY_NAMES: Readonly<Record<number, string>> = {
+export const FONT_FAMILY_NAMES: Readonly<Record<number, string>> = {
   1: "Virgil",
   2: "Helvetica",
   3: "Cascadia",
