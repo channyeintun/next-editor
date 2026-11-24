@@ -504,11 +504,13 @@ describe("PreviewGateway WebSocket", () => {
 
   it("aborts a connecting socket the page closes", async () => {
     harness = createGatewayHarness();
-    void serveWebSocket(3000, () => {
+    const serverReady = serveWebSocket(3000, () => {
       // Never answers the handshake.
     });
     const socket = openSocket("ws://localhost:3000/");
-    await tick(5);
+    // Connected, with the handshake unanswered. A fixed wait is not that: on a
+    // busy machine the bridge was still hashing its key, and nothing had connected.
+    await serverReady;
     socket.send({ type: "close" });
     expect(await socket.waitFor("close")).toMatchObject({ code: 1006, wasClean: false });
     expect(harness.connections[0].closed).toBe(true);
