@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { planPublish, type DefaultLesson } from "./publishPlan";
+import {
+  lessonScriptReaderFiles,
+  liveIndexMovedProblem,
+  planPublish,
+  type DefaultLesson,
+} from "./publishPlan";
 import {
   encodePublishedScriptIndex,
   parsePublishedScriptIndex,
@@ -118,5 +123,40 @@ describe("planPublish", () => {
     });
     expect(plan.added).toEqual(["constructor"]);
     expect(plan.puts).toEqual([id("6")]);
+  });
+});
+
+describe("liveIndexMovedProblem", () => {
+  it("lets the index be put when the live index is still the one planned from", () => {
+    expect(liveIndexMovedProblem(null, null)).toBeNull();
+    expect(liveIndexMovedProblem({ text: "a" }, { text: "a" })).toBeNull();
+  });
+
+  it("refuses when another publish wrote the index meanwhile", () => {
+    expect(liveIndexMovedProblem({ text: "a" }, { text: "b" })).toMatch(/run the publish again/);
+    expect(liveIndexMovedProblem(null, { text: "b" })).toMatch(/changed during this publish/);
+    expect(liveIndexMovedProblem({ text: "a" }, null)).toMatch(/changed during this publish/);
+  });
+});
+
+describe("lessonScriptReaderFiles", () => {
+  it("keeps only the schema and the Director, without their tests", () => {
+    expect(
+      lessonScriptReaderFiles([
+        "src/studio/script/schema.ts",
+        "src/studio/script/compile.ts",
+        "src/studio/script/compile.test.ts",
+        "src/studio/script/__fixtures__/go-swap.yaml",
+        "src/studio/inPageDirector.ts",
+        "src/studio/inPageDirector.test.ts",
+        "src/studio/scripts/go-swap.yaml",
+        "src/studio/scriptx.ts",
+        "docs/lesson-script-authoring.md",
+      ]),
+    ).toEqual([
+      "src/studio/script/schema.ts",
+      "src/studio/script/compile.ts",
+      "src/studio/inPageDirector.ts",
+    ]);
   });
 });

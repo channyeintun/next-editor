@@ -27,21 +27,30 @@
 // built from, and a publish refuses unless that commit is an ancestor of HEAD,
 // so a stale checkout or a second machine cannot roll lessons back.
 //
-// Every script is validated as the studio reads it (YAML, schema, file name
-// equals lesson.slug, the studio's default lessons present in their
-// languages), and one failure stops the publish. --dry-run prints every
-// command and writes nothing. --allow-removals lets a lesson leave the index.
+// Every script is validated with the schema in this checkout's working tree
+// (YAML, schema, file name equals lesson.slug, the studio's default lessons
+// present in their languages), and one failure stops the publish. That is not
+// necessarily the schema of the studio deployed on the site: a change to the
+// schema or the Director must be deployed before a lesson that needs it is
+// published. The tool cannot see what is deployed, so it warns when that code
+// changed since the commit the live index was built from, or differs from HEAD
+// in the working tree. Just before the index is put, the live index is read
+// again, and the publish stops if another one wrote it meanwhile. --dry-run
+// prints every command and writes nothing. --allow-removals lets a lesson
+// leave the index.
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { STUDIO_DEFAULT_LESSONS } from "../src/studio/plans/index.ts";
 import {
-  DEFAULT_ENGLISH_STUDIO_PLAN_SLUG,
-  DEFAULT_STUDIO_PLAN_SLUG,
-} from "../src/studio/plans/index.ts";
-import { lessonChanges, planPublish } from "../src/studio/plans/publishPlan.ts";
-import type { DefaultLesson } from "../src/studio/plans/publishPlan.ts";
+  LESSON_SCRIPT_READER_PATHS,
+  lessonChanges,
+  lessonScriptReaderFiles,
+  liveIndexMovedProblem,
+  planPublish,
+} from "../src/studio/plans/publishPlan.ts";
 import {
   lessonFileNameProblem,
   lessonSlugOfFileName,
@@ -65,12 +74,6 @@ import { boundBucketName } from "./r2Bucket.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const WRANGLER_CONFIG = resolve(ROOT, "infra/wrangler.toml");
-
-/** The lessons the studio opens on when the URL names none, each in the language of its voice. */
-const DEFAULT_LESSONS: DefaultLesson[] = [
-  { slug: DEFAULT_STUDIO_PLAN_SLUG, language: "my" },
-  { slug: DEFAULT_ENGLISH_STUDIO_PLAN_SLUG, language: "en" },
-];
 
 /** Remote puts after the first, at once. The first runs alone, so only one wrangler refreshes the login. */
 const REMOTE_PUTS_AT_ONCE = 4;
@@ -186,6 +189,47 @@ function workingTreeChanges(checkout: ScriptsCheckout): string[] {
     .split("\0")
     .filter((line) => line.length > 3 && line.endsWith(".yaml"))
     .map((line) => `${line.slice(0, 2)} ${line.slice(3)}`);
+}
+
+/**
+ * Why the deployed studio may not read what HEAD's scripts need: the files it
+ * reads scripts with that changed between the commit the live index was built
+ * from and HEAD, and those that differ from HEAD in the working tree (they
+ * validate this publish, yet are in no commit). Warnings, not refusals: a
+ * deploy after that commit may already carry the change.
+ */
+function readerWarnings(checkout: ScriptsCheckout, liveSource: string | null): string[] {
+  const paths = [...LESSON_SCRIPT_READER_PATHS];
+  const warnings: string[] = [];
+  // The reader is this repository's code; the live source is a commit of the
+  // scripts' checkout. They can be compared only when that is this repository.
+  if (liveSource !== null && resolve(checkout.top) === resolve(ROOT)) {
+    const changed = lessonScriptReaderFiles(
+      git(ROOT, ["diff", "--name-only", liveSource, "HEAD", "--", ...paths])
+        .toString()
+        .split("\n")
+        .filter(Boolean),
+    );
+    if (changed.length > 0) {
+      warnings.push(
+        `the script schema or the Director changed since ${liveSource.slice(0, 10)}, the commit the live index was built from ` +
+          `(${changed.join(", ")}): a lesson that needs the change fails on the site until a studio built from HEAD is deployed`,
+      );
+    }
+  }
+  const uncommitted = lessonScriptReaderFiles(
+    git(ROOT, ["status", "--porcelain", "-z", "--", ...paths])
+      .toString()
+      .split("\0")
+      .filter((line) => line.length > 3)
+      .map((line) => line.slice(3)),
+  );
+  if (uncommitted.length > 0) {
+    warnings.push(
+      `the scripts were validated with a schema or Director that is not HEAD's (${uncommitted.join(", ")} differ in the working tree)`,
+    );
+  }
+  return warnings;
 }
 
 // ---------------------------------------------------------------- bucket
@@ -342,23 +386,31 @@ async function publish(args: string[]): Promise<number> {
 
   const bucket = bucketName();
   const live = liveIndex(bucket, destination);
-  if (live) {
-    const ancestor = isAncestor(checkout.top, live.index.source, head);
-    if (ancestor !== true) {
-      refusals.push(
-        ancestor === false
-          ? `the live index was built from ${live.index.source}, which is not an ancestor of HEAD: publishing would roll lessons back`
-          : `the live index was built from "${live.index.source}", which this checkout does not know: fetch, then publish again`,
-      );
-    }
+  const ancestor = live ? isAncestor(checkout.top, live.index.source, head) : null;
+  if (live && ancestor !== true) {
+    refusals.push(
+      ancestor === false
+        ? `the live index was built from ${live.index.source}, which is not an ancestor of HEAD: publishing would roll lessons back`
+        : `the live index was built from "${live.index.source}", which this checkout does not know: fetch, then publish again`,
+    );
   }
 
-  const plan = planPublish({ next: index, live, allowRemovals, defaultLessons: DEFAULT_LESSONS });
+  const plan = planPublish({
+    next: index,
+    live,
+    allowRemovals,
+    defaultLessons: STUDIO_DEFAULT_LESSONS,
+  });
   refusals.push(...plan.refusals);
   console.log(
     `\n${Object.keys(index.lessons).length} lessons at HEAD ${head.slice(0, 10)}: ` +
       `${plan.added.length} added, ${plan.changed.length} changed, ${plan.removed.length} removed`,
   );
+  // Compared only with a commit this checkout knows and that HEAD descends from.
+  const liveSource = live && ancestor === true ? live.index.source : null;
+  for (const warning of readerWarnings(checkout, liveSource)) {
+    console.warn(`warning: ${warning}`);
+  }
   if (refusals.length > 0) {
     console.error(`\npublish refused:`);
     for (const refusal of refusals) console.error(`  ${refusal}`);
@@ -418,6 +470,11 @@ async function publish(args: string[]): Promise<number> {
       return 1;
     }
     if (plan.putIndex) {
+      const moved = liveIndexMovedProblem(live, liveIndex(bucket, destination));
+      if (moved) {
+        console.error(`publish stopped: ${moved}`);
+        return 1;
+      }
       writeFileSync(indexFile, plan.indexText);
       // Last: an index never names an object that is not in the bucket.
       if (!(await putAll([indexPut], 1))) return 1;

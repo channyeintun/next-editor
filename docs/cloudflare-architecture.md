@@ -137,8 +137,13 @@ Neither `studio-scripts/` nor `webnode-deps/` is served by `/media`. The studio
 reads its scripts from `/api/studio/scripts` (`routes/studioScripts.ts`): the
 index as `application/json` with `Cache-Control: no-cache` and its ETag (a
 current copy is answered with 304), each object as `text/plain; charset=utf-8`
-with `public, max-age=31536000, immutable`, and a malformed or unknown id as a
-404 with `no-store`. The webnode runtime host alone serves `webnode-deps/`, with
+with `public, max-age=31536000, immutable`, and a malformed or unknown id, or
+any other path under the prefix, as a 404 with `no-store` (the rules live in
+`src/studio/plans/publishedScripts.ts`, which the dev server's stand-in uses
+too). The build carries no lesson scripts. Order: on a new environment, publish
+(`bun scripts/lesson-scripts.ts publish --remote`), then build and deploy; a
+change to the script schema or the Director is built and deployed first, and the
+lessons that need it are published after that deploy. The webnode runtime host alone serves `webnode-deps/`, with
 the Brotli encoding its stored bytes need (`webnodePreviewHost.ts`).
 
 Bytes are served **through the Worker** at `/media/lessons/<id>/<file>` from the
@@ -322,7 +327,6 @@ deletes the stored copy along with the intent.
 | `/api/lessons/mine`, create/update/publish/unpublish/delete routes | owner               | Draft and published lesson lifecycle                                                                                  |
 | `PATCH /api/lessons/:id`                                           | owner               | Edit title, description, tags, thumbnail, and `duration` (`m:ss` or `h:mm:ss`, as the gallery shows it)               |
 | `PUT /api/uploads/:id/media/:filename`                             | owner/sign-in       | Validate and stream a lesson object through the Worker to R2                                                          |
-| `DELETE /api/uploads/:id/media/:filename`                          | owner               | Delete one narration file of the lesson (never the `.ne`, a thumbnail, camera or captions) and forget its storage     |
 | `/api/playlists/*`                                                 | mixed               | Public playlist detail plus owner CRUD, membership, and ordering                                                      |
 | `/api/authors/:username`, `/api/search`                            | —                   | Public author/catalog discovery; search is intentionally uncached                                                     |
 | `/api/collaboration/rooms/*`, `/invitations/*`                     | member/role         | D1 control plane, private R2 assets, binary WebSockets, and room-local SQLite                                         |

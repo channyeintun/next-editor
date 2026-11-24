@@ -369,123 +369,18 @@ describe("uploadsRoute storage bounds", () => {
   });
 });
 
-describe("uploadsRoute narration delete", () => {
-  function deleteRequest(path: string): [string, RequestInit] {
-    return [`https://nexteditor.dev${path}`, { method: "DELETE" }];
-  }
-
-  function ownedBy(ownerId: string) {
-    vi.mocked(getLessonById).mockResolvedValue({ id: "l1", owner_id: ownerId } as never);
-  }
-
-  it("deletes the owner's narration file and forgets its storage", async () => {
-    ownedBy("user-1");
-    const { env, put, del } = createEnv();
-    await uploadsRoute.request(...putRequest("/l1/media/l1-0123abcd.ogg"), env);
-    await uploadsRoute.request(...putRequest("/l1/media/l1.ne"), env);
-    expect(put).toHaveBeenCalledTimes(2);
-
-    const response = await uploadsRoute.request(...deleteRequest("/l1/media/l1-0123abcd.ogg"), env);
-
-    expect(response.status).toBe(204);
-    expect(await response.text()).toBe("");
-    expect(del).toHaveBeenCalledWith("lessons/l1/l1-0123abcd.ogg");
-    expect(mediaObjects()).toEqual([{ key: "lessons/l1/l1.ne", owner_id: "user-1", bytes: 6 }]);
-  });
-
-  it("answers 204 again when the file is already gone", async () => {
-    ownedBy("user-1");
+describe("uploadsRoute deletes", () => {
+  it("has no route that deletes a lesson's file: a viewer may still be playing it", async () => {
+    vi.mocked(getLessonById).mockResolvedValue({ id: "l1", owner_id: "user-1" } as never);
     const { env, del } = createEnv();
 
-    const first = await uploadsRoute.request(...deleteRequest("/l1/media/l1.ogg"), env);
-    const again = await uploadsRoute.request(...deleteRequest("/l1/media/l1.ogg"), env);
-
-    expect(first.status).toBe(204);
-    expect(again.status).toBe(204);
-    expect(del).toHaveBeenCalledTimes(2);
-  });
-
-  it("refuses another user's lesson, and keeps its storage", async () => {
-    ownedBy("user-2");
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user-2" } as never);
-    const { env, del } = createEnv();
-    await uploadsRoute.request(...putRequest("/l1/media/l1.ogg"), env);
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user-1" } as never);
-
-    const response = await uploadsRoute.request(...deleteRequest("/l1/media/l1.ogg"), env);
-
-    expect(response.status).toBe(403);
-    expect(del).not.toHaveBeenCalled();
-    expect(mediaObjects()).toEqual([{ key: "lessons/l1/l1.ogg", owner_id: "user-2", bytes: 6 }]);
-  });
-
-  it.each(["l1.ne", "l1-thumbnail-1791222405295.webp", "l1-thumbnail.png", "l1.webm", "l1.mp4"])(
-    "refuses to delete %s, which is not a narration file",
-    async (filename) => {
-      ownedBy("user-1");
-      const { env, del } = createEnv();
-
-      const response = await uploadsRoute.request(...deleteRequest(`/l1/media/${filename}`), env);
-
-      expect(response.status).toBe(400);
-      expect(del).not.toHaveBeenCalled();
-    },
-  );
-
-  it("never routes a caption file or a path to the delete", async () => {
-    ownedBy("user-1");
-    const { env, del } = createEnv();
-
-    const caption = await uploadsRoute.request(...deleteRequest("/l1/media/l1.en.vtt"), env);
-    const nested = await uploadsRoute.request(...deleteRequest("/l1/media/x%2Fl1.ogg"), env);
-
-    expect(caption.status).toBe(404);
-    expect(nested.status).toBe(404);
-    expect(del).not.toHaveBeenCalled();
-  });
-
-  it("answers 404 for a lesson that does not exist", async () => {
-    const { env, del } = createEnv();
-
-    const response = await uploadsRoute.request(...deleteRequest("/l1/media/l1.ogg"), env);
+    const response = await uploadsRoute.request(
+      "https://nexteditor.dev/l1/media/l1-0123abcd.ogg",
+      { method: "DELETE" },
+      env,
+    );
 
     expect(response.status).toBe(404);
     expect(del).not.toHaveBeenCalled();
-  });
-
-  it("requires a signed-in user", async () => {
-    ownedBy("user-1");
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(null as never);
-    const { env, del } = createEnv();
-
-    const response = await uploadsRoute.request(...deleteRequest("/l1/media/l1.ogg"), env);
-
-    expect(response.status).toBe(401);
-    expect(del).not.toHaveBeenCalled();
-  });
-
-  it("charges each delete to the user's upload budget, and fails closed without one", async () => {
-    ownedBy("user-1");
-    const { env, del } = createEnv();
-    const limiter = countingRateLimiter(1);
-
-    const first = await uploadsRoute.request(...deleteRequest("/l1/media/l1.ogg"), {
-      ...env,
-      MEDIA_UPLOAD_RATE_LIMITER: limiter,
-    });
-    const second = await uploadsRoute.request(...deleteRequest("/l1/media/l1.ogg"), {
-      ...env,
-      MEDIA_UPLOAD_RATE_LIMITER: limiter,
-    });
-    const missing = await uploadsRoute.request(...deleteRequest("/l1/media/l1.ogg"), {
-      ...env,
-      MEDIA_UPLOAD_RATE_LIMITER: undefined,
-    });
-
-    expect(first.status).toBe(204);
-    expect(second.status).toBe(429);
-    expect(missing.status).toBe(503);
-    expect(limiter.keys).toEqual(["user:user-1", "user:user-1"]);
-    expect(del).toHaveBeenCalledTimes(1);
   });
 });

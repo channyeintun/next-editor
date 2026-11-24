@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, watch, type FSWatcher } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
@@ -7,9 +6,12 @@ import type { PublishedScriptEntry } from "../src/studio/plans/publishedScripts"
 import {
   encodePublishedScriptIndex,
   PUBLISHED_SCRIPT_CONTENT_TYPE,
+  PUBLISHED_SCRIPT_INDEX_CACHE_CONTROL,
   PUBLISHED_SCRIPT_INDEX_CONTENT_TYPE,
   PUBLISHED_SCRIPT_INDEX_PATH,
   PUBLISHED_SCRIPT_INDEX_VERSION,
+  PUBLISHED_SCRIPT_MISS_CACHE_CONTROL,
+  PUBLISHED_SCRIPT_OBJECT_CACHE_CONTROL,
   PUBLISHED_SCRIPTS_PATH,
   publishedScriptIdOfPath,
   WORKING_TREE_SOURCE,
@@ -48,9 +50,6 @@ export interface LessonScriptsMiddleware {
   invalidate(): void;
 }
 
-const INDEX_CACHE_CONTROL = "no-cache";
-const OBJECT_CACHE_CONTROL = "public, max-age=31536000, immutable";
-
 function oneLine(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).replace(/\s*\n\s*/g, " ");
 }
@@ -75,8 +74,12 @@ export function createLessonScriptsMiddleware(
   async function build(): Promise<Snapshot> {
     // Loaded on first use, so the config every `vp` command loads does not
     // load the lesson schema too.
-    const { lessonFileNameProblem, lessonSlugOfFileName, publishedScriptFileOf } =
-      await import("../src/studio/plans/publishedScriptEntry");
+    const {
+      lessonFileNameProblem,
+      lessonSlugOfFileName,
+      publishedScriptFileOf,
+      publishedScriptIdOf,
+    } = await import("../src/studio/plans/publishedScriptEntry");
     const lessons = Object.create(null) as Record<string, PublishedScriptEntry>;
     const objects = new Map<string, Uint8Array>();
     const names = readdirSync(dir)
@@ -90,7 +93,9 @@ export function createLessonScriptsMiddleware(
         // Removed or renamed since the folder was listed: the watcher rebuilds again.
         continue;
       }
-      const id = createHash("sha256").update(bytes).digest("hex");
+      // The hash only finds a parse already done; what is served is named by
+      // the id its entry carries, the one the index names.
+      const id = await publishedScriptIdOf(bytes);
       let parsed = parsedById.get(id);
       if (!parsed) {
         parsed = await publishedScriptFileOf(bytes).then(
@@ -109,7 +114,7 @@ export function createLessonScriptsMiddleware(
         continue;
       }
       lessons[lessonSlugOfFileName(name)!] = parsed.entry;
-      objects.set(id, bytes);
+      objects.set(parsed.entry.id, bytes);
     }
     const indexText = encodePublishedScriptIndex({
       version: PUBLISHED_SCRIPT_INDEX_VERSION,
@@ -165,7 +170,7 @@ export function createLessonScriptsMiddleware(
     send(
       response,
       404,
-      { "content-type": "application/json", "cache-control": "no-store" },
+      { "content-type": "application/json", "cache-control": PUBLISHED_SCRIPT_MISS_CACHE_CONTROL },
       JSON.stringify({ error: "not found" }),
       head,
     );
@@ -179,7 +184,8 @@ export function createLessonScriptsMiddleware(
     }
     const head = request.method === "HEAD";
     // Everything under the prefix is answered here, so nothing reaches the
-    // /api/studio proxy and a wrong path is a 404, as on the Worker.
+    // /api/studio proxy, and a wrong path or method is a 404, as the Worker's
+    // route answers every path under its prefix that it does not serve.
     if (request.method !== "GET" && !head) {
       notFound(response, head);
       return;
@@ -192,7 +198,7 @@ export function createLessonScriptsMiddleware(
             200,
             {
               "content-type": PUBLISHED_SCRIPT_INDEX_CONTENT_TYPE,
-              "cache-control": INDEX_CACHE_CONTROL,
+              "cache-control": PUBLISHED_SCRIPT_INDEX_CACHE_CONTROL,
             },
             indexText,
             head,
@@ -212,7 +218,7 @@ export function createLessonScriptsMiddleware(
           200,
           {
             "content-type": PUBLISHED_SCRIPT_CONTENT_TYPE,
-            "cache-control": OBJECT_CACHE_CONTROL,
+            "cache-control": PUBLISHED_SCRIPT_OBJECT_CACHE_CONTROL,
             "x-content-type-options": "nosniff",
           },
           bytes,

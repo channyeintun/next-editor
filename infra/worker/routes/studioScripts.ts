@@ -5,7 +5,10 @@ import {
   isPublishedScriptId,
   PUBLISHED_SCRIPT_CONTENT_TYPE,
   PUBLISHED_SCRIPT_INDEX_CONTENT_TYPE,
+  PUBLISHED_SCRIPT_INDEX_CACHE_CONTROL,
   PUBLISHED_SCRIPT_INDEX_KEY,
+  PUBLISHED_SCRIPT_MISS_CACHE_CONTROL,
+  PUBLISHED_SCRIPT_OBJECT_CACHE_CONTROL,
   publishedScriptObjectKey,
 } from "../../../src/studio/plans/publishedScripts";
 
@@ -24,17 +27,11 @@ import {
 // would tie one request's I/O to every later request in the isolate.
 export const studioScriptsRoute = new Hono<{ Bindings: Env }>();
 
-// The index changes on every publish, so a browser revalidates it each time;
-// the ETag makes that a 304 when nothing changed.
-const INDEX_CACHE_CONTROL = "no-cache";
-// An object's key is the hash of its bytes, so its bytes never change.
-const OBJECT_CACHE_CONTROL = "public, max-age=31536000, immutable";
-
-// A miss must not be cached: an object can be missing only for the moment
-// between a publish putting it and a reader asking, and the index is missing
-// only until the first publish.
+// The cache rules are publishedScripts.ts's, so this route and the dev
+// server's stand-in answer alike. For the index, the ETag below makes the
+// browser's revalidation a 304 when nothing changed.
 function notFound(c: Context): Response {
-  c.header("cache-control", "no-store");
+  c.header("cache-control", PUBLISHED_SCRIPT_MISS_CACHE_CONTROL);
   return c.json({ error: "not found" }, 404);
 }
 
@@ -76,7 +73,7 @@ studioScriptsRoute.get("/index", (c) =>
     c,
     PUBLISHED_SCRIPT_INDEX_KEY,
     PUBLISHED_SCRIPT_INDEX_CONTENT_TYPE,
-    INDEX_CACHE_CONTROL,
+    PUBLISHED_SCRIPT_INDEX_CACHE_CONTROL,
   ),
 );
 
@@ -90,6 +87,11 @@ studioScriptsRoute.get("/objects/:id{.+}", (c) => {
     c,
     publishedScriptObjectKey(id),
     PUBLISHED_SCRIPT_CONTENT_TYPE,
-    OBJECT_CACHE_CONTROL,
+    PUBLISHED_SCRIPT_OBJECT_CACHE_CONTROL,
   );
 });
+
+// Every other path under the prefix is this route's 404 too. Without it a
+// misspelt path would fall through to the app shell, a 200 of HTML, and a tool
+// that trusts the status would take that for an answer.
+studioScriptsRoute.all("*", (c) => notFound(c));

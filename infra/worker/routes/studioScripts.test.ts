@@ -1,6 +1,8 @@
+import { Hono } from "hono";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { studioScriptsRoute } from "./studioScripts";
 import {
+  PUBLISHED_SCRIPTS_PATH,
   PUBLISHED_SCRIPT_INDEX_KEY,
   publishedScriptObjectKey,
 } from "../../../src/studio/plans/publishedScripts";
@@ -137,5 +139,40 @@ describe("studioScriptsRoute objects", () => {
     expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
     expect(response.headers.get("etag")).toBe(`"${ID}"`);
     expect(await response.text()).toBe("");
+  });
+});
+
+describe("studioScriptsRoute other paths", () => {
+  // Mounted as worker/index.ts mounts it, in front of an app shell that
+  // answers everything else with a 200, as the SPA's not-found handling does.
+  function mounted() {
+    const app = new Hono();
+    app.route(PUBLISHED_SCRIPTS_PATH, studioScriptsRoute);
+    app.all("*", (c) => c.html("<!doctype html>"));
+    return app;
+  }
+
+  it.each([
+    ["GET", ""],
+    ["GET", "/"],
+    ["GET", "/indexx"],
+    ["GET", "/index/"],
+    ["GET", "/objects/"],
+    ["GET", "/anything/else"],
+    ["POST", "/index"],
+    ["DELETE", `/objects/${ID}`],
+  ])("answers %s %s with the route's own 404, never the app shell", async (method, tail) => {
+    const { env, get } = bucketOf({});
+
+    const response = await mounted().request(
+      request(`${PUBLISHED_SCRIPTS_PATH}${tail}`, { method }),
+      undefined,
+      env,
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(get).not.toHaveBeenCalled();
   });
 });

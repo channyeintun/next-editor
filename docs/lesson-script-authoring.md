@@ -195,7 +195,9 @@ picker simply renders without the video.
             watch the performance, confirm "Checks (N/N ok)" + receipts
    → agents with browser access drive the user's Chrome and watch live;
      do not verify with the headless harness
-     (bun scripts/studio-render.ts exists for CI/repeatability audits only)
+     (bun scripts/studio-render.ts is for unattended renders, workflows and
+     replacing a published lesson, not this verify step; see
+     studio-m0-runbook.md)
    → for a JS/TS preview fixture, repeat from a clean page and require both
      renders to pass normalized repeatability before claiming support
 4. A human watches the full replay (/studio?plan=<slug>) and decides on a draft.

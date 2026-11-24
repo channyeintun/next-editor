@@ -20,7 +20,24 @@ doc is the "how do I ship a change / set this up from scratch" reference.
 
 ## Regular deploy (the common case)
 
-Once everything below is set up, shipping a change is two commands:
+Once everything below is set up, shipping a change is two commands.
+
+Lesson scripts are not in the build: `/studio` reads them from R2
+(`studio-scripts/`, served by `/api/studio/scripts`), and they are put there by
+`bun scripts/lesson-scripts.ts publish --remote` (a person runs it, or an agent
+on that person's word; it uses their wrangler login and publishes the committed
+lessons at `HEAD`, which must be on `origin/main`). Two cases need it around a
+deploy:
+
+- **The first deploy of an environment** (a new bucket): publish _before_ the
+  build. Without it `/api/studio/scripts/index` is a 404 and `/studio` has no
+  lessons.
+- **A deploy that changes the script schema or the Director**
+  (`src/studio/script/`, `src/studio/inPageDirector.ts`): deploy first, then
+  publish the lessons that need the change. The publish warns when that code
+  changed since the commit the live index was built from.
+
+A new or changed lesson on its own needs no deploy: publishing it is enough.
 
 ```sh
 bun run build          # from the repo root — builds dist/
@@ -160,7 +177,11 @@ for the **Workers KV Storage: Edit** scope.
 
 ### 6. First deploy (no custom domain yet)
 
+Publish the lesson scripts first: the build does not carry them (see
+"Regular deploy" above).
+
 ```sh
+bun scripts/lesson-scripts.ts publish --remote
 bun run build
 cd infra
 npx wrangler deploy

@@ -53,7 +53,9 @@ and manifest, the repeatability verdict, the lesson bundle (handed over as bytes
 by the studio, no downloads) and screenshots, and exits non-zero unless every
 render passed and the comparison is clean. `--speed=full` (the default) renders
 off the wall clock where a lesson allows it; `--speed=real` performs in real
-time. Each render may take 420 s plus twice the local script's estimated
+time. A lesson stays in real time when it opens a live preview, starts a runtime
+or makes a live/network run, or when the render records the screen or the
+camera; report.json's `clock` says which clock a render used. Each render may take 420 s plus twice the local script's estimated
 narration length (the fixed 420 s alone for a slug with no local script). The
 first render of each command also records the page's visibility and animation
 frame rate in `page-environment.json`, and warns when the page is hidden or runs
@@ -159,8 +161,9 @@ The editorial contract lives in [studio-persona.md](./studio-persona.md)
 
 ```text
 1. Pick one concept; write src/studio/scripts/<slug>.yaml (scenes, [[mark]]s,
-   per-scene sources — the critic flags unsourced scenes). The file
-   auto-registers by filename; never edit src/studio/plans/index.ts.
+   per-scene sources — the critic flags unsourced scenes). The file name
+   must be its lesson.slug; nothing registers it in code (never edit
+   src/studio/plans/index.ts).
 2. bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml
    → optional preflight: validates schema/markers/dialogs, runs the advisory
    critic, and writes <slug>.critique.json next to the YAML. It emits NO
@@ -177,8 +180,10 @@ The editorial contract lives in [studio-persona.md](./studio-persona.md)
 > **Historical (M0/M1).** The original M0 flow hard-coded a compiled
 > `StudioPlan` and registered it by editing `src/studio/plans/index.ts`, and an
 > early Director build emitted `src/studio/plans/scripts/<slug>.json`. Neither
-> applies now: checked-in `src/studio/scripts/*.yaml` auto-register via
-> `import.meta.glob`, and the script is compiled **in the render page**
+> applies now: checked-in `src/studio/scripts/*.yaml` are read from the folder
+> by the dev server (`build/lessonScriptsDevPlugin.ts`) and from R2 on the site
+> (published with `bun scripts/lesson-scripts.ts publish --remote`; nothing is
+> bundled), and the script is compiled **in the render page**
 > (`src/studio/inPageDirector.ts`) at render time. There is no emitted plan JSON
 > and no registry edit; the Director CLI only writes the `.critique.json`
 > sidecar.
@@ -210,9 +215,10 @@ The Director CLI validates the script (`src/studio/script/schema.ts`), checks
 marker resolution and dialog segmentation, runs the advisory critic, and writes
 `<slug>.critique.json` next to the YAML. It emits **no** compiled plan — the
 in-page Director (`src/studio/inPageDirector.ts`) compiles the script at render
-time. Checked-in `src/studio/scripts/*.yaml` **auto-register by filename**
-(`import.meta.glob` in `src/studio/plans/index.ts`) — no code edit, no registry
-entry; render at `/studio?plan=<slug>`. Running the Director with no arguments
+time. No code edit and no registry entry: under `bun run dev` the studio reads
+the folder (reload `/studio` after a change); on nexteditor.dev it reads what
+`bun scripts/lesson-scripts.ts publish --remote` published. Render at
+`/studio?plan=<slug>`. Running the Director with no arguments
 validates every script. It keeps going past a bad script: each failure prints
 as `✗ <file>: <message>`, the run ends with `N of M script(s) valid` (plus
 `N script(s) failed`), and it exits 1 if any script failed. A `voxcpm2-modal`

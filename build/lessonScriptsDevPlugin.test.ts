@@ -5,9 +5,32 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parsePublishedScriptIndex } from "../src/studio/plans/publishedScripts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  parsePublishedScriptIndex,
+  PUBLISHED_SCRIPT_CONTENT_TYPE,
+  PUBLISHED_SCRIPT_INDEX_CACHE_CONTROL,
+  PUBLISHED_SCRIPT_INDEX_CONTENT_TYPE,
+  PUBLISHED_SCRIPT_MISS_CACHE_CONTROL,
+  PUBLISHED_SCRIPT_OBJECT_CACHE_CONTROL,
+} from "../src/studio/plans/publishedScripts";
 import { createLessonScriptsMiddleware } from "./lessonScriptsDevPlugin";
+
+// Lets a test give entries an id other than the bare hash, as a later change
+// to the id rule in publishedScriptEntry.ts would.
+const entryIds = vi.hoisted(() => ({ rewrite: null as ((id: string) => string) | null }));
+vi.mock("../src/studio/plans/publishedScriptEntry", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("../src/studio/plans/publishedScriptEntry")>();
+  return {
+    ...original,
+    publishedScriptFileOf: async (bytes: Uint8Array) => {
+      const file = await original.publishedScriptFileOf(bytes);
+      const rewrite = entryIds.rewrite;
+      return rewrite ? { ...file, entry: { ...file.entry, id: rewrite(file.entry.id) } } : file;
+    },
+  };
+});
 
 const FIXTURES = fileURLToPath(new URL("../src/studio/script/__fixtures__/", import.meta.url));
 
@@ -51,7 +74,10 @@ beforeEach(() => {
   copyFileSync(join(FIXTURES, "go-swap.yaml"), join(dir, "go-swap.yaml"));
 });
 
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+afterEach(() => {
+  entryIds.rewrite = null;
+  rmSync(dir, { recursive: true, force: true });
+});
 
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
@@ -61,8 +87,8 @@ describe("the dev server's lesson scripts", () => {
     const index = await ask(middleware, "/api/studio/scripts/index");
     expect(index.status).toBe(200);
     expect(index.headers).toMatchObject({
-      "content-type": "application/json",
-      "cache-control": "no-cache",
+      "content-type": PUBLISHED_SCRIPT_INDEX_CONTENT_TYPE,
+      "cache-control": PUBLISHED_SCRIPT_INDEX_CACHE_CONTROL,
     });
     const parsed = parsePublishedScriptIndex(JSON.parse(index.body.toString()));
     const bytes = readFileSync(join(dir, "go-swap.yaml"));
@@ -71,9 +97,27 @@ describe("the dev server's lesson scripts", () => {
 
     const object = await ask(middleware, `/api/studio/scripts/objects/${sha256(bytes)}`);
     expect(object.status).toBe(200);
-    expect(object.headers["content-type"]).toBe("text/plain; charset=utf-8");
+    expect(object.headers).toMatchObject({
+      "content-type": PUBLISHED_SCRIPT_CONTENT_TYPE,
+      "cache-control": PUBLISHED_SCRIPT_OBJECT_CACHE_CONTROL,
+    });
     expect(object.body.equals(bytes)).toBe(true);
     expect(warnings).toEqual([]);
+  });
+
+  it("serves each script under the id its index entry names", async () => {
+    entryIds.rewrite = (id) => [...id].reverse().join("");
+    const middleware = createLessonScriptsMiddleware(dir, (line) => warnings.push(line));
+    const index = parsePublishedScriptIndex(
+      JSON.parse((await ask(middleware, "/api/studio/scripts/index")).body.toString()),
+    );
+    const bytes = readFileSync(join(dir, "go-swap.yaml"));
+    const { id } = index.lessons["go-swap"];
+    expect(id).not.toBe(sha256(bytes));
+
+    const object = await ask(middleware, `/api/studio/scripts/objects/${id}`);
+    expect(object.status).toBe(200);
+    expect(object.body.equals(bytes)).toBe(true);
   });
 
   it("leaves out a file that does not parse or is misnamed, with one warning each", async () => {
@@ -108,7 +152,7 @@ describe("the dev server's lesson scripts", () => {
     ]) {
       const answer = await ask(middleware, url);
       expect({ url, status: answer.status }).toEqual({ url, status: 404 });
-      expect(answer.headers["cache-control"]).toBe("no-store");
+      expect(answer.headers["cache-control"]).toBe(PUBLISHED_SCRIPT_MISS_CACHE_CONTROL);
     }
     expect((await ask(middleware, "/api/studio/scripts/index", "POST")).status).toBe(404);
   });

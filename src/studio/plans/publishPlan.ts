@@ -110,3 +110,43 @@ export function planPublish(input: PublishPlanInput): PublishPlan {
     refusals,
   };
 }
+
+/**
+ * Why the index must not be put after all, or null when it may: the live index
+ * is read again just before the put, and anything other than what this publish
+ * planned from means another publish wrote it meanwhile. Putting over it could
+ * put back an older commit's lessons. The bucket has no conditional put, so
+ * this narrows the window to the moment between the read and the put.
+ */
+export function liveIndexMovedProblem(
+  planned: { text: string } | null,
+  now: { text: string } | null,
+): string | null {
+  if ((planned?.text ?? null) === (now?.text ?? null)) return null;
+  return "the live index changed during this publish (another publish wrote it): nothing was put over it; run the publish again";
+}
+
+/**
+ * The code a published script is read with on the site: the schema and the
+ * Director that turns a script into a lesson. A lesson that needs a change
+ * here works on the site only once a studio built with that change is deployed.
+ */
+export const LESSON_SCRIPT_READER_PATHS: readonly string[] = [
+  "src/studio/script/",
+  "src/studio/inPageDirector.ts",
+];
+
+/**
+ * The files of `changed` (paths from the repository root) that the site reads
+ * scripts with. Tests and their fixtures are not built into the site.
+ */
+export function lessonScriptReaderFiles(changed: readonly string[]): string[] {
+  return changed.filter(
+    (file) =>
+      !/\.test\.tsx?$/.test(file) &&
+      !file.includes("/__fixtures__/") &&
+      LESSON_SCRIPT_READER_PATHS.some((path) =>
+        path.endsWith("/") ? file.startsWith(path) : file === path,
+      ),
+  );
+}
