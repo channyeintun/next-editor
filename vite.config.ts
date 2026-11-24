@@ -202,6 +202,9 @@ export default ({ mode }: { mode: string }) => {
         "tube/vite/**/*.{test,spec}.ts",
         // The build's own steps (Node-side, the node environment as well).
         "build/**/*.{test,spec}.ts",
+        // The studio driver's pure parts (argument parsing, the published-id
+        // check, the SQL for a local session); Node-side as well.
+        "scripts/studio-driver/**/*.{test,spec}.ts",
         // infra/worker/** deliberately excluded: it runs in the Workers runtime,
         // not a browser — that side is tested against real wrangler dev + local
         // D1/R2 (see docs/progress.md), not jsdom.

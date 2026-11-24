@@ -1,218 +1,90 @@
 /**
- * Unattended studio render command (docs/agent-lesson-production.md §12 M2/M3).
+ * The unattended studio driver (docs/agent-lesson-production.md §12 M2/M3).
  *
- *   bun scripts/studio-render.ts [slug] [--runtime=fixture|live] [--runs=2]
- *                                [--url=http://localhost:5173] [--out=studio-out]
+ *   bun scripts/studio-render.ts <slug…>              render, as "render <slug…>"
+ *   bun scripts/studio-render.ts render|workflow|update|status|login …
+ *   bun scripts/studio-render.ts --help               every command and option
  *
- * Drives the /studio route in headless Chrome (playwright-core, system Chrome
- * channel — no browser download), performs the requested number of renders,
- * saves the downloaded lesson bundle plus render reports, the repeatability
- * comparison, and diagnostic screenshots, and exits non-zero unless every
- * render passed and the repeatability comparison is clean.
+ * Drives /studio in system Chrome (playwright-core, no browser download) on a
+ * browser profile of its own, kept outside the repository, so a sign-in, the
+ * narration cache and the narration settings outlast one command. It works
+ * through the studio's automation surface (window.__NEXT_EDITOR_STUDIO__
+ * .automation, src/studio/studioWindowHandle.ts) and never clicks, and it
+ * exits non-zero unless everything it was asked to do passed.
  *
- * Requires a running dev server (`bun run dev`); the script fails fast with
- * that instruction rather than spawning servers behind your back.
+ * Against a dev server it needs one running (`bun run dev`, and
+ * `bun run dev:worker` for anything signed in); it fails fast with that
+ * instruction rather than starting servers behind your back.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { chromium, type Page } from "playwright-core";
-import YAML from "yaml";
-import {
-  estimateNarrationMsForRenderWait,
-  studioRenderWaitMs,
-} from "../src/studio/renderLaunch.ts";
-import { extractScriptNarration } from "../src/studio/script/markers.ts";
-import { parseLessonScript } from "../src/studio/script/schema.ts";
-import type { StudioWindowHandle } from "../src/studio/studioWindowHandle.ts";
+import { homedir } from "node:os";
+import type { Page } from "playwright-core";
+import { HELP, parseArgs } from "./studio-driver/args.ts";
+import { runLoginCommand, runStatusCommand } from "./studio-driver/accountCommands.ts";
+import { DriverError, launchStudioBrowser } from "./studio-driver/browser.ts";
+import { runRenderCommand, runUpdateCommand } from "./studio-driver/renderCommand.ts";
+import { runWorkflowCommand } from "./studio-driver/workflowCommand.ts";
 
-interface CliOptions {
-  slug: string;
-  runtime: "fixture" | "live";
-  runs: number;
-  baseUrl: string;
-  outDir: string;
-}
+// Whether a command ran, so its verdict is printed (help and argument errors have none).
+let ranCommand = false;
 
-function parseArgs(argv: string[]): CliOptions {
-  const options: CliOptions = {
-    slug: "rust-borrow",
-    runtime: "fixture",
-    runs: 2,
-    baseUrl: "http://localhost:5173",
-    outDir: "studio-out",
-  };
-  for (const arg of argv) {
-    if (arg.startsWith("--runtime=")) {
-      const value = arg.slice("--runtime=".length);
-      if (value !== "fixture" && value !== "live") {
-        throw new Error(`--runtime must be fixture or live, got "${value}"`);
-      }
-      options.runtime = value;
-    } else if (arg.startsWith("--runs=")) {
-      options.runs = Math.max(1, Number.parseInt(arg.slice("--runs=".length), 10) || 2);
-    } else if (arg.startsWith("--url=")) {
-      options.baseUrl = arg.slice("--url=".length);
-    } else if (arg.startsWith("--out=")) {
-      options.outDir = arg.slice("--out=".length);
-    } else if (!arg.startsWith("--")) {
-      options.slug = arg;
-    }
-  }
-  return options;
-}
-
-async function readStudioState(page: Page): Promise<StudioWindowHandle | null> {
-  return page.evaluate(() => {
-    const handle = window.__NEXT_EDITOR_STUDIO__;
-    return handle ? (JSON.parse(JSON.stringify(handle)) as StudioWindowHandle) : null;
+async function main(): Promise<number> {
+  const parsed = parseArgs(process.argv.slice(2), {
+    studioProfile: process.env.STUDIO_PROFILE,
+    home: homedir(),
+    cwd: process.cwd(),
   });
-}
-
-async function waitForRunCount(
-  page: Page,
-  count: number,
-  timeoutMs: number,
-): Promise<StudioWindowHandle> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const state = await readStudioState(page);
-    if (state && state.runs.length >= count && !state.running) {
-      return state;
-    }
-    if (Date.now() > deadline) {
-      throw new Error(`Timed out waiting for render #${count} to finish`);
-    }
-    await new Promise((resolvePoll) => setTimeout(resolvePoll, 1_000));
+  if ("error" in parsed) {
+    console.error(
+      `studio-render: ${parsed.error}\n(bun scripts/studio-render.ts --help lists every command)`,
+    );
+    return 2;
   }
-}
-
-/**
- * Pre-synthesis narration estimate for a checked-in LessonScript, used only to
- * size the render wait, or 0 when the slug has no script file here
- * (an imported script) — the wait then falls back to its fixed base.
- */
-function estimatedNarrationMsFor(slug: string): number {
-  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  const scriptPath = join(repoRoot, "src/studio/scripts", `${slug}.yaml`);
-  if (!existsSync(scriptPath)) {
+  const { command } = parsed;
+  if (command.kind === "help") {
+    console.log(HELP);
     return 0;
   }
-  const script = parseLessonScript(YAML.parse(readFileSync(scriptPath, "utf8")));
-  const extracted = extractScriptNarration(script);
-  return estimateNarrationMsForRenderWait(extracted.tokens.length);
+  ranCommand = true;
+  // login launches its own browser, after the person's Chrome has closed.
+  if (command.kind === "login") return (await runLoginCommand(command)) ? 0 : 1;
+
+  console.log(
+    `studio-render: ${command.kind} on ${command.shared.url} with the profile ${command.shared.profile}`,
+  );
+  const context = await launchStudioBrowser(command.shared);
+  context.on("page", (page) => watchPage(page));
+  for (const page of context.pages()) watchPage(page);
+  try {
+    switch (command.kind) {
+      case "status":
+        return (await runStatusCommand(context, command)) ? 0 : 1;
+      case "render":
+        return (await runRenderCommand(context, command)) ? 0 : 1;
+      case "workflow":
+        return (await runWorkflowCommand(context, command)) ? 0 : 1;
+      case "update":
+        return (await runUpdateCommand(context, command)) ? 0 : 1;
+    }
+  } finally {
+    await context.close().catch(() => {});
+  }
 }
 
-const options = parseArgs(process.argv.slice(2));
-const renderWaitMs = studioRenderWaitMs(estimatedNarrationMsFor(options.slug));
-const outDir = resolve(
-  options.outDir,
-  `${options.slug}-${new Date().toISOString().replace(/[:.]/g, "-")}`,
-);
-mkdirSync(outDir, { recursive: true });
-
-// Fail fast if the dev server isn't up.
-try {
-  await fetch(options.baseUrl, { signal: AbortSignal.timeout(3_000) });
-} catch {
-  console.error(`studio-render: no dev server at ${options.baseUrl} — start one with: bun run dev`);
-  process.exit(1);
-}
-
-console.log(
-  `studio-render: ${options.slug} (${options.runtime}) ×${options.runs} → ${outDir} (up to ${Math.round(renderWaitMs / 60_000)} min per render)`,
-);
-
-const browser = await chromium.launch({
-  channel: "chrome",
-  headless: true,
-  args: ["--autoplay-policy=no-user-gesture-required", "--mute-audio"],
-});
-
-let exitCode = 0;
-try {
-  const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
-    acceptDownloads: true,
-  });
-  const page = await context.newPage();
+function watchPage(page: Page): void {
   page.on("console", (message) => {
-    if (message.type() === "error") {
-      console.log(`  [page:error] ${message.text().slice(0, 300)}`);
-    }
+    if (message.type() === "error") console.log(`  [page:error] ${message.text().slice(0, 300)}`);
   });
-
-  const url = `${options.baseUrl}/studio?plan=${encodeURIComponent(options.slug)}&runtime=${options.runtime}&autostart=1`;
-  await page.goto(url, { waitUntil: "domcontentloaded" });
-  // The studio honours autostart=1 only when navigator.webdriver is true
-  // (headless Chrome driven over the DevTools pipe reports it); without it the
-  // first render would never start and the wait below would only time out.
-  if (!(await page.evaluate(() => navigator.webdriver))) {
-    throw new Error("navigator.webdriver is false — the studio will not autostart the render");
-  }
-
-  let finalState: StudioWindowHandle | null = null;
-  for (let run = 1; run <= options.runs; run++) {
-    console.log(`  render #${run}…`);
-    if (run > 1) {
-      await page.getByRole("button", { name: "Render again" }).click();
-    }
-    try {
-      // Scaled to the lesson: the narration plays in real time, and a
-      // first-ever render also downloads the ~125MB pocket-tts bundle and
-      // synthesizes every dialog on WASM (see studioRenderWaitMs).
-      finalState = await waitForRunCount(page, run, renderWaitMs);
-    } catch (error) {
-      await page.screenshot({ path: join(outDir, `run-${run}-timeout.png`), fullPage: true });
-      throw error;
-    }
-    const entry = finalState.runs[run - 1];
-    console.log(`  render #${run}: ${entry.outcome}`);
-    writeFileSync(join(outDir, `run-${run}-report.json`), JSON.stringify(entry.report, null, 2));
-    writeFileSync(
-      join(outDir, `run-${run}-manifest.json`),
-      JSON.stringify(entry.manifest, null, 2),
-    );
-    if (entry.outcome !== "passed") {
-      exitCode = 1;
-      await page.screenshot({ path: join(outDir, `run-${run}-failed.png`), fullPage: true });
-    }
-  }
-
-  // Repeatability verdict (published by the controller after run ≥ 2).
-  if (finalState && options.runs >= 2) {
-    writeFileSync(join(outDir, "comparison.json"), JSON.stringify(finalState.comparison, null, 2));
-    const comparisonOk = Boolean(
-      finalState.comparison?.length && finalState.comparison.every((check) => check.ok),
-    );
-    console.log(`  repeatability: ${comparisonOk ? "PASS" : "FAIL"}`);
-    if (!comparisonOk) {
-      exitCode = 1;
-    }
-  }
-
-  // Pull the lesson bundle from the last passing render via the download button.
-  const lastEntry = finalState?.runs.at(-1);
-  if (lastEntry?.outcome === "passed") {
-    const downloads: Promise<void>[] = [];
-    page.on("download", (download) => {
-      downloads.push(download.saveAs(join(outDir, download.suggestedFilename())));
-    });
-    await page.getByRole("button", { name: "Download bundle" }).click();
-    // Four programmatic downloads fire back-to-back; give them a beat to register.
-    await page.waitForTimeout(3_000);
-    await Promise.all(downloads);
-    console.log(`  bundle: ${downloads.length} files saved`);
-  }
-
-  await page.screenshot({ path: join(outDir, "final.png"), fullPage: true });
-} catch (error) {
-  exitCode = 1;
-  console.error(`studio-render: ${error instanceof Error ? error.message : String(error)}`);
-} finally {
-  await browser.close();
 }
 
-console.log(exitCode === 0 ? "studio-render: PASS" : "studio-render: FAIL");
+let exitCode: number;
+try {
+  exitCode = await main();
+} catch (error) {
+  console.error(
+    `studio-render: ${error instanceof DriverError ? error.message : error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+  );
+  exitCode = 1;
+}
+if (ranCommand) console.log(exitCode === 0 ? "studio-render: PASS" : "studio-render: FAIL");
 process.exit(exitCode);

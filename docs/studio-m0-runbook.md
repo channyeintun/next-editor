@@ -13,21 +13,67 @@ adds the editorial/critic loop and in-page pocket-tts synthesis.
 ## Unattended renders (M2)
 
 ```text
-bun run dev                       # in one terminal
-bun scripts/studio-render.ts rust-borrow             # two renders + comparison (CI only)
-bun scripts/studio-render.ts <slug> --runtime=live --runs=2 --out=studio-out
+bun run dev                       # in one terminal (and bun run dev:worker for anything signed in)
+bun scripts/studio-render.ts rust-borrow             # render twice + comparison, as "render rust-borrow"
+bun scripts/studio-render.ts render <slug…> --runtime=live --runs=2 --speed=real --out=studio-out
+bun scripts/studio-render.ts status                  # sign-in, narration provider and voice, lesson index
+bun scripts/studio-render.ts login --local           # sign the dev server in as a fixed test user
+bun scripts/studio-render.ts login --url=https://nexteditor.dev   # a person signs in once
+bun scripts/studio-render.ts workflow <slug…> --publish --thumbnails=<dir> --url=https://nexteditor.dev
+bun scripts/studio-render.ts update <slug> --url=https://nexteditor.dev [--replace]
+bun scripts/studio-render.ts --help                  # every command and option
 ```
 
-Drives `/studio` in headless system Chrome (playwright-core, no browser
-download), saves per-run reports/manifests, the repeatability verdict, the
-downloaded lesson bundle, and diagnostic screenshots under `studio-out/`, and
-exits non-zero unless every render passed and the comparison is clean. Each
-render may take 420 s plus twice the script's estimated narration length (the
-fixed 420 s alone for a slug with no checked-in script). The harness opens
-`/studio?…&autostart=1` and checks that `navigator.webdriver` is true, since the
-studio honours `autostart` only in an automation-controlled browser.
+Drives `/studio` in system Chrome (playwright-core, no browser download),
+headless unless `--headed`, at 1440×900. It launches Chrome once per command on
+a browser profile of its own, outside the repository (`--profile`, else
+`STUDIO_PROFILE`, else `~/.next-editor/studio-profile`), so a sign-in, the
+narration cache, the Pocket bundle and the narration settings outlast one
+command. One command per profile at a time: a second one is refused with
+"in use". State in the profile is kept **per site**: what `--url=http://localhost:5173`
+signed in, narrated or stored is not there for `--url=https://nexteditor.dev`.
+
+The driver never clicks. It opens a bare `/studio` and calls the studio's
+automation surface (`window.__NEXT_EDITOR_STUDIO__.automation`, typed in
+`src/studio/studioWindowHandle.ts`), which the studio offers only when
+`navigator.webdriver` is true and which applies the same start rules as the
+buttons. Before it starts anything it waits for the studio to say it is ready
+and fails at once with the reason it gives; it refuses a profile that records
+the screen (no one can answer the picker); and with a paid narration provider
+(VoxCPM2, AthanLab) it refuses dialogs the profile has not kept, printing how
+many, unless `--allow-synthesis` is given. Against a site that is not this
+machine it compares each local script's SHA-256 with the id the site publishes
+and refuses on a difference, saying to publish first
+(`bun scripts/lesson-scripts.ts publish --remote`), unless `--published` says
+to render what the site has; the id it rendered is written to `script.json`
+(and to `workflow.json` for a workflow).
+
+`render` saves, per lesson under `studio-out/<slug>-<time>/`, each run's report
+and manifest, the repeatability verdict, the lesson bundle (handed over as bytes
+by the studio, no downloads) and screenshots, and exits non-zero unless every
+render passed and the comparison is clean. `--speed=full` (the default) renders
+off the wall clock where a lesson allows it; `--speed=real` performs in real
+time. Each render may take 420 s plus twice the local script's estimated
+narration length (the fixed 420 s alone for a slug with no local script). The
+first render of each command also records the page's visibility and animation
+frame rate in `page-environment.json`, and warns when the page is hidden or runs
+under 30 frames a second. `workflow` prints each lesson's progress and leaves
+`workflow.json` (per lesson: status, draft id, published slug, script id) and a
+`<slug>.issue.md` for each failed lesson; `--resume` goes on with the workflow
+stored in the profile. `update` renders a lesson once, finds the signed-in
+author's published lesson by its title (or `--lesson=<url slug>`), prints what
+would change (caption cues, durations), and replaces it in place only with
+`--replace`.
+
+`login --url=<site>` starts Chrome itself on the profile, with no automation (so
+Google's sign-in accepts it) and with the cookie storage the driven launches can
+read; sign in, close the window, and it checks `/api/auth/me`. Never open the
+profile in your everyday Chrome: its cookies would become unreadable to the
+driver. `login --local` works only on a loopback URL: it applies the local D1
+migrations, adds one fixed test user and a session to the local D1 that
+`bun run dev:worker` reads, and puts the session cookie in the profile.
 Verification of lessons happens in a real Chrome via the /studio flow; this
-harness remains for CI and repeatability audits.
+driver is for unattended renders, workflows and repeatability audits.
 
 ## Draft publishing (M3)
 
@@ -122,8 +168,8 @@ The editorial contract lives in [studio-persona.md](./studio-persona.md)
    weigh critic notes (the critic proposes; it cannot block or approve).
 3. Verify in a real Chrome: bun run dev, open /studio?plan=<slug>, press
    Start render, watch the performance, confirm "Checks (N/N ok)". The
-   headless bun scripts/studio-render.ts is a CI/repeatability audit, not the
-   authoring verify step.
+   unattended bun scripts/studio-render.ts is for renders, workflows and
+   repeatability audits, not the authoring verify step.
 4. Watch the rendered lesson end-to-end (/studio playback).
 5. Create draft… → review in the lessons UI → publish (human, separate).
 ```
@@ -289,8 +335,9 @@ open http://localhost:5173/studio
 
 - Click **Start render** (a click satisfies the browser's audio autoplay policy).
   `/studio?autostart=1` starts a render without the click only when
-  `navigator.webdriver` is true — the headless `scripts/studio-render.ts`
-  harness. In a normal browser the plan is preselected and waits for the click.
+  `navigator.webdriver` is true (an automation-controlled browser; the
+  `scripts/studio-render.ts` driver calls the studio's automation surface
+  instead). In a normal browser the plan is preselected and waits for the click.
 - Click **Render again** after the first run finishes: the panel then shows the
   normalized **Repeatability** verdict between the two runs (also compared across a
   reload within one browsing session via `sessionStorage`).
