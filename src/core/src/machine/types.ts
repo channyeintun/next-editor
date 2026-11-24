@@ -331,6 +331,12 @@ export interface EditorMachineContext extends EditorMachineHostHooks {
   learnerWorkspaceBaseline: WorkspaceRecordingSnapshot | null;
   /** Whether the next editor mount should resync playback state */
   pendingPlaybackEditorSync: boolean;
+  /**
+   * The frame a hand-over to the viewer resolved while the editor had not yet bound the
+   * file it belongs to. Its text is already in the workspace; the binding shows its caret,
+   * selection and scroll, once (frameReplay.ts showFrameAwaitingEditor).
+   */
+  frameAwaitingEditor: EditorFrame | null;
   /** Whether the playback audio element has been spawned for the loaded recording */
   playbackAudioSpawned: boolean;
 }
@@ -715,6 +721,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     viewerPanelHolds: {},
     learnerWorkspaceBaseline: null,
     pendingPlaybackEditorSync: false,
+    frameAwaitingEditor: null,
     playbackAudioSpawned: false,
     lastAppliedFrameIndex: -1,
     lastAppliedPreviewEventIndex: -1,

@@ -42,6 +42,7 @@ import {
   MonacoEditor,
   monaco,
   getOrCreatePlaybackModel,
+  isPlaybackModelUri,
   syncWorkspaceModel,
   toMonacoModelPath,
   toPlaybackModelPath,
@@ -560,6 +561,18 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
   };
 
   /**
+   * After MonacoEditor swapped a model in: restore the file's view, then tell the
+   * machine of the binding, so a recorded caret and scroll the machine shows on it (a
+   * seek while paused that opened this file) are the last write. A playback model was
+   * already told of by the model-change listener (syncPlaybackEditorModel).
+   */
+  const restoreViewAndBind = (editor: StandaloneEditor, model: monaco.editor.ITextModel | null) => {
+    viewStates.restore(editor, model);
+    const shown = editor.getModel();
+    if (!shown || !isPlaybackModelUri(shown.uri)) syncEditorRef(editor);
+  };
+
+  /**
    * Handle Monaco Editor mount event
    * Sets up the editor reference for use in recording and replay
    *
@@ -572,12 +585,14 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
   const handleEditorDidMount = (editor: StandaloneEditor) => {
     disposeEditorListeners();
     editorRef.current = editor;
+    // The file's own view first: the machine may show a recorded caret and scroll on
+    // the binding (a seek while paused that opened this file), and that must win.
+    viewStates.restore(editor, editor.getModel());
     syncEditorRef(editor);
     const mountedModel = editor.getModel();
     if (mountedModel) {
       modelVersionByUriRef.current.set(mountedModel.uri.toString(), mountedModel.getVersionId());
     }
-    viewStates.restore(editor, editor.getModel());
 
     focusEditorIfNeeded(editor);
 
@@ -596,7 +611,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
         }
 
         disposePlaybackModelsIfIdle(editor.getModel()?.uri ?? null);
-        syncEditorRef(editor);
+        // MonacoEditor only swaps a workspace model in, and restoreViewAndBind tells the
+        // machine once the file's view is back.
         presence.publishCursor(editor);
         presence.publishViewport(editor);
         yMonacoBinding.reconcile(editor);
@@ -701,7 +717,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
                   model={activeModel}
                   onMount={handleEditorDidMount}
                   onBeforeModelChange={viewStates.save}
-                  onAfterModelChange={viewStates.restore}
+                  onAfterModelChange={restoreViewAndBind}
                   onWillDispose={viewStates.saveBeforeDispose}
                   options={editorOptions}
                 />

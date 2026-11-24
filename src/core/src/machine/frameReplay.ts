@@ -17,6 +17,7 @@ import { applyContentDiff } from "../utils/editorDiff";
 import { reportMachineError } from "./machineError";
 import { asReplayWrite, isLearnerCaretHeld, showRecordedCaret } from "./playbackCaret";
 import { resolveBoundedReplayTime } from "./replayStep";
+import { getRecordedActiveFilePath } from "./replayState";
 
 // ============================================================================
 // Editor frame replay
@@ -89,6 +90,37 @@ export function latestEditorModelBoundaryTime(
   }
 
   return boundaryTimes[boundedIndex] ?? null;
+}
+
+/**
+ * Whether the frame at `frameIndex` was captured before the open file's model came to
+ * the front, so it belongs to the file open before (latestEditorModelBoundaryTime).
+ */
+function predatesOpenFileModel(
+  context: EditorMachineContext,
+  frames: readonly DeltaFrame[],
+  frameIndex: number,
+): boolean {
+  const boundaryTime = latestEditorModelBoundaryTime(
+    context.recording?.workspaceEvents,
+    context.lastAppliedWorkspaceEventIndex,
+  );
+  return boundaryTime !== null && frames[frameIndex].timestamp < boundaryTime;
+}
+
+/**
+ * Whether the file in front of the viewer is the one the recording has open at
+ * `workspaceEventIndex`. Frames carry no file path, so a frame may only be shown in, or
+ * copied into, that file: a file the viewer opened themselves never gets one.
+ */
+export function isRecordedFileInFront(
+  context: EditorMachineContext,
+  workspaceEventIndex: number,
+): boolean {
+  const recordedPath = getRecordedActiveFilePath(context.recording, workspaceEventIndex);
+  return (
+    recordedPath !== undefined && context.getWorkspaceSnapshot?.()?.activeFilePath === recordedPath
+  );
 }
 
 /**
@@ -294,17 +326,12 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
 
   const frameIndex = findFrameIndexAtTime(frames, currentTime, lastAppliedFrameIndex);
 
-  const editorModelBoundaryTime = latestEditorModelBoundaryTime(
-    recording.workspaceEvents,
-    context.lastAppliedWorkspaceEventIndex,
-  );
-
   // Checked before the "same frame as last time" return below: a file can be
   // opened between two applies with no new frame captured (away from the open
   // file and back). The frame on screen then predates the file's model, and a
   // seek to this time would not apply it, so a tick must stop counting it as
   // applied too.
-  if (editorModelBoundaryTime !== null && frames[frameIndex].timestamp < editorModelBoundaryTime) {
+  if (predatesOpenFileModel(context, frames, frameIndex)) {
     if (frameIndex === lastAppliedFrameIndex && currentFrame === null) {
       return {};
     }
@@ -339,3 +366,79 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
 
   return updates;
 };
+
+/**
+ * The workspace goes to the viewer (a seek while paused or ended, a pause, the end) while
+ * the frame at the playhead waits for the editor to bind the file a replayed switch just
+ * put in front (pendingPlaybackEditorSync). The hand-over detaches, so no binding after it
+ * re-syncs the replay, and the file would show the workspace event's text, without what
+ * was typed since, until PLAY. So the frame is resolved here without the editor:
+ * adoptPlaybackWorkspaceAtPause puts its text into the file before the editor shows it,
+ * and it is kept for the binding to show its caret, selection and scroll.
+ *
+ * Only while the file in front is the one the recording has open: a file the viewer
+ * opened gets no frame.
+ */
+export const resolveFrameWithheldForEditor = ({
+  context,
+  event,
+}: EditorActionArgs): EditorContextUpdate => {
+  const frames = context.recording?.frames;
+  // Without an editor (a binary file is shown) no frame is applied anywhere, as in
+  // applyFrameAtTime.
+  if (
+    !frames?.length ||
+    !context.editorRefs.editor ||
+    !context.pendingPlaybackEditorSync ||
+    context.hasManualWorkspaceOverride ||
+    !isRecordedFileInFront(context, context.lastAppliedWorkspaceEventIndex)
+  ) {
+    return {};
+  }
+
+  const frameIndex = findFrameIndexAtTime(frames, resolveBoundedReplayTime(context, event));
+  if (predatesOpenFileModel(context, frames, frameIndex)) return {};
+  // Rebuilt from its keyframe: nothing was applied to this file's model to fold onto.
+  const frame = foldFrameAtIndex(
+    { ...context, currentFrame: null, lastAppliedFrameIndex: -1 },
+    frames,
+    frameIndex,
+  );
+  if (!frame) return {};
+
+  mirrorFrameSlideState(context, frame, null);
+  const previewState = mirrorFramePreviewState(context, frame);
+  return {
+    currentFrame: frame,
+    lastAppliedFrameIndex: frameIndex,
+    frameAwaitingEditor: frame,
+    ...(previewState ? { lastAppliedPreviewState: previewState } : {}),
+  };
+};
+
+/**
+ * SET_EDITOR_REF: the editor has bound a model. When it is the file whose frame the
+ * hand-over resolved, it holds exactly that frame's text, and the frame's caret, selection
+ * and scroll are shown on it. A model with other text is another file, or one the viewer
+ * has changed, and gets nothing. Either way the wait ends with this binding: any later
+ * one belongs to the viewer.
+ */
+export const showFrameAwaitingEditor = ({
+  context,
+  event,
+}: EditorActionArgs): EditorContextUpdate => {
+  const frame = context.frameAwaitingEditor;
+  if (event.type !== "SET_EDITOR_REF" || !event.editor || !frame) return {};
+  if (
+    context.hasManualWorkspaceOverride &&
+    event.editor.getModel()?.getValue() === frame.state.content
+  ) {
+    applyFrameState(event.editor, frame);
+  }
+  return { frameAwaitingEditor: null };
+};
+
+/** The viewer acted, or the recording changed, before the editor bound the frame's file. */
+export const clearFrameAwaitingEditor = (): EditorContextUpdate => ({
+  frameAwaitingEditor: null,
+});

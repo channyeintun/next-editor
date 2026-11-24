@@ -17,6 +17,7 @@ import type {
   CameraRecordingInput,
 } from "./cameraActor";
 import { getPlaybackAudioState } from "./playbackActors";
+import type { LearnerWorkspaceSave } from "./learnerWorkspace";
 import { fromTypedCallback } from "./fromTypedCallback";
 import type { CaptionTrack, EditorFrame, Recording, RecordingStreamDelta } from "../types";
 import type { ChatCheckpoint } from "../chat";
@@ -2359,22 +2360,31 @@ describe("editorMachine actor lifecycle", () => {
   });
 
   // A paused SEEK reattaches the recorded workspace for that one transition and detaches
-  // again, so no model swap (and no SET_EDITOR_REF) ever follows it. The pending editor
-  // sync that reattaching sets used to make every paused scrub skip its target frame.
+  // again, so the playback model never swaps in. Inside one file no model swap follows it
+  // at all, and the target frame is applied in the seek. A seek that replays a switch to
+  // another file puts the frame's text into the workspace, and the editor's binding of
+  // that file shows the frame's caret and scroll.
   describe("seeking while paused", () => {
-    const keyframe = (timestamp: number, content: string): Recording["frames"][number] => ({
+    const keyframe = (
+      timestamp: number,
+      content: string,
+      frameSelection = selection,
+    ): Recording["frames"][number] => ({
       timestamp,
       isKeyframe: true,
       state: {
         content,
-        selection,
+        selection: frameSelection,
         position: { lineNumber: 1, column: 1 },
         viewState: null,
         mouseCursor: { x: 0, y: 0, visible: false },
       },
     });
 
-    const loadReady = async (recording: Recording) => {
+    const loadReady = async (
+      recording: Recording,
+      onLearnerWorkspaceSaved?: (save: LearnerWorkspaceSave) => void,
+    ) => {
       const editor = new MockEditor(new MockTextModel("outside"));
       const workspace = {
         current: createTwoFileWorkspaceSnapshot("a.ts", "outside-a", "outside-b"),
@@ -2386,6 +2396,7 @@ describe("editorMachine actor lifecycle", () => {
           applyWorkspaceSnapshot: (snapshot) => {
             workspace.current = snapshot;
           },
+          onLearnerWorkspaceSaved,
         },
       }).start();
 
@@ -2404,6 +2415,14 @@ describe("editorMachine actor lifecycle", () => {
 
       return { actor, editor, workspace };
     };
+
+    const caretAt2 = {
+      ...selection,
+      startColumn: 2,
+      endColumn: 2,
+      selectionStartColumn: 2,
+      positionColumn: 2,
+    } as monaco.Selection;
 
     const recordingOnOneFile = (): Recording => ({
       ...createRecording(),
@@ -2431,10 +2450,20 @@ describe("editorMachine actor lifecycle", () => {
       expect(context.hasManualWorkspaceOverride).toBe(true);
       expect(context.pendingPlaybackEditorSync).toBe(false);
 
+      // No model swap follows a seek inside one file, so a binding changes nothing.
+      editor.setSelection(caretAt2);
+      actor.send({
+        type: "SET_EDITOR_REF",
+        editor: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+      });
+      expect(editor.getValue()).toBe("ab");
+      expect(editor.getSelection()).toEqual(caretAt2);
+      expect(workspace.current.project.files["a.ts"].content).toBe("ab");
+
       actor.stop();
     });
 
-    it("still waits for the model swap when the seek replays a file switch", async () => {
+    it("writes no frame into the bound model when the seek replays a file switch", async () => {
       const { actor, editor, workspace } = await startPausedAt50({
         ...createRecording(),
         frames: [keyframe(0, "a-frame"), keyframe(100, "b-frame")],
@@ -2452,10 +2481,11 @@ describe("editorMachine actor lifecycle", () => {
 
       actor.send({ type: "SEEK", time: 150 });
 
-      // b.ts's frame must not land in the a.ts model that is still bound.
+      // b.ts's frame must not land in the a.ts model that is still bound. Its text goes
+      // into the workspace, which the b.ts model the editor binds next is made from.
       expect(workspace.current.activeFilePath).toBe("b.ts");
       expect(editor.getValue()).toBe("a-frame");
-      expect(workspace.current.project.files["b.ts"].content).toBe("b-snapshot");
+      expect(workspace.current.project.files["b.ts"].content).toBe("b-frame");
 
       actor.stop();
     });
@@ -2508,6 +2538,228 @@ describe("editorMachine actor lifecycle", () => {
       expect(workspace.current.project.files["b.ts"].content).toBe("b-user");
 
       actor.stop();
+    });
+
+    // The editor binds another file's model only after the seek, so the frame's text goes
+    // into the workspace in the seek, and the binding shows the frame's caret and scroll.
+    describe("a seek that opens another file", () => {
+      type Loaded = Awaited<ReturnType<typeof loadReady>>;
+      const caretAt3 = {
+        ...selection,
+        startColumn: 3,
+        endColumn: 3,
+        selectionStartColumn: 3,
+        positionColumn: 3,
+      } as monaco.Selection;
+      const recordingWithSwitch = (): Recording => ({
+        ...createRecording(),
+        frames: [keyframe(0, "a-frame"), keyframe(100, "b"), keyframe(120, "bc", caretAt3)],
+        workspaceEvents: [
+          { timestamp: 0, snapshot: createTwoFileWorkspaceSnapshot("a.ts", "a-frame", "") },
+          { timestamp: 100, snapshot: createTwoFileWorkspaceSnapshot("b.ts", "a-frame", "") },
+        ],
+      });
+
+      // CodeEditor shows the workspace model of the file in front, which holds the
+      // workspace's text for it, and then re-asserts the editor ref.
+      const bindOpenFile = ({ actor, editor, workspace }: Loaded) => {
+        const { content } = workspace.current.project.files[workspace.current.activeFilePath];
+        const model = new MockTextModel(typeof content === "string" ? content : "");
+        editor.setModel(model as unknown as monaco.editor.ITextModel);
+        actor.send({
+          type: "SET_EDITOR_REF",
+          editor: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+        });
+        return model;
+      };
+
+      const handOverAt50 = async (
+        state: "paused" | "ended",
+        onLearnerWorkspaceSaved?: (save: LearnerWorkspaceSave) => void,
+      ) => {
+        const loaded = await loadReady(recordingWithSwitch(), onLearnerWorkspaceSaved);
+        loaded.actor.send({ type: "PLAY" });
+        loaded.actor.send({ type: "TICK", currentTime: 50 });
+        loaded.actor.send({ type: state === "paused" ? "PAUSE" : "FINISHED" });
+        expect(loaded.actor.getSnapshot().matches({ playback: state })).toBe(true);
+        expect(loaded.editor.getValue()).toBe("a-frame");
+        return loaded;
+      };
+
+      it.each(["paused", "ended"] as const)(
+        "shows the frame at the playhead once the editor binds the file (%s)",
+        async (state) => {
+          const saves: LearnerWorkspaceSave[] = [];
+          const loaded = await handOverAt50(state, (save) => saves.push(save));
+          const { actor, editor, workspace } = loaded;
+
+          actor.send({ type: "SEEK", time: 150 });
+
+          // a.ts's model, still bound, is never written.
+          expect(editor.getValue()).toBe("a-frame");
+          expect(workspace.current.activeFilePath).toBe("b.ts");
+          expect(workspace.current.project.files["a.ts"].content).toBe("a-frame");
+          expect(workspace.current.project.files["b.ts"].content).toBe("bc");
+
+          const bModel = bindOpenFile(loaded);
+          expect(bModel.getValue()).toBe("bc");
+          expect(editor.getSelection()).toEqual(caretAt3);
+
+          const { context } = actor.getSnapshot();
+          expect(actor.getSnapshot().matches({ playback: state })).toBe(true);
+          expect(context.hasManualWorkspaceOverride).toBe(true);
+          expect(context.pendingPlaybackEditorSync).toBe(false);
+          // The lesson's text, not the viewer's edit.
+          expect(context.learnerWorkspaceBaseline?.project.files["b.ts"].content).toBe("bc");
+          actor.send({ type: "PRESERVE_LEARNER_WORKSPACE" });
+          expect(saves).toEqual([]);
+
+          // Once: a later binding leaves what the viewer typed and where they put the caret.
+          bModel.setValue("bc!");
+          editor.setSelection(selection as monaco.Selection);
+          actor.send({
+            type: "SET_EDITOR_REF",
+            editor: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+          });
+          expect(bModel.getValue()).toBe("bc!");
+          expect(editor.getSelection()).toEqual(selection);
+
+          actor.stop();
+        },
+      );
+
+      it("shows the frame once the editor binds a file a tick opened just before a pause", async () => {
+        const loaded = await loadReady(recordingWithSwitch());
+        const { actor, editor, workspace } = loaded;
+        actor.send({ type: "PLAY" });
+        actor.send({ type: "TICK", currentTime: 50 });
+        actor.send({ type: "TICK", currentTime: 150 });
+        expect(actor.getSnapshot().context.pendingPlaybackEditorSync).toBe(true);
+        actor.send({ type: "PAUSE" });
+
+        expect(editor.getValue()).toBe("a-frame");
+        expect(workspace.current.project.files["b.ts"].content).toBe("bc");
+        const bModel = bindOpenFile(loaded);
+        expect(bModel.getValue()).toBe("bc");
+        expect(editor.getSelection()).toEqual(caretAt3);
+
+        actor.stop();
+      });
+
+      it("applies the frame in the seek when the viewer already has that file open", async () => {
+        const loaded = await handOverAt50("paused");
+        const { actor, editor, workspace } = loaded;
+        workspace.current = { ...workspace.current, activeFilePath: "b.ts" };
+        const bModel = bindOpenFile(loaded);
+        actor.send({ type: "WORKSPACE_EVENT" });
+
+        actor.send({ type: "SEEK", time: 150 });
+
+        expect(bModel.getValue()).toBe("bc");
+        expect(editor.getSelection()).toEqual(caretAt3);
+        expect(workspace.current.project.files["b.ts"].content).toBe("bc");
+        expect(workspace.current.project.files["a.ts"].content).toBe("a-frame");
+
+        actor.stop();
+      });
+
+      it("gives no frame to a file the viewer opens before the editor binds the seek's", async () => {
+        const loaded = await handOverAt50("paused");
+        const { actor, editor, workspace } = loaded;
+        actor.send({ type: "SEEK", time: 150 });
+
+        // The app swallows the explorer's workspace event right after a replayed snapshot.
+        workspace.current = { ...workspace.current, activeFilePath: "a.ts" };
+        const caretBefore = editor.getSelection();
+        const aModel = bindOpenFile(loaded);
+        expect(aModel.getValue()).toBe("a-frame");
+        expect(editor.getSelection()).toEqual(caretBefore);
+
+        // The binding was the one the seek waited for: b.ts later gets no frame either.
+        workspace.current = { ...workspace.current, activeFilePath: "b.ts" };
+        const bModel = bindOpenFile(loaded);
+        expect(bModel.getValue()).toBe("bc");
+        expect(editor.getSelection()).toEqual(caretBefore);
+        expect(workspace.current.project.files["a.ts"].content).toBe("a-frame");
+
+        actor.stop();
+      });
+
+      it("leaves the caret alone after a viewer's workspace event before the bind", async () => {
+        const loaded = await handOverAt50("paused");
+        const { actor, editor } = loaded;
+        actor.send({ type: "SEEK", time: 150 });
+        actor.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: 12 });
+
+        const caretBefore = editor.getSelection();
+        const bModel = bindOpenFile(loaded);
+        expect(bModel.getValue()).toBe("bc");
+        expect(editor.getSelection()).toEqual(caretBefore);
+
+        actor.stop();
+      });
+
+      const learnerSnapshot = () => createTwoFileWorkspaceSnapshot("b.ts", "a-frame", "b-learner");
+
+      it("keeps a restored version when the editor binds after the restore", async () => {
+        const saves: LearnerWorkspaceSave[] = [];
+        const loaded = await handOverAt50("paused", (save) => saves.push(save));
+        const { actor, editor, workspace } = loaded;
+
+        actor.send({
+          type: "RESTORE_LEARNER_WORKSPACE",
+          recordingTime: 150,
+          snapshot: learnerSnapshot(),
+        });
+        const caretBefore = editor.getSelection();
+        const bModel = bindOpenFile(loaded);
+
+        expect(bModel.getValue()).toBe("b-learner");
+        expect(editor.getSelection()).toEqual(caretBefore);
+        expect(workspace.current.project.files["b.ts"].content).toBe("b-learner");
+        actor.send({ type: "PLAY" });
+        expect(saves.map((save) => save.snapshot.project.files["b.ts"].content)).toEqual([
+          "b-learner",
+        ]);
+
+        actor.stop();
+      });
+
+      it("keeps a restored version when the editor binds between the seek and the restore", async () => {
+        const loaded = await handOverAt50("paused");
+        const { actor, workspace } = loaded;
+
+        actor.send({ type: "SEEK", time: 150 });
+        const bModel = bindOpenFile(loaded);
+        expect(bModel.getValue()).toBe("bc");
+        actor.send({ type: "APPLY_LEARNER_WORKSPACE", snapshot: learnerSnapshot() });
+
+        expect(workspace.current.project.files["b.ts"].content).toBe("b-learner");
+        // The app shows the restored text in the file's model.
+        const restoredModel = bindOpenFile(loaded);
+        expect(restoredModel.getValue()).toBe("b-learner");
+
+        actor.stop();
+      });
+
+      it("plays on from the seek as before", async () => {
+        const saves: LearnerWorkspaceSave[] = [];
+        const loaded = await handOverAt50("paused", (save) => saves.push(save));
+        const { actor } = loaded;
+        actor.send({ type: "SEEK", time: 150 });
+        bindOpenFile(loaded);
+
+        actor.send({ type: "PLAY" });
+        expect(actor.getSnapshot().context.pendingPlaybackEditorSync).toBe(true);
+        expect(actor.getSnapshot().context.frameAwaitingEditor).toBeNull();
+        // CodeEditor swaps in the playback model of b.ts.
+        const playbackModel = bindOpenFile(loaded);
+        actor.send({ type: "TICK", currentTime: 160 });
+        expect(playbackModel.getValue()).toBe("bc");
+        expect(saves).toEqual([]);
+
+        actor.stop();
+      });
     });
 
     // A sidebar drag, New File, an upload or a drop while the lesson plays pauses it.

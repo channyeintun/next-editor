@@ -25,7 +25,7 @@ import {
   normalizeTimelineDuration,
   normalizeTimelineTime,
 } from "./playbackValues";
-import { applyFrameAtTime, RENDERED_FRAME_RESET } from "./frameReplay";
+import { applyFrameAtTime, isRecordedFileInFront, RENDERED_FRAME_RESET } from "./frameReplay";
 import { reportMachineError } from "./machineError";
 import { resolveBoundedReplayTime, type ReplayStep } from "./replayStep";
 import {
@@ -190,6 +190,7 @@ export const setRecording = (
     ...VIEWER_PANEL_HOLDS_RESET,
     learnerWorkspaceBaseline: null,
     pendingPlaybackEditorSync: opensOtherFile,
+    frameAwaitingEditor: null,
     playbackAudioSpawned: false,
     timeline: {
       currentTime: 0,
@@ -393,6 +394,7 @@ export const resetPlayback = ({ context }: EditorActionArgs): EditorContextUpdat
   hasManualWorkspaceOverride: false,
   learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: false,
+  frameAwaitingEditor: null,
   timeline: {
     ...context.timeline,
     currentTime: 0,
@@ -404,6 +406,10 @@ export const invalidateAppliedPlaybackState = (): EditorContextUpdate => ({
   ...APPLIED_PLAYBACK_STATE_RESET,
 });
 
+/**
+ * Keeps `frameAwaitingEditor`: a hand-over sets it just before it detaches, for the
+ * editor's binding that follows.
+ */
 export const detachPlaybackWorkspace = (): EditorContextUpdate => ({
   hasManualWorkspaceOverride: true,
   pendingPlaybackEditorSync: false,
@@ -414,6 +420,8 @@ export const reattachPlaybackWorkspace = ({ context }: EditorActionArgs): Editor
   hasManualWorkspaceOverride: false,
   learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: context.hasManualWorkspaceOverride,
+  // The replay applies frames itself again, so no binding waits to show one.
+  frameAwaitingEditor: null,
 });
 
 /**
@@ -456,32 +464,30 @@ export const clearPendingPlaybackEditorSync = (): EditorContextUpdate => ({
 
 /**
  * A paused SEEK reattaches for that one transition only: SYNC_PAUSED_WORKSPACE_ACTIONS
- * detaches again before anything observes the snapshot, so the playback model never
- * swaps in and no SET_EDITOR_REF arrives to clear the pending sync that
- * `reattachPlaybackWorkspace` just set. Left set, it made `applyFrameAtTime` skip the
- * target frame, so scrubbing a paused lesson moved neither the code nor the caret
- * until PLAY.
+ * detaches again before the playback model can swap in, so no SET_EDITOR_REF that
+ * re-syncs the replay follows. The pending sync that `reattachPlaybackWorkspace` just
+ * set would make `applyFrameAtTime` skip the target frame, and scrubbing a paused lesson
+ * would move neither the code nor the caret until PLAY.
  *
- * Clear it only while the viewer is still on the file the recording had open. Frames
- * carry no file path, and the workspace cursor is deliberately not reset on seek
- * (panel-width deltas), so a scrub inside one workspace interval would otherwise write
- * the recorded file's content into a file the viewer opened while paused. A replayed
- * file switch still re-sets the flag in `applyWorkspaceEventsAtTime`.
+ * Clear it only when the file in front of the viewer is the one the recording has open
+ * where the seek lands. Frames carry no file path, so the target frame belongs to that
+ * file; written into a file the viewer opened while paused, it would replace their
+ * text. When the seek replays a switch to another file, the flag stays set (and
+ * `applyWorkspaceEventsAtTime` sets it too), the editor still shows the old file's
+ * model, and `resolveFrameWithheldForEditor` resolves the frame without the editor.
  */
 export const clearPendingEditorSyncForPausedSeek = ({
   context,
+  event,
 }: EditorActionArgs): EditorContextUpdate => {
-  const recordedActiveFilePath = getRecordedActiveFilePath(
-    context.recording,
+  const workspaceEvents = context.recording?.workspaceEvents;
+  if (!workspaceEvents?.length) return {};
+  const targetIndex = findTimedEventIndexAtOrBefore(
+    workspaceEvents,
+    resolveBoundedReplayTime(context, event),
     context.lastAppliedWorkspaceEventIndex,
   );
-  if (
-    recordedActiveFilePath === undefined ||
-    context.getWorkspaceSnapshot?.()?.activeFilePath !== recordedActiveFilePath
-  ) {
-    return {};
-  }
-  return { pendingPlaybackEditorSync: false };
+  return isRecordedFileInFront(context, targetIndex) ? { pendingPlaybackEditorSync: false } : {};
 };
 
 // Editor/model swaps only invalidate Monaco-rendered frame state. Keep the
@@ -496,6 +502,7 @@ export const clearRecording = ({ context }: EditorActionArgs): EditorContextUpda
   ...VIEWER_PANEL_HOLDS_RESET,
   learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: false,
+  frameAwaitingEditor: null,
   recording: null,
   ...APPLIED_PLAYBACK_STATE_RESET,
   // No recording is left for a width delta to be relative to.

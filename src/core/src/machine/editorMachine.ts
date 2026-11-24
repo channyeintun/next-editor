@@ -92,6 +92,11 @@ import {
   notifySeek,
   setEditorRef,
 } from "./replayActions";
+import {
+  clearFrameAwaitingEditor,
+  resolveFrameWithheldForEditor,
+  showFrameAwaitingEditor,
+} from "./frameReplay";
 import { clearCursorDecorations, releaseLearnerCaretHold } from "./playbackCaret";
 import { holdViewerPanelView } from "./viewerPanels";
 import {
@@ -117,11 +122,13 @@ import { isAtPlaybackEnd } from "./playbackValues";
 import { isDmpCodecLoaded } from "../../dmp/dmpCodec";
 
 /**
- * Hands the workspace to the viewer (paused, ended): keep what the recording shows, stop
- * replaying the workspace over it, and remember it as the baseline the viewer's own edits
- * are told apart from.
+ * Hands the workspace to the viewer (paused, ended): keep what the recording shows (the
+ * frame still waiting for the editor to bind a file a replayed switch opened included),
+ * stop replaying the workspace over it, and remember it as the baseline the viewer's own
+ * edits are told apart from.
  */
 const SYNC_PAUSED_WORKSPACE_ACTIONS = [
+  "resolveFrameWithheldForEditor",
   "adoptPlaybackWorkspaceAtPause",
   "detachPlaybackWorkspace",
   "captureLearnerWorkspaceBaseline",
@@ -354,6 +361,9 @@ export const editorMachine = setup({
     reopenRecordedFile: assign(reopenRecordedFile),
     clearPendingPlaybackEditorSync: assign(clearPendingPlaybackEditorSync),
     clearPendingEditorSyncForPausedSeek: assign(clearPendingEditorSyncForPausedSeek),
+    resolveFrameWithheldForEditor: assign(resolveFrameWithheldForEditor),
+    showFrameAwaitingEditor: assign(showFrameAwaitingEditor),
+    clearFrameAwaitingEditor: assign(clearFrameAwaitingEditor),
     invalidateRenderedPlaybackState: assign(invalidateRenderedPlaybackState),
     clearRecording: assign(clearRecording),
     notifySeek,
@@ -415,13 +425,14 @@ export const editorMachine = setup({
         guard: "shouldSyncPlaybackEditorRef",
         actions: [
           "setEditorRef",
+          "showFrameAwaitingEditor",
           "clearPendingPlaybackEditorSync",
           "invalidateRenderedPlaybackState",
           "applyReplayStateAtTime",
         ],
       },
       {
-        actions: ["setEditorRef", "invalidateRenderedPlaybackState"],
+        actions: ["setEditorRef", "showFrameAwaitingEditor", "invalidateRenderedPlaybackState"],
       },
     ],
     // The `stoppingRecording` watchdog finalizes 2s after STOP, so a slower
@@ -821,7 +832,7 @@ export const editorMachine = setup({
       exit: ["stopAudioPlayer", "clearCursorDecorations", "clearPlaybackAudioSpawned"],
       on: {
         WORKSPACE_EVENT: {
-          actions: ["detachPlaybackWorkspace"],
+          actions: ["detachPlaybackWorkspace", "clearFrameAwaitingEditor"],
         },
         // Streamed growth catches the replay up only while it owns the workspace. Once the
         // viewer has taken over (paused and ended detach on entry; ready detaches on
@@ -831,7 +842,7 @@ export const editorMachine = setup({
         EXTEND_RECORDING: [
           {
             guard: "isGrowthWhileViewerOwnsWorkspace",
-            actions: ["extendRecording", "syncStreamedRecordingGrowth"],
+            actions: ["extendRecording", "clearFrameAwaitingEditor", "syncStreamedRecordingGrowth"],
           },
           {
             guard: "isForLoadedRecording",
@@ -841,7 +852,11 @@ export const editorMachine = setup({
         APPEND_RECORDING_DELTA: [
           {
             guard: "isGrowthWhileViewerOwnsWorkspace",
-            actions: ["appendRecordingDelta", "syncStreamedRecordingGrowth"],
+            actions: [
+              "appendRecordingDelta",
+              "clearFrameAwaitingEditor",
+              "syncStreamedRecordingGrowth",
+            ],
           },
           {
             guard: "isForLoadedRecording",
@@ -915,7 +930,7 @@ export const editorMachine = setup({
         // reader failure). Exiting `playback` stops the timeline/audio children first.
         LOAD_RECORDING: {
           target: "loading",
-          actions: ["preserveLearnerWorkspace", "stopAudioRecorder"],
+          actions: ["preserveLearnerWorkspace", "stopAudioRecorder", "clearFrameAwaitingEditor"],
         },
       },
       states: {
@@ -993,8 +1008,9 @@ export const editorMachine = setup({
               target: "playing",
               actions: ["preserveLearnerWorkspace", "reattachPlaybackWorkspace"],
             },
+            // The frame the seek resolved must not be shown over the restored version.
             APPLY_LEARNER_WORKSPACE: {
-              actions: "applyLearnerWorkspace",
+              actions: ["applyLearnerWorkspace", "clearFrameAwaitingEditor"],
             },
           },
         },

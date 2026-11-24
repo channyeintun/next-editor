@@ -58,12 +58,17 @@ import { getWhiteboardReplayResult } from "./whiteboard";
 //
 // - Replay owns the page: after a tick or a seek while ready or playing, a seek
 //   while paused or ended, STOP, PLAY (ended then PLAY too), SET_EDITOR_REF when
-//   it re-syncs the editor, and growth while replay owns, the track shows what a
-//   cold resolve at T shows.
+//   it re-syncs the editor, SET_EDITOR_REF when it binds the file a seek while
+//   paused or ended (or the end) put in front, and growth while replay owns, the
+//   track shows what a cold resolve at T shows.
 // - The viewer owns the page: paused, ended, or after a viewer's WORKSPACE_EVENT,
 //   a tick, growth, SET_EDITOR_REF and a panel view change leave what the track
 //   shows as it was, the viewer's own changes included. The next PLAY, SEEK or
-//   STOP hands it back to the first law.
+//   STOP hands it back to the first law. The one exception is the binding above:
+//   when a seek while paused or ended, or the end, puts another file in front,
+//   the editor's first SET_EDITOR_REF after it (with no PLAY, SEEK, STOP, viewer
+//   WORKSPACE_EVENT or growth between) shows that file as a cold resolve at T
+//   does, once, and the page stays the viewer's.
 //
 // Each test below generates a time-sorted log and a walk of those moves, and
 // checks the law the move falls under after the load and after every move.
@@ -295,7 +300,9 @@ interface TrackHost {
   /** Whether the app has an editor change still to tell the machine about. */
   awaitsEditorRef?(context: EditorMachineContext): boolean;
   /** The app shows the open file's model in its editor, just before it says so. */
-  rebind?(): void;
+  rebind?(context: EditorMachineContext): void;
+  /** Whether the editor still shows another file than the one the workspace has open. */
+  opensAnotherFile?(): boolean;
 }
 
 interface ReplayTrack {
@@ -391,14 +398,22 @@ function walk(
   // ---- The app telling the machine its editor again (SET_EDITOR_REF).
   let editorRefIn: number | null = null;
   let waits = 0;
+  // A seek while paused or ended, or the end, put another file in front: the editor's
+  // next binding shows that file at T (the exception to the viewer-owns law).
+  let bindShowsFrame = false;
   const tellEditor = (label: string) => {
     host.startMove?.();
+    // What the app shows as it binds the model is the app's, not the machine's.
+    host.rebind?.(machine.context);
     const before = host.shown(machine.context);
-    host.rebind?.();
     send(machine, { type: "SET_EDITOR_REF", editor: machine.context.editorRefs.editor });
-    // The machine re-syncs a real editor, and only while replay owns the page
-    // (shouldSyncPlaybackEditorRef). Without one, or for the viewer, nothing re-applies.
-    if (owner === "replay" && host.editor) replayOwns(label, true);
+    // The machine re-syncs a real editor while replay owns the page
+    // (shouldSyncPlaybackEditorRef), and shows the frame the hand-over resolved on the
+    // file it opened (showFrameAwaitingEditor). Without an editor, or otherwise for the
+    // viewer, nothing re-applies.
+    const resolves = Boolean(host.editor) && (owner === "replay" || bindShowsFrame);
+    bindShowsFrame = false;
+    if (resolves) replayOwns(label, true, owner === "viewer");
     else viewerOwns(label, before);
   };
   // The app re-renders some moves after the change, and always before the viewer's
@@ -452,6 +467,7 @@ function walk(
         replayOwns(at(), true, handedOver);
         // A seek while paused or ended takes the page for that step only.
         owner = handedOver ? "viewer" : "replay";
+        bindShowsFrame = handedOver && Boolean(host.opensAnotherFile?.());
         break;
       }
       case "play": {
@@ -492,6 +508,8 @@ function walk(
         replayOwns(`${at()}, the last tick`, false);
         keptForViewer(at(), () => send(machine, { type: "FINISHED" }));
         owner = "viewer";
+        // The last tick may have opened a file the editor has not bound yet.
+        bindShowsFrame = Boolean(host.opensAnotherFile?.());
         break;
       }
       case "stop": {
@@ -509,7 +527,9 @@ function walk(
           grow(machine, records, move.extend);
           replayOwns(at(), false);
         } else {
-          // PLAY, SEEK or STOP picks the new records up.
+          // PLAY, SEEK or STOP picks the new records up. The binding no longer shows a
+          // frame: the one resolved before the growth may not be the one at T now.
+          bindShowsFrame = false;
           keptForViewer(at(), () => grow(machine, records, move.extend));
         }
         break;
@@ -1276,7 +1296,10 @@ const previewTrack: ReplayTrack = {
 // the editor shows. A file switch, the load of another file, and PLAY after the
 // viewer had the workspace make the machine wait for the app to bind the new
 // model and say so (SET_EDITOR_REF). Until then the frame must not be applied:
-// it would land in the model the editor still shows.
+// it would land in the model the editor still shows. A seek while paused or
+// ended that switches files (or the end, right after a tick that did) puts the
+// frame's text into the workspace instead, the model the app binds is made from
+// it, and that binding shows the frame's caret and scroll on it.
 // ============================================================================
 
 /** What the editor shows from a frame: its text, caret and selection, and scroll. */
@@ -1315,6 +1338,11 @@ class FramesEditor {
   bind(path: string): void {
     if (!this.models.has(path)) this.models.set(path, { content: "" });
     this.boundPath = path;
+  }
+
+  /** The app gives the bound model a text of its own (not a replay write). */
+  load(content: string): void {
+    this.model.content = content;
   }
 
   // The part of IStandaloneCodeEditor the frame step uses. A model that can undo takes
@@ -1615,7 +1643,18 @@ const framesTrack: ReplayTrack = {
       // it, or the editor shows another file than the workspace.
       awaitsEditorRef: (context) =>
         context.pendingPlaybackEditorSync || editor.boundPath !== live.snapshot.activeFilePath,
-      rebind: () => editor.bind(live.snapshot.activeFilePath),
+      opensAnotherFile: () => editor.boundPath !== live.snapshot.activeFilePath,
+      // While the viewer owns the page, the app shows the file's own model, made from the
+      // workspace's text for it (CodeEditor's syncWorkspaceModel).
+      rebind: (context) => {
+        const path = live.snapshot.activeFilePath;
+        const opens = editor.boundPath !== path;
+        editor.bind(path);
+        const { content } = live.snapshot.project.files[path];
+        if (opens && context.hasManualWorkspaceOverride && typeof content === "string") {
+          editor.load(content);
+        }
+      },
       shown: () => editor.view(),
       landed: (context, expected) => {
         const written = editor.writes - writesBefore;
