@@ -56,17 +56,34 @@ function children(node: Node): Node[] {
   });
 }
 
+// Getters and setters are methods of these types too, with `kind` "get" or "set".
 const FUNCTION_TYPES = new Set([
   "ArrowFunctionExpression",
   "FunctionExpression",
   "FunctionDeclaration",
   "ObjectMethod",
+  "ClassMethod",
+  "ClassPrivateMethod",
+]);
+
+const METHOD_TYPES = new Set(["ObjectMethod", "ClassMethod", "ClassPrivateMethod"]);
+
+// Class fields that hold a value: an arrow in one is named after the field.
+const FIELD_TYPES = new Set([
+  "ObjectProperty",
+  "ClassProperty",
+  "ClassPrivateProperty",
+  "ClassAccessorProperty",
 ]);
 
 function keyName(key: unknown): string | null {
   if (!isNode(key)) return null;
   if (key.type === "Identifier") return key.name as string;
   if (key.type === "StringLiteral") return key.value as string;
+  if (key.type === "PrivateName") {
+    const id = keyName(key.id);
+    return id === null ? null : `#${id}`;
+  }
   return null;
 }
 
@@ -77,12 +94,12 @@ function nameOf(node: Node, inherited: string): string {
     const own = keyName(node.id);
     if (own) return own;
   }
-  if (node.type === "ObjectMethod") return keyName(node.key) ?? inherited;
+  if (METHOD_TYPES.has(node.type)) return keyName(node.key) ?? inherited;
   return inherited;
 }
 
 function namedScope(node: Node, inherited: string): string {
-  if (node.type === "ObjectProperty") return keyName(node.key) ?? inherited;
+  if (FIELD_TYPES.has(node.type)) return keyName(node.key) ?? inherited;
   if (node.type === "VariableDeclarator") return keyName(node.id) ?? inherited;
   return inherited;
 }
@@ -236,6 +253,57 @@ export function longFunctionProblems(source: string, allowed: Record<string, num
         `${name} is now ${MAX_FUNCTION_LINES} lines or fewer, or is gone; remove it from LONG_FUNCTIONS (hubRules.test.ts)`,
     );
   return [...problems, ...stale];
+}
+
+/** The top-level statement that declares `name`, as `const name = …` or `export const name = …`. */
+function declarationOf(program: Node, name: string): Node | undefined {
+  return topLevelDeclarations(program).find(
+    (node) =>
+      node.type === "VariableDeclaration" &&
+      (node.declarations as Node[]).some((declarator) => keyName(declarator.id) === name),
+  );
+}
+
+/**
+ * The lines of code of every function outside the declaration of `machineName`: the
+ * hub's own helpers, which the 10-line cap alone lets grow as many short siblings.
+ */
+export function linesOutsideMachine(source: string, machineName: string): number {
+  const machine = declarationOf(parse(source).program, machineName);
+  if (!machine) throw new Error(`no top-level declaration of ${machineName}`);
+  const { start, end } = machine.loc;
+  return functionLengths(source)
+    .filter((fn) => fn.line < start.line || fn.line > end.line)
+    .reduce((total, fn) => total + fn.lines, 0);
+}
+
+/**
+ * What editorMachine.ts may hold besides the machine: its helpers' lines of code only
+ * go down, and it declares no type of its own (a domain's types live in its module).
+ */
+export function machineHelperProblems(source: string, ceiling: number): string[] {
+  const problems: string[] = [];
+  const lines = linesOutsideMachine(source, "editorMachine");
+  if (lines > ceiling) {
+    problems.push(
+      `editorMachine.ts has ${lines} lines of code in functions outside the machine, more ` +
+        `than ${ceiling}: write the helper in its domain's module and import it`,
+    );
+  }
+  if (lines < ceiling) {
+    problems.push(
+      `editorMachine.ts has ${lines} lines of code in functions outside the machine; lower ` +
+        `MACHINE_HELPER_LINES (hubRules.test.ts) to ${lines}`,
+    );
+  }
+  const types = typeDeclarationCount(source);
+  if (types > 0) {
+    problems.push(
+      `editorMachine.ts declares ${types} top-level interface or type declarations: declare ` +
+        "them in the module of the domain they belong to and import them",
+    );
+  }
+  return problems;
 }
 
 export function machineTypeProblems(source: string, ceiling: number): string[] {
