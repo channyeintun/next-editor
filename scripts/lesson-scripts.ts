@@ -75,8 +75,21 @@ import { boundBucketName } from "./r2Bucket.ts";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const WRANGLER_CONFIG = resolve(ROOT, "infra/wrangler.toml");
 
-/** Remote puts after the first, at once. The first runs alone, so only one wrangler refreshes the login. */
-const REMOTE_PUTS_AT_ONCE = 4;
+/**
+ * Remote puts after the first, at once. The first runs alone, so only one
+ * wrangler refreshes the login. Two, not more: with four, the bucket's API
+ * answered "internal error, please try again" within the first forty puts.
+ */
+const REMOTE_PUTS_AT_ONCE = 2;
+
+/**
+ * How often one put is tried before the publish stops. The pause doubles from
+ * the first one up to the longest, about a minute of patience in all: a
+ * publish that stops has to put every object again, since it keeps no record.
+ */
+const PUT_ATTEMPTS = 6;
+const PUT_FIRST_PAUSE_MS = 2_000;
+const PUT_LONGEST_PAUSE_MS = 30_000;
 
 type Destination = "remote" | "local";
 
@@ -300,7 +313,8 @@ function put(command: string[]): Promise<string | null> {
 /**
  * Run the puts in order: the first alone, so only one wrangler refreshes an
  * expired login and writes it back, then `atOnce` at a time. Stops at the
- * first failure: no put starts after one failed. True when all of them worked.
+ * first put that fails every try: no put starts after that. True when all of
+ * them worked.
  */
 async function putAll(
   commands: { label: string; command: string[] }[],
@@ -311,7 +325,16 @@ async function putAll(
   let failed = false;
   const putNext = async () => {
     const { label, command } = commands[next++];
-    const problem = await put(command);
+    let problem = await put(command);
+    // A put names its object by its bytes (or is the index, written whole), so
+    // sending it again is safe; a dropped connection on a slow line should not
+    // cost the whole publish.
+    for (let attempt = 2; problem !== null && attempt <= PUT_ATTEMPTS && !failed; attempt++) {
+      console.error(`  putting ${label} failed; trying again (${attempt} of ${PUT_ATTEMPTS})`);
+      const pauseMs = Math.min(PUT_FIRST_PAUSE_MS * 2 ** (attempt - 2), PUT_LONGEST_PAUSE_MS);
+      await new Promise((resume) => setTimeout(resume, pauseMs));
+      problem = await put(command);
+    }
     if (problem !== null) {
       failed = true;
       console.error(`putting ${label} failed:\n${problem}`);
