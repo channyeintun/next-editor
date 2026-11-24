@@ -5,13 +5,10 @@
 // LESSONS=slug,slug narrows the list. SETTLE=<ms> is how long the preview is
 // watched after it first showed the page (2500).
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { lessonScriptPath } from "../lessonScriptsDir";
 import type { HarnessApi } from "../webnode-harness";
 import { plainText as strip } from "./text";
-
-/** Where the lessons' scripts are. */
-export const LESSON_SCRIPTS = fileURLToPath(new URL("../../src/studio/scripts/", import.meta.url));
 
 const DEFAULT_LESSONS = [
   "next-editor-intro-mm",
@@ -59,7 +56,7 @@ export default async function (api: HarnessApi) {
     if (m.type() === "error") consoleErrors.push(m.text().slice(0, 300));
   });
   for (const slug of slugs) {
-    const lesson = parse(readFileSync(`${LESSON_SCRIPTS}${slug}.yaml`, "utf8"));
+    const lesson = parse(readFileSync(lessonScriptPath(slug), "utf8"));
     const files = lesson.lesson.workspace.files as Record<string, string>;
     const pkg = files["package.json"] ? JSON.parse(files["package.json"]) : {};
     await api.section(

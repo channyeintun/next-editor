@@ -141,7 +141,9 @@ header). Each runs in one of three places:
 - A deterministic performer drives the real editor while the normal recorder captures it. QA
   gates check the result, and a render that passes every gate can become a draft through the
   normal upload flow; publishing stays a human decision.
-- Scripts live in `src/studio/scripts/`. The authoring contract is
+- Scripts live in `src/studio/scripts/`. They are not in the app bundle: `bun run dev` reads the
+  folder, and `bun scripts/lesson-scripts.ts publish --remote` puts committed lessons on the site
+  with no build and no deploy. The authoring contract is
   [docs/lesson-script-authoring.md](docs/lesson-script-authoring.md).
 
 ## Browser Support

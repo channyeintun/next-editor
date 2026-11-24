@@ -27,8 +27,16 @@ editor/slide/whiteboard/runtime action, and the assertions that gate the
 build. The YAML is the _only_ artifact — it is parsed and validated in the
 browser at render time. Two ways it reaches the studio:
 
-- **Checked in** at `src/studio/scripts/<slug>.yaml` — auto-registers by
-  filename (never touch `src/studio/plans/index.ts`).
+- **Checked in** at `src/studio/scripts/<slug>.yaml` (the file name is its
+  `lesson.slug`), with its Director sidecar. Commit and push the two as one
+  commit. Under `bun run dev` the studio reads the folder itself: reload
+  `/studio` to see the lesson. `bun scripts/lesson-scripts.ts publish --remote`
+  puts committed lessons on nexteditor.dev with no build and no deploy; it
+  writes to production, so a person runs it, or an agent on their word. A
+  lesson with a new dependency set also needs `webnode-deps` build and upload
+  and a deploy. A change to the script schema or the Director is deployed
+  before a lesson that needs it is published. Nothing registers a lesson in
+  code: never touch `src/studio/plans/index.ts`.
 - **Imported at runtime** — any user pastes the file into `/studio` on the
   website via **Import…**; it is validated and critiqued in the page.
 
@@ -172,7 +180,7 @@ picker simply renders without the video.
 **Agents working in this repo**:
 
 ```text
-1. Write    src/studio/scripts/<slug>.yaml     # auto-registers by filename
+1. Write    src/studio/scripts/<slug>.yaml     # file name = lesson.slug
 2. Validate bun scripts/studio-director.ts     # optional preflight, all scripts
                                                # (or pass one path)
    → fix schema/marker errors; weigh critic notes (advisory);
@@ -182,7 +190,8 @@ picker simply renders without the video.
    Replay   bun scripts/studio-verify-lesson.ts src/studio/scripts/<slug>.yaml
    → Node.js (Vite) lessons only: every action against real Vite + Chrome
 3. Render   bun run dev   (separate terminal, keep running)
-            open /studio?plan=<slug> in a real Chrome, press Start render,
+            open /studio?plan=<slug> in a real Chrome (reload it after an
+            edit), press Start render,
             watch the performance, confirm "Checks (N/N ok)" + receipts
    → agents with browser access drive the user's Chrome and watch live;
      do not verify with the headless harness
@@ -190,6 +199,9 @@ picker simply renders without the video.
    → for a JS/TS preview fixture, repeat from a clean page and require both
      renders to pass normalized repeatability before claiming support
 4. A human watches the full replay (/studio?plan=<slug>) and decides on a draft.
+5. Publish  commit and push the YAML and its sidecar as one commit, then
+            bun scripts/lesson-scripts.ts publish --remote
+   → production: a person runs it, or an agent on their word
 ```
 
 Step 2 is convenience — the Director's validation runs in the page too — but

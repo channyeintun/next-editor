@@ -2,6 +2,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
+import {
+  lessonCritiquePath,
+  lessonScriptPath,
+  lessonScriptSlugs,
+  lessonScriptsDir,
+} from "../../../scripts/lessonScriptsDir";
 import { CRITIC_VERSION, PERSONA_GUIDE_VERSION, critiqueScript } from "./critic";
 import { extractScriptNarration } from "./markers";
 import { parseLessonScript, type LessonScript } from "./schema";
@@ -146,18 +152,16 @@ describe("critiqueScript", () => {
   // Parses and critiques every checked-in lesson (hundreds), about 3 s alone and more
   // than the 5 s default when the whole suite runs beside it.
   it("keeps every checked-in critique sidecar current", { timeout: 30_000 }, () => {
-    const scriptsDir = resolve(__dirname, "../scripts");
-    const files = readdirSync(scriptsDir);
-    const yamls = files.filter((name) => name.endsWith(".yaml")).sort();
-    const sidecars = files.filter((name) => name.endsWith(".critique.json")).sort();
-    expect(sidecars).toEqual(yamls.map((name) => name.replace(/\.yaml$/, ".critique.json")));
+    const slugs = lessonScriptSlugs();
+    const sidecars = readdirSync(lessonScriptsDir())
+      .filter((name) => name.endsWith(".critique.json"))
+      .map((name) => name.slice(0, -".critique.json".length));
+    expect(sidecars.sort()).toEqual([...slugs].sort());
 
-    for (const name of yamls) {
-      const script = parseLessonScript(YAML.parse(readFileSync(resolve(scriptsDir, name), "utf8")));
-      const sidecar = JSON.parse(
-        readFileSync(resolve(scriptsDir, name.replace(/\.yaml$/, ".critique.json")), "utf8"),
-      );
-      expect(sidecar, `${name} sidecar is stale`).toEqual(
+    for (const slug of slugs) {
+      const script = parseLessonScript(YAML.parse(readFileSync(lessonScriptPath(slug), "utf8")));
+      const sidecar = JSON.parse(readFileSync(lessonCritiquePath(slug), "utf8"));
+      expect(sidecar, `${slug}.yaml sidecar is stale`).toEqual(
         critiqueScript(script, extractedOf(script)),
       );
     }

@@ -15,8 +15,8 @@
  * this file is the thin I/O shell.
  */
 
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
@@ -29,9 +29,10 @@ import { fetchPublishedDeck } from "../src/googleSlides/fetchPublishedDeck.ts";
 import type { ParsedDeck } from "../src/googleSlides/types.ts";
 import { requireVoiceProfile } from "../src/studio/tts/profiles.ts";
 import { sha256HexOfText } from "../src/studio/hash.ts";
+import { lessonScriptPath, lessonScriptSlugs, lessonScriptsDir } from "./lessonScriptsDir.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const scriptsDir = join(repoRoot, "src", "studio", "scripts");
+const scriptsDir = lessonScriptsDir();
 
 function fail(message: string): never {
   console.error(`\nstudio-director: ${message}`);
@@ -101,10 +102,7 @@ const args = process.argv.slice(2);
 const targets =
   args.length > 0
     ? args.map((arg) => resolve(arg))
-    : readdirSync(scriptsDir)
-        .filter((name) => name.endsWith(".yaml"))
-        .sort()
-        .map((name) => join(scriptsDir, name));
+    : lessonScriptSlugs().map((slug) => lessonScriptPath(slug));
 
 if (targets.length === 0) {
   fail(`no scripts found in ${scriptsDir}`);

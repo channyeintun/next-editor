@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vite-plus/test";
 import YAML from "yaml";
+import { lessonScriptPath } from "../../scripts/lessonScriptsDir";
 
 import { instantiateKiteCompiler, type KiteCompiler } from "../runtime/kitePlayground/compiler";
 import { replayTypedFile } from "./crashCourseTestUtils";
@@ -20,7 +21,7 @@ import { KITE_KEYWORDS } from "../monaco/kiteLanguage";
  * program that no longer produces it, and nothing would fail.
  */
 
-const scriptPath = resolve(process.cwd(), "src/studio/scripts/kite-crash-course.yaml");
+const scriptPath = lessonScriptPath("kite-crash-course");
 const wasmPath = resolve(process.cwd(), "src/core/kite/build/kite-compiler.wasm");
 
 describe("kite crash course", () => {

@@ -75,6 +75,7 @@ import {
   DEPS_STORE_PLANS_DIR,
   depsStoreObjectFile,
 } from "./webnode-deps-store";
+import { boundBucketName } from "./r2Bucket";
 import { runtimeLessons, starterWorkspaces } from "./webnode-scenarios/workspaces";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -734,17 +735,7 @@ async function check(): Promise<number> {
 
 /** The bucket the Worker binds as BUCKET, as infra/wrangler.toml names it. */
 function bucketName(): string {
-  const config = readFileSync(WRANGLER_CONFIG, "utf8");
-  for (const block of config.split("[[r2_buckets]]").slice(1)) {
-    const section = block.split(/^\[/m)[0];
-    if (/^\s*binding\s*=\s*"BUCKET"/m.test(section)) {
-      const name = /^\s*bucket_name\s*=\s*"([^"]+)"/m.exec(section)?.[1];
-      if (name) {
-        return name;
-      }
-    }
-  }
-  throw new Error(`no r2 bucket bound as BUCKET in ${WRANGLER_CONFIG}`);
+  return boundBucketName(WRANGLER_CONFIG);
 }
 
 async function upload(args: string[]): Promise<number> {

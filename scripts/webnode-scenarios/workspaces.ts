@@ -2,9 +2,9 @@
 // (a studio script whose runtime is webnode's) and every starter's. The
 // measurements (measure.ts) and the prepared installs (scripts/webnode-deps.ts)
 // both start from this one listing.
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { parse } from "yaml";
-import { LESSON_SCRIPTS } from "./lessons";
+import { lessonScriptPath, lessonScriptSlugs } from "../lessonScriptsDir";
 import { STARTERS, STARTERS_ROOT } from "./starters";
 import type { Shows } from "./starters";
 
@@ -30,15 +30,12 @@ export interface LessonAction {
 /** Every runtime lesson by slug, in the order of the scripts' file names. */
 export function runtimeLessons(): Map<string, LessonScript> {
   const scripts = new Map<string, LessonScript>();
-  for (const name of readdirSync(LESSON_SCRIPTS).sort()) {
-    if (!name.endsWith(".yaml")) {
-      continue;
-    }
-    const script = parse(readFileSync(`${LESSON_SCRIPTS}${name}`, "utf8")) as LessonScript;
+  for (const slug of lessonScriptSlugs()) {
+    const script = parse(readFileSync(lessonScriptPath(slug), "utf8")) as LessonScript;
     if (script.runtime?.kind !== "webcontainer") {
       continue;
     }
-    scripts.set(name.replace(/\.yaml$/, ""), script);
+    scripts.set(slug, script);
   }
   return scripts;
 }

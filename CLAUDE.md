@@ -19,6 +19,14 @@ follow `docs/lesson-script-authoring.md` — the complete authoring contract
 `lesson-script` skill for this. Never hand-edit the emitted JSON under
 `src/studio/plans/scripts/`.
 
+Commit and push a lesson's YAML and its Director sidecar as one commit; under
+`bun run dev`, reload `/studio` to see it. Lessons are not in the app bundle:
+`bun scripts/lesson-scripts.ts publish --remote` puts committed lessons on
+nexteditor.dev with no build and no deploy. It writes to production, so Chan
+runs it, or an agent on his word. A lesson with a new dependency set also needs
+`webnode-deps` build and upload and a deploy. A change to the script schema or
+the Director is deployed before a lesson that needs it is published.
+
 ## Mandatory Workflow
 
 After completing the work, provide:

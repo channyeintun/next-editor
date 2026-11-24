@@ -104,9 +104,11 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      and fails on half-typed JSX that breaks the preview, console errors, and
      failed preview or file expectations. It is a preflight, not the render
      check in step 5.
-   - Scripts auto-register by filename — do not edit
-     `src/studio/plans/index.ts`. The YAML is the only artifact; end users can
-     alternatively import it via /studio's **Import…** on the website.
+   - The file name must be the script's `lesson.slug`. Nothing registers a
+     lesson in code — do not edit `src/studio/plans/index.ts`: under
+     `bun run dev` the studio reads the folder, so reload /studio after an
+     edit. The YAML is the only artifact; end users can alternatively import
+     it via /studio's **Import…** on the website.
 5. **Render — verify in the user's Chrome, never headless** (user rule):
    - Use an already-running foreground dev server, then drive the real Chrome
      via claude-in-chrome: open `/studio?plan=<slug>`, press **Start render**,
@@ -130,3 +132,10 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
 6. **Report**: slug, narration length, actions used, critic notes kept vs
    fixed, render/gate results. A human reviews the lesson before any draft is
    created — never call the lesson done, only rendered.
+7. **Commit and publish**: commit and push the YAML and its sidecar as one
+   commit. `bun scripts/lesson-scripts.ts publish --remote` then puts
+   committed lessons on nexteditor.dev with no build and no deploy. It writes
+   to production: run it only when the user asks for it. A lesson with a new
+   dependency set also needs `webnode-deps` build and upload and a deploy, and
+   a change to the script schema or the Director is deployed before a lesson
+   that needs it is published.

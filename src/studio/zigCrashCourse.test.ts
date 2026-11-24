@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vite-plus/test";
 import YAML from "yaml";
+import { lessonScriptPath } from "../../scripts/lessonScriptsDir";
 
 import { replayTypedFile } from "./crashCourseTestUtils";
 import { parseLessonScript, type LessonScript } from "./script/schema";
@@ -28,7 +28,7 @@ import { whiteboardAssetProblems, whiteboardLabelProblems } from "./whiteboardLe
  * zig-play.dev when the lesson was authored; the fixture is that run's output.
  */
 
-const scriptPath = resolve(process.cwd(), "src/studio/scripts/zig-crash-course.yaml");
+const scriptPath = lessonScriptPath("zig-crash-course");
 
 describe("zig crash course", () => {
   let script: LessonScript;

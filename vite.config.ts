@@ -11,6 +11,7 @@ import { webnodeBundlePlugin } from "./build/webnodeBundlePlugin";
 import { posthogReleasePlugins } from "./build/posthogReleasePlugins";
 import { landingPrerenderPlugin } from "./build/landingPrerenderPlugin";
 import { precompressAssetsPlugin } from "./build/precompressAssetsPlugin";
+import { lessonScriptsDevPlugin } from "./build/lessonScriptsDevPlugin";
 
 const crossOriginHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -84,6 +85,10 @@ export default ({ mode }: { mode: string }) => {
       // `bun run dev` resolve the same /api/proxy route the Worker
       // serves in production.
       proxyPlugin(),
+      // Dev-server equivalent of infra/worker/routes/studioScripts.ts: the
+      // studio reads the lesson scripts straight from the folder under
+      // `vp dev` and `vp preview`, ahead of the /api/studio proxy below.
+      lessonScriptsDevPlugin(),
       // Dev-server equivalent of infra/worker/routes/openrouter.ts: lets
       // `bun run dev` resolve the same /api/openrouter/responses route the
       // Worker serves in production (see src/shared/openrouterProxy.ts).
@@ -325,19 +330,6 @@ export default ({ mode }: { mode: string }) => {
               {
                 name: "utils",
                 test: /[\\/]node_modules[\\/]@msgpack[\\/]/,
-              },
-              {
-                // The studio registers every checked-in LessonScript as raw
-                // YAML text (the eager glob in src/studio/plans). Left in the
-                // StudioRoute chunk, that text grows it by every lesson added,
-                // and at 404 lessons the chunk was 27.3 MiB: over the 25 MiB
-                // Cloudflare allows per asset file, so `wrangler deploy`
-                // refused the whole upload. In a group of their own, split
-                // into chunks of about 8 MiB, new lessons add chunks instead
-                // of making one larger. The studio still loads all of them.
-                name: "studio-scripts",
-                test: /[\\/]src[\\/]studio[\\/]scripts[\\/][^\\/]+\.ya?ml(?:\?|$)/,
-                maxSize: 8 * 1024 * 1024,
               },
               {
                 // First-party modules the entry loads that lazy routes import

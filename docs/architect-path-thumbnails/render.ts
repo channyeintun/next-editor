@@ -8,17 +8,17 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
+import { lessonScriptPath } from "../../scripts/lessonScriptsDir";
 
 const outDir = import.meta.dir;
 const template = resolve(outDir, "../architect-path-thumbnail.html");
-const scripts = resolve(outDir, "../../src/studio/scripts");
 const args = process.argv.slice(2);
 const checkOnly = args.includes("--check");
 const only = new Set(args.filter((arg) => arg !== "--check").map(Number));
 
 // The title a card shows is the lesson's own: the YAML is its one home.
 function lessonTitle(slug: string): string {
-  const yaml = readFileSync(join(scripts, `${slug}.yaml`), "utf8");
+  const yaml = readFileSync(lessonScriptPath(slug), "utf8");
   const title = /^\s*title:\s*"?(.*?)"?\s*$/m.exec(yaml)?.[1];
   if (!title) throw new Error(`${slug}.yaml has no title`);
   return title;

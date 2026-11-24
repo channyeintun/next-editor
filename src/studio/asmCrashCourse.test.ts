@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vite-plus/test";
 import YAML from "yaml";
+import { lessonScriptPath } from "../../scripts/lessonScriptsDir";
 
 import { replayTypedFile } from "./crashCourseTestUtils";
 import { parseLessonScript, type LessonScript } from "./script/schema";
@@ -33,7 +33,7 @@ import {
  * `expect.output` that claims something the console never prints.
  */
 
-const scriptPath = resolve(process.cwd(), "src/studio/scripts/x86-64-assembly-crash-course.yaml");
+const scriptPath = lessonScriptPath("x86-64-assembly-crash-course");
 
 describe("x86-64 assembly crash course", () => {
   let script: LessonScript;

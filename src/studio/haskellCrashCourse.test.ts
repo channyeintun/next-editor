@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vite-plus/test";
 import YAML from "yaml";
+import { lessonScriptPath } from "../../scripts/lessonScriptsDir";
 
 import { replayTypedFile } from "./crashCourseTestUtils";
 import { parseLessonScript, type LessonScript } from "./script/schema";
@@ -34,7 +34,7 @@ import { whiteboardAssetProblems, whiteboardLabelProblems } from "./whiteboardLe
  * exact stdout.
  */
 
-const scriptPath = resolve(process.cwd(), "src/studio/scripts/haskell-crash-course.yaml");
+const scriptPath = lessonScriptPath("haskell-crash-course");
 
 /** The statements of `main`'s do block — one per line the program prints. */
 function mainDoStatements(program: string): string[] {

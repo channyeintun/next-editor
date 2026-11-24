@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
+import { lessonScriptPath } from "../../../scripts/lessonScriptsDir";
 import { canonicalJson } from "../hash";
 import { parseStudioPlan } from "../plan";
 import { POINTER_AIM_MAX_MS } from "../../core/src/utils/pointerMotion";
@@ -960,8 +961,8 @@ describe("lessonScriptSchema", () => {
   // strict; its nested objects were not, so a misspelled key there was dropped
   // and the lesson replayed a console with no warning, register or retry.
   it("rejects a misspelled key inside a runtime fixture and names it", () => {
-    const kotlinPath = resolve(process.cwd(), "src/studio/scripts/kotlin-crash-course.yaml");
-    const asmPath = resolve(process.cwd(), "src/studio/scripts/x86-64-assembly-crash-course.yaml");
+    const kotlinPath = lessonScriptPath("kotlin-crash-course");
+    const asmPath = lessonScriptPath("x86-64-assembly-crash-course");
     const cases: [string, string, string, (fixture: Record<string, any>) => void][] = [
       [
         kotlinPath,

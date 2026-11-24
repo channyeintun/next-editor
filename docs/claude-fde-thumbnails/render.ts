@@ -10,11 +10,11 @@ import { pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
 import { parse } from "yaml";
 import { matchThumbnail } from "../../src/studio/workflow/workflowLessons";
+import { lessonScriptPath, lessonScriptSlugs } from "../../scripts/lessonScriptsDir";
 
 const outDir = import.meta.dir;
 const template = resolve(outDir, "../claude-fde-thumbnail.html");
 const guide = resolve(outDir, "../claude-fde-course.md");
-const scripts = resolve(outDir, "../../src/studio/scripts");
 const args = process.argv.slice(2);
 const checkOnly = args.includes("--check");
 const only = new Set(args.filter((arg) => arg !== "--check").map(Number));
@@ -43,7 +43,7 @@ function walk(node: unknown, visit: (node: Record<string, any>) => void): void {
 // file, and (for a Burmese label in the drawing) a phrase the lesson shows. The YAML is the
 // one home of all four.
 function lessonProblems(card: Card, labels: string[]): string[] {
-  const source = readFileSync(join(scripts, `${card.slug}.yaml`), "utf8");
+  const source = readFileSync(lessonScriptPath(card.slug), "utf8");
   const script = parse(source);
   const lesson = script.lesson;
   const problems: string[] = [];
@@ -98,9 +98,7 @@ try {
   );
 
   // One card for each lesson of the course, named so the studio workflow finds it.
-  const slugs = readdirSync(scripts)
-    .filter((name) => /^claude-fde-\d\d-.*\.yaml$/.test(name))
-    .map((name) => name.replace(/\.yaml$/, ""));
+  const slugs = lessonScriptSlugs().filter((slug) => /^claude-fde-\d\d-/.test(slug));
   const names = cards.map((card) => `${card.slug}.png`);
   for (const slug of slugs)
     if (matchThumbnail(slug, names) !== `${slug}.png`) failures.push(`${slug} has no thumbnail`);
