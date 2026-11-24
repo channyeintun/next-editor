@@ -25,6 +25,9 @@ import {
 // unchanged, one spliced), a preview patch add rebuilt from an earlier template, and a
 // frame's preview content deduped within its segment. If a kind's decode case went
 // missing, that track would come back empty and the per-track comparison fails.
+// A second keyframe starts a second cluster, so the later workspace splice and patch
+// template are written into a later segment than the records they point back to: the
+// readers keep that dedup state for the whole stream, not per segment.
 
 const LONG_SOURCE = "export const greeting = 'hello';\n".repeat(20);
 const PREVIEW_HTML = "<main>the same static preview page</main>".repeat(20);
@@ -83,18 +86,24 @@ const SELECTION = {
   positionColumn: 1,
 };
 
-const FRAMES = [
-  {
-    timestamp: 0,
+const SECOND_CLUSTER_START = 250;
+
+function keyframe(timestamp: number, scrollTop: number) {
+  return {
+    timestamp,
     isKeyframe: true,
     state: {
       content: LONG_SOURCE,
       position: { lineNumber: 1, column: 1 },
       selection: SELECTION,
       viewState: null,
-      previewState: { isOpen: true, content: PREVIEW_HTML, scrollTop: 0 },
+      previewState: { isOpen: true, content: PREVIEW_HTML, scrollTop },
     },
-  },
+  };
+}
+
+const FRAMES = [
+  keyframe(0, 0),
   // The delta form repeats the whole preview state when its scroll moves, so this
   // frame's content is a repeat the writer replaces with a marker.
   {
@@ -102,6 +111,7 @@ const FRAMES = [
     isKeyframe: false,
     previewState: { isOpen: true, content: PREVIEW_HTML, scrollTop: 40 },
   },
+  keyframe(SECOND_CLUSTER_START, 40),
 ] as unknown as DeltaFrame[];
 
 function patchBatch(time: number, idBase: number): PreviewDomPatchBatch {
@@ -161,11 +171,13 @@ function makeRecording(): DecodedRecording {
         events: [{ type: 2, timestamp: 1_700_000_000_130, data: { node: { type: 0, id: 1 } } }],
       },
     ],
-    previewPatchBatches: [patchBatch(140, 100), patchBatch(150, 200)],
+    // The second batch, in the second cluster, is written as a template of the first.
+    previewPatchBatches: [patchBatch(140, 100), patchBatch(260, 200)],
     workspaceEvents: [
       // Identical to the header snapshot: every text file is written as unchanged.
       { timestamp: 200, snapshot: workspace(LONG_SOURCE) },
-      // One small edit to a long file: written as a splice of the previous content.
+      // One small edit to a long file, in the second cluster: written as a splice of the
+      // previous event's content, which sits in the first cluster's segment.
       { timestamp: 300, snapshot: workspace(`${LONG_SOURCE}// done\n`, "index.html") },
     ],
     workspaceAssets: [{ descriptor: ASSET_DESCRIPTOR, bytes: ASSET_BYTES }],
@@ -187,7 +199,15 @@ function makeRecording(): DecodedRecording {
       { id: "audio", kind: "audio", mimeType: "audio/ogg", source: "microphone" },
       { id: "camera", kind: "camera", mimeType: "video/webm", source: "camera" },
     ],
-    clusters: [{ index: 0, startTimeMs: 0, endTimeMs: 2_000, containsKeyframe: true }],
+    clusters: [
+      { index: 0, startTimeMs: 0, endTimeMs: SECOND_CLUSTER_START, containsKeyframe: true },
+      {
+        index: 1,
+        startTimeMs: SECOND_CLUSTER_START,
+        endTimeMs: 2_000,
+        containsKeyframe: true,
+      },
+    ],
     audioSource: "microphone",
     audioStartOffsetMs: 12,
     audioFile: "recording-every-kind.ogg",
@@ -245,13 +265,13 @@ const HEADER_FIELDS_ON_THE_RECORDING = (
   "audioType" | "cameraType"
 >[];
 
-/** The undecoded (marker-carrying) records of every segment, by kind. */
-function rawSegmentsByKind(bytes: Uint8Array): Map<number, unknown[]> {
+/** The undecoded (marker-carrying) records of every segment, by kind, one array per segment. */
+function rawSegmentsByKind(bytes: Uint8Array): Map<number, unknown[][]> {
   const { headerEnd } = parseHeader(bytes);
   const footerStart = findFooterStart(bytes, headerEnd);
   if (footerStart === null) throw new Error("Expected a finalized stream");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const byKind = new Map<number, unknown[]>();
+  const byKind = new Map<number, unknown[][]>();
   let offset = headerEnd;
   while (offset < footerStart) {
     const header = readSegmentHeader(view, offset);
@@ -259,7 +279,7 @@ function rawSegmentsByKind(bytes: Uint8Array): Map<number, unknown[]> {
     const payload = bytes.subarray(payloadStart, payloadStart + header.byteLength);
     const records =
       header.kind === SEGMENT_KIND.workspaceAsset ? [payload] : decodeRecords<unknown>(payload);
-    byKind.set(header.kind, [...(byKind.get(header.kind) ?? []), ...records]);
+    byKind.set(header.kind, [...(byKind.get(header.kind) ?? []), records]);
     offset = payloadStart + header.byteLength;
   }
   return byKind;
@@ -286,6 +306,22 @@ describe("a recording with every segment kind", () => {
     expect(text(SEGMENT_KIND.workspace)).toContain('"contentSplice"');
     expect(text(SEGMENT_KIND.previewPatch)).toContain('"dedupTemplate"');
     expect(text(SEGMENT_KIND.frames)).toContain('"contentDeduped":true');
+  });
+
+  it("writes the splice and the patch template in a later segment than their source", async () => {
+    const raw = rawSegmentsByKind(await encodeRecordingToStream(makeRecording()));
+    const segmentTexts = (kind: number) =>
+      (raw.get(kind) ?? []).map((records) => JSON.stringify(records));
+
+    const workspace = segmentTexts(SEGMENT_KIND.workspace);
+    expect(workspace).toHaveLength(2);
+    expect(workspace[0]).not.toContain('"contentSplice"');
+    expect(workspace[1]).toContain('"contentSplice"');
+
+    const patches = segmentTexts(SEGMENT_KIND.previewPatch);
+    expect(patches).toHaveLength(2);
+    expect(patches[0]).not.toContain('"dedupTemplate"');
+    expect(patches[1]).toContain('"dedupTemplate"');
   });
 
   it("decodes every track, the assets and the header back to what was encoded", async () => {
