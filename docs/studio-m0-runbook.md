@@ -295,6 +295,13 @@ console:
   same job, at no extra charge. Errors start with `AthanLab:`; a rejected
   (expired or revoked) key is never sent again until the user connects a new
   one.
+- **Howard on the author's computer**
+  ([howard-on-device-burmese.md](./howard-on-device-burmese.md)) is listed for
+  everyone and costs nothing: the page calls qwentts.cpp's `tts-server` on the
+  loopback address, registers the narrator reference there as a cloned voice,
+  and asks for each uncached dialog as a 24 kHz WAV. Takes are keyed by the
+  model the server names, so a lesson narrated earlier renders with the server
+  off. Errors start with `Howard:`.
 - **VoxCPM2 on Modal** ([modal-voxcpm2-burmese.md](./modal-voxcpm2-burmese.md))
   is listed only for accounts with the private `studio.burmese-voxcpm2` D1
   flag; a failure there carries the service's reason

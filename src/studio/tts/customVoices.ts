@@ -12,10 +12,11 @@ import {
  * explicitly selected for Burmese Modal narration, the same sample is sent
  * through the authenticated Worker to Modal for speaker conditioning, as the
  * input of each narration job. The Worker does not keep it; Modal stores each
- * job's input and keeps the job's audio for up to 7 days.
+ * job's input and keeps the job's audio for up to 7 days. Selected for Howard,
+ * it goes only to the server the author runs on this computer.
  */
 
-/** Stored samples are 24 kHz: what Pocket-TTS conditions on, and what VoxCPM2's Worker requires. */
+/** Stored samples are 24 kHz: what Pocket-TTS conditions on, what VoxCPM2's Worker requires, and Howard's own rate. */
 export const VOICE_SAMPLE_RATE = VOXCPM2_REFERENCE_SAMPLE_RATE;
 /** Reference sample bounds: enough voice to condition on, small enough to store. */
 export const MIN_SAMPLE_SECONDS = 2;
@@ -34,11 +35,6 @@ export function isVoxCpm2ReferenceReady(voice: {
 }): boolean {
   const durationSeconds = voice.samples.length / voice.sampleRate;
   return durationSeconds >= MIN_VOXCPM2_REFERENCE_SECONDS && durationSeconds <= MAX_SAMPLE_SECONDS;
-}
-
-/** Whether a prepared (VOICE_SAMPLE_RATE) sample is too short for a VoxCPM2 reference. */
-export function voxCpm2ReferenceTooShort(samples: Float32Array): boolean {
-  return samples.length < MIN_VOXCPM2_REFERENCE_SECONDS * VOICE_SAMPLE_RATE;
 }
 
 export interface SavedCustomVoice {

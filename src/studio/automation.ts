@@ -1,7 +1,7 @@
 import { base64ToBytes, bytesToBase64 } from "../shared/base64";
 import { canonicalJson } from "./hash";
 import type { NarrationCoverage } from "./narrationPack/coverage";
-import type { StudioNarrationProvider } from "./narrationLanguage";
+import { isPaidNarrationProvider, type StudioNarrationProvider } from "./narrationLanguage";
 import type { StudioRuntimeMode } from "./plan";
 import type { RenderSpeed } from "./renderClock";
 import { parseRenderSpeedParam, parseRuntimeModeParam } from "./renderLaunch";
@@ -103,6 +103,8 @@ export interface StudioReadiness {
   narratorVoiceReported: boolean;
   /** Whether the AthanLab panel has given its first answer (key, voice, balance). */
   athanLabReported: boolean;
+  /** Whether the Howard panel has given its first answer (the local server, and its model). */
+  howardServerReported: boolean;
 }
 
 /**
@@ -125,6 +127,9 @@ export function studioWaitingFor(readiness: StudioReadiness): string | null {
   if (!readiness.narratorVoiceReported) return "the saved narrator voices";
   if (readiness.provider === "athanlab" && !readiness.athanLabReported) {
     return "your AthanLab setup";
+  }
+  if (readiness.provider === "howard" && !readiness.howardServerReported) {
+    return "the Howard server on this computer";
   }
   return null;
 }
@@ -214,8 +219,7 @@ export function createStudioAutomation(deps: () => StudioAutomationDeps): Studio
         workflowBlockedReason: studio.workflowBlockedReason,
         signedIn: studio.signedIn,
         provider: studio.provider,
-        // Pocket-TTS runs in this page; every other voice is a paid service.
-        providerIsPaid: studio.provider !== "pocket",
+        providerIsPaid: isPaidNarrationProvider(studio.provider),
         voice: studio.voice,
         screenRecording: studio.screenRecording,
         lessons: studio.lessons,

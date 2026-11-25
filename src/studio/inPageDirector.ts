@@ -25,6 +25,7 @@ import {
 import { pocketSynthProvider } from "./tts/pocketSynth";
 import { requireVoiceProfile, ttsRequestHash, type VoiceProfile } from "./tts/profiles";
 import { levelNarrationDialogs, NARRATION_LEVELING } from "./tts/loudness";
+import { howardSynthProvider } from "./tts/howardSynth";
 import { voxCpm2SynthProvider } from "./tts/modalVoxCpm2Synth";
 import { athanLabSynthProvider } from "./tts/athanlabSynth";
 import type { DialogSynthProvider } from "./tts/synthProvider";
@@ -89,6 +90,8 @@ function providerFor(
       return voxCpm2SynthProvider(profile, buildSeed);
     case "athanlab":
       return athanLabSynthProvider(profile);
+    case "howard-local":
+      return howardSynthProvider(profile, buildSeed);
   }
 }
 

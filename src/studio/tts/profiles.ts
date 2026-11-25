@@ -1,5 +1,6 @@
 import { sha256HexOfJson } from "../hash";
 import { ATHANLAB_TEXT_PREP_VERSION } from "./athanlab/textPrep";
+import { HOWARD_MODEL, HOWARD_SAMPLE_RATE, HOWARD_SAMPLING } from "./howard/protocol";
 import { POCKET_ENGINE_VERSION } from "./pocket/engineVersion";
 import { POCKET_TEXT_PREP_VERSION } from "./pocket/textPrep";
 
@@ -14,8 +15,9 @@ import { POCKET_TEXT_PREP_VERSION } from "./pocket/textPrep";
  * onnxruntime-web. `voxcpm2-modal` calls the authenticated first-party Worker
  * proxy, which is separately authorized by a per-user D1 flag. `athanlab`
  * calls the first-party Worker too, which speaks to AthanLab with the user's
- * own API key, stored encrypted server-side. Provider credentials are
- * deliberately absent from profiles and request hashes.
+ * own API key, stored encrypted server-side. `howard-local` calls a server on
+ * the author's own computer. Provider credentials are deliberately absent
+ * from profiles and request hashes.
  */
 
 export interface PocketVoiceProfile {
@@ -93,7 +95,43 @@ export interface AthanLabVoiceProfile {
   mimeType: "audio/wav";
 }
 
-export type VoiceProfile = PocketVoiceProfile | ModalVoxCpm2VoiceProfile | AthanLabVoiceProfile;
+/**
+ * Howard 0.6B, a Burmese fine-tune of Qwen3-TTS, on the author's own computer
+ * (tts/howard/). Like the other reference voices it is a render-time choice,
+ * not a registry entry: the speaker comes from a narrator recording in this
+ * browser, and the model from the server the author runs.
+ */
+export interface HowardVoiceProfile {
+  /** `howard-${serverModelId}-reference-${referenceVoiceSha256}`. */
+  id: string;
+  providerId: "howard-local";
+  model: typeof HOWARD_MODEL;
+  /**
+   * The talker the author's server loaded, as the server names it (its GGUF
+   * file name, or its `--alias`). The 8-bit and the 4-bit talker speak
+   * differently, so it keys the cache.
+   */
+  serverModelId: string;
+  /** Browser-local reference sample the speaker is taken from. */
+  referenceVoiceId: string;
+  /** Reference sample hash — keys the synthesis cache without embedding audio. */
+  referenceVoiceSha256: string;
+  /**
+   * How the reference conditions the model: its speaker embedding alone. A
+   * transcript-conditioned mode would be another value here.
+   */
+  cloning: "speaker-embedding";
+  /** The request settings the adapter sends with every dialog. */
+  sampling: typeof HOWARD_SAMPLING;
+  sampleRate: typeof HOWARD_SAMPLE_RATE;
+  mimeType: "audio/wav";
+}
+
+export type VoiceProfile =
+  | PocketVoiceProfile
+  | ModalVoxCpm2VoiceProfile
+  | AthanLabVoiceProfile
+  | HowardVoiceProfile;
 
 /** The exported pocket-tts ONNX bundle; its name is part of every Pocket request hash. */
 const POCKET_BUNDLE_NAME = "english_2026-04";
@@ -179,6 +217,25 @@ export function athanLabProfileOf(voiceId: string): AthanLabVoiceProfile {
     numberMode: "smart",
     textPrepVersion: ATHANLAB_TEXT_PREP_VERSION,
     sampleRate: 48000,
+    mimeType: "audio/wav",
+  };
+}
+
+/** Bind Howard, as the author's server runs it, to one browser-local speaker. */
+export function howardProfileOf(
+  voice: { id: string; sampleSha256: string },
+  serverModelId: string,
+): HowardVoiceProfile {
+  return {
+    id: `howard-${serverModelId}-reference-${voice.sampleSha256}`,
+    providerId: "howard-local",
+    model: HOWARD_MODEL,
+    serverModelId,
+    referenceVoiceId: voice.id,
+    referenceVoiceSha256: voice.sampleSha256,
+    cloning: "speaker-embedding",
+    sampling: HOWARD_SAMPLING,
+    sampleRate: HOWARD_SAMPLE_RATE,
     mimeType: "audio/wav",
   };
 }

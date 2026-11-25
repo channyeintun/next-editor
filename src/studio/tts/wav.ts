@@ -141,6 +141,17 @@ export function decodeWavPcm16(bytes: Uint8Array): DecodedWav {
   return { pcm, sampleRate };
 }
 
+/**
+ * trimSilencePcm16 on a whole PCM16 WAV: the lead-in and tail silence a model
+ * leaves around the speech, so speech starts where the schedule puts the
+ * dialog. The rate is the take's own: re-encoding at an expected rate would
+ * hide a wrong-rate take from the Director's validation.
+ */
+export function trimWavSilence(wav: Uint8Array): Uint8Array {
+  const { pcm, sampleRate } = decodeWavPcm16(wav);
+  return encodeWavPcm16(trimSilencePcm16(pcm, sampleRate), sampleRate);
+}
+
 export interface ValidatedDialogWav {
   durationMs: number;
   /** The decoded samples, so the caller levels them without decoding again. */

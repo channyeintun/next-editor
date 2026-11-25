@@ -78,6 +78,9 @@ import {
   MIN_VOXCPM2_REFERENCE_SECONDS,
   type SavedCustomVoice,
 } from "./tts/customVoices";
+import { isHowardReferenceReady } from "./tts/howard/protocol";
+import { HOWARD_SERVER_NOT_REPORTED, type HowardServerReport } from "./tts/howard/server";
+import { howardNarrationProfileOf } from "./tts/howardSynth";
 import {
   athanLabProfileOf,
   customVoiceProfileOf,
@@ -100,6 +103,7 @@ import {
   type StudioNarrationProvider,
 } from "./narrationLanguage";
 import AthanLabPanel from "./AthanLabPanel";
+import HowardPanel from "./HowardPanel";
 import NarratorVoicePanel, { type NarratorVoiceTask } from "./NarratorVoicePanel";
 import StudioIntro from "./StudioIntro";
 import { findPublishedLesson, replacePublishedLesson } from "./update/publishedLessonUpdate";
@@ -351,6 +355,9 @@ export default function StudioController() {
     reason: string | null;
     configured: boolean;
   }>(ATHANLAB_NOT_REPORTED);
+  // Reported by <HowardPanel>: whether the Howard server on this computer
+  // answers, and the model it runs, which keys Howard narration.
+  const [howardServer, setHowardServer] = useState<HowardServerReport>(HOWARD_SERVER_NOT_REPORTED);
   const runningRef = useRef(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   // The draft modal replaces the whole console (see the early return below), so
@@ -387,6 +394,7 @@ export default function StudioController() {
     storeNarrationProvider(next);
     // A remounting panel reports afresh; never start from its previous answer.
     if (next === "athanlab") setAthanLabReadiness(ATHANLAB_NOT_REPORTED);
+    if (next === "howard") setHowardServer(HOWARD_SERVER_NOT_REPORTED);
     // A completed bundle belongs to the provider that synthesized it — also
     // across the two Burmese providers. Do not leave that artifact exposed
     // after the provider selection changes.
@@ -430,6 +438,16 @@ export default function StudioController() {
     );
   };
 
+  const reportHowardServer = (report: HowardServerReport) => {
+    setHowardServer((current) =>
+      current.modelId === report.modelId &&
+      current.reachable === report.reachable &&
+      current.reason === report.reason
+        ? current
+        : report,
+    );
+  };
+
   const reportNarratorVoice = (voice: SavedCustomVoice | null) => {
     setNarratorVoice(voice);
     setNarratorVoiceReported(true);
@@ -443,6 +461,19 @@ export default function StudioController() {
 
   const selectedVoiceIsBurmeseReady =
     narratorVoice !== null && isVoxCpm2ReferenceReady(narratorVoice);
+  const selectedVoiceIsHowardReady =
+    narratorVoice !== null && isHowardReferenceReady(narratorVoice, MAX_SAMPLE_SECONDS);
+  // Howard keys narration by the model its server named. With no model known,
+  // nothing can be narrated or looked up; with one known and no server
+  // answering, lessons narrated earlier still render from the dialog cache.
+  const howardModelNeeded =
+    provider === "howard" && howardServer.modelId === null
+      ? (howardServer.reason ?? HOWARD_SERVER_NOT_REPORTED.reason)
+      : null;
+  const howardServerNeeded =
+    provider === "howard" && !howardServer.reachable
+      ? (howardServer.reason ?? HOWARD_SERVER_NOT_REPORTED.reason)
+      : null;
   const narrationImportRunning = useSelector(offlineNarrationStore, (snapshot) =>
     selectNarrationImportRunning(snapshot.context),
   );
@@ -555,6 +586,10 @@ export default function StudioController() {
       voiceProfile = athanLabProfileOf(athanLabVoice.id);
       voiceName = athanLabVoice.name;
       voiceKind = "athanlab";
+    } else if (provider === "howard") {
+      voiceProfile = howardNarrationProfileOf(narratorVoice, howardServer);
+      voiceName = narratorVoice?.name ?? null;
+      voiceKind = "reference";
     } else if (narratorVoice) {
       voiceProfile = customVoiceProfileOf(narratorVoice);
       voiceName = narratorVoice.name;
@@ -917,11 +952,15 @@ export default function StudioController() {
     voxCpm2Enabled: studioCapabilities.burmeseVoxCpm2,
     narratorVoiceReported,
     athanLabReported: athanLabReadiness !== ATHANLAB_NOT_REPORTED,
+    howardServerReported: howardServer !== HOWARD_SERVER_NOT_REPORTED,
   });
   // A render, unlike a resume, also needs AthanLab able to buy narration now:
-  // its Start stays disabled until then.
+  // its Start stays disabled until then. Howard's stays disabled until its
+  // server has named a model.
   const autostartReady =
-    waitingFor === null && (provider !== "athanlab" || athanLabReadiness.ready);
+    waitingFor === null &&
+    (provider !== "athanlab" || athanLabReadiness.ready) &&
+    howardModelNeeded === null;
   useEffect(() => {
     patchStudioWindowHandle({ waitingFor });
   }, [waitingFor]);
@@ -964,7 +1003,8 @@ export default function StudioController() {
       (narrationImportRunning ? NARRATION_IMPORT_RUNNING : null) ??
       (provider === "athanlab" && !athanLabReadiness.ready
         ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
-        : null)
+        : null) ??
+      howardModelNeeded
     );
   };
   const startBlockedReason = startBlockedReasonOf(planSlug);
@@ -973,7 +1013,8 @@ export default function StudioController() {
   const voiceBlockedReason =
     voiceTask.busy !== null || voiceTask.recording
       ? "Finish the narrator voice task first."
-      : provider === "voxcpm2" && !selectedVoiceIsBurmeseReady
+      : (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady) ||
+          (provider === "howard" && !selectedVoiceIsHowardReady)
         ? NARRATOR_REFERENCE_NEEDED
         : null;
 
@@ -1006,17 +1047,21 @@ export default function StudioController() {
         : (voiceBlockedReason ??
           (provider === "athanlab" && !athanLabReadiness.configured
             ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
-            : null));
+            : null) ??
+          howardModelNeeded);
   // A new workflow has all of its narration still to buy, so an empty AthanLab
   // balance stops it too. One that already ran may have every lesson narrated
   // (its own narration pass can be what emptied the balance): resuming it buys
   // nothing for those, and narration it does still need fails at its first
-  // dialog with AthanLab's own refusal (narrationVoiceOf).
+  // dialog with AthanLab's own refusal (narrationVoiceOf). Likewise a new
+  // workflow needs the Howard server answering, where a resumed one may find
+  // its narration kept.
   const workflowBlockedReason =
     workflowResumeBlockedReason ??
     (provider === "athanlab" && !athanLabReadiness.ready
       ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
-      : null);
+      : null) ??
+    howardServerNeeded;
   // A lesson the workflow cannot narrate fails before the workflow starts, not
   // hours in: it must be listed, and its locale suit the chosen narration.
   // From the lesson list alone: a published script that does not parse fails
@@ -1341,6 +1386,7 @@ export default function StudioController() {
             >
               <option value="pocket">English · Pocket-TTS</option>
               <option value="athanlab">မြန်မာ · AthanLab (your API key)</option>
+              <option value="howard">မြန်မာ · Howard (on-device)</option>
               {studioCapabilities.burmeseVoxCpm2 ? (
                 <option value="voxcpm2">မြန်မာ · VoxCPM2 (Modal)</option>
               ) : null}
@@ -1355,6 +1401,13 @@ export default function StudioController() {
               disabled={busy || voiceTask.busy !== null}
               onVoiceChange={reportAthanLabVoice}
               onReadyChange={reportAthanLabReadiness}
+            />
+          ) : null}
+
+          {provider === "howard" ? (
+            <HowardPanel
+              disabled={busy || voiceTask.busy !== null}
+              onServerChange={reportHowardServer}
             />
           ) : null}
 

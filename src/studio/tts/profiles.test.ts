@@ -5,6 +5,7 @@ import {
   POCKET_ONNX_RUNTIME_VERSION,
   athanLabProfileOf,
   customVoiceProfileOf,
+  howardProfileOf,
   modalVoxCpm2BurmeseProfileOf,
   requireVoiceProfile,
   ttsRequestHash,
@@ -145,5 +146,61 @@ describe("athanlab voice profiles", () => {
         profile: { ...profile, textPrepVersion: 2 as unknown as 1 },
       }),
     ).not.toBe(hash);
+  });
+});
+
+describe("howard voice profiles", () => {
+  const voice = { id: "voice-1", sampleSha256: "ab".repeat(32) };
+
+  it("pin the model, the speaker and every request setting", () => {
+    expect(howardProfileOf(voice, "Howard-0.6B-Q8_0.gguf")).toEqual({
+      id: `howard-Howard-0.6B-Q8_0.gguf-reference-${voice.sampleSha256}`,
+      providerId: "howard-local",
+      model: "aungzaythant/Howard-0.6B",
+      serverModelId: "Howard-0.6B-Q8_0.gguf",
+      referenceVoiceId: "voice-1",
+      referenceVoiceSha256: voice.sampleSha256,
+      cloning: "speaker-embedding",
+      sampling: { language: "auto", temperature: 0.65, topP: 0.9, subtalkerTemperature: 0.15 },
+      sampleRate: 24000,
+      mimeType: "audio/wav",
+    });
+  });
+
+  it("are not in the static registry", () => {
+    expect(() => requireVoiceProfile(howardProfileOf(voice, "Howard-0.6B-Q8_0.gguf").id)).toThrow(
+      /Unknown voice profile/,
+    );
+  });
+
+  // The 8-bit and the 4-bit talker speak differently, and so does another
+  // speaker: either one makes a dialog a different take.
+  it("key cached dialogs on the talker the server runs and on the speaker", async () => {
+    const profile = howardProfileOf(voice, "Howard-0.6B-Q8_0.gguf");
+    const request = { profile, speechText: "မင်္ဂလာပါ။", lexiconVersion: 1, seed: 0 };
+    const hash = await ttsRequestHash(request);
+
+    expect(
+      await ttsRequestHash({
+        ...request,
+        profile: howardProfileOf(voice, "Howard-0.6B-Q8_0.gguf"),
+      }),
+    ).toBe(hash);
+    expect(
+      await ttsRequestHash({
+        ...request,
+        profile: howardProfileOf(voice, "Howard-0.6B-Q4_K_M.gguf"),
+      }),
+    ).not.toBe(hash);
+    expect(
+      await ttsRequestHash({
+        ...request,
+        profile: howardProfileOf(
+          { ...voice, sampleSha256: "cd".repeat(32) },
+          profile.serverModelId,
+        ),
+      }),
+    ).not.toBe(hash);
+    expect(await ttsRequestHash({ ...request, seed: 1 })).not.toBe(hash);
   });
 });

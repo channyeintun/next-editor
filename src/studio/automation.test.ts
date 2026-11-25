@@ -103,6 +103,7 @@ describe("studioWaitingFor", () => {
     voxCpm2Enabled: false,
     narratorVoiceReported: true,
     athanLabReported: false,
+    howardServerReported: false,
   };
 
   it("names what the studio still waits for, and nothing once ready", () => {
@@ -120,6 +121,13 @@ describe("studioWaitingFor", () => {
     expect(studioWaitingFor({ ...ready, provider: "athanlab" })).toBe("your AthanLab setup");
     // An answer that blocks a start (an empty balance) is the blocked reason's to say.
     expect(studioWaitingFor({ ...ready, provider: "athanlab", athanLabReported: true })).toBeNull();
+    expect(studioWaitingFor({ ...ready, provider: "howard" })).toBe(
+      "the Howard server on this computer",
+    );
+    // A server that did not answer is settled too: the start then says why.
+    expect(
+      studioWaitingFor({ ...ready, provider: "howard", howardServerReported: true }),
+    ).toBeNull();
   });
 });
 
@@ -141,6 +149,12 @@ describe("createStudioAutomation", () => {
       waitingFor: "the saved narrator voices",
       providerIsPaid: false,
     });
+
+    // Howard runs on the author's computer, like Pocket-TTS.
+    studio.provider = "howard";
+    expect(automation.status()).toMatchObject({ provider: "howard", providerIsPaid: false });
+    studio.provider = "voxcpm2";
+    expect(automation.status()).toMatchObject({ providerIsPaid: true });
   });
 
   describe("startRender", () => {

@@ -7,6 +7,8 @@ import type { SavedCustomVoice } from "./tts/customVoices";
 const library = vi.hoisted(() => ({
   voices: [] as SavedCustomVoice[],
   synthesizePocket: vi.fn<() => Promise<Uint8Array>>(),
+  synthesizeHoward:
+    vi.fn<(reference: unknown, speechText: string, seed: number) => Promise<Uint8Array>>(),
   saveVoice: vi.fn<(name: string, samples: Float32Array) => Promise<SavedCustomVoice>>(),
   deleteVoice: vi.fn<(id: string) => Promise<void>>(),
 }));
@@ -15,6 +17,7 @@ vi.mock("./tts/pocketSynth", () => ({ synthesizePocketWav: library.synthesizePoc
 vi.mock("./tts/modalVoxCpm2Synth", () => ({
   synthesizeModalVoxCpm2Wav: () => Promise.reject(new Error("unused")),
 }));
+vi.mock("./tts/howardSynth", () => ({ synthesizeHowardWav: library.synthesizeHoward }));
 vi.mock("./tts/customVoices", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./tts/customVoices")>()),
   listCustomVoices: () => Promise.resolve(library.voices),
@@ -140,6 +143,35 @@ describe("NarratorVoicePanel status region", () => {
     expect(screen.queryByRole("combobox", { name: "Narrator voice" })).toBeNull();
     // The library still loads, so switching back finds the same selection.
     await waitFor(() => expect(onSelectedVoiceChange).toHaveBeenCalledWith(narrator));
+  });
+});
+
+describe("NarratorVoicePanel with Howard", () => {
+  it("asks for a reference, and previews it on the Howard server", async () => {
+    library.synthesizeHoward.mockResolvedValue(new Uint8Array(44));
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    renderPanel("howard");
+
+    expect(await screen.findByRole("option", { name: "voice: Narrator (reference)" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "voice: reference required" })).toBeTruthy();
+    expect(screen.getByText(/3–20s narrator reference is required/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    await waitFor(() => expect(library.synthesizeHoward).toHaveBeenCalledOnce());
+    expect(library.synthesizeHoward.mock.calls[0][0]).toEqual({
+      referenceVoiceId: narrator.id,
+      referenceVoiceSha256: narrator.sampleSha256,
+    });
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("holds Preview for a reference under three seconds", async () => {
+    library.voices = [{ ...narrator, samples: new Float32Array(24_000 * 2) }];
+    renderPanel("howard");
+
+    const preview = await screen.findByRole<HTMLButtonElement>("button", { name: "Preview" });
+    expect(preview.disabled).toBe(true);
   });
 });
 

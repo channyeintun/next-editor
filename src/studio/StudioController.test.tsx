@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { AthanLabPanelProps } from "./AthanLabPanel";
+import type { HowardPanelProps } from "./HowardPanel";
 import type { synthesizeNarrationAhead } from "./inPageDirector";
 import type { runStudioRender } from "./runStudioRender";
 import type { SavedCustomVoice } from "./tts/customVoices";
@@ -16,6 +17,7 @@ const studio = vi.hoisted(() => ({
   voicesLoad: null as Promise<SavedCustomVoice[]> | null,
   capabilities: { athanlab: false, burmeseVoxCpm2: false },
   athanLabPanel: null as AthanLabPanelProps | null,
+  howardPanel: null as HowardPanelProps | null,
   /** The voice the last plan build synthesized with. */
   builtVoiceProfile: undefined as VoiceProfile | undefined,
   /** The workflow's narration pass, one call per lesson. */
@@ -57,6 +59,12 @@ vi.mock("@next-editor/infra", () => ({
 vi.mock("./AthanLabPanel", () => ({
   default: (props: AthanLabPanelProps) => {
     studio.athanLabPanel = props;
+    return null;
+  },
+}));
+vi.mock("./HowardPanel", () => ({
+  default: (props: HowardPanelProps) => {
+    studio.howardPanel = props;
     return null;
   },
 }));
@@ -301,7 +309,9 @@ describe("StudioController status messages", () => {
     finishWait();
     await waitFor(() => expect(renderStatus()).toHaveTextContent("Render status: failed"));
     expect(screen.queryByText(/Bring this tab to the front/)).toBeNull();
-    expect(document.title).toBe("Studio | Next Editor");
+    // The title is set in an effect of the render that shows the failure: it
+    // can land a moment after the status text does.
+    await waitFor(() => expect(document.title).toBe("Studio | Next Editor"));
   });
 
   // Over the stage it covered code the performance pointed at, and it sat in
@@ -510,6 +520,7 @@ describe("StudioController unattended render", () => {
     studio.voicesLoad = null;
     studio.capabilities = { athanlab: false, burmeseVoxCpm2: false };
     studio.athanLabPanel = null;
+    studio.howardPanel = null;
   });
 
   it("waits for the saved voices, then renders with the stored one", async () => {
@@ -563,6 +574,71 @@ describe("StudioController unattended render", () => {
     });
     await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("waits for the Howard server to name its model, then narrates keyed by it", async () => {
+    localStorage.setItem("next-editor:studio:narration-provider", "howard");
+    localStorage.setItem("next-editor:studio:voice-choice", narrator.id);
+    studio.voices = [narrator];
+    studio.runRender.mockReturnValue(new Promise(() => {}));
+    studio.searchParams = new URLSearchParams("plan=burmese-script&autostart=1");
+    renderController(await freshStudioController());
+
+    await settle();
+    // Offered to every account: Howard needs no flag and no key.
+    expect(screen.getByRole("combobox", { name: "Narration language and provider" })).toHaveValue(
+      "howard",
+    );
+    const panel = studio.howardPanel;
+    if (!panel) throw new Error("HowardPanel not rendered");
+    expect(studio.runRender).not.toHaveBeenCalled();
+
+    // No server has ever answered, so there is no model to key narration by.
+    act(() =>
+      panel.onServerChange({
+        modelId: null,
+        reachable: false,
+        reason: "Howard: no server answers at http://127.0.0.1:8080",
+      }),
+    );
+    await settle();
+    expect(studio.runRender).not.toHaveBeenCalled();
+    expect(startButton()).toBeDisabled();
+
+    act(() =>
+      panel.onServerChange({ modelId: "Howard-0.6B-Q8_0.gguf", reachable: true, reason: null }),
+    );
+    await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+    expect(studio.builtVoiceProfile).toMatchObject({
+      providerId: "howard-local",
+      serverModelId: "Howard-0.6B-Q8_0.gguf",
+      referenceVoiceId: narrator.id,
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("renders with Howard from kept narration while its server is off", async () => {
+    localStorage.setItem("next-editor:studio:narration-provider", "howard");
+    localStorage.setItem("next-editor:studio:voice-choice", narrator.id);
+    studio.voices = [narrator];
+    studio.runRender.mockReturnValue(new Promise(() => {}));
+    studio.searchParams = new URLSearchParams("plan=burmese-script&autostart=1");
+    renderController(await freshStudioController());
+
+    await settle();
+    const panel = studio.howardPanel;
+    if (!panel) throw new Error("HowardPanel not rendered");
+    // The server named this model on an earlier day; nothing answers now.
+    act(() =>
+      panel.onServerChange({
+        modelId: "Howard-0.6B-Q8_0.gguf",
+        reachable: false,
+        reason: "Howard: no server answers at http://127.0.0.1:8080",
+      }),
+    );
+
+    await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+    expect(studio.builtVoiceProfile).toMatchObject({ serverModelId: "Howard-0.6B-Q8_0.gguf" });
   });
 
   it("waits while the lesson list is being read", async () => {

@@ -14,8 +14,10 @@ import {
   prepareVoiceSample,
   saveCustomVoice,
   type SavedCustomVoice,
-  voxCpm2ReferenceTooShort,
+  VOICE_SAMPLE_RATE,
 } from "./tts/customVoices";
+import { HOWARD_MIN_REFERENCE_SECONDS, isHowardReferenceReady } from "./tts/howard/protocol";
+import { synthesizeHowardWav } from "./tts/howardSynth";
 import { type LessonClip, saveLessonClipVoice } from "./tts/lessonVoiceClip";
 import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
 import { synthesizePocketWav } from "./tts/pocketSynth";
@@ -26,8 +28,9 @@ import { customVoiceProfileOf, modalVoxCpm2BurmeseProfileOf } from "./tts/profil
  * references live in this browser's IndexedDB: upload or record one, take a
  * clip from one of the author's lessons (NarratorLessonClipPicker), preview
  * it, delete it, and pick the one a render narrates with. The selected sample
- * either clones Pocket-TTS locally or conditions Burmese VoxCPM2 through the
- * authenticated Worker at render time. AthanLab voices come from the user's
+ * either clones Pocket-TTS locally, conditions Burmese VoxCPM2 through the
+ * authenticated Worker at render time, or gives Howard its speaker on the
+ * author's own computer. AthanLab voices come from the user's
  * AthanLab account instead (AthanLabPanel), so with that provider only the
  * voice-task status region is rendered — the library stays loaded for when
  * the author switches back.
@@ -86,6 +89,23 @@ async function runVoiceTask(
   }
 }
 
+/**
+ * The least speech a provider that narrates from a recorded reference needs
+ * of it, or null for one that works without a reference.
+ */
+function referenceSecondsOf(provider: StudioNarrationProvider): number | null {
+  if (provider === "voxcpm2") return MIN_VOXCPM2_REFERENCE_SECONDS;
+  if (provider === "howard") return HOWARD_MIN_REFERENCE_SECONDS;
+  return null;
+}
+
+/** Whether a stored voice can be the provider's reference. */
+function isReferenceReady(voice: SavedCustomVoice, provider: StudioNarrationProvider): boolean {
+  return provider === "howard"
+    ? isHowardReferenceReady(voice, MAX_SAMPLE_SECONDS)
+    : isVoxCpm2ReferenceReady(voice);
+}
+
 /** Decodes a narrator sample to the reference format, checks it, and stores it. */
 async function prepareAndSaveVoice(
   bytes: ArrayBuffer,
@@ -93,13 +113,16 @@ async function prepareAndSaveVoice(
   provider: StudioNarrationProvider,
 ): Promise<SavedCustomVoice> {
   const samples = await prepareVoiceSample(bytes);
-  if (provider === "voxcpm2" && voxCpm2ReferenceTooShort(samples)) {
+  const referenceSeconds = referenceSecondsOf(provider);
+  if (referenceSeconds !== null && samples.length < referenceSeconds * VOICE_SAMPLE_RATE) {
     throw new Error(
-      `Burmese narration requires at least ${MIN_VOXCPM2_REFERENCE_SECONDS}s of clear reference speech`,
+      `Burmese narration requires at least ${referenceSeconds}s of clear reference speech`,
     );
   }
   return saveCustomVoice(name, samples);
 }
+
+const BURMESE_PREVIEW_SENTENCE = "မင်္ဂလာပါ။ ဒီအသံနဲ့ သင်ခန်းစာတစ်လျှောက် တစ်သမတ်တည်း ရှင်းပြပေးပါမယ်။";
 
 /** Synthesizes the provider's preview sentence with `voice` and plays it. */
 async function playVoicePreview(
@@ -110,14 +133,20 @@ async function playVoicePreview(
     provider === "voxcpm2"
       ? await synthesizeModalVoxCpm2Wav(
           modalVoxCpm2BurmeseProfileOf(voice),
-          "မင်္ဂလာပါ။ ဒီအသံနဲ့ သင်ခန်းစာတစ်လျှောက် တစ်သမတ်တည်း ရှင်းပြပေးပါမယ်။",
+          BURMESE_PREVIEW_SENTENCE,
           1,
         )
-      : await synthesizePocketWav(
-          customVoiceProfileOf(voice),
-          "Hi! This is my cloned voice, reading a quick preview.",
-          1,
-        );
+      : provider === "howard"
+        ? await synthesizeHowardWav(
+            { referenceVoiceId: voice.id, referenceVoiceSha256: voice.sampleSha256 },
+            BURMESE_PREVIEW_SENTENCE,
+            1,
+          )
+        : await synthesizePocketWav(
+            customVoiceProfileOf(voice),
+            "Hi! This is my cloned voice, reading a quick preview.",
+            1,
+          );
   const url = URL.createObjectURL(new Blob([wav.slice() as BlobPart], { type: "audio/wav" }));
   const audio = new Audio(url);
   audio.onended = () => URL.revokeObjectURL(url);
@@ -241,10 +270,11 @@ export default function NarratorVoicePanel({
     lessonPickerButtonRef.current?.focus();
   }, [lessonPickerOpen, voiceBusy]);
 
-  const selectedVoiceIsBurmeseReady =
-    selectedVoice !== null && isVoxCpm2ReferenceReady(selectedVoice);
-  const requiredVoiceSeconds =
-    provider === "voxcpm2" ? MIN_VOXCPM2_REFERENCE_SECONDS : MIN_SAMPLE_SECONDS;
+  const referenceSeconds = referenceSecondsOf(provider);
+  const needsReference = referenceSeconds !== null;
+  const selectedVoiceIsReferenceReady =
+    selectedVoice !== null && isReferenceReady(selectedVoice, provider);
+  const requiredVoiceSeconds = referenceSeconds ?? MIN_SAMPLE_SECONDS;
 
   const chooseVoice = (value: string) => {
     setVoiceChoice(value);
@@ -351,11 +381,11 @@ export default function NarratorVoicePanel({
               className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
             >
               <option value="default">
-                {provider === "voxcpm2" ? "voice: reference required" : "voice: script default"}
+                {needsReference ? "voice: reference required" : "voice: script default"}
               </option>
               {customVoices.map((voice) => (
                 <option key={voice.id} value={voice.id}>
-                  voice: {voice.name} ({provider === "voxcpm2" ? "reference" : "cloned"})
+                  voice: {voice.name} ({needsReference ? "reference" : "cloned"})
                 </option>
               ))}
             </select>
@@ -367,7 +397,7 @@ export default function NarratorVoicePanel({
                     disabled ||
                     voiceBusy !== null ||
                     voiceRecording ||
-                    (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady)
+                    (needsReference && !selectedVoiceIsReferenceReady)
                   }
                   onClick={previewVoice}
                   className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
@@ -395,7 +425,7 @@ export default function NarratorVoicePanel({
           {/* Ways to add a voice: an audio file, the microphone, or a lesson clip. */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-bold uppercase tracking-[0.04em] text-slate-400">
-              {provider === "voxcpm2" ? "Add reference" : "Add voice"}
+              {needsReference ? "Add reference" : "Add voice"}
             </span>
             <button
               type="button"
@@ -471,7 +501,7 @@ export default function NarratorVoicePanel({
       {provider === "voxcpm2" ? (
         <p
           className={`mt-1 text-[12px] ${
-            selectedVoiceIsBurmeseReady ? "text-slate-400" : "text-amber-300"
+            selectedVoiceIsReferenceReady ? "text-slate-400" : "text-amber-300"
           }`}
         >
           A {MIN_VOXCPM2_REFERENCE_SECONDS}–{MAX_SAMPLE_SECONDS}s narrator reference is required so
@@ -479,6 +509,17 @@ export default function NarratorVoicePanel({
           deployment with each narration job, along with the fixed Burmese educator prompt. Modal
           stores each job's input and keeps its audio for up to 7 days. The LessonScript must use{" "}
           <span className="font-mono text-slate-300">locale: my-MM</span>.
+        </p>
+      ) : null}
+      {provider === "howard" ? (
+        <p
+          className={`mt-1 text-[12px] ${
+            selectedVoiceIsReferenceReady ? "text-slate-400" : "text-amber-300"
+          }`}
+        >
+          A {HOWARD_MIN_REFERENCE_SECONDS}–{MAX_SAMPLE_SECONDS}s narrator reference is required:
+          Howard takes the speaker from it, so every dialog keeps the same voice. Use only a voice
+          you have permission to clone.
         </p>
       ) : null}
     </>

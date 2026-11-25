@@ -9,7 +9,6 @@ import {
   MIN_SAMPLE_SECONDS,
   saveCustomVoice,
   VOICE_SAMPLE_RATE,
-  voxCpm2ReferenceTooShort,
 } from "./customVoices";
 
 describe("clampVoiceSamples", () => {
@@ -43,11 +42,6 @@ describe("VoxCPM2 reference length", () => {
     expect(isVoxCpm2ReferenceReady(reference(5))).toBe(true);
     expect(isVoxCpm2ReferenceReady(reference(20))).toBe(true);
     expect(isVoxCpm2ReferenceReady(reference(20.1))).toBe(false);
-  });
-
-  it("calls a prepared sample under 5 s too short", () => {
-    expect(voxCpm2ReferenceTooShort(seconds(4.9))).toBe(true);
-    expect(voxCpm2ReferenceTooShort(seconds(5))).toBe(false);
   });
 });
 

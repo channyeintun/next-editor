@@ -21,9 +21,9 @@ describe("Studio narration language", () => {
     expect(validateNarrationLanguage("en-US", "my")).toMatch(/requires a LessonScript locale/);
   });
 
-  it("names both Burmese providers when an English provider meets a Burmese script", () => {
+  it("names the Burmese providers when an English provider meets a Burmese script", () => {
     expect(validateNarrationLanguage("my-MM", "en")).toBe(
-      'The "my-MM" LessonScript needs Burmese narration — choose မြန်မာ · AthanLab or မြန်မာ · VoxCPM2 (Modal)',
+      'The "my-MM" LessonScript needs Burmese narration — choose မြန်မာ · AthanLab, မြန်မာ · Howard (on-device) or မြန်မာ · VoxCPM2 (Modal)',
     );
   });
 });
@@ -32,17 +32,20 @@ describe("Studio narration provider", () => {
   it("derives the narration language from the provider", () => {
     expect(narrationLanguageOf("pocket")).toBe("en");
     expect(narrationLanguageOf("athanlab")).toBe("my");
+    expect(narrationLanguageOf("howard")).toBe("my");
     expect(narrationLanguageOf("voxcpm2")).toBe("my");
   });
 
   it("labels each provider the way a run records it", () => {
     expect(narrationProviderLabel("pocket")).toBe("Pocket-TTS");
     expect(narrationProviderLabel("athanlab")).toBe("AthanLab");
+    expect(narrationProviderLabel("howard")).toBe("Howard (on-device)");
     expect(narrationProviderLabel("voxcpm2")).toBe("VoxCPM2 (Modal)");
   });
 
   it("accepts only known provider ids, e.g. from browser storage", () => {
     expect(isStudioNarrationProvider("athanlab")).toBe(true);
+    expect(isStudioNarrationProvider("howard")).toBe(true);
     expect(isStudioNarrationProvider("voxcpm2")).toBe(true);
     expect(isStudioNarrationProvider("pocket")).toBe(true);
     expect(isStudioNarrationProvider("my")).toBe(false);

@@ -136,8 +136,10 @@ header). Each runs in one of three places:
   optional local voice cloning). Burmese narration uses AthanLab with the user's own API key: any
   signed-in user can connect a key, which the Worker stores encrypted and never shows again. Each
   uncached dialog is an AthanLab job charged to the user's AthanLab balance, and AthanLab keeps job
-  text and audio for 30 days. Users with the `studio.burmese-voxcpm2` feature flag can choose
-  VoxCPM2 on Modal instead.
+  text and audio for 30 days. Howard 0.6B narrates Burmese on the author's own computer instead: the
+  page calls a local server that one command starts, with no key and no cost
+  ([setup](docs/howard-on-device-burmese.md)). Users with the `studio.burmese-voxcpm2` feature flag
+  can choose VoxCPM2 on Modal.
 - A deterministic performer drives the real editor while the normal recorder captures it. QA
   gates check the result, and a render that passes every gate can become a draft through the
   normal upload flow; publishing stays a human decision.
