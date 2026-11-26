@@ -1,0 +1,1126 @@
+# Fintech Engineering, lesson 37: end to end, a crypto withdrawal (Burmese).
+#
+# Source: Fintech Engineering Handbook, Appendix B "Flow 1: A crypto withdrawal" (CC BY 4.0,
+# Voytek Pitula), with pointers back to the lessons that taught each pattern.
+# Start state: chain.go (a fake node holding the hot wallet), flow.go (Request reserves amount +
+# fee estimates under an idempotency key; Drive runs the stored state machine: compliance gate,
+# sign and store the hash, broadcast, finality), books.go (the store, the final posting with the
+# real fee, the overdraft), ledger.go (the course ledger + ETH formatting), main.go (the happy path).
+# Edits, all insert-only, in main.go:
+#   1. a world that crashes right after the broadcast, driven twice -> run-2 "sends on chain: 1"
+#   2. a world whose real network fee is above the estimate           -> run-3 the overdraft line
+# Runs: run-1 (reserve, same key again, posted, books, nightly check), run-2, run-3.
+# Figures: flow (the whole withdrawal as a sequence, 7 steps), books (the final entry), crash
+# (resume by asking the chain), fee (the fee above the hold, booked and recovered), iv.
+# Facts: B15 (finality on Ethereum and Bitcoin).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-37-flow-withdrawal
+  title: "Fintech Engineering 37: Flow ၁၊ crypto withdrawal"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      books.go: |
+        package main
+
+        import "fmt"
+
+        // Service is one store: ledger, idempotency keys, holds, the audit trail and the chain.
+        type Service struct {
+        	ledger     Ledger
+        	chain      *Chain
+        	keys       map[string]*Withdrawal // scoped to user and operation
+        	holds      map[string]int64       // open reservations per user
+        	trail      []string
+        	crashAfter string // test hook: the process dies right after this step
+        }
+
+        // available is the balance minus the open reservations: what a new request may use.
+        func (s *Service) available(account string) int64 {
+        	return s.ledger.Balance(account) - s.holds[account]
+        }
+
+        // release closes a withdrawal's reservation and returns what it held.
+        func (s *Service) release(w *Withdrawal) int64 {
+        	held := w.Held
+        	s.holds[w.User] -= held
+        	w.Held = 0
+        	return held
+        }
+
+        // post books the final movement with the real fee, then settles the reservation.
+        func (s *Service) post(w *Withdrawal) {
+        	fee := s.chain.Find(w.Hash).Fee
+        	charge := w.Amount + fee + w.SvcFee
+        	must(s.ledger.Post(Tx{ID: w.ID, Memo: "withdrawal " + w.Hash, Lines: []Line{
+        		{Account: w.User, Debit: charge},
+        		{Account: "expense:network-fee", Debit: fee},
+        		{Account: "asset:chain", Credit: w.Amount + fee},
+        		{Account: "revenue:fees", Credit: fee + w.SvcFee},
+        	}}))
+        	held := s.release(w)
+        	if charge <= held {
+        		fmt.Printf("%s final, posted, released %s\n", w.ID, eth(held-charge))
+        		return
+        	}
+        	fmt.Printf("%s final, posted %s over the hold: fee %s, estimate %s\n", w.ID,
+        		eth(charge-held), eth(fee), eth(w.EstFee))
+        	if b := s.ledger.Balance(w.User); b < 0 {
+        		s.trail = append(s.trail, w.ID+" overdraft "+eth(b))
+        		fmt.Printf("%s overdraft: user %s ETH, recover from the next deposit\n", w.ID, eth(b))
+        	}
+        }
+
+        func must(err error) {
+        	if err != nil {
+        		panic(err)
+        	}
+        }
+      chain.go: |
+        package main
+
+        // ETH amounts are int64 wei.
+        const (
+        	gwei       int64 = 1_000_000_000
+        	ether            = 1_000_000_000 * gwei
+        	milli            = ether / 1000 // 0.001 ETH
+        	finalAfter       = 64           // blocks: stands in for finality (two epochs of 32 slots is the floor)
+        )
+
+        // Chain is a fake Ethereum node holding our hot wallet. A send cannot be taken back.
+        type Chain struct {
+        	Wallet  int64               // what our wallet really holds on chain
+        	NextFee int64               // the network fee the next send will really cost
+        	sent    map[string]*ChainTx // by transaction hash
+        	height  int
+        }
+
+        // ChainTx is a transaction the network accepted.
+        type ChainTx struct {
+        	Hash, To    string
+        	Amount, Fee int64
+        	Block       int
+        }
+
+        func newChain(wallet, fee int64) *Chain {
+        	return &Chain{Wallet: wallet, NextFee: fee, sent: map[string]*ChainTx{}}
+        }
+
+        // Broadcast sends a signed transaction: the amount and the fee leave the wallet.
+        func (c *Chain) Broadcast(hash, to string, amount int64) {
+        	c.height++
+        	c.sent[hash] = &ChainTx{hash, to, amount, c.NextFee, c.height}
+        	c.Wallet -= amount + c.NextFee
+        }
+
+        // Find asks the node about a hash: nil if the network never saw it.
+        func (c *Chain) Find(hash string) *ChainTx { return c.sent[hash] }
+
+        // Confirmations counts the blocks on top of the transaction, its own block included.
+        func (c *Chain) Confirmations(hash string) int {
+        	if tx := c.sent[hash]; tx != nil {
+        		return c.height - tx.Block + 1
+        	}
+        	return 0
+        }
+
+        // Mine adds n blocks; Sends counts the transactions the network holds.
+        func (c *Chain) Mine(n int) { c.height += n }
+        func (c *Chain) Sends() int { return len(c.sent) }
+      flow.go: |
+        package main
+
+        import (
+        	"crypto/sha256"
+        	"fmt"
+        )
+
+        const sanctioned = "0xbad" // an address the screening provider flags
+
+        // Withdrawal is the stored state of one flow: a driver can resume it after any crash.
+        type Withdrawal struct {
+        	ID, User, To           string
+        	Amount, EstFee, SvcFee int64
+        	Held                   int64 // the open reservation
+        	State, Hash            string
+        }
+
+        var nextID int
+
+        // Request checks the available balance and reserves amount plus fees in one step.
+        func (s *Service) Request(key, from, to string, amount int64) *Withdrawal {
+        	if w := s.keys[from+"/withdraw/"+key]; w != nil {
+        		return w
+        	}
+        	nextID++
+        	w := &Withdrawal{fmt.Sprintf("w-%d", nextID), from, to, amount, 2 * milli, milli, 0, "reserved", ""}
+        	if need := amount + w.EstFee + w.SvcFee; need <= s.available(from) {
+        		s.keys[from+"/withdraw/"+key], w.Held = w, need
+        		s.holds[from] += need
+        		fmt.Printf("%s reserved %s ETH, available %s\n", w.ID, eth(need), eth(s.available(from)))
+        	} else {
+        		w.State = "released"
+        	}
+        	return w
+        }
+
+        // Drive moves a withdrawal forward from its stored state; it is safe to call again.
+        func (s *Service) Drive(w *Withdrawal) {
+        	for w.State != "posted" && w.State != "released" {
+        		switch w.State {
+        		case "reserved": // the compliance gate: may sleep for days in manual review
+        			if w.To == sanctioned {
+        				s.trail = append(s.trail, w.ID+" blocked: "+w.To)
+        				fmt.Printf("%s blocked, released %s\n", w.ID, eth(s.release(w)))
+        				w.State = "released"
+        				continue
+        			}
+        			s.trail = append(s.trail, w.ID+" passed screening")
+        			// sign first: the hash is stored before anything is sent
+        			w.Hash = fmt.Sprintf("0x%x", sha256.Sum256([]byte(w.ID+w.To)))[:10]
+        			w.State = "sending"
+        		case "sending":
+        			if s.chain.Find(w.Hash) != nil {
+        				fmt.Printf("%s resumed: %s is on chain, not sent again\n", w.ID, w.Hash)
+        			} else {
+        				s.chain.Broadcast(w.Hash, w.To, w.Amount)
+        			}
+        			if s.crashAfter == "sending" {
+        				s.crashAfter = ""
+        				fmt.Println(w.ID, "crashed after the broadcast")
+        				return
+        			}
+        			w.State = "sent"
+        		case "sent":
+        			s.chain.Mine(finalAfter) // waiting for finality, compressed
+        			if s.chain.Confirmations(w.Hash) >= finalAfter {
+        				s.post(w)
+        				w.State = "posted"
+        			}
+        		}
+        	}
+        }
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // kindOf reads the account type from the name: "asset:bank" is an asset.
+        func kindOf(account string) string {
+        	kind, _, _ := strings.Cut(account, ":")
+        	return kind
+        }
+
+        // Balance derives an account's balance on the side where that kind of account grows:
+        // assets and expenses grow with debits; liabilities, equity and revenue grow with credits.
+        func (l *Ledger) Balance(account string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind := kindOf(account); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+
+        // format prints minor units with exp decimal places: format(1234, 2) is "12.34" (money.go).
+        func format(minor int64, exp int) string {
+        	sign := ""
+        	if minor < 0 {
+        		sign, minor = "-", -minor
+        	}
+        	digits := fmt.Sprintf("%0*d", exp+1, minor)
+        	if exp == 0 {
+        		return sign + digits
+        	}
+        	return sign + digits[:len(digits)-exp] + "." + digits[len(digits)-exp:]
+        }
+
+        // eth prints wei (10^18 per ether) without trailing zeros: eth(5e17) is "0.5".
+        // int64 wei stops at about 9.22 ETH; a real system keeps 256-bit integers (lesson 03).
+        func eth(wei int64) string {
+        	return strings.TrimSuffix(strings.TrimRight(format(wei, 18), "0"), ".")
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        const user = "liability:user:1042"
+
+        func main() {
+        	// user 1042 holds 0.503 ETH and withdraws 0.5; the network will charge 0.0015
+        	s := newService(503*milli, 3*milli/2)
+        	w := s.Request("k-1", user, "0x71c", ether/2)
+        	again := s.Request("k-1", user, "0x71c", ether/2) // the client retries the submit
+        	fmt.Println(again.ID, "again with key k-1: same withdrawal, reserved once")
+        	s.Drive(w)
+        	s.report()
+        }
+
+        // newService starts a 1 ETH hot wallet: user 1042 holds balance, user 2077 the rest.
+        func newService(balance, fee int64) *Service {
+        	s := &Service{chain: newChain(ether, fee), keys: map[string]*Withdrawal{}, holds: map[string]int64{}}
+        	must(s.ledger.Post(Tx{ID: "d-1", Memo: "deposits", Lines: []Line{
+        		{Account: "asset:chain", Debit: ether},
+        		{Account: user, Credit: balance},
+        		{Account: "liability:user:2077", Credit: ether - balance},
+        	}}))
+        	return s
+        }
+
+        // report prints the books, then the nightly check of the ledger against the chain.
+        func (s *Service) report() {
+        	l := &s.ledger
+        	fmt.Printf("user %s  chain %s  gas %s  fees %s\n", eth(l.Balance(user)),
+        		eth(l.Balance("asset:chain")), eth(l.Balance("expense:network-fee")), eth(l.Balance("revenue:fees")))
+        	fmt.Printf("recon: chain wallet %s, ledger %s\n", eth(s.chain.Wallet), eth(l.Balance("asset:chain")))
+        }
+  slides:
+    - id: books-1
+      contentType: html
+      name: "Double-entry 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DOUBLE-ENTRY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Final ဖြစ်မှ entry တစ်ခုတည်းနဲ့ post လုပ်</text>
+        <g class="in"><rect x="80" y="220" width="900" height="300" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="255" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="543.7" y="255" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">debit</text><text x="686.6" y="255" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">credit</text><text x="730.6" y="255" font-size="22" fill="#8a94a8" font-weight="700">ဘာလဲ</text><path d="M80 272H980" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="313" font-size="25" fill="#e9edf5" class="mono">liability:user:1042</text><text x="543.7" y="313" font-size="26" text-anchor="end" fill="#f6c453" class="mono">0.5025</text><text x="730.6" y="313" font-size="27" fill="#e9edf5">0.5 + fee + 0.001</text></g><g><path d="M96 334H964" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="375" font-size="28" fill="#e9edf5" class="mono">asset:chain</text><text x="686.6" y="375" font-size="26" text-anchor="end" fill="#f6c453" class="mono">0.5015</text><text x="730.6" y="375" font-size="26" fill="#e9edf5">wallet ကနေ ထွက်</text></g></g>
+        <g class="in"><text x="1290" y="254" font-size="30" text-anchor="middle" fill="#b794f6" font-weight="700">liability:user:1042</text><text x="1290" y="286" font-size="22" text-anchor="middle" fill="#8a94a8">liability</text><path d="M1060 302H1520M1290 302V550" stroke="#b794f6" stroke-width="3" stroke-linecap="round" fill="none"/><text x="1175" y="332" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Debit</text><text x="1405" y="332" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Credit</text><g><text x="1175" y="378" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">0.5025</text></g><g><text x="1405" y="378" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">0.503</text></g></g>
+        <g class="in"><text x="1290" y="610" font-size="32" text-anchor="middle" fill="#4fd1c5" class="mono">balance 0.0005</text></g>
+        </svg>
+    - id: books-2
+      contentType: html
+      name: "Double-entry 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DOUBLE-ENTRY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Final ဖြစ်မှ entry တစ်ခုတည်းနဲ့ post လုပ်</text>
+        <rect x="80" y="220" width="900" height="300" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="255" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="543.7" y="255" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">debit</text><text x="686.6" y="255" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">credit</text><text x="730.6" y="255" font-size="22" fill="#8a94a8" font-weight="700">ဘာလဲ</text><path d="M80 272H980" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="313" font-size="25" fill="#e9edf5" class="mono">liability:user:1042</text><text x="543.7" y="313" font-size="26" text-anchor="end" fill="#f6c453" class="mono">0.5025</text><text x="730.6" y="313" font-size="27" fill="#e9edf5">0.5 + fee + 0.001</text></g><g><path d="M96 334H964" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="375" font-size="28" fill="#e9edf5" class="mono">asset:chain</text><text x="686.6" y="375" font-size="26" text-anchor="end" fill="#f6c453" class="mono">0.5015</text><text x="730.6" y="375" font-size="26" fill="#e9edf5">wallet ကနေ ထွက်</text></g><g class="in"><path d="M96 396H964" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="437" font-size="25" fill="#e9edf5" class="mono">expense:network-fee</text><text x="543.7" y="437" font-size="26" text-anchor="end" fill="#e9edf5" class="mono">0.0015</text><text x="730.6" y="437" font-size="28" fill="#e9edf5">chain ယူတဲ့ gas</text></g><g class="in"><path d="M96 458H964" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="499" font-size="28" fill="#e9edf5" class="mono">revenue:fees</text><text x="686.6" y="499" font-size="26" text-anchor="end" fill="#e9edf5" class="mono">0.0025</text><text x="730.6" y="499" font-size="28" fill="#e9edf5">user ဆီက fee</text></g>
+        <g class="in"><rect x="80" y="560" width="524.3" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="80" y="560" width="524.3" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="342.2" y="594.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">Σ debit 0.504 = Σ credit 0.504</text></g>
+        <g class="in"><rect x="80" y="640" width="736" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="80" y="640" width="736" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="448" y="674.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">hold 0.503 − charge 0.5025 → release 0.0005</text></g>
+        <text x="1290" y="254" font-size="30" text-anchor="middle" fill="#b794f6" font-weight="700">liability:user:1042</text><text x="1290" y="286" font-size="22" text-anchor="middle" fill="#8a94a8">liability</text><path d="M1060 302H1520M1290 302V550" stroke="#b794f6" stroke-width="3" stroke-linecap="round" fill="none"/><text x="1175" y="332" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Debit</text><text x="1405" y="332" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Credit</text><g><text x="1175" y="378" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">0.5025</text></g><g><text x="1405" y="378" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">0.503</text></g>
+        <text x="1290" y="610" font-size="32" text-anchor="middle" fill="#4fd1c5" class="mono">balance 0.0005</text>
+        </svg>
+    - id: crash-1
+      contentType: html
+      name: "Resumability 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-block" viewBox="0 0 48 48"><path d="M24 4 41 14v20L24 44 7 34V14z"/><path d="M7 14l17 10 17-10M24 24v20"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">RESUMABILITY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Broadcast ပြီးမှ crash ဖြစ်ရင်</text>
+        <g class="in"><path d="M245 276V720" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-gear" x="140" y="218" width="40" height="40" style="color:#b794f6"/><text x="271" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Driver</text><path d="M800 276V720" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="695" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Store</text><path d="M1355 276V720" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-block" x="1250" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1381" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Chain</text><g><path d="M253 354.4H788" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="522.5" y="341.4" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">state sending · hash 0x1351…</text></g><g><path d="M253 435.2H1343" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="800" y="422.2" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">broadcast</text></g><g><rect x="180.4" y="490" width="129.3" height="48" rx="12" fill="#0b0e14" stroke="#fc8181" stroke-width="2"/><text x="245" y="523" font-size="25" text-anchor="middle" fill="#fc8181" font-weight="600">✗ crash</text></g></g>
+        </svg>
+    - id: crash-2
+      contentType: html
+      name: "Resumability 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-block" viewBox="0 0 48 48"><path d="M24 4 41 14v20L24 44 7 34V14z"/><path d="M7 14l17 10 17-10M24 24v20"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">RESUMABILITY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Broadcast ပြီးမှ crash ဖြစ်ရင်</text>
+        <path d="M245 276V720" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-gear" x="140" y="218" width="40" height="40" style="color:#b794f6"/><text x="271" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Driver</text><path d="M800 276V720" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="695" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Store</text><path d="M1355 276V720" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-block" x="1250" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1381" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Chain</text><g><path d="M253 354.4H788" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="522.5" y="341.4" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">state sending · hash 0x1351…</text></g><g><path d="M253 435.2H1343" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="800" y="422.2" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">broadcast</text></g><g><rect x="180.4" y="490" width="129.3" height="48" rx="12" fill="#0b0e14" stroke="#fc8181" stroke-width="2"/><text x="245" y="523" font-size="25" text-anchor="middle" fill="#fc8181" font-weight="600">✗ crash</text></g><g class="in"><path d="M253 596.8H1343" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="800" y="583.8" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">resume: find 0x1351…?</text></g><g class="in"><path d="M1347 677.6H257" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="800" y="664.6" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600">found → do not send again</text></g>
+        <g class="in"><rect x="120" y="770" width="632.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="120" y="770" width="632.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="436.1" y="804.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">resume = ask the chain, never resend blindly</text></g>
+        </svg>
+    - id: fee-1
+      contentType: html
+      name: "Overdraft 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">OVERDRAFT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Network fee က estimate ထက် များလာရင်</text>
+        <g class="in"><text x="100" y="258" font-size="26" fill="#8a94a8">reserved for the fee</text></g>
+        <g class="in"><rect x="100" y="280" width="860" height="70" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="284" width="483.4" height="62" rx="10" fill="#f6ad55" opacity="0.28"/><rect x="104" y="284" width="483.4" height="62" rx="10" fill="url(#hatch)" stroke="#f6ad55" stroke-width="2.5"/><text x="345.7" y="390" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="600">estimate</text><text x="345.7" y="326" font-size="30" text-anchor="middle" fill="#e9edf5" font-weight="700" class="mono">0.002</text></g></g>
+        <g class="in"><text x="100" y="448" font-size="26" fill="#8a94a8">what the network charged</text></g>
+        <g class="in"><rect x="100" y="470" width="860" height="70" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="474" width="483.4" height="62" rx="10" fill="#f6ad55" opacity="0.8"/><text x="345.7" y="580" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="600">covered by the hold</text><text x="345.7" y="516" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">0.002</text></g><g><rect x="595.4" y="474" width="360.6" height="62" rx="10" fill="#fc8181" opacity="0.8"/><text x="775.7" y="580" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">over the hold</text><text x="775.7" y="516" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">0.0015</text></g></g>
+        <g class="in"><rect x="1000" y="492" width="307.4" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="1000" y="492" width="307.4" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="1153.7" y="526.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">run 3: user −0.0015</text></g>
+        </svg>
+    - id: fee-2
+      contentType: html
+      name: "Overdraft 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">OVERDRAFT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Network fee က estimate ထက် များလာရင်</text>
+        <text x="100" y="258" font-size="26" fill="#8a94a8">reserved for the fee</text>
+        <rect x="100" y="280" width="860" height="70" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="284" width="483.4" height="62" rx="10" fill="#f6ad55" opacity="0.28"/><rect x="104" y="284" width="483.4" height="62" rx="10" fill="url(#hatch)" stroke="#f6ad55" stroke-width="2.5"/><text x="345.7" y="390" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="600">estimate</text><text x="345.7" y="326" font-size="30" text-anchor="middle" fill="#e9edf5" font-weight="700" class="mono">0.002</text></g>
+        <text x="100" y="448" font-size="26" fill="#8a94a8">what the network charged</text>
+        <rect x="100" y="470" width="860" height="70" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="474" width="483.4" height="62" rx="10" fill="#f6ad55" opacity="0.8"/><text x="345.7" y="580" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="600">covered by the hold</text><text x="345.7" y="516" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">0.002</text></g><g><rect x="595.4" y="474" width="360.6" height="62" rx="10" fill="#fc8181" opacity="0.8"/><text x="775.7" y="580" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">over the hold</text><text x="775.7" y="516" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">0.0015</text></g>
+        <rect x="1000" y="492" width="307.4" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="1000" y="492" width="307.4" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="1153.7" y="526.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">run 3: user −0.0015</text>
+        <g class="in"><rect x="100" y="640" width="600" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-warn" x="122" y="673" width="64" height="64" style="color:#fc8181"/><text x="440" y="695.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">book the overdraft</text><text x="440" y="736.6" font-size="24" text-anchor="middle" fill="#8a94a8">the negative stays visible</text></g>
+        <g class="in"><rect x="820" y="640" width="680" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-retry" x="842" y="673" width="64" height="64" style="color:#68d391"/><text x="1200" y="695.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">recover explicitly</text><text x="1200" y="736.6" font-size="24" text-anchor="middle" fill="#8a94a8">next deposit · ask · write-off</text></g>
+        <path d="M710 705L806 705" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/>
+        </svg>
+    - id: flow-1
+      contentType: html
+      name: "Flow 1 · withdrawal 1/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol><symbol id="i-block" viewBox="0 0 48 48"><path d="M24 4 41 14v20L24 44 7 34V14z"/><path d="M7 14l17 10 17-10M24 24v20"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FLOW 1 · WITHDRAWAL</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal ကို အဆင့် 6 ဆင့်နဲ့</text>
+        <g class="in"><path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M502.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="377.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="397.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="528.5" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">API</text><path d="M800 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="695" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1097.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="972.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="992.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="1123.5" y="247.2" font-size="27" text-anchor="middle" fill="#e9edf5" font-weight="600">Compliance</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-block" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Chain</text><g><path d="M213 344H490.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="353.8" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">withdraw · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g></g>
+        </svg>
+    - id: flow-2
+      contentType: html
+      name: "Flow 1 · withdrawal 2/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol><symbol id="i-block" viewBox="0 0 48 48"><path d="M24 4 41 14v20L24 44 7 34V14z"/><path d="M7 14l17 10 17-10M24 24v20"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FLOW 1 · WITHDRAWAL</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal ကို အဆင့် 6 ဆင့်နဲ့</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M502.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="377.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="397.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="528.5" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">API</text><path d="M800 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="695" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1097.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="972.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="992.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="1123.5" y="247.2" font-size="27" text-anchor="middle" fill="#e9edf5" font-weight="600">Compliance</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-block" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Chain</text><g><path d="M213 344H490.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="353.8" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">withdraw · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g class="in"><path d="M510.5 405.8H788" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="651.3" y="392.8" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">reserve 0.503</text><circle cx="528.5" cy="405.8" r="17" fill="#f6ad55"/><text x="528.5" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g>
+        </svg>
+    - id: flow-3
+      contentType: html
+      name: "Flow 1 · withdrawal 3/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol><symbol id="i-block" viewBox="0 0 48 48"><path d="M24 4 41 14v20L24 44 7 34V14z"/><path d="M7 14l17 10 17-10M24 24v20"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FLOW 1 · WITHDRAWAL</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal ကို အဆင့် 6 ဆင့်နဲ့</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M502.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="377.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="397.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="528.5" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">API</text><path d="M800 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="695" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1097.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="972.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="992.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="1123.5" y="247.2" font-size="27" text-anchor="middle" fill="#e9edf5" font-weight="600">Compliance</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-block" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Chain</text><g><path d="M213 344H490.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="353.8" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">withdraw · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g><path d="M510.5 405.8H788" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="651.3" y="392.8" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">reserve 0.503</text><circle cx="528.5" cy="405.8" r="17" fill="#f6ad55"/><text x="528.5" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g><g class="in"><path d="M510.5 467.5H1085.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="800" y="454.5" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">screen · daily limit</text><circle cx="528.5" cy="467.5" r="17" fill="#6cb2f5"/><text x="528.5" y="475.5" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">3</text></g><g class="in"><rect x="953.9" y="503.3" width="287.3" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="1097.5" y="536.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">review: hours … days</text></g><g class="in"><path d="M1089.5 591.1H514.5" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="800" y="578.1" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600">pass → audit trail</text></g>
+        </svg>
+    - id: flow-4
+      contentType: html
+      name: "Flow 1 · withdrawal 4/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol><symbol id="i-block" viewBox="0 0 48 48"><path d="M24 4 41 14v20L24 44 7 34V14z"/><path d="M7 14l17 10 17-10M24 24v20"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FLOW 1 · WITHDRAWAL</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal ကို အဆင့် 6 ဆင့်နဲ့</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M502.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="377.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="397.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="528.5" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">API</text><path d="M800 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="695" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1097.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="972.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="992.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="1123.5" y="247.2" font-size="27" text-anchor="middle" fill="#e9edf5" font-weight="600">Compliance</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-block" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Chain</text><g><path d="M213 344H490.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="353.8" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">withdraw · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g><path d="M510.5 405.8H788" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="651.3" y="392.8" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">reserve 0.503</text><circle cx="528.5" cy="405.8" r="17" fill="#f6ad55"/><text x="528.5" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g><g><path d="M510.5 467.5H1085.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="800" y="454.5" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">screen · daily limit</text><circle cx="528.5" cy="467.5" r="17" fill="#6cb2f5"/><text x="528.5" y="475.5" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">3</text></g><g><rect x="953.9" y="503.3" width="287.3" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="1097.5" y="536.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">review: hours … days</text></g><g><path d="M1089.5 591.1H514.5" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="800" y="578.1" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600">pass → audit trail</text></g><g class="in"><path d="M510.5 652.9H1383" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="948.8" y="639.9" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">sign · store hash · broadcast</text><circle cx="528.5" cy="652.9" r="17" fill="#f6c453"/><text x="528.5" y="660.9" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">4</text></g>
+        </svg>
+    - id: flow-5
+      contentType: html
+      name: "Flow 1 · withdrawal 5/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol><symbol id="i-block" viewBox="0 0 48 48"><path d="M24 4 41 14v20L24 44 7 34V14z"/><path d="M7 14l17 10 17-10M24 24v20"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FLOW 1 · WITHDRAWAL</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal ကို အဆင့် 6 ဆင့်နဲ့</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M502.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="377.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="397.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="528.5" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">API</text><path d="M800 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="695" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1097.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="972.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="992.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="1123.5" y="247.2" font-size="27" text-anchor="middle" fill="#e9edf5" font-weight="600">Compliance</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-block" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Chain</text><g><path d="M213 344H490.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="353.8" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">withdraw · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g><path d="M510.5 405.8H788" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="651.3" y="392.8" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">reserve 0.503</text><circle cx="528.5" cy="405.8" r="17" fill="#f6ad55"/><text x="528.5" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g><g><path d="M510.5 467.5H1085.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="800" y="454.5" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">screen · daily limit</text><circle cx="528.5" cy="467.5" r="17" fill="#6cb2f5"/><text x="528.5" y="475.5" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">3</text></g><g><rect x="953.9" y="503.3" width="287.3" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="1097.5" y="536.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">review: hours … days</text></g><g><path d="M1089.5 591.1H514.5" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="800" y="578.1" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600">pass → audit trail</text></g><g><path d="M510.5 652.9H1383" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="948.8" y="639.9" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">sign · store hash · broadcast</text><circle cx="528.5" cy="652.9" r="17" fill="#f6c453"/><text x="528.5" y="660.9" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">4</text></g><g class="in"><path d="M1387 714.6H514.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="948.8" y="701.6" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">wait for finality (~15 min)</text><circle cx="1369" cy="714.6" r="17" fill="#6cb2f5"/><text x="1369" y="722.6" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">5</text></g>
+        </svg>
+    - id: flow-6
+      contentType: html
+      name: "Flow 1 · withdrawal 6/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol><symbol id="i-block" viewBox="0 0 48 48"><path d="M24 4 41 14v20L24 44 7 34V14z"/><path d="M7 14l17 10 17-10M24 24v20"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FLOW 1 · WITHDRAWAL</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal ကို အဆင့် 6 ဆင့်နဲ့</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M502.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="377.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="397.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="528.5" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">API</text><path d="M800 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="695" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1097.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="972.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="992.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="1123.5" y="247.2" font-size="27" text-anchor="middle" fill="#e9edf5" font-weight="600">Compliance</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-block" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Chain</text><g><path d="M213 344H490.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="353.8" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">withdraw · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g><path d="M510.5 405.8H788" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="651.3" y="392.8" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">reserve 0.503</text><circle cx="528.5" cy="405.8" r="17" fill="#f6ad55"/><text x="528.5" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g><g><path d="M510.5 467.5H1085.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="800" y="454.5" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">screen · daily limit</text><circle cx="528.5" cy="467.5" r="17" fill="#6cb2f5"/><text x="528.5" y="475.5" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">3</text></g><g><rect x="953.9" y="503.3" width="287.3" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="1097.5" y="536.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">review: hours … days</text></g><g><path d="M1089.5 591.1H514.5" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="800" y="578.1" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600">pass → audit trail</text></g><g><path d="M510.5 652.9H1383" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="948.8" y="639.9" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">sign · store hash · broadcast</text><circle cx="528.5" cy="652.9" r="17" fill="#f6c453"/><text x="528.5" y="660.9" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">4</text></g><g><path d="M1387 714.6H514.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="948.8" y="701.6" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">wait for finality (~15 min)</text><circle cx="1369" cy="714.6" r="17" fill="#6cb2f5"/><text x="1369" y="722.6" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">5</text></g><g class="in"><path d="M510.5 776.4H788" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="651.3" y="763.4" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">post · release</text></g>
+        </svg>
+    - id: flow-7
+      contentType: html
+      name: "Flow 1 · withdrawal 7/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-teal" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#4fd1c5" stroke="#4fd1c5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol><symbol id="i-block" viewBox="0 0 48 48"><path d="M24 4 41 14v20L24 44 7 34V14z"/><path d="M7 14l17 10 17-10M24 24v20"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FLOW 1 · WITHDRAWAL</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal ကို အဆင့် 6 ဆင့်နဲ့</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M502.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="377.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="397.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="528.5" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">API</text><path d="M800 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="695" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1097.5 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="972.5" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="992.5" y="218" width="40" height="40" style="color:#b794f6"/><text x="1123.5" y="247.2" font-size="27" text-anchor="middle" fill="#e9edf5" font-weight="600">Compliance</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-block" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Chain</text><g><path d="M213 344H490.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="353.8" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">withdraw · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g><path d="M510.5 405.8H788" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="651.3" y="392.8" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">reserve 0.503</text><circle cx="528.5" cy="405.8" r="17" fill="#f6ad55"/><text x="528.5" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g><g><path d="M510.5 467.5H1085.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="800" y="454.5" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">screen · daily limit</text><circle cx="528.5" cy="467.5" r="17" fill="#6cb2f5"/><text x="528.5" y="475.5" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">3</text></g><g><rect x="953.9" y="503.3" width="287.3" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="1097.5" y="536.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">review: hours … days</text></g><g><path d="M1089.5 591.1H514.5" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="800" y="578.1" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600">pass → audit trail</text></g><g><path d="M510.5 652.9H1383" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="948.8" y="639.9" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">sign · store hash · broadcast</text><circle cx="528.5" cy="652.9" r="17" fill="#f6c453"/><text x="528.5" y="660.9" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">4</text></g><g><path d="M1387 714.6H514.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="948.8" y="701.6" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">wait for finality (~15 min)</text><circle cx="1369" cy="714.6" r="17" fill="#6cb2f5"/><text x="1369" y="722.6" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">5</text></g><g><path d="M510.5 776.4H788" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="651.3" y="763.4" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">post · release</text></g><g class="in"><path d="M808 838.2H1383" fill="none" stroke="#4fd1c5" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-teal)"/><text x="1097.5" y="825.2" font-size="25" text-anchor="middle" fill="#4fd1c5" font-weight="600">nightly reconciliation</text><circle cx="826" cy="838.2" r="17" fill="#4fd1c5"/><text x="826" y="846.2" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">6</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal system တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal system တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Irreversible broadcast မတိုင်ခင် key နဲ့ reserve</text><text x="188" y="311" font-size="26" fill="#8a94a8">check နဲ့ reserve က atomic တစ်ဆင့်တည်း၊ amount + fee estimate</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal system တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Irreversible broadcast မတိုင်ခင် key နဲ့ reserve</text><text x="188" y="311" font-size="26" fill="#8a94a8">check နဲ့ reserve က atomic တစ်ဆင့်တည်း၊ amount + fee estimate</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">State machine ကို သိမ်း၊ compliance မှာ ရက်ချီ အိပ်နိုင်</text><text x="188" y="443" font-size="26" fill="#8a94a8">driver က resume လုပ်တဲ့အခါ chain ကို အရင် မေး</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal system တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Irreversible broadcast မတိုင်ခင် key နဲ့ reserve</text><text x="188" y="311" font-size="26" fill="#8a94a8">check နဲ့ reserve က atomic တစ်ဆင့်တည်း၊ amount + fee estimate</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">State machine ကို သိမ်း၊ compliance မှာ ရက်ချီ အိပ်နိုင်</text><text x="188" y="443" font-size="26" fill="#8a94a8">driver က resume လုပ်တဲ့အခါ chain ကို အရင် မေး</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Final ဖြစ်မှ post၊ nightly reconcile</text><text x="188" y="575" font-size="26" fill="#8a94a8">real fee နဲ့ settle၊ over ဖြစ်ရင် overdraft ကို book ပြီး recover</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto withdrawal system တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Irreversible broadcast မတိုင်ခင် key နဲ့ reserve</text><text x="188" y="311" font-size="26" fill="#8a94a8">check နဲ့ reserve က atomic တစ်ဆင့်တည်း၊ amount + fee estimate</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">State machine ကို သိမ်း၊ compliance မှာ ရက်ချီ အိပ်နိုင်</text><text x="188" y="443" font-size="26" fill="#8a94a8">driver က resume လုပ်တဲ့အခါ chain ကို အရင် မေး</text></g><g><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Final ဖြစ်မှ post၊ nightly reconcile</text><text x="188" y="575" font-size="26" fill="#8a94a8">real fee နဲ့ settle၊ over ဖြစ်ရင် overdraft ကို book ပြီး recover</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">Withdrawal table = state machine၊ poller က drive</text><text x="188" y="707" font-size="26" fill="#8a94a8">conditional write နဲ့ hold၊ hash ကို ပို့ခင် သိမ်း၊ final ဖြစ်မှ post</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9537
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "w-1 reserved 0.503 ETH, available 0\nw-1 again with key k-1: same withdrawal, reserved once\nw-1 final, posted, released 0.0005\nuser 0.0005  chain 0.4985  gas 0.0015  fees 0.0025\nrecon: chain wallet 0.4985, ledger 0.4985\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "w-1 reserved 0.503 ETH, available 0\nw-1 again with key k-1: same withdrawal, reserved once\nw-1 final, posted, released 0.0005\nuser 0.0005  chain 0.4985  gas 0.0015  fees 0.0025\nrecon: chain wallet 0.4985, ledger 0.4985\nw-2 reserved 0.503 ETH, available 0\nw-2 crashed after the broadcast\nw-2 resumed: 0x1351b352 is on chain, not sent again\nw-2 final, posted, released 0.0005\nsends on chain: 1\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "w-1 reserved 0.503 ETH, available 0\nw-1 again with key k-1: same withdrawal, reserved once\nw-1 final, posted, released 0.0005\nuser 0.0005  chain 0.4985  gas 0.0015  fees 0.0025\nrecon: chain wallet 0.4985, ledger 0.4985\nw-2 reserved 0.503 ETH, available 0\nw-2 crashed after the broadcast\nw-2 resumed: 0x1351b352 is on chain, not sent again\nw-2 final, posted, released 0.0005\nsends on chain: 1\nw-3 reserved 0.503 ETH, available 0\nw-3 final, posted 0.0015 over the hold: fee 0.0035, estimate 0.002\nw-3 overdraft: user -0.0015 ETH, recover from the next deposit\nuser -0.0015  chain 0.4965  gas 0.0035  fees 0.0045\nrecon: chain wallet 0.4965, ledger 0.4965\n"
+
+scenes:
+  - id: hook
+    chapter: Flow ၁၊ crypto withdrawal
+    narration: >-
+      ငွေ system ထဲကနေ အပြင်ကို ထွက်သွားတဲ့ crypto withdrawal က end-to-end flow သုံးခုထဲမှာ အဆင့် အများဆုံးပါ။
+      chain က confirm လုပ်ပြီးရင် ပို့လိုက်တဲ့ ETH ကို ပြန်ယူလို့ မရတော့လို့ပါ။ [[mark:pt-flow0]] ဒါကြောင့်
+      ပြန်မရတဲ့ အဆင့်ကို မရောက်ခင် ကျန်တဲ့ အရာအားလုံး ပြင်ဆင်ပြီးသား ဖြစ်နေရပါမယ်။
+      [[mark:sc-user]] user တစ်ယောက်က ETH သုည ဒသမ ငါး ကို အပြင်က address တစ်ခုဆီ ထုတ်မယ်
+      ဆိုပါစို့။ [[mark:pt-req]] request က idempotency key နဲ့ ရောက်လာပါတယ်။ lesson ၂၀ မှာလို key ကို
+      user နဲ့ operation အလိုက် scope လုပ်ပြီး အလုပ် မစခင် claim လုပ်ရပါတယ်၊ ဒါမှ client က နှစ်ခါ ပို့လည်း
+      withdrawal တစ်ခုပဲ ဖြစ်မှာပါ။ [[mark:flow-2]] ပြီးတော့ ပြန်မရတဲ့ အလုပ်
+      မလုပ်ခင် ပမာဏနဲ့ network fee ခန့်မှန်းခြေကို reserve လုပ်ပါတယ်။
+      lesson ၁၈ မှာ မြင်ခဲ့သလို balance စစ်တာနဲ့ reserve လုပ်တာက linearizable ဖြစ်တဲ့ တစ်ဆင့်တည်း
+      ဖြစ်ရပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: A crypto withdrawal (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: open-main-1, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - { id: show-flow, type: slide.show, at: { scene: start, offsetMs: 300 }, slideId: flow-1 }
+      - { id: pt-flow0, type: slide.point, at: { mark: pt-flow0 }, target: { x: 0.125, y: 0.184 } }
+      - { id: pt-req, type: slide.point, at: { mark: pt-req }, target: { x: 0.196, y: 0.398 } }
+      - { id: flow-2, type: slide.show, at: { mark: flow-2 }, slideId: flow-2 }
+      - {
+          id: pt-res,
+          type: slide.point,
+          at: { afterAction: flow-2 },
+          target: { x: 0.382, y: 0.466 },
+        }
+
+  - id: gate
+    chapter: Compliance gate မှာ ရက်ချီ အိပ်နိုင်တယ်
+    narration: >-
+      [[mark:flow-3]] တတိယ အဆင့်က ပြီးခဲ့တဲ့ lesson မှာ ကြည့်ခဲ့တဲ့ compliance gate ပါ။ sanctions၊ AML နဲ့ ပို့မယ့်
+      address ကို screen လုပ်တာပါ။ ဒီနေရာမှာ pattern လေးခု ဆုံပါတယ်။ ပထမ၊ ဒါက အပြင်ဘက် call ဖြစ်လို့ lesson ၂၃ မှာလို
+      နှေးမယ်၊ fail မယ်၊ မှားပြောမယ်လို့ ယူဆပြီး ရေးရပါတယ်။ [[mark:pt-rev]] ဒုတိယ၊ manual review ကို
+      ရောက်သွားရင် နာရီချီ ရက်ချီ ကြာနိုင်လို့ flow က ဒီကြားမှာ သေသွားလည်း ဆက်သွားနိုင်ရပါမယ်။ lesson ၂၂ မှာလို
+      state ကို သိမ်းထားပြီး သီးခြား driver တစ်ခုက ပြန်ကောက်ပါတယ်၊ အဲဒီ အတောအတွင်း reservation က နေရာမှာပဲ
+      ရှိနေပါတယ်။ [[mark:pt-scr]] တတိယ၊ တစ်ရက်ကို ထုတ်ခွင့်ရှိတဲ့ limit ဆိုတာ lesson ၁၇ ရဲ့ invariant တစ်ခုပါပဲ။ အချိန်
+      window ပါပြီး တပြိုင်နက် စစ်ရလို့ reservation နဲ့ ပြဿနာ အတူတူပါ၊ withdrawal နှစ်ခု ပြိုင်ပြီး
+      နှစ်ခုလုံး limit ကို ဖြတ်သွားလို့ မရပါဘူး။ [[mark:pt-pass]] စတုတ္ထ၊ pass လား block လား၊ ဘယ်သူ
+      override လုပ်ခဲ့လဲ ဆိုတဲ့ ဆုံးဖြတ်ချက် တိုင်းက audit trail ထဲ ရောက်ရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: A crypto withdrawal (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+    actions:
+      - { id: flow-3, type: slide.show, at: { mark: flow-3 }, slideId: flow-3 }
+      - {
+          id: pt-scr-0,
+          type: slide.point,
+          at: { afterAction: flow-3 },
+          target: { x: 0.475, y: 0.535 },
+        }
+      - { id: pt-rev, type: slide.point, at: { mark: pt-rev }, target: { x: 0.661, y: 0.604 } }
+      - { id: pt-scr, type: slide.point, at: { mark: pt-scr }, target: { x: 0.475, y: 0.535 } }
+      - { id: pt-pass, type: slide.point, at: { mark: pt-pass }, target: { x: 0.475, y: 0.672 } }
+
+  - id: chain
+    chapter: Broadcast၊ finality၊ post
+    narration: >-
+      [[mark:flow-4]] pass ရပြီ ဆိုရင် transaction ကို sign လုပ်ပြီး node ကနေ broadcast လုပ်ပါတယ်။ ပြန်မရတဲ့
+      အဆင့်က ဒီတစ်ခုမို့ idempotent ဖြစ်ရပါမယ်။ network fee အစစ်ကိုလည်း ကြိုမသိနိုင်လို့ ခန့်မှန်းခြေကို reserve လုပ်ခဲ့တာပါ။ [[mark:flow-5]] ပြီးရင် finality ကို စောင့်ပါတယ်။
+      confirmation တစ်ခုရရုံနဲ့ မပြီးသေးပါဘူး၊ ပြီးပြီလို့ စောစော ကြေညာထားတဲ့ send ကို reorg က
+      ပြန်ဖျက်နိုင်လို့ပါ။ [[mark:pt-fin]] lesson ၃၅ မှာ မြင်ခဲ့သလို proof of stake Ethereum မှာ block
+      တစ်ခု final ဖြစ်ဖို့ မိနစ် ၁၅ လောက် ကြာတယ်လို့ Ethereum ရဲ့ documentation က ဆိုပါတယ်။ [[mark:flow-6]] final ဖြစ်မှ ledger ထဲ post
+      လုပ်ပြီး reservation ကို settle လုပ်ပါတယ်၊ entry တွေကို ခဏနေ code နဲ့ ကြည့်ပါမယ်။
+      [[mark:flow-7]] နောက်ဆုံးက ဒီ flow နဲ့ သီးခြား ညတိုင်း run တဲ့ job ပါ။ ledger ကို chain ပေါ်က
+      အမှန်တရားနဲ့ reconcile လုပ်ပြီး၊ confirm မဖြစ်ခဲ့တဲ့ broadcast၊ book လုပ်ထားတာနဲ့ မတူတဲ့ fee ကို
+      ဖမ်းပေးတဲ့ safety net ပါ။ [[mark:pt-title]] ဒီ flow မှာ မူ သုံးခုလုံး ပါပါတယ်။ key နဲ့ reservation က ငွေကို
+      မရှိဘဲ မဖန်တီးဖို့ No invented data ကို ထိန်းပါတယ်။ state နဲ့ trail က No lost data ကို၊ chain ကို
+      ပြန်မေးတာနဲ့ reconciliation က No trust ကို ထိန်းပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: A crypto withdrawal (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+      - {
+          title: "ethereum.org — Proof-of-stake (PoS): slots and epochs",
+          url: "https://ethereum.org/developers/docs/consensus-mechanisms/pos/",
+        }
+      - {
+          title: "ethereum.org — Single slot finality",
+          url: "https://ethereum.org/roadmap/single-slot-finality/",
+        }
+    actions:
+      - { id: flow-4, type: slide.show, at: { mark: flow-4 }, slideId: flow-4 }
+      - {
+          id: pt-bc,
+          type: slide.point,
+          at: { afterAction: flow-4 },
+          target: { x: 0.568, y: 0.741 },
+        }
+      - { id: flow-5, type: slide.show, at: { mark: flow-5 }, slideId: flow-5 }
+      - { id: pt-fin, type: slide.point, at: { mark: pt-fin }, target: { x: 0.568, y: 0.81 } }
+      - { id: flow-6, type: slide.show, at: { mark: flow-6 }, slideId: flow-6 }
+      - {
+          id: pt-post,
+          type: slide.point,
+          at: { afterAction: flow-6 },
+          target: { x: 0.382, y: 0.878 },
+        }
+      - { id: flow-7, type: slide.show, at: { mark: flow-7 }, slideId: flow-7 }
+      - {
+          id: pt-rec,
+          type: slide.point,
+          at: { afterAction: flow-7 },
+          target: { x: 0.661, y: 0.947 },
+        }
+      - { id: pt-title, type: slide.point, at: { mark: pt-title }, target: { x: 0.125, y: 0.184 } }
+
+  - id: code
+    chapter: Code ထဲက state machine
+    narration: >-
+      [[mark:close-flow]] ဒီ flow ကို code နဲ့ ကြည့်ရအောင်။ [[mark:open-flow]] Request က key ကို ရှာပြီး
+      ရှိပြီးသား ဆိုရင် ရှိတဲ့ withdrawal ကိုပဲ ပြန်ပေးပါတယ်။ [[mark:sel-hold]] မရှိမှ available ကို စစ်ပြီး
+      ပမာဏနဲ့ fee နှစ်ခုကို တစ်ဆင့်တည်းမှာ hold လုပ်ပါတယ်။ [[mark:sel-drive]] Drive က withdrawal ကို
+      သိမ်းထားတဲ့ state ကနေ ရှေ့ဆက်ပေးတာပါ၊ ထပ်ခေါ်လည်း အန္တရာယ် မရှိပါဘူး။ [[mark:sel-hash]] သတိထားရမှာက transaction ကို sign လုပ်ပြီး hash ကို ပို့ခင်မှာ
+      သိမ်းထားတာပါ၊ ပို့ပြီးမှ မှတ်တာ မဟုတ်ပါဘူး။ [[mark:sel-find]] ဒါကြောင့် sending state မှာ chain ကို
+      အဲဒီ hash နဲ့ အရင် မေးပြီး၊ chain က မမြင်ဖူးမှပဲ broadcast လုပ်ပါတယ်။ [[mark:open-main-2]] main မှာ
+      ETH သုည ဒသမ ငါးသုညသုံး ရှိတဲ့ user က သုည ဒသမ ငါး ထုတ်ပါတယ်။ balance အကုန်နီးပါး ထုတ်တာပါ။
+      [[mark:sel-again]] request ကို key တူတူနဲ့ နှစ်ခါ ပို့ထားပြီး၊ network fee အစစ်က ခန့်မှန်းခြေထက် နည်းပါတယ်။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: A crypto withdrawal (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+    actions:
+      - { id: close-flow, type: slide.close, at: { mark: close-flow } }
+      - { id: open-flow, type: workspace.openFile, at: { mark: open-flow }, path: flow.go }
+      - id: sel-hold
+        type: editor.select
+        at: { mark: sel-hold }
+        target:
+          {
+            file: flow.go,
+            text: "\t\ts.keys[from+\"/withdraw/\"+key], w.Held = w, need\n\t\ts.holds[from] += need",
+            occurrence: 1,
+          }
+      - id: sel-drive
+        type: editor.select
+        at: { mark: sel-drive }
+        target: { file: flow.go, text: "func (s *Service) Drive(w *Withdrawal) {", occurrence: 1 }
+      - id: sel-hash
+        type: editor.select
+        at: { mark: sel-hash }
+        target:
+          {
+            file: flow.go,
+            text: "\t\t\tw.Hash = fmt.Sprintf(\"0x%x\", sha256.Sum256([]byte(w.ID+w.To)))[:10]",
+            occurrence: 1,
+          }
+      - id: sel-find
+        type: editor.select
+        at: { mark: sel-find }
+        target: { file: flow.go, text: "\t\t\tif s.chain.Find(w.Hash) != nil {", occurrence: 1 }
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: sel-again
+        type: editor.select
+        at: { mark: sel-again }
+        target:
+          {
+            file: main.go,
+            text: "\tagain := s.Request(\"k-1\", user, \"0x71c\", ether/2)",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "recon: chain wallet 0.4985, ledger 0.4985",
+          timeoutMs: 8000,
+        }
+
+  - id: books
+    narration: >-
+      [[mark:pt-reserved]] hold က ပမာဏ၊ fee ခန့်မှန်းခြေနဲ့ service fee ပေါင်းထားတာဖြစ်ပြီး available က
+      သုည ကျန်ပါတယ်။ [[mark:pt-again]] key တူ request ထပ်ရောက်တော့ withdrawal အသစ် မဖြစ်ဘဲ ရှိပြီးသားကိုပဲ
+      ပြန်ရပါတယ်။ [[mark:pt-final]] final ဖြစ်တော့ post လုပ်ပြီး hold ထဲက ပိုနေတဲ့ အပိုင်းကို release
+      လုပ်ပါတယ်။ [[mark:pt-recon]] ညဘက် check မှာ chain ပေါ်က wallet နဲ့ ledger ကိုက်ပါတယ်။
+      [[mark:dock-1]] post လုပ်တဲ့ entry ကို ကြည့်ရအောင်။ [[mark:show-books]] user ကို ပမာဏ၊ chain က
+      တကယ် ယူသွားတဲ့ network fee နဲ့ service fee ပေါင်းပြီး debit လုပ်ပါတယ်။ [[mark:pt-chain]] wallet
+      ကနေ တကယ် ထွက်သွားတာက ပမာဏနဲ့ network fee ပါ။ [[mark:books-2]] network fee က chain ယူသွားတဲ့ ငွေမို့ expense
+      ဖြစ်ပြီး၊ user ဆီက ကောက်တဲ့ fee တွေက revenue ပါ၊ debit နဲ့ credit ညီပါတယ်။ [[mark:pt-rel]] fee
+      ခန့်မှန်းခြေကတော့ ဘယ် entry ထဲမှာမှ မပါပါဘူး၊ hold ထဲမှာပဲ ရှိခဲ့တာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+    actions:
+      - id: pt-reserved
+        type: console.point
+        at: { mark: pt-reserved }
+        target: { text: "w-1 reserved 0.503 ETH, available 0", occurrence: 1 }
+      - id: pt-again
+        type: console.point
+        at: { mark: pt-again }
+        target: { text: "w-1 again with key k-1", occurrence: 1 }
+      - id: pt-final
+        type: console.point
+        at: { mark: pt-final }
+        target: { text: "w-1 final, posted, released 0.0005", occurrence: 1 }
+      - id: pt-recon
+        type: console.point
+        at: { mark: pt-recon }
+        target: { text: "recon: chain wallet 0.4985", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+      - {
+          id: show-books,
+          type: slide.show,
+          at: { mark: show-books, offsetMs: -700 },
+          slideId: books-1,
+        }
+      - {
+          id: pt-user,
+          type: slide.point,
+          at: { afterAction: show-books },
+          target: { x: 0.118, y: 0.364 },
+        }
+      - { id: pt-chain, type: slide.point, at: { mark: pt-chain }, target: { x: 0.118, y: 0.433 } }
+      - { id: books-2, type: slide.show, at: { mark: books-2 }, slideId: books-2 }
+      - {
+          id: pt-sum,
+          type: slide.point,
+          at: { afterAction: books-2 },
+          target: { x: 0.208, y: 0.687 },
+        }
+      - { id: pt-rel, type: slide.point, at: { mark: pt-rel }, target: { x: 0.274, y: 0.776 } }
+
+  - id: crash
+    chapter: ခက်တဲ့ နေရာ ၁၊ broadcast ပြီးမှ crash
+    narration: >-
+      [[mark:show-crash]] ခက်တဲ့ နေရာ ပထမ တစ်ခုက broadcast နဲ့ confirmation ကြားမှာ process သေသွားတာပါ။
+      [[mark:pt-store]] state ကို sending လို့ hash နဲ့ အတူ သိမ်းပြီးမှ broadcast လုပ်ခဲ့ပါတယ်။ [[mark:pt-crash]]
+      နောက် state ကို မသိမ်းရခင် crash ဖြစ်သွားရင် driver ပြန်ကောက်တဲ့အခါ သိမ်းထားတာက sending ပဲ
+      ရှိပါတယ်၊ ပို့ပြီးပြီလား မပို့ရသေးဘူးလား မသိပါဘူး။ [[mark:crash-2]] အဖြေက chain ကို hash နဲ့ မေးတာပါ။
+      တွေ့ရင် ပို့ပြီးသားမို့ ရှေ့ဆက်ပြီး၊ မတွေ့မှ ပို့ပါတယ်။ lesson ၂၂ က effect နဲ့ မှတ်တမ်းကြားက ကွက်လပ်ပါပဲ၊
+      ဒီမှာတော့ chain ကိုယ်တိုင်က hash ကို မှတ်ထားလို့ chain ကို မေးလို့ ရတာပါ။
+      [[mark:close-crash]] code နဲ့ စမ်းကြည့်ရအောင်။ [[mark:type-crash]] ledger နဲ့ chain အသစ် တစ်စုံမှာ
+      process ကို broadcast ပြီးတာနဲ့ သေအောင် လုပ်ထားပါတယ်။ Drive ကို ပထမ တစ်ခါ ခေါ်တော့ သေသွားပြီး၊
+      ဒုတိယ တစ်ခါက သီးခြား driver က ပြန်ကောက်တာပါ။ chain ပေါ်မှာ transaction ဘယ်နှခု ရှိမလဲ
+      ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-crashed]] ပထမ Drive က
+      broadcast ပြီးတာနဲ့ သေသွားပါတယ်။ [[mark:pt-resumed]] ပြန်ကောက်တဲ့ driver က chain ကို မေးတော့ hash ကို
+      တွေ့လို့ ထပ်မပို့ပါဘူး။ [[mark:pt-sends]] chain ပေါ်မှာ transaction တစ်ခုပဲ ရှိပါတယ်။ [[mark:dock-2]] hash ကို
+      ပို့ပြီးမှ သိမ်းခဲ့ရင် ပြန်ကောက်တဲ့ driver မှာ မေးစရာ hash မရှိတော့လို့ အသစ် ပြန် sign လုပ်ပြီး
+      ပို့မိရင် ETH သုည ဒသမ ငါး နှစ်ခါ ထွက်သွားနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: A crypto withdrawal (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: show-crash, type: slide.show, at: { mark: show-crash }, slideId: crash-1 }
+      - { id: pt-store, type: slide.point, at: { mark: pt-store }, target: { x: 0.302, y: 0.409 } }
+      - { id: pt-crash, type: slide.point, at: { mark: pt-crash }, target: { x: 0.139, y: 0.589 } }
+      - { id: crash-2, type: slide.show, at: { mark: crash-2 }, slideId: crash-2 }
+      - {
+          id: pt-ask,
+          type: slide.point,
+          at: { afterAction: crash-2 },
+          target: { x: 0.475, y: 0.679 },
+        }
+      - { id: close-crash, type: slide.close, at: { mark: close-crash } }
+      - id: type-crash
+        type: editor.type
+        at: { mark: type-crash }
+        target: { file: main.go, after: "\ts.report()\n", occurrence: 1 }
+        text: "\n\ts2 := newService(503*milli, 3*milli/2)\n\ts2.crashAfter = \"sending\" // the process dies right after the broadcast\n\tw2 := s2.Request(\"k-2\", user, \"0x71c\", ether/2)\n\ts2.Drive(w2) // dies\n\ts2.Drive(w2) // an independent driver resumes from the stored state\n\tfmt.Println(\"sends on chain:\", s2.chain.Sends())\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "sends on chain: 1",
+          timeoutMs: 8000,
+        }
+      - id: pt-crashed
+        type: console.point
+        at: { mark: pt-crashed }
+        target: { text: "w-2 crashed after the broadcast", occurrence: 1 }
+      - id: pt-resumed
+        type: console.point
+        at: { mark: pt-resumed }
+        target: { text: "w-2 resumed", occurrence: 1 }
+      - id: pt-sends
+        type: console.point
+        at: { mark: pt-sends }
+        target: { text: "sends on chain: 1", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+      - {
+          id: expect-file,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: 's2.crashAfter = "sending"',
+        }
+
+  - id: fee
+    chapter: ခက်တဲ့ နေရာ ၂၊ fee က estimate ထက် များရင်
+    narration: >-
+      [[mark:show-fee]] ခက်တဲ့ နေရာ ဒုတိယ တစ်ခုက network fee အစစ်က reserve လုပ်ထားတဲ့ ခန့်မှန်းခြေထက်
+      များလာတာပါ။ [[mark:pt-est]] hold ထဲမှာ fee အတွက် ဖယ်ထားတာက ခန့်မှန်းခြေ ပမာဏ ပဲ ရှိပါတယ်။
+      [[mark:pt-over]] chain ကတော့ အဲဒီထက် ပိုယူသွားပြီး၊ broadcast ပြီးသွားလို့ ငြင်းလို့လည်း မရတော့ပါဘူး။
+      user က balance အကုန်နီးပါး ထုတ်တဲ့ အခါမျိုးမှာ settle လုပ်လိုက်တာနဲ့ account က အနုတ် ဖြစ်သွားနိုင်ပါတယ်။
+      [[mark:fee-2]] lesson ၁၉ မှာ ပြောခဲ့သလို ဒါကို overdraft အဖြစ် book လုပ်ပြီး တမင် ပြန်ယူရပါတယ်။
+      balance ကို သုညမှာ clamp လုပ်လိုက်ရင်တော့ ငွေကို မရှိဘဲ ဖန်တီးလိုက်တာ ဖြစ်ပါတယ်။ [[mark:close-fee]] code နဲ့
+      စမ်းကြည့်ရအောင်။ [[mark:type-fee]] ledger နဲ့ chain နောက်တစ်စုံမှာ chain က ယူမယ့် fee ကို ခန့်မှန်းခြေထက် များအောင်
+      ထားပါတယ်။ withdrawal ကို အဆုံးထိ drive လုပ်ပြီး books နဲ့ ညဘက် check ကို ထုတ်ပါတယ်။
+      [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-overline]] post လုပ်တော့ charge က hold ထက် ပိုနေပါတယ်။
+      [[mark:pt-od]] user balance က အနုတ် ဖြစ်သွားပြီး ledger မှာ ဖုံးမထားဘဲ ရှိနေပါတယ်၊ ပြန်ယူဖို့ trail ထဲမှာလည်း မှတ်ထားပါတယ်။
+      [[mark:pt-recon3]] ညဘက် check ကတော့ ကိုက်ပါတယ်၊ ledger ထဲမှာ chain က တကယ် ယူသွားတဲ့ fee ကို book
+      လုပ်ထားလို့ပါ။ [[mark:dock-3]] ခန့်မှန်းခြေကို book လုပ်ခဲ့ရင် ဒီ line မှာ chain နဲ့ ledger ကွာနေမှာဖြစ်ပြီး၊
+      reconciliation က ဖမ်းပေးမှာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: A crypto withdrawal (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Handling overdrafts (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-overdrafts",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+    actions:
+      - { id: show-fee, type: slide.show, at: { mark: show-fee, offsetMs: -700 }, slideId: fee-1 }
+      - { id: pt-est, type: slide.point, at: { mark: pt-est }, target: { x: 0.204, y: 0.447 } }
+      - { id: pt-over, type: slide.point, at: { mark: pt-over }, target: { x: 0.472, y: 0.658 } }
+      - { id: fee-2, type: slide.show, at: { mark: fee-2 }, slideId: fee-2 }
+      - { id: pt-rc, type: slide.point, at: { afterAction: fee-2 }, target: { x: 0.725, y: 0.864 } }
+      - { id: close-fee, type: slide.close, at: { mark: close-fee } }
+      - id: type-fee
+        type: editor.type
+        at: { mark: type-fee }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"sends on chain:\", s2.chain.Sends())\n",
+            occurrence: 1,
+          }
+        text: "\n\ts3 := newService(503*milli, 7*milli/2) // the real fee comes in above the estimate\n\ts3.Drive(s3.Request(\"k-3\", user, \"0x71c\", ether/2))\n\ts3.report()\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "w-3 overdraft: user -0.0015 ETH",
+          timeoutMs: 8000,
+        }
+      - id: pt-overline
+        type: console.point
+        at: { mark: pt-overline }
+        target: { text: "w-3 final, posted 0.0015 over the hold", occurrence: 1 }
+      - id: pt-od
+        type: console.point
+        at: { mark: pt-od }
+        target: { text: "w-3 overdraft", occurrence: 1 }
+      - id: pt-recon3
+        type: console.point
+        at: { mark: pt-recon3 }
+        target: { text: "recon: chain wallet 0.4965", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech system design interview တွေမှာ crypto withdrawal system တစ်ခု ဒီဇိုင်းဆွဲပါ လို့
+      မေးလေ့ရှိပါတယ်။ box တွေ ဆွဲပြီး queue ထည့်ရုံနဲ့ မလုံလောက်ပါဘူး၊ ပြန်မရတဲ့ step ကို ဗဟိုထားပြီး
+      ဖြေပါ။ [[mark:iv-a]] ပထမ၊ broadcast မတိုင်ခင် key နဲ့ request ကို claim လုပ်ပြီး၊ ပမာဏနဲ့ fee
+      ခန့်မှန်းခြေကို atomic တစ်ဆင့်တည်းနဲ့ reserve လုပ်ပါ။ [[mark:iv-b]] ဒုတိယ၊ withdrawal ကို သိမ်းထားတဲ့
+      state machine အဖြစ် ထားပါ၊ compliance မှာ ရက်ချီ အိပ်နိုင်ပြီး၊ resume လုပ်တဲ့အခါ chain ကို အရင်
+      မေးပါတယ်။ [[mark:iv-c]] တတိယ၊ final ဖြစ်မှ fee အစစ်နဲ့ post လုပ်ပြီး၊ hold ထက် ကျော်ရင် overdraft ကို book
+      လုပ်ပြီး ပြန်ယူပါ၊ ညတိုင်း ledger ကို chain နဲ့ reconcile လုပ်ပါ။ [[mark:iv-d]] ပြီးရင် ကိုယ် ဘာ build
+      လုပ်မလဲ ဆက်ပြောပါ။ withdrawal table က state machine ဖြစ်ပြီး poller က drive လုပ်မယ်၊ hold ကို
+      conditional write နဲ့ လုပ်မယ်၊ hash ကို ပို့ခင် သိမ်းမယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: A crypto withdrawal (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ဒီ line မှာ ပို့မယ့် address ကို
+      sanctions list ပေါ်က address တစ်ခုဖြစ်တဲ့ sanctioned နဲ့ အစားထိုးပြီး run ကြည့်ပါ။ ပထမ withdrawal က
+      gate မှာ block ခံရပြီး hold တစ်ခုလုံး release ဖြစ်သွားပါမယ်၊ chain ကိုလည်း ဘာမှ မရောက်ပါဘူး။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ crypto withdrawal
+      က ပြန်မရတဲ့ broadcast ကို ဗဟိုထားတဲ့ flow ပါ၊ အရင် reserve လုပ်၊ state ကို သိမ်း၊ chain ကို ပြန်မေးပြီး
+      final ဖြစ်မှ post လုပ်ပါတယ်။ နောက် lesson က ငွေ ဝင်လာတဲ့ card deposit ပါ၊ အဲဒီမှာ အခက်က နှစ်ခါ
+      မပို့ဖို့ မဟုတ်တော့ဘဲ အပြင်ကမ္ဘာ ပြောတာကို မယုံဖို့ ဖြစ်လာပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: A crypto withdrawal (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target:
+          {
+            file: main.go,
+            text: "\tw := s.Request(\"k-1\", user, \"0x71c\", ether/2)",
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
