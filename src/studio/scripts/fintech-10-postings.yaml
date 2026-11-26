@@ -1,0 +1,875 @@
+# Fintech Engineering, lesson 10: one transaction, many postings (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Double-entry bookkeeping" (one transaction many
+# movements; posted entries are immutable), "Flow 2: A card deposit" (the clearing account, the
+# fee as an expense), "Audits and audit trails" (commingling), Appendix A "Accounting & ledgers"
+# and "Payments, rails & cards" (posting, suspense / clearing, omnibus, commingling, accrual vs
+# cash) (CC BY 4.0, Voytek Pitula).
+# Start state: ledger.go is kit/go/ledger.go unchanged; main.go posts a 100.00 card deposit as one
+# Tx of three lines (Cr liability:user:1042, Dr expense:processing-fee, Dr asset:psp-receivable)
+# and prints four balances.
+# Edits, all insert-only:
+#   1. a second deposit with the fee line missing             -> run-2 prints the rejection
+#   2. the PSP settlement: Dr asset:bank / Cr psp-receivable   -> run-3: bank 97.10, receivable 0
+# Figures: fan (one event, three lines, one transaction), transit (where the money is between
+# capture and settlement), pool (omnibus vs commingling, FTX), iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-10-postings
+  title: "Fintech Engineering 10: Transaction တစ်ခု၊ posting အများ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // kindOf reads the account type from the name: "asset:bank" is an asset.
+        func kindOf(account string) string {
+        	kind, _, _ := strings.Cut(account, ":")
+        	return kind
+        }
+
+        // Balance derives an account's balance on the side where that kind of account grows:
+        // assets and expenses grow with debits; liabilities, equity and revenue grow with credits.
+        func (l *Ledger) Balance(account string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind := kindOf(account); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // post records tx, or prints why the ledger refused it.
+        func post(l *Ledger, tx Tx) {
+        	if err := l.Post(tx); err != nil {
+        		fmt.Println("rejected:", err)
+        	}
+        }
+
+        func main() {
+        	var l Ledger
+        	// A 100.00 card deposit: the PSP keeps a 2.90 fee and will pay out 97.10 later.
+        	post(&l, Tx{ID: "dep-1", Memo: "card deposit", Lines: []Line{
+        		{Account: "liability:user:1042", Credit: 10000},
+        		{Account: "expense:processing-fee", Debit: 290},
+        		{Account: "asset:psp-receivable", Debit: 9710},
+        	}})
+
+        	accounts := []string{"asset:bank", "asset:psp-receivable",
+        		"expense:processing-fee", "liability:user:1042"}
+        	for _, acct := range accounts {
+        		fmt.Printf("%-24s %8s\n", acct, cents(l.Balance(acct)))
+        	}
+        }
+  slides:
+    - id: fan-1
+      contentType: html
+      name: "Posting 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">POSTING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Business event တစ်ခု၊ line အများ</text>
+        <g class="in"><rect x="80" y="410" width="400" height="170" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="80" y="410" width="400" height="170" rx="18" fill="#f6c453" opacity="0.13"/><use href="#i-card" x="102" y="463" width="64" height="64" style="color:#f6c453"/><text x="320" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">card deposit</text><text x="320" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">100.00 EUR</text></g>
+        <g class="in"><rect x="680" y="270" width="800" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="1080" y="318.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Cr  liability:user:1042   100.00</text><text x="1080" y="362.7" font-size="24" text-anchor="middle" fill="#8a94a8">user ကို ပေးစရာ</text></g>
+        <path d="M487.7 488.6L669.2 338.9" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: fan-2
+      contentType: html
+      name: "Posting 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">POSTING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Business event တစ်ခု၊ line အများ</text>
+        <rect x="80" y="410" width="400" height="170" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="80" y="410" width="400" height="170" rx="18" fill="#f6c453" opacity="0.13"/><use href="#i-card" x="102" y="463" width="64" height="64" style="color:#f6c453"/><text x="320" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">card deposit</text><text x="320" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">100.00 EUR</text>
+        <rect x="680" y="270" width="800" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="1080" y="318.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Cr  liability:user:1042   100.00</text><text x="1080" y="362.7" font-size="24" text-anchor="middle" fill="#8a94a8">user ကို ပေးစရာ</text>
+        <path d="M487.7 488.6L669.2 338.9" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><rect x="680" y="430" width="800" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="1080" y="478.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Dr  expense:processing-fee   2.90</text><text x="1080" y="522.7" font-size="24" text-anchor="middle" fill="#8a94a8">PSP ဖြတ်တဲ့ fee</text></g>
+        <path d="M490 494.8L666 490.3" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <g class="in"><rect x="680" y="590" width="800" height="120" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1080" y="638.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Dr  asset:psp-receivable   97.10</text><text x="1080" y="682.7" font-size="24" text-anchor="middle" fill="#8a94a8">PSP က ပေးရမယ့် ငွေ</text></g>
+        <path d="M487.9 501.1L668.9 641.4" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: fan-3
+      contentType: html
+      name: "Posting 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">POSTING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Business event တစ်ခု၊ line အများ</text>
+        <g class="in"><rect x="620" y="215" width="920" height="600" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="642" y="251" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">ONE TRANSACTION · dep-1</text></g>
+        <rect x="80" y="410" width="400" height="170" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="80" y="410" width="400" height="170" rx="18" fill="#f6c453" opacity="0.13"/><use href="#i-card" x="102" y="463" width="64" height="64" style="color:#f6c453"/><text x="320" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">card deposit</text><text x="320" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">100.00 EUR</text>
+        <rect x="680" y="270" width="800" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="1080" y="318.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Cr  liability:user:1042   100.00</text><text x="1080" y="362.7" font-size="24" text-anchor="middle" fill="#8a94a8">user ကို ပေးစရာ</text>
+        <path d="M487.7 488.6L669.2 338.9" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <rect x="680" y="430" width="800" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="1080" y="478.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Dr  expense:processing-fee   2.90</text><text x="1080" y="522.7" font-size="24" text-anchor="middle" fill="#8a94a8">PSP ဖြတ်တဲ့ fee</text>
+        <path d="M490 494.8L666 490.3" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <rect x="680" y="590" width="800" height="120" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1080" y="638.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Dr  asset:psp-receivable   97.10</text><text x="1080" y="682.7" font-size="24" text-anchor="middle" fill="#8a94a8">PSP က ပေးရမယ့် ငွေ</text>
+        <path d="M487.9 501.1L668.9 641.4" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><rect x="680" y="742" width="801.1" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="680" y="742" width="801.1" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="1080.5" y="776.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Dr 2.90 + 97.10 = Cr 100.00 → all lines or none</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Fee ပါတဲ့ card deposit ကို ledger မှာ ဘယ်လို မှတ်မလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Fee ပါတဲ့ card deposit ကို ledger မှာ ဘယ်လို မှတ်မလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Transaction တစ်ခု၊ line သုံးကြောင်း၊ Dr = Cr</text><text x="188" y="311" font-size="26" fill="#8a94a8">Dr psp-receivable 97.10 · Dr processing-fee 2.90 · Cr user 100.00</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Fee ပါတဲ့ card deposit ကို ledger မှာ ဘယ်လို မှတ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Transaction တစ်ခု၊ line သုံးကြောင်း၊ Dr = Cr</text><text x="188" y="311" font-size="26" fill="#8a94a8">Dr psp-receivable 97.10 · Dr processing-fee 2.90 · Cr user 100.00</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">ငွေ မရောက်သေးရင် bank မဟုတ်ဘဲ receivable</text><text x="188" y="443" font-size="26" fill="#8a94a8">settlement ရောက်မှ Dr bank · Cr receivable</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Fee ပါတဲ့ card deposit ကို ledger မှာ ဘယ်လို မှတ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Transaction တစ်ခု၊ line သုံးကြောင်း၊ Dr = Cr</text><text x="188" y="311" font-size="26" fill="#8a94a8">Dr psp-receivable 97.10 · Dr processing-fee 2.90 · Cr user 100.00</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">ငွေ မရောက်သေးရင် bank မဟုတ်ဘဲ receivable</text><text x="188" y="443" font-size="26" fill="#8a94a8">settlement ရောက်မှ Dr bank · Cr receivable</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Atomic — DB transaction တစ်ခုထဲမှာ post၊ မညီရင် reject</text><text x="188" y="575" font-size="26" fill="#8a94a8">posted ပြီးရင် မပြင်ဘူး၊ compensating entry နဲ့ ပြင်တယ်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Fee ပါတဲ့ card deposit ကို ledger မှာ ဘယ်လို မှတ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Transaction တစ်ခု၊ line သုံးကြောင်း၊ Dr = Cr</text><text x="188" y="311" font-size="26" fill="#8a94a8">Dr psp-receivable 97.10 · Dr processing-fee 2.90 · Cr user 100.00</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">ငွေ မရောက်သေးရင် bank မဟုတ်ဘဲ receivable</text><text x="188" y="443" font-size="26" fill="#8a94a8">settlement ရောက်မှ Dr bank · Cr receivable</text></g><g><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Atomic — DB transaction တစ်ခုထဲမှာ post၊ မညီရင် reject</text><text x="188" y="575" font-size="26" fill="#8a94a8">posted ပြီးရင် မပြင်ဘူး၊ compensating entry နဲ့ ပြင်တယ်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">Receivable ကို PSP ရဲ့ settlement batch နဲ့ reconcile</text><text x="188" y="707" font-size="26" fill="#8a94a8">ကြာနေတဲ့ receivable = ရောက်မလာတဲ့ ငွေ</text></g>
+        </svg>
+    - id: pool-1
+      contentType: html
+      name: "Omnibus account 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">OMNIBUS ACCOUNT</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ် account တစ်ခု၊ user account အများ</text>
+        <g class="in"><rect x="100" y="210" width="860" height="214" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">ledger account</text><text x="938" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M100 262H960" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="299" font-size="28" fill="#b794f6" class="mono">liability:user:1042</text><text x="938" y="299" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M116 316H944" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="353" font-size="28" fill="#b794f6" class="mono">liability:user:2077</text><text x="938" y="353" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">40.00</text></g><g><path d="M116 370H944" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="407" font-size="28" fill="#b794f6" class="mono">liability:user:3150</text><text x="938" y="407" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">12.00</text></g></g>
+        <g class="in"><rect x="100" y="520" width="860" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="100" y="520" width="860" height="130" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-bank" x="122" y="553" width="64" height="64" style="color:#4fd1c5"/><text x="570" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">asset:bank · omnibus</text><text x="570" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">user ငွေ အားလုံး ဘဏ် account တစ်ခုထဲမှာ — 152.00</text></g>
+        <path d="M530 434L530 506" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="616.6" y="477.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">Σ 152.00</text>
+        </svg>
+    - id: pool-2
+      contentType: html
+      name: "Omnibus account 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">OMNIBUS ACCOUNT</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ် account တစ်ခု၊ user account အများ</text>
+        <rect x="100" y="210" width="860" height="214" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">ledger account</text><text x="938" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M100 262H960" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="299" font-size="28" fill="#b794f6" class="mono">liability:user:1042</text><text x="938" y="299" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M116 316H944" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="353" font-size="28" fill="#b794f6" class="mono">liability:user:2077</text><text x="938" y="353" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">40.00</text></g><g><path d="M116 370H944" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="407" font-size="28" fill="#b794f6" class="mono">liability:user:3150</text><text x="938" y="407" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">12.00</text></g>
+        <rect x="100" y="520" width="860" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="100" y="520" width="860" height="130" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-bank" x="122" y="553" width="64" height="64" style="color:#4fd1c5"/><text x="570" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">asset:bank · omnibus</text><text x="570" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">user ငွေ အားလုံး ဘဏ် account တစ်ခုထဲမှာ — 152.00</text>
+        <path d="M530 434L530 506" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="616.6" y="477.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">Σ 152.00</text>
+        <g class="in"><rect x="1170" y="520" width="370" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1192" y="553" width="64" height="64" style="color:#9aa5b8"/><text x="1395" y="575.5" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600">company funds</text><text x="1395" y="615.9" font-size="24" text-anchor="middle" fill="#8a94a8">revenue · costs</text></g>
+        <g class="in"><rect x="100" y="700" width="525" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="100" y="700" width="525" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="362.5" y="734.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">pooled, per-user ledger — legitimate</text></g>
+        </svg>
+    - id: pool-3
+      contentType: html
+      name: "Omnibus account 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">OMNIBUS ACCOUNT</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ် account တစ်ခု၊ user account အများ</text>
+        <rect x="100" y="210" width="860" height="214" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">ledger account</text><text x="938" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M100 262H960" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="299" font-size="28" fill="#b794f6" class="mono">liability:user:1042</text><text x="938" y="299" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M116 316H944" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="353" font-size="28" fill="#b794f6" class="mono">liability:user:2077</text><text x="938" y="353" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">40.00</text></g><g><path d="M116 370H944" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="407" font-size="28" fill="#b794f6" class="mono">liability:user:3150</text><text x="938" y="407" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">12.00</text></g>
+        <rect x="100" y="520" width="860" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="100" y="520" width="860" height="130" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-bank" x="122" y="553" width="64" height="64" style="color:#4fd1c5"/><text x="570" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">asset:bank · omnibus</text><text x="570" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">user ငွေ အားလုံး ဘဏ် account တစ်ခုထဲမှာ — 152.00</text>
+        <path d="M530 434L530 506" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="616.6" y="477.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">Σ 152.00</text>
+        <rect x="1170" y="520" width="370" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1192" y="553" width="64" height="64" style="color:#9aa5b8"/><text x="1395" y="575.5" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600">company funds</text><text x="1395" y="615.9" font-size="24" text-anchor="middle" fill="#8a94a8">revenue · costs</text>
+        <rect x="100" y="700" width="525" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="100" y="700" width="525" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="362.5" y="734.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">pooled, per-user ledger — legitimate</text>
+        <path d="M970 585L1156 585" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/><text x="1063" y="568.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">user funds</text>
+        <g class="in"><circle cx="1534" cy="526" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="1520.2" y="512.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        <g class="in"><rect x="100" y="790" width="493.5" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="100" y="790" width="493.5" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="346.7" y="824.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">commingling — regulatory red flag</text></g>
+        </svg>
+    - id: pool-4
+      contentType: html
+      name: "Omnibus account 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">OMNIBUS ACCOUNT</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ် account တစ်ခု၊ user account အများ</text>
+        <rect x="100" y="210" width="860" height="214" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">ledger account</text><text x="938" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M100 262H960" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="299" font-size="28" fill="#b794f6" class="mono">liability:user:1042</text><text x="938" y="299" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M116 316H944" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="353" font-size="28" fill="#b794f6" class="mono">liability:user:2077</text><text x="938" y="353" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">40.00</text></g><g><path d="M116 370H944" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="407" font-size="28" fill="#b794f6" class="mono">liability:user:3150</text><text x="938" y="407" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">12.00</text></g>
+        <rect x="100" y="520" width="860" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="100" y="520" width="860" height="130" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-bank" x="122" y="553" width="64" height="64" style="color:#4fd1c5"/><text x="570" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">asset:bank · omnibus</text><text x="570" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">user ငွေ အားလုံး ဘဏ် account တစ်ခုထဲမှာ — 152.00</text>
+        <path d="M530 434L530 506" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="616.6" y="477.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">Σ 152.00</text>
+        <rect x="1170" y="520" width="370" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1192" y="553" width="64" height="64" style="color:#9aa5b8"/><text x="1395" y="575.5" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600">company funds</text><text x="1395" y="615.9" font-size="24" text-anchor="middle" fill="#8a94a8">revenue · costs</text>
+        <rect x="100" y="700" width="525" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="100" y="700" width="525" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="362.5" y="734.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">pooled, per-user ledger — legitimate</text>
+        <path d="M970 585L1156 585" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/><text x="1063" y="568.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">user funds</text>
+        <circle cx="1534" cy="526" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="1520.2" y="512.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="100" y="790" width="493.5" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="100" y="790" width="493.5" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="346.7" y="824.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">commingling — regulatory red flag</text>
+        <g class="in"><rect x="1170" y="230" width="370" height="110" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="1355" y="275.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">FTX · 11 Nov 2022</text><text x="1355" y="316.6" font-size="24" text-anchor="middle" fill="#8a94a8">Chapter 11</text></g>
+        <g class="in"><text x="1170" y="385" font-size="23" fill="#8a94a8">SEC: alleged diversion</text><text x="1170" y="415.4" font-size="23" fill="#8a94a8">of customer funds</text><text x="1170" y="445.7" font-size="23" fill="#8a94a8">founder convicted, 7 of 7</text></g>
+        </svg>
+    - id: transit-1
+      contentType: html
+      name: "Money in transit 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">MONEY IN TRANSIT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေ တကယ် ဘယ်မှာ ရှိလဲ</text>
+        <g class="in"><circle cx="250" cy="330" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-card" x="220.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="250" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Card</text><text x="250" y="460" font-size="23" text-anchor="middle" fill="#8a94a8">user</text></g>
+        <g class="in"><circle cx="800" cy="330" r="56" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-server" x="770.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#9aa5b8"/><text x="800" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><text x="800" y="460" font-size="23" text-anchor="middle" fill="#8a94a8">captured</text></g>
+        <path d="M316 330L730 330" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><circle cx="346" cy="330" r="19" fill="#f6c453"/><text x="346" y="338.5" font-size="24" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text><text x="523" y="313.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">capture 100.00</text>
+        </svg>
+    - id: transit-2
+      contentType: html
+      name: "Money in transit 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">MONEY IN TRANSIT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေ တကယ် ဘယ်မှာ ရှိလဲ</text>
+        <circle cx="250" cy="330" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-card" x="220.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="250" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Card</text><text x="250" y="460" font-size="23" text-anchor="middle" fill="#8a94a8">user</text>
+        <circle cx="800" cy="330" r="56" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-server" x="770.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#9aa5b8"/><text x="800" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><text x="800" y="460" font-size="23" text-anchor="middle" fill="#8a94a8">captured</text>
+        <path d="M316 330L730 330" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><circle cx="346" cy="330" r="19" fill="#f6c453"/><text x="346" y="338.5" font-size="24" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text><text x="523" y="313.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">capture 100.00</text>
+        <g class="in"><rect x="60" y="520" width="380" height="130" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="250" y="572.1" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">liability:user:1042</text><text x="250" y="615.1" font-size="24" text-anchor="middle" fill="#8a94a8">100.00 — ပေးစရာ ရှိပြီ</text></g>
+        <g class="in"><rect x="610" y="520" width="380" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5" stroke-dasharray="10 8"/><text x="800" y="573.9" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">asset:psp-receivable</text><text x="800" y="612.7" font-size="24" text-anchor="middle" fill="#8a94a8">97.10 — in transit</text></g>
+        <g class="in"><text x="800" y="700" font-size="26" text-anchor="middle" fill="#8a94a8" class="mono">100.00 − 2.90 fee = 97.10</text></g>
+        </svg>
+    - id: transit-3
+      contentType: html
+      name: "Money in transit 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">MONEY IN TRANSIT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေ တကယ် ဘယ်မှာ ရှိလဲ</text>
+        <circle cx="250" cy="330" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-card" x="220.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="250" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Card</text><text x="250" y="460" font-size="23" text-anchor="middle" fill="#8a94a8">user</text>
+        <circle cx="800" cy="330" r="56" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-server" x="770.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#9aa5b8"/><text x="800" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><text x="800" y="460" font-size="23" text-anchor="middle" fill="#8a94a8">captured</text>
+        <path d="M316 330L730 330" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><circle cx="346" cy="330" r="19" fill="#f6c453"/><text x="346" y="338.5" font-size="24" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text><text x="523" y="313.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">capture 100.00</text>
+        <rect x="60" y="520" width="380" height="130" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="250" y="572.1" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">liability:user:1042</text><text x="250" y="615.1" font-size="24" text-anchor="middle" fill="#8a94a8">100.00 — ပေးစရာ ရှိပြီ</text>
+        <g class="in"><circle cx="1350" cy="330" r="56" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-bank" x="1320.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#9aa5b8"/><text x="1350" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our bank</text><text x="1350" y="460" font-size="23" text-anchor="middle" fill="#8a94a8">T+X</text></g>
+        <path d="M866 330L1280 330" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M866 330L1280 330')"/><circle cx="896" cy="330" r="19" fill="#f6c453"/><text x="896" y="338.5" font-size="24" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text><text x="1073" y="313.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">settlement 97.10</text>
+        <g class="in"><rect x="610" y="520" width="380" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="800" y="573.9" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">asset:psp-receivable</text><text x="800" y="612.7" font-size="24" text-anchor="middle" fill="#8a94a8">0.00 — settled</text></g>
+        <g class="in"><rect x="1160" y="520" width="380" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1350" y="575.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">asset:bank</text><text x="1350" y="616.6" font-size="24" text-anchor="middle" fill="#8a94a8">97.10</text></g>
+        <text x="800" y="700" font-size="26" text-anchor="middle" fill="#8a94a8" class="mono">100.00 − 2.90 fee = 97.10</text>
+        </svg>
+    - id: transit-4
+      contentType: html
+      name: "Money in transit 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">MONEY IN TRANSIT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေ တကယ် ဘယ်မှာ ရှိလဲ</text>
+        <circle cx="250" cy="330" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-card" x="220.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="250" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Card</text><text x="250" y="460" font-size="23" text-anchor="middle" fill="#8a94a8">user</text>
+        <circle cx="800" cy="330" r="56" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-server" x="770.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#9aa5b8"/><text x="800" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><text x="800" y="460" font-size="23" text-anchor="middle" fill="#8a94a8">captured</text>
+        <path d="M316 330L730 330" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><circle cx="346" cy="330" r="19" fill="#f6c453"/><text x="346" y="338.5" font-size="24" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text><text x="523" y="313.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">capture 100.00</text>
+        <rect x="60" y="520" width="380" height="130" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="250" y="572.1" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">liability:user:1042</text><text x="250" y="615.1" font-size="24" text-anchor="middle" fill="#8a94a8">100.00 — ပေးစရာ ရှိပြီ</text>
+        <circle cx="1350" cy="330" r="56" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-bank" x="1320.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#9aa5b8"/><text x="1350" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our bank</text><text x="1350" y="460" font-size="23" text-anchor="middle" fill="#8a94a8">T+X</text>
+        <path d="M866 330L1280 330" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M866 330L1280 330')"/><circle cx="896" cy="330" r="19" fill="#f6c453"/><text x="896" y="338.5" font-size="24" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text><text x="1073" y="313.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">settlement 97.10</text>
+        <rect x="610" y="520" width="380" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="800" y="573.9" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">asset:psp-receivable</text><text x="800" y="612.7" font-size="24" text-anchor="middle" fill="#8a94a8">0.00 — settled</text>
+        <rect x="1160" y="520" width="380" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1350" y="575.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">asset:bank</text><text x="1350" y="616.6" font-size="24" text-anchor="middle" fill="#8a94a8">97.10</text>
+        <g class="in"><rect x="60" y="790" width="864.3" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="60" y="790" width="864.3" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="492.2" y="824.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">✗ capture မှာ asset:bank ကို debit — ledger ≠ bank statement</text></g>
+        <text x="800" y="700" font-size="26" text-anchor="middle" fill="#8a94a8" class="mono">100.00 − 2.90 fee = 97.10</text>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9510
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "asset:bank                   0.00\nasset:psp-receivable        97.10\nexpense:processing-fee       2.90\nliability:user:1042        100.00\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "rejected: tx dep-2 is not balanced: debit 97.10, credit 100.00\nasset:bank                   0.00\nasset:psp-receivable        97.10\nexpense:processing-fee       2.90\nliability:user:1042        100.00\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "rejected: tx dep-2 is not balanced: debit 97.10, credit 100.00\nasset:bank                  97.10\nasset:psp-receivable         0.00\nexpense:processing-fee       2.90\nliability:user:1042        100.00\n"
+
+scenes:
+  - id: hook
+    chapter: Event တစ်ခု၊ line အများ
+    narration: >-
+      user တစ်ယောက်က card နဲ့ ယူရို ၁၀၀ သွင်းတယ် ဆိုပါစို့။ [[mark:show-fan]] card payment ကို
+      ကိုယ့်ကိုယ်စား လက်ခံပေးတဲ့ PSP က processing fee နှစ်ယူရို ကိုးဆယ်ဆင့် ဖြတ်ပြီး၊ ကျန်တဲ့ ၉၇ ယူရို
+      ၁၀ ဆင့်ကို ရက်အနည်းငယ် နောက်မှ ပေးပါမယ်။ [[mark:pt-l1]] user ဘက်ကနေ ကြည့်ရင် ယူရို ၁၀၀
+      သွင်းထားတာ ဖြစ်လို့ user ရဲ့ liability account ကို ၁၀၀ အပြည့် credit လုပ်ပါတယ်။ [[mark:fan-2]]
+      platform ဘက်မှာတော့ ငွေက နှစ်နေရာ ကွဲသွားပါတယ်။ fee က PSP ကို ပေးရတဲ့ စရိတ် ဖြစ်လို့ expense
+      ကို debit လုပ်ပြီး၊ [[mark:pt-l3]] ကျန်တဲ့ ၉၇ ယူရို ၁၀ ဆင့်က PSP က ကိုယ့်ကို ပေးစရာ ရှိတဲ့ ငွေ
+      ဖြစ်လို့ receivable ကို debit လုပ်ပါတယ်။ receivable ဆိုတာ တခြားသူက ကိုယ့်ကို ပေးစရာ ရှိတဲ့
+      asset ပါ။ [[mark:fan-3]] business event တစ်ခုက line သုံးကြောင်း ဖြစ်သွားပြီး၊ အဲဒီ သုံးကြောင်းကို
+      transaction တစ်ခုတည်းအနေနဲ့ post လုပ်ပါတယ်။ posting ဆိုတာ entry တွေကို ledger ထဲမှာ တကယ်
+      မှတ်လိုက်တာပါ။ [[mark:pt-sum]] debit နှစ်ကြောင်း ပေါင်းရင် ၁၀၀၊ credit က ၁၀၀ ဆိုတော့ ညီပါတယ်။
+      [[mark:who-pays]] ဒီမှာ fee ကို platform က ခံလိုက်လို့ expense ဖြစ်တာပါ။ user ဆီက ဖြတ်မယ်
+      ဆိုရင်တော့ user ကို credit လုပ်တဲ့ ပမာဏ လျော့သွားပါမယ်။ ဘယ်သူ ခံမလဲ ဆိုတာ business
+      ဆုံးဖြတ်ချက်ပါ၊ ledger က အဲဒီ ဆုံးဖြတ်ချက်ကို line တွေအဖြစ် ရေးပေးတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - { id: show-fan, type: slide.show, at: { mark: show-fan, offsetMs: -700 }, slideId: fan-1 }
+      - {
+          id: pt-ev,
+          type: slide.point,
+          at: { afterAction: show-fan },
+          target: { x: 0.175, y: 0.653 },
+        }
+      - { id: pt-l1, type: slide.point, at: { mark: pt-l1 }, target: { x: 0.675, y: 0.442 } }
+      - { id: fan-2, type: slide.show, at: { mark: fan-2 }, slideId: fan-2 }
+      - { id: pt-l2, type: slide.point, at: { afterAction: fan-2 }, target: { x: 0.675, y: 0.62 } }
+      - { id: pt-l3, type: slide.point, at: { mark: pt-l3 }, target: { x: 0.675, y: 0.798 } }
+      - { id: fan-3, type: slide.show, at: { mark: fan-3 }, slideId: fan-3 }
+      - { id: pt-tx, type: slide.point, at: { afterAction: fan-3 }, target: { x: 0.413, y: 0.292 } }
+      - { id: pt-sum, type: slide.point, at: { mark: pt-sum }, target: { x: 0.669, y: 0.889 } }
+      - { id: pt-who, type: slide.point, at: { mark: who-pays }, target: { x: 0.675, y: 0.62 } }
+
+  - id: code
+    narration: >-
+      [[mark:close-fan]] code မှာ ဒီ transaction ကို ကြည့်ရအောင်။ [[mark:sel-lines]] line သုံးကြောင်းလုံး
+      Tx တစ်ခုထဲမှာ ရှိပြီး Post ကို တစ်ခါပဲ ခေါ်ပါတယ်။ [[mark:sel-accts]] အောက်မှာ account လေးခုရဲ့
+      balance ကို ထုတ်ပြပါတယ်၊ ဘဏ် account လည်း ပါပါတယ်။ [[mark:run-1]] run လိုက်ရအောင်။
+      [[mark:pt-bank0]] ဘဏ်ထဲမှာ သုည ပါ၊ ငွေ မရောက်သေးလို့ပါ။ [[mark:pt-rec]] PSP ဆီမှာ ရှိနေတဲ့ ၉၇ ယူရို
+      ၁၀ ဆင့်က receivable ထဲမှာ ရှိပြီး၊ [[mark:pt-user]] user ကိုတော့ ၁၀၀ အပြည့် ပေးစရာ ရှိနေပါပြီ။
+      [[mark:dock-1]] user ရဲ့ balance က အခုကတည်းက မှန်ပေမဲ့၊ platform ရဲ့ ဘဏ်ထဲမှာ ငွေ မရှိသေးတာကို
+      ledger က ဖုံးမထားပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+    actions:
+      - { id: close-fan, type: slide.close, at: { mark: close-fan } }
+      - id: sel-lines
+        type: editor.select
+        at: { mark: sel-lines }
+        target:
+          {
+            file: main.go,
+            text: "{Account: \"liability:user:1042\", Credit: 10000},\n\t\t{Account: \"expense:processing-fee\", Debit: 290},\n\t\t{Account: \"asset:psp-receivable\", Debit: 9710},",
+            occurrence: 1,
+          }
+      - id: sel-accts
+        type: editor.select
+        at: { mark: sel-accts }
+        target:
+          {
+            file: main.go,
+            text: "accounts := []string{\"asset:bank\", \"asset:psp-receivable\",\n\t\t\"expense:processing-fee\", \"liability:user:1042\"}",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "asset:psp-receivable        97.10",
+          timeoutMs: 8000,
+        }
+      - id: pt-bank0
+        type: console.point
+        at: { mark: pt-bank0 }
+        target: { text: "asset:bank", occurrence: 1 }
+      - id: pt-rec
+        type: console.point
+        at: { mark: pt-rec }
+        target: { text: "asset:psp-receivable", occurrence: 1 }
+      - id: pt-user
+        type: console.point
+        at: { mark: pt-user }
+        target: { text: "liability:user:1042", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: atomic
+    chapter: တစ်ခုလုံး ဒါမှမဟုတ် ဘာမှ မဟုတ်
+    narration: >-
+      [[mark:type-bad]] နောက်ထပ် deposit တစ်ခုမှာ code က fee line ကို မေ့သွားတယ် ဆိုပါစို့။ user ကို ၁၀၀
+      credit လုပ်ပြီး receivable ကို ၉၇ ယူရို ၁၀ ဆင့်ပဲ debit လုပ်ထားလို့ ဘက် နှစ်ဖက် မညီပါဘူး။
+      [[mark:ask-bad]] Post က ညီတဲ့ line တွေကိုတော့ ထည့်ပြီး ကျန်တာကို ပယ်မလား၊ transaction တစ်ခုလုံးကို
+      ပယ်မလား၊ run မလုပ်ခင် ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-rej]] transaction
+      တစ်ခုလုံးကို reject လုပ်လိုက်ပြီး၊ debit နဲ့ credit ပမာဏ နှစ်ခုကိုပါ error ထဲမှာ ပြထားပါတယ်။
+      [[mark:pt-rec2]] receivable က ၉၇ ယူရို ၁၀ ဆင့်ပဲ ရှိပါသေးတယ်၊ ဆိုလိုတာက ဒုတိယ transaction ရဲ့ line
+      တစ်ကြောင်းမှ ledger ထဲ မရောက်ပါဘူး။ [[mark:open-ledger]] Post ထဲမှာ ဘယ်လို စစ်လဲ ကြည့်ရအောင်။
+      [[mark:sel-post]] line အားလုံးရဲ့ debit နဲ့ credit ကို အရင် ပေါင်းပြီး၊ ညီမှ transaction ကို တစ်ခါတည်း
+      ထည့်ပါတယ်။ [[mark:db-tx]] တကယ့် database မှာဆိုရင် line တွေကို database transaction တစ်ခုထဲမှာ
+      ရေးပြီး commit မလုပ်ခင် ညီသလား စစ်ရပါတယ်။ line တစ်ကြောင်းချင်းကို သီးခြား commit တွေနဲ့
+      ရေးရင် ကြားထဲမှာ crash ဖြစ်တဲ့အခါ credit ပဲ ရောက်ပြီး debit မရောက်တဲ့ books ကျန်ခဲ့ပါမယ်။
+      [[mark:principles]] အဲဒါက ငွေကို မရှိဘဲ မဖန်တီးရဘူး ဆိုတဲ့ No invented data နဲ့၊ ငွေနဲ့ ပတ်သက်ပြီး
+      ဖြစ်ခဲ့သမျှ မပျောက်ရဘူး ဆိုတဲ့ No lost data မူ နှစ်ခုလုံးကို ချိုးဖောက်တာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - id: type-bad
+        type: editor.type
+        at: { mark: type-bad }
+        target:
+          {
+            file: main.go,
+            after: "\t\t{Account: \"asset:psp-receivable\", Debit: 9710},\n\t}})\n",
+            occurrence: 1,
+          }
+        text: "\tpost(&l, Tx{ID: \"dep-2\", Memo: \"card deposit\", Lines: []Line{\n\t\t{Account: \"liability:user:1042\", Credit: 10000},\n\t\t{Account: \"asset:psp-receivable\", Debit: 9710},\n\t}})\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "rejected: tx dep-2",
+          timeoutMs: 8000,
+        }
+      - id: pt-rej
+        type: console.point
+        at: { mark: pt-rej }
+        target: { text: "rejected", occurrence: 1 }
+      - id: pt-rec2
+        type: console.point
+        at: { mark: pt-rec2 }
+        target: { text: "asset:psp-receivable", occurrence: 1 }
+      - { id: open-ledger, type: workspace.openFile, at: { mark: open-ledger }, path: ledger.go }
+      - id: sel-post
+        type: editor.select
+        at: { mark: sel-post }
+        target:
+          {
+            file: ledger.go,
+            text: "if debit != credit {\n\t\treturn fmt.Errorf(\"tx %s is not balanced: debit %s, credit %s\", tx.ID, cents(debit), cents(credit))\n\t}\n\tl.txs = append(l.txs, tx)",
+            occurrence: 1,
+          }
+
+  - id: transit
+    chapter: PSP ဆီမှာ ရှိနေတဲ့ ငွေ
+    narration: >-
+      [[mark:show-transit]] receivable ကို ဘာလို့ သုံးရလဲ ဆိုတာ ငွေ တကယ် ဘယ်မှာ ရှိလဲ ဆိုတာနဲ့
+      ကြည့်ရအောင်။ [[mark:pt-cap]] PSP က user ရဲ့ card payment ကို capture လုပ်လိုက်ပါပြီ၊ ဆိုလိုတာက card ကနေ ငွေကို တကယ် ဆွဲယူလိုက်တာပါ။ ဒါပေမဲ့ ငွေက
+      PSP ဆီမှာ ရှိနေပါသေးတယ်။ [[mark:transit-2]] ledger မှာ user ကို ပေးစရာက ချက်ချင်း ပေါ်ပြီး၊ ငွေ
+      ကိုယ်တိုင်ကတော့ receivable ထဲမှာ in transit အနေနဲ့ ရှိနေပါတယ်။ ငွေ လမ်းခရီးမှာ ရှိနေတုန်း ခဏ
+      ထားတဲ့ ဒီလို account ကို clearing account ဒါမှမဟုတ် suspense account လို့ ခေါ်ပါတယ်။
+      [[mark:transit-3]] ရက်အနည်းငယ် နောက်မှာ PSP က settlement လုပ်ပြီး ငွေ ကိုယ့်ဘဏ်ကို ရောက်လာပါတယ်။
+      အဲဒီအခါ receivable က သုည ပြန်ဖြစ်ပြီး ဘဏ်ထဲမှာ ငွေ တကယ် ရှိလာပါတယ်။ [[mark:transit-4]] capture
+      လုပ်တဲ့ အချိန်မှာပဲ ဘဏ် account ကို တန်း debit လုပ်လိုက်ရင် ဘာဖြစ်မလဲ။ ledger ရဲ့ ဘဏ် balance က
+      settlement မရောက်မချင်း ဘဏ်ရဲ့ statement နဲ့ မကိုက်တော့ပါဘူး။ [[mark:worse]] ပိုဆိုးတာက PSP က
+      ငွေ လုံးဝ မပေးလိုက်တဲ့ deposit တစ်ခုကို ledger ထဲမှာ ရှာလို့ မရတော့တာပါ။ receivable သုံးထားရင်တော့
+      ရက်ကြာလာတာတောင် သုည မပြန်ဖြစ်တဲ့ receivable က အဲဒီ ငွေကို ပြပေးပါတယ်။ PSP ရဲ့ settlement ကို ဒီ
+      account နဲ့ reconcile လုပ်တာ၊ ဆိုလိုတာက မှတ်တမ်း နှစ်ခု ကိုက်မကိုက် တိုက်စစ်တာကို နောက်ပိုင်းမှာ
+      ကြည့်ပါမယ်။ [[mark:accrual]] fee expense ကိုလည်း PSP က တကယ် ဖြတ်တဲ့ settlement ကို မစောင့်ဘဲ
+      ဖြစ်တဲ့ အချိန်မှာ မှတ်ပါတယ်။ ဒါကို accrual basis လို့ ခေါ်ပြီး၊ ငွေ တကယ် ရွေ့မှ မှတ်တာကို cash basis
+      လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Know your domain, Accounting & ledgers (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#accounting-ledgers",
+        }
+    actions:
+      - {
+          id: show-transit,
+          type: slide.show,
+          at: { mark: show-transit, offsetMs: -700 },
+          slideId: transit-1,
+        }
+      - { id: pt-cap, type: slide.point, at: { mark: pt-cap }, target: { x: 0.302, y: 0.362 } }
+      - { id: transit-2, type: slide.show, at: { mark: transit-2 }, slideId: transit-2 }
+      - {
+          id: pt-rec-t,
+          type: slide.point,
+          at: { afterAction: transit-2 },
+          target: { x: 0.5, y: 0.731 },
+        }
+      - { id: transit-3, type: slide.show, at: { mark: transit-3 }, slideId: transit-3 }
+      - {
+          id: pt-stl,
+          type: slide.point,
+          at: { afterAction: transit-3 },
+          target: { x: 0.844, y: 0.731 },
+        }
+      - { id: transit-4, type: slide.show, at: { mark: transit-4 }, slideId: transit-4 }
+      - {
+          id: pt-wrong,
+          type: slide.point,
+          at: { afterAction: transit-4 },
+          target: { x: 0.301, y: 0.942 },
+        }
+      - { id: pt-rec0-t, type: slide.point, at: { mark: worse }, target: { x: 0.5, y: 0.731 } }
+      - { id: pt-accrual, type: slide.point, at: { mark: accrual }, target: { x: 0.646, y: 0.362 } }
+
+  - id: settle
+    narration: >-
+      [[mark:close-transit]] settlement ကို code ထဲ ထည့်ကြည့်ရအောင်။ [[mark:open-main2]] ဘဏ် account ကို
+      debit လုပ်ပြီး receivable ကို credit လုပ်တဲ့ transaction ပါ။ [[mark:type-stl]] asset နှစ်ခုကြား ရွှေ့တာ
+      ဖြစ်လို့ user ရဲ့ balance နဲ့ fee ကို မထိပါဘူး။ user ဘက်ကနေ ကြည့်ရင် ဘာမှ မဖြစ်သလိုပါပဲ၊
+      ပြောင်းသွားတာက platform ရဲ့ ငွေ ရှိတဲ့ နေရာပါ။ [[mark:why-stl]] ဒီ ငွေ ၉၇ ယူရို ၁၀ ဆင့်က PSP ရဲ့
+      settlement report ထဲက ဂဏန်းနဲ့ ကိုက်ရပါမယ်။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-bank97]] ဘဏ်ထဲမှာ
+      ၉၇ ယူရို ၁၀ ဆင့် ရောက်လာပြီး၊ [[mark:pt-rec0]] receivable က သုည ပြန်ဖြစ်ပါတယ်။ [[mark:pt-user3]] user
+      ရဲ့ balance ကတော့ ၁၀၀ ပါပဲ။ [[mark:dock-3]] သတိထားကြည့်ရင် settlement က receivable ကို ပြင်လိုက်တာ
+      မဟုတ်ပါဘူး၊ transaction အသစ်တစ်ခုနဲ့ ချေလိုက်တာပါ။ post လုပ်ပြီးသား transaction ကို ledger မှာ
+      ဘယ်တော့မှ မပြင်ပါဘူး၊ immutable ပါ။ [[mark:corrections]] အမှားတစ်ခု ပြင်ရမယ် ဆိုရင်တောင် မူလ
+      transaction ကို ထိန်းထားပြီး ပြန်ချေတဲ့ transaction အသစ်ကို post လုပ်ပါတယ်။ ဒါကို နောက်ပိုင်း lesson
+      တစ်ခုမှာ အသေးစိတ် ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+    actions:
+      - { id: close-transit, type: slide.close, at: { mark: close-transit } }
+      - { id: open-main2, type: workspace.openFile, at: { mark: open-main2 }, path: main.go }
+      - id: type-stl
+        type: editor.type
+        at: { mark: type-stl }
+        target:
+          {
+            file: main.go,
+            after: "\t\t{Account: \"asset:psp-receivable\", Debit: 9710},\n\t}})\n",
+            occurrence: 2,
+          }
+        text: "\tpost(&l, Tx{ID: \"stl-1\", Memo: \"PSP settlement\", Lines: []Line{\n\t\t{Account: \"asset:bank\", Debit: 9710},\n\t\t{Account: \"asset:psp-receivable\", Credit: 9710},\n\t}})\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "asset:bank                  97.10",
+          timeoutMs: 8000,
+        }
+      - id: pt-bank97
+        type: console.point
+        at: { mark: pt-bank97 }
+        target: { text: "asset:bank", occurrence: 1 }
+      - id: pt-rec0
+        type: console.point
+        at: { mark: pt-rec0 }
+        target: { text: "asset:psp-receivable", occurrence: 1 }
+      - id: pt-user3
+        type: console.point
+        at: { mark: pt-user3 }
+        target: { text: "liability:user:1042", occurrence: 1 }
+      - {
+          id: expect-file-stl,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: '{Account: "asset:bank", Debit: 9710},',
+        }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: pool
+    chapter: Omnibus နဲ့ commingling
+    narration: >-
+      [[mark:show-pool]] ဘဏ်ဘက်မှာတော့ user တစ်ယောက်ချင်းအတွက် ဘဏ် account သီးသန့် မဖွင့်ပါဘူး။
+      [[mark:pt-rows]] ledger ထဲမှာ user တစ်ယောက်ချင်းရဲ့ liability account ရှိပြီး၊ [[mark:pt-omni]] ငွေ
+      ကိုယ်တိုင်ကတော့ ဘဏ် account တစ်ခုထဲမှာ အတူတူ ရှိပါတယ်။ ဒါကို omnibus account လို့ ခေါ်ပါတယ်။
+      ငွေကို စုထားပေမဲ့ ဘယ်သူ့ ငွေ ဘယ်လောက်လဲ ဆိုတာ ledger က အတိအကျ ခွဲမှတ်ထားလို့ ဒါက တရားဝင်တဲ့
+      pooling ပါ။ [[mark:pool-2]] ကုမ္ပဏီ ကိုယ်ပိုင် ငွေ၊ ဆိုလိုတာက revenue တွေ၊ စရိတ် ပေးဖို့ ငွေတွေကတော့
+      သီးခြား ထားရပါတယ်။ [[mark:pool-3]] user ငွေနဲ့ ကုမ္ပဏီ ငွေကို ရောလိုက်တာ၊ user ငွေကို ကုမ္ပဏီ
+      စရိတ်အတွက် သုံးလိုက်တာကို commingling လို့ ခေါ်ပါတယ်။ regulator ဘက်ကနေ ကြည့်ရင် ပြင်းထန်တဲ့
+      သတိပေးချက် တစ်ခုဖြစ်ပြီး audit မှာ စစ်တဲ့ အချက်ပါ။ [[mark:pool-4]] ဒီ ခွဲခြားမှု ပျက်သွားရင် ဘာဖြစ်နိုင်လဲ
+      ဆိုတာနဲ့ ဆက်စပ်တဲ့ တကယ့် ဥပမာ တစ်ခုက FTX ပါ။ ၂၀၂၂ ခုနှစ် နိုဝင်ဘာ ၁၁ ရက်နေ့မှာ FTX နဲ့ သူ့
+      affiliate တွေ Chapter ၁၁ bankruptcy အတွက် လျှောက်ထားခဲ့ပါတယ်။ [[mark:pt-case]] ဒီဇင်ဘာမှာ US SEC က founder ကို တရားစွဲပြီး၊ FTX ရဲ့
+      customer ငွေတွေကို ဆက်စပ်နေတဲ့ trading ကုမ္ပဏီ တစ်ခုဆီ ထုတ်ဖော်မပြောဘဲ လွှဲသုံးခဲ့တယ်လို့ စွပ်စွဲခဲ့ပါတယ်။
+      ၂၀၂၃ ခုနှစ်မှာတော့ federal jury က founder ကို စွဲချက် ခုနစ်ခုလုံးနဲ့ အပြစ်ရှိတယ်လို့ ဆုံးဖြတ်ခဲ့ပါတယ်။ [[mark:rule]]
+      engineer ဘက်ကနေ ရတဲ့ သင်ခန်းစာက user liability စုစုပေါင်းကို user ငွေ ရှိရမယ့် asset နဲ့ ပုံမှန်
+      တိုက်စစ်ဖို့ပါ၊ ဒီလို ကွာဟချက်ကို အစောဆုံး ပြပေးတဲ့ check က အဲဒါပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+      - {
+          title: "SEC press release 2022-219 (13 Dec 2022)",
+          url: "https://www.sec.gov/news/press-release/2022-219",
+        }
+      - {
+          title: "NBC News — verdict and count list (2 Nov 2023)",
+          url: "https://www.nbcnews.com/business/business-news/sam-bankman-fried-verdict-ftx-trial-rcna123158",
+        }
+    actions:
+      - {
+          id: show-pool,
+          type: slide.show,
+          at: { mark: show-pool, offsetMs: -700 },
+          slideId: pool-1,
+        }
+      - { id: pt-rows, type: slide.point, at: { mark: pt-rows }, target: { x: 0.127, y: 0.344 } }
+      - { id: pt-omni, type: slide.point, at: { mark: pt-omni }, target: { x: 0.331, y: 0.731 } }
+      - { id: pool-2, type: slide.show, at: { mark: pool-2 }, slideId: pool-2 }
+      - {
+          id: pt-co,
+          type: slide.point,
+          at: { afterAction: pool-2 },
+          target: { x: 0.847, y: 0.731 },
+        }
+      - { id: pool-3, type: slide.show, at: { mark: pool-3 }, slideId: pool-3 }
+      - {
+          id: pt-red,
+          type: slide.point,
+          at: { afterAction: pool-3 },
+          target: { x: 0.21, y: 0.942 },
+        }
+      - { id: pool-4, type: slide.show, at: { mark: pool-4 }, slideId: pool-4 }
+      - {
+          id: pt-ftx,
+          type: slide.point,
+          at: { afterAction: pool-4 },
+          target: { x: 0.847, y: 0.387 },
+        }
+      - { id: pt-case, type: slide.point, at: { mark: pt-case }, target: { x: 0.769, y: 0.509 } }
+      - { id: pt-rule, type: slide.point, at: { mark: rule }, target: { x: 0.331, y: 0.731 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ fee ပါတဲ့ card deposit တစ်ခုကို ledger မှာ ဘယ်လို မှတ်မလဲ
+      လို့ မေးတတ်ပါတယ်။ user ရဲ့ balance ကို ၁၀၀ တိုးမယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး။ [[mark:iv-a]]
+      ပထမ၊ transaction တစ်ခုထဲမှာ line သုံးကြောင်းနဲ့ post လုပ်မယ်။ user ရဲ့ liability ကို ၁၀၀ credit၊ fee
+      ကို expense အဖြစ် debit၊ ကျန်တာကို PSP receivable အဖြစ် debit လုပ်ပြီး ဘက် နှစ်ဖက် ညီရမယ်။
+      [[mark:iv-b]] ဒုတိယ၊ ငွေ ဘဏ်ကို မရောက်သေးလို့ ဘဏ် account ကို မထိဘဲ receivable မှာ ထားမယ်။
+      settlement ရောက်မှ ဘဏ်ကို debit၊ receivable ကို credit လုပ်မယ်။ [[mark:iv-c]] တတိယ၊ line
+      အားလုံးကို database transaction တစ်ခုထဲမှာ ရေးပြီး မညီရင် တစ်ခုလုံး reject လုပ်မယ်။ post
+      လုပ်ပြီးသားကို မပြင်ဘဲ ပြန်ချေတဲ့ entry နဲ့ပဲ ပြင်မယ်။ [[mark:iv-d]] ပြီးရင် ဘယ်လို စစ်မလဲ
+      ဆက်ပြောပါ။ receivable ကို PSP ရဲ့ settlement batch နဲ့ reconcile လုပ်မယ်၊ သတ်မှတ်ထားတဲ့ ရက်
+      ကျော်တာတောင် ကျန်နေတဲ့ receivable က ရောက်မလာတဲ့ ငွေ ဖြစ်လို့ alert ပေးမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] reject ခံရတဲ့ ဒုတိယ deposit ထဲကို
+      မေ့ကျန်ခဲ့တဲ့ fee line ကို ထည့်ပါ၊ processing fee expense ကို ၂၉၀ ဆင့် debit လုပ်တဲ့ line ပါ။ run
+      လိုက်ရင် reject မဖြစ်တော့ဘဲ user ရဲ့ balance က ၂၀၀၊ fee expense က ငါးယူရို ရှစ်ဆယ်ဆင့် ဖြစ်လာပါမယ်။
+      [[mark:try-why]] receivable မှာ ၉၇ ယူရို ၁၀ ဆင့် ပြန်ရှိနေတာကိုလည်း သတိထားပါ၊ ဒုတိယ deposit ရဲ့ ငွေအတွက်
+      settlement မရောက်သေးလို့ပါ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ business event တစ်ခုကို debit နဲ့ credit ညီတဲ့
+      line အများနဲ့ transaction တစ်ခုအဖြစ် တစ်ခါတည်း post လုပ်ပြီး၊ ငွေ တကယ် မရောက်သေးရင် ဘဏ် account
+      မဟုတ်ဘဲ receivable မှာ ထားပါတယ်။ နောက် lesson မှာတော့ ဒီ deposit တစ်ခုမှာပဲ အချိန် သုံးမျိုး ရှိတာကို
+      ကြည့်ပါမယ်။ ဖြစ်တဲ့ အချိန်၊ ledger မှာ မှတ်တဲ့ အချိန်နဲ့ ငွေ တကယ် ရွေ့တဲ့ အချိန်ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target:
+          {
+            file: main.go,
+            text: 'post(&l, Tx{ID: "dep-2", Memo: "card deposit", Lines: []Line{',
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
