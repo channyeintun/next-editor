@@ -1,0 +1,642 @@
+# Fintech Engineering, lesson 02: why floats cannot hold money (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Precision handling" (CC BY 4.0, Voytek Pitula).
+# Start state: main.go adds 0.1 and 0.2 held in float64 variables and compares the sum with 0.3.
+# Edits, all insert-only:
+#   1. a loop that adds 0.1 a million times           -> run-2 prints 100000.00000133288
+#   2. 1e18 wei in a float64, plus one wei            -> run-3 prints true (the wei is lost)
+#   3. the same loop with an int64 counted in cents   -> run-4 prints 10000000
+# Figures: why (0.1 has no finite binary form), limit (53 bits), options (four representations),
+# iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-02-floats
+  title: "Fintech Engineering 02: Float နဲ့ ငွေ မတွက်ရတဲ့ အကြောင်း"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        	a, b := 0.1, 0.2
+        	fmt.Println(a + b)
+        	fmt.Println(a+b == 0.3)
+        }
+  slides:
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေအတွက် float ဘာလို့ မသုံးတာလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေအတွက် float ဘာလို့ မသုံးတာလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Representation — 0.1 ကို binary နဲ့ အတိအကျ မရေးနိုင်</text><text x="188" y="311" font-size="26" fill="#8a94a8">အမှားက တန်ဖိုး ထည့်ကတည်းက ပါနေပြီ</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေအတွက် float ဘာလို့ မသုံးတာလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Representation — 0.1 ကို binary နဲ့ အတိအကျ မရေးနိုင်</text><text x="188" y="311" font-size="26" fill="#8a94a8">အမှားက တန်ဖိုး ထည့်ကတည်းက ပါနေပြီ</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Accumulation — အမှားတွေ စုလာပြီး equality check တွေ မှားတယ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">ledger နဲ့ report မကိုက်တော့ဘူး</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေအတွက် float ဘာလို့ မသုံးတာလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Representation — 0.1 ကို binary နဲ့ အတိအကျ မရေးနိုင်</text><text x="188" y="311" font-size="26" fill="#8a94a8">အမှားက တန်ဖိုး ထည့်ကတည်းက ပါနေပြီ</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Accumulation — အမှားတွေ စုလာပြီး equality check တွေ မှားတယ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">ledger နဲ့ report မကိုက်တော့ဘူး</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Magnitude — precision က digit 16 လုံးလောက်ပဲ</text><text x="188" y="575" font-size="26" fill="#8a94a8">ပမာဏ ကြီးရင် အသေးဆုံး unit တွေ အသိမပေးဘဲ ပျောက်တယ်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေအတွက် float ဘာလို့ မသုံးတာလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Representation — 0.1 ကို binary နဲ့ အတိအကျ မရေးနိုင်</text><text x="188" y="311" font-size="26" fill="#8a94a8">အမှားက တန်ဖိုး ထည့်ကတည်းက ပါနေပြီ</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Accumulation — အမှားတွေ စုလာပြီး equality check တွေ မှားတယ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">ledger နဲ့ report မကိုက်တော့ဘူး</text></g><g><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Magnitude — precision က digit 16 လုံးလောက်ပဲ</text><text x="188" y="575" font-size="26" fill="#8a94a8">ပမာဏ ကြီးရင် အသေးဆုံး unit တွေ အသိမပေးဘဲ ပျောက်တယ်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">minor unit int နဲ့ သိမ်း၊ decimal နဲ့ တွက်၊ boundary မှာ round</text><text x="188" y="707" font-size="26" fill="#8a94a8">ကိုယ် ဘာသုံးမလဲ ဆိုတာပါ ဆက်ဖြေပါ</text></g>
+        </svg>
+    - id: limit-1
+      contentType: html
+      name: "Precision 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">PRECISION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">float64 မှာ ဂဏန်းအတွက် 53 bit ပဲ ရှိတယ်</text>
+        <g class="in"><text x="100" y="350" font-size="84" fill="#4fd1c5" font-weight="800" class="mono">9,007,199,254,740,992</text><text x="100" y="396" font-size="26" fill="#8a94a8">2^53 — ဒီအထိပဲ ကိန်းပြည့်တိုင်းကို အတိအကျ မှတ်နိုင်တယ်</text></g>
+        </svg>
+    - id: limit-2
+      contentType: html
+      name: "Precision 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">PRECISION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">float64 မှာ ဂဏန်းအတွက် 53 bit ပဲ ရှိတယ်</text>
+        <text x="100" y="350" font-size="84" fill="#4fd1c5" font-weight="800" class="mono">9,007,199,254,740,992</text><text x="100" y="396" font-size="26" fill="#8a94a8">2^53 — ဒီအထိပဲ ကိန်းပြည့်တိုင်းကို အတိအကျ မှတ်နိုင်တယ်</text>
+        <g class="in"><text x="100" y="590" font-size="84" fill="#f6c453" font-weight="800" class="mono">1,000,000,000,000,000,000</text><text x="100" y="636" font-size="26" fill="#8a94a8">1 ETH ကို wei နဲ့ ရေတွက်ရင် (10^18)</text></g>
+        <g class="in"><rect x="100" y="740" width="763.7" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="100" y="740" width="763.7" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="481.9" y="774.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">10^18 &gt; 2^53  →  wei တစ်ခုချင်းကို မမှတ်နိုင်တော့ဘူး</text></g>
+        </svg>
+    - id: options-1
+      contentType: html
+      name: "Representing money 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REPRESENTING MONEY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေပမာဏကို ကိုယ်စားပြုနည်း 4 မျိုး</text>
+        <g class="in"><rect x="100" y="205" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="240" font-size="22" fill="#8a94a8" font-weight="700">representation</text><text x="596.2" y="240" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">exact</text><text x="689.1" y="240" font-size="22" fill="#8a94a8" font-weight="700">speed</text><text x="919.5" y="240" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်မှာ သုံးလဲ</text><path d="M100 257H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="313" font-size="28" fill="#fc8181" class="mono">float64</text><text x="596.2" y="313" font-size="28" text-anchor="middle" fill="#fc8181">✗</text><text x="689.1" y="313" font-size="28" fill="#e9edf5">fastest</text><text x="919.5" y="313" font-size="28" fill="#e9edf5">ငွေအတွက် မသုံးရ</text></g></g>
+        </svg>
+    - id: options-2
+      contentType: html
+      name: "Representing money 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REPRESENTING MONEY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေပမာဏကို ကိုယ်စားပြုနည်း 4 မျိုး</text>
+        <rect x="100" y="205" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="240" font-size="22" fill="#8a94a8" font-weight="700">representation</text><text x="596.2" y="240" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">exact</text><text x="689.1" y="240" font-size="22" fill="#8a94a8" font-weight="700">speed</text><text x="919.5" y="240" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်မှာ သုံးလဲ</text><path d="M100 257H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="313" font-size="28" fill="#fc8181" class="mono">float64</text><text x="596.2" y="313" font-size="28" text-anchor="middle" fill="#fc8181">✗</text><text x="689.1" y="313" font-size="28" fill="#e9edf5">fastest</text><text x="919.5" y="313" font-size="28" fill="#e9edf5">ငွေအတွက် မသုံးရ</text></g><g class="in"><path d="M116 349H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="405" font-size="28" fill="#6cb2f5" class="mono">decimal (BigDecimal)</text><text x="596.2" y="405" font-size="28" text-anchor="middle" fill="#68d391">✓</text><text x="689.1" y="405" font-size="28" fill="#e9edf5">slower</text><text x="919.5" y="405" font-size="28" fill="#e9edf5">FX၊ pricing၊ ကြားထဲက တွက်ချက်မှု</text></g>
+        </svg>
+    - id: options-3
+      contentType: html
+      name: "Representing money 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REPRESENTING MONEY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေပမာဏကို ကိုယ်စားပြုနည်း 4 မျိုး</text>
+        <rect x="100" y="205" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="240" font-size="22" fill="#8a94a8" font-weight="700">representation</text><text x="596.2" y="240" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">exact</text><text x="689.1" y="240" font-size="22" fill="#8a94a8" font-weight="700">speed</text><text x="919.5" y="240" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်မှာ သုံးလဲ</text><path d="M100 257H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="313" font-size="28" fill="#fc8181" class="mono">float64</text><text x="596.2" y="313" font-size="28" text-anchor="middle" fill="#fc8181">✗</text><text x="689.1" y="313" font-size="28" fill="#e9edf5">fastest</text><text x="919.5" y="313" font-size="28" fill="#e9edf5">ငွေအတွက် မသုံးရ</text></g><g><path d="M116 349H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="405" font-size="28" fill="#6cb2f5" class="mono">decimal (BigDecimal)</text><text x="596.2" y="405" font-size="28" text-anchor="middle" fill="#68d391">✓</text><text x="689.1" y="405" font-size="28" fill="#e9edf5">slower</text><text x="919.5" y="405" font-size="28" fill="#e9edf5">FX၊ pricing၊ ကြားထဲက တွက်ချက်မှု</text></g><g class="in"><path d="M116 441H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="497" font-size="28" fill="#f6c453" class="mono">minor units (int)</text><text x="596.2" y="497" font-size="28" text-anchor="middle" fill="#68d391">✓</text><text x="689.1" y="497" font-size="28" fill="#e9edf5">fast</text><text x="919.5" y="497" font-size="28" fill="#e9edf5">ledger၊ storage၊ API</text></g>
+        </svg>
+    - id: options-4
+      contentType: html
+      name: "Representing money 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REPRESENTING MONEY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေပမာဏကို ကိုယ်စားပြုနည်း 4 မျိုး</text>
+        <rect x="100" y="205" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="240" font-size="22" fill="#8a94a8" font-weight="700">representation</text><text x="596.2" y="240" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">exact</text><text x="689.1" y="240" font-size="22" fill="#8a94a8" font-weight="700">speed</text><text x="919.5" y="240" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်မှာ သုံးလဲ</text><path d="M100 257H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="313" font-size="28" fill="#fc8181" class="mono">float64</text><text x="596.2" y="313" font-size="28" text-anchor="middle" fill="#fc8181">✗</text><text x="689.1" y="313" font-size="28" fill="#e9edf5">fastest</text><text x="919.5" y="313" font-size="28" fill="#e9edf5">ငွေအတွက် မသုံးရ</text></g><g><path d="M116 349H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="405" font-size="28" fill="#6cb2f5" class="mono">decimal (BigDecimal)</text><text x="596.2" y="405" font-size="28" text-anchor="middle" fill="#68d391">✓</text><text x="689.1" y="405" font-size="28" fill="#e9edf5">slower</text><text x="919.5" y="405" font-size="28" fill="#e9edf5">FX၊ pricing၊ ကြားထဲက တွက်ချက်မှု</text></g><g><path d="M116 441H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="497" font-size="28" fill="#f6c453" class="mono">minor units (int)</text><text x="596.2" y="497" font-size="28" text-anchor="middle" fill="#68d391">✓</text><text x="689.1" y="497" font-size="28" fill="#e9edf5">fast</text><text x="919.5" y="497" font-size="28" fill="#e9edf5">ledger၊ storage၊ API</text></g><g class="in"><path d="M116 533H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="589" font-size="28" fill="#b794f6" class="mono">rational (a/b)</text><text x="596.2" y="589" font-size="28" text-anchor="middle" fill="#68d391">✓</text><text x="689.1" y="589" font-size="28" fill="#e9edf5">slowest</text><text x="919.5" y="589" font-size="28" fill="#e9edf5">precision လုံးဝ မပျောက်စေချင်ရင်</text></g>
+        </svg>
+    - id: options-5
+      contentType: html
+      name: "Representing money 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REPRESENTING MONEY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေပမာဏကို ကိုယ်စားပြုနည်း 4 မျိုး</text>
+        <rect x="100" y="205" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="240" font-size="22" fill="#8a94a8" font-weight="700">representation</text><text x="596.2" y="240" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">exact</text><text x="689.1" y="240" font-size="22" fill="#8a94a8" font-weight="700">speed</text><text x="919.5" y="240" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်မှာ သုံးလဲ</text><path d="M100 257H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="313" font-size="28" fill="#fc8181" class="mono">float64</text><text x="596.2" y="313" font-size="28" text-anchor="middle" fill="#fc8181">✗</text><text x="689.1" y="313" font-size="28" fill="#e9edf5">fastest</text><text x="919.5" y="313" font-size="28" fill="#e9edf5">ငွေအတွက် မသုံးရ</text></g><g><path d="M116 349H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="405" font-size="28" fill="#6cb2f5" class="mono">decimal (BigDecimal)</text><text x="596.2" y="405" font-size="28" text-anchor="middle" fill="#68d391">✓</text><text x="689.1" y="405" font-size="28" fill="#e9edf5">slower</text><text x="919.5" y="405" font-size="28" fill="#e9edf5">FX၊ pricing၊ ကြားထဲက တွက်ချက်မှု</text></g><g><path d="M116 441H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="497" font-size="28" fill="#f6c453" class="mono">minor units (int)</text><text x="596.2" y="497" font-size="28" text-anchor="middle" fill="#68d391">✓</text><text x="689.1" y="497" font-size="28" fill="#e9edf5">fast</text><text x="919.5" y="497" font-size="28" fill="#e9edf5">ledger၊ storage၊ API</text></g><g><path d="M116 533H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="589" font-size="28" fill="#b794f6" class="mono">rational (a/b)</text><text x="596.2" y="589" font-size="28" text-anchor="middle" fill="#68d391">✓</text><text x="689.1" y="589" font-size="28" fill="#e9edf5">slowest</text><text x="919.5" y="589" font-size="28" fill="#e9edf5">precision လုံးဝ မပျောက်စေချင်ရင်</text></g>
+        <g class="in"><rect x="100" y="700" width="896.5" height="54" rx="27" fill="#f6c453" opacity="0.16"/><rect x="100" y="700" width="896.5" height="54" rx="27" fill="none" stroke="#f6c453" stroke-width="2"/><text x="548.3" y="737.5" font-size="30" text-anchor="middle" fill="#f6c453" font-weight="700">storage ≠ computation  —  int နဲ့ သိမ်း၊ decimal နဲ့ တွက်</text></g>
+        </svg>
+    - id: why-1
+      contentType: html
+      name: "Floating point 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FLOATING POINT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">0.1 ကို binary နဲ့ အတိအကျ မရေးနိုင်ဘူး</text>
+        <g class="in"><text x="100" y="262" font-size="26" fill="#8a94a8">decimal</text></g>
+        <g class="in"><text x="100" y="334" font-size="58" fill="#e9edf5" class="mono">1/3  = 0.3333333333333…</text></g>
+        </svg>
+    - id: why-2
+      contentType: html
+      name: "Floating point 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FLOATING POINT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">0.1 ကို binary နဲ့ အတိအကျ မရေးနိုင်ဘူး</text>
+        <text x="100" y="262" font-size="26" fill="#8a94a8">decimal</text>
+        <text x="100" y="334" font-size="58" fill="#e9edf5" class="mono">1/3  = 0.3333333333333…</text>
+        <g class="in"><text x="100" y="432" font-size="26" fill="#8a94a8">binary</text></g>
+        <g class="in"><text x="100" y="504" font-size="58" fill="#f6c453" class="mono">1/10 = 0.0001100110011…</text></g>
+        <g class="in"><rect x="1040" y="462" width="345.3" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="1040" y="462" width="345.3" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="1212.6" y="496.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700" class="mono">1/2 + 1/4 + 1/8 + …</text></g>
+        </svg>
+    - id: why-3
+      contentType: html
+      name: "Floating point 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FLOATING POINT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">0.1 ကို binary နဲ့ အတိအကျ မရေးနိုင်ဘူး</text>
+        <text x="100" y="262" font-size="26" fill="#8a94a8">decimal</text>
+        <text x="100" y="334" font-size="58" fill="#e9edf5" class="mono">1/3  = 0.3333333333333…</text>
+        <text x="100" y="432" font-size="26" fill="#8a94a8">binary</text>
+        <text x="100" y="504" font-size="58" fill="#f6c453" class="mono">1/10 = 0.0001100110011…</text>
+        <rect x="1040" y="462" width="345.3" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="1040" y="462" width="345.3" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="1212.6" y="496.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700" class="mono">1/2 + 1/4 + 1/8 + …</text>
+        <g class="in"><path d="M140 720H1420" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M421.6 702H1087.2" stroke="#fc8181" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="754.4" y="686" font-size="24" text-anchor="middle" fill="#fc8181" font-weight="600">error ≈ 5.5 × 10⁻¹⁸</text></g><g><circle cx="421.6" cy="720" r="10" fill="#e9edf5"/><path d="M421.6 720V766" stroke="#e9edf5" stroke-width="2.5"/><text x="421.6" y="802" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="700" class="mono">0.1</text><text x="421.6" y="840" font-size="23" text-anchor="middle" fill="#8a94a8">code ထဲမှာ ရေးတာ</text></g><g><circle cx="1087.2" cy="720" r="10" fill="#fc8181"/><path d="M1087.2 720V766" stroke="#fc8181" stroke-width="2.5"/><text x="1087.2" y="802" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">0.1000000000000000055511…</text><text x="1087.2" y="840" font-size="23" text-anchor="middle" fill="#8a94a8">float64 ထဲမှာ တကယ် သိမ်းထားတာ</text></g></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9502
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "0.30000000000000004\nfalse\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "0.30000000000000004\nfalse\n100000.00000133288\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "0.30000000000000004\nfalse\n100000.00000133288\ntrue\n"
+      run-4:
+        status: success
+        exitCode: 0
+        output: "0.30000000000000004\nfalse\n100000.00000133288\ntrue\n10000000\n"
+
+scenes:
+  - id: hook
+    chapter: Float နှစ်ခု ပေါင်းကြည့်ရအောင်
+    narration: >-
+      ငွေကိုင်တဲ့ system တစ်ခုမှာ ပထမဆုံး ဆုံးဖြတ်ရတာက ငွေပမာဏကို ဘယ် type နဲ့ ကိုယ်စားပြုမလဲ
+      ဆိုတာပါ။ ဒီနေရာမှာ မှားရင် အပေါ်က layer တိုင်းမှာ အဲဒီ အမှား ပါသွားပါတယ်။ [[mark:sel-vars]] ဒီ
+      program မှာ သုည ဒသမ တစ် နဲ့ သုည ဒသမ နှစ် ကို float variable နှစ်ခုထဲ ထည့်ထားပါတယ်။
+      [[mark:sel-sum]] အောက်က ပထမ line က နှစ်ခု ပေါင်းလဒ်ကို ထုတ်ပြပြီး၊ ဒုတိယ line က အဲဒီ
+      ပေါင်းလဒ်ဟာ သုည ဒသမ သုံး နဲ့ ညီသလား ဆိုတာ စစ်တာပါ။ run မလုပ်ခင် ဘာထွက်မလဲ ခန့်မှန်းကြည့်ပါ။
+      [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+      - {
+          title: "The Go Programming Language Specification — Numeric types",
+          url: "https://go.dev/ref/spec#Numeric_types",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-vars
+        type: editor.select
+        at: { mark: sel-vars }
+        target: { file: main.go, text: "a, b := 0.1, 0.2", occurrence: 1 }
+      - id: sel-sum
+        type: editor.select
+        at: { mark: sel-sum }
+        target:
+          { file: main.go, text: "fmt.Println(a + b)\n\tfmt.Println(a+b == 0.3)", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "0.30000000000000004",
+          timeoutMs: 8000,
+        }
+
+  - id: read-sum
+    narration: >-
+      [[mark:pt-sum]] ပေါင်းလဒ်က သုည ဒသမ သုံး အတိအကျ မဟုတ်ပါဘူး။ ဒသမ နောက်က ၁၇ လုံးမြောက်မှာ
+      လေး တစ်လုံး ပိုနေပါတယ်။ [[mark:pt-false]] ဒါကြောင့် ညီသလား စစ်တဲ့ line က false ပြန်ပေးပါတယ်။ ဒါ
+      Go ရဲ့ bug မဟုတ်ပါဘူး။ [[mark:dock-1]] Java၊ Python၊ JavaScript အားလုံးမှာလည်း ဒီအတိုင်းပဲ
+      ထွက်ပါတယ်၊ ဘာကြောင့်လဲဆိုတော့ အားလုံးက floating point အတွက် standard တစ်ခုတည်းကို
+      သုံးထားကြလို့ပါ။
+    sources:
+      - {
+          title: "What Every Computer Scientist Should Know About Floating-Point Arithmetic (Goldberg)",
+          url: "https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html",
+        }
+    actions:
+      - id: pt-sum
+        type: console.point
+        at: { mark: pt-sum }
+        target: { text: "0.30000000000000004", occurrence: 1 }
+      - id: pt-false
+        type: console.point
+        at: { mark: pt-false }
+        target: { text: "false", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: why
+    chapter: Binary မှာ 0.1 မရှိဘူး
+    narration: >-
+      [[mark:show-why]] အကြောင်းရင်းက ဂဏန်းကို ဘယ်စနစ်နဲ့ ရေးလဲ ဆိုတာပါ။ [[mark:pt-third]] decimal
+      စနစ်မှာ သုံးပုံတစ်ပုံကို ဒသမနဲ့ ရေးရင် သုံးတွေ အဆုံးမရှိ ဆက်သွားပြီး ဘယ်တော့မှ အတိအကျ
+      မရေးနိုင်ပါဘူး။ [[mark:why-2]] float ကတော့ ဂဏန်းတွေကို binary နဲ့ သိမ်းပါတယ်။ binary မှာ အတိအကျ
+      ရေးနိုင်တာက နှစ်ပုံတစ်ပုံ၊ လေးပုံတစ်ပုံ၊ ရှစ်ပုံတစ်ပုံ စတဲ့ နှစ်ရဲ့ ထပ်ကိန်း အပိုင်းတွေကို
+      ပေါင်းထားတဲ့ ဂဏန်းတွေပဲ ရှိပါတယ်။ [[mark:pt-tenth]] ဆယ်ပုံတစ်ပုံက အဲဒီထဲ မပါလို့ binary နဲ့ ရေးရင်
+      digit တွေ အဆုံးမရှိ ထပ်နေပါတယ်။ [[mark:why-3]] float တစ်ခုမှာ bit ၆၄ လုံးပဲ ရှိတော့ အဲဒီ
+      အဆုံးမရှိတဲ့ ဂဏန်းကို တစ်နေရာမှာ ဖြတ်ပြီး အနီးဆုံး တန်ဖိုးကို သိမ်းရပါတယ်။ [[mark:pt-stored]]
+      ဆိုလိုတာက code ထဲမှာ သုည ဒသမ တစ် လို့ ရေးလိုက်တဲ့ အချိန်ကတည်းက တကယ် သိမ်းထားတာက အဲဒါထက်
+      နည်းနည်းလေး ပိုကြီးတဲ့ တန်ဖိုး ဖြစ်နေပါပြီ။ ဘာမှ မတွက်ရသေးခင်ကတည်းက အမှားက ပါနေတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+      - {
+          title: "What Every Computer Scientist Should Know About Floating-Point Arithmetic (Goldberg)",
+          url: "https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html",
+        }
+    actions:
+      - { id: show-why, type: slide.show, at: { mark: show-why, offsetMs: -700 }, slideId: why-1 }
+      - { id: pt-third, type: slide.point, at: { mark: pt-third }, target: { x: 0.1, y: 0.384 } }
+      - { id: why-2, type: slide.show, at: { mark: why-2 }, slideId: why-2 }
+      - { id: pt-tenth, type: slide.point, at: { mark: pt-tenth }, target: { x: 0.1, y: 0.573 } }
+      - { id: why-3, type: slide.show, at: { mark: why-3 }, slideId: why-3 }
+      - {
+          id: pt-stored,
+          type: slide.point,
+          at: { mark: pt-stored },
+          target: { x: 0.661, y: 0.947 },
+        }
+
+  - id: accumulate
+    chapter: အမှားက စုလာတယ်
+    narration: >-
+      [[mark:close-why]] တစ်ခါ မှားတာက သေးသေးလေးပါ။ ဒါပေမဲ့ ငွေ system က တစ်ခါပဲ တွက်တာ မဟုတ်ပါဘူး။
+      [[mark:type-loop]] ဒီ loop က သုည ဒသမ တစ် ကို အကြိမ် တစ်သန်း ပေါင်းတာပါ။ ဆယ်ဆင့်တန် payment
+      တစ်သန်းကို စုစုပေါင်းတာလို့ မြင်ကြည့်ပါ။ မှန်ရင် စုစုပေါင်းက တစ်သိန်း အတိအကျ ဖြစ်ရပါမယ်။
+      [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-total]] တစ်သိန်း အတိအကျ မဟုတ်ဘဲ ဒသမ နောက်မှာ အပိုတွေ
+      ပါလာပါတယ်။ ပေါင်းတိုင်း ဖြစ်တဲ့ အမှား သေးသေးလေးတွေက မကြေဘဲ စုလာတာပါ။ တကယ့် system မှာဆိုရင်
+      ဒါက ledger ရဲ့ စုစုပေါင်းနဲ့ report ရဲ့ စုစုပေါင်း မကိုက်တာ၊ ညီသလား စစ်တဲ့ check တွေ အကြောင်းမဲ့
+      fail တာ အနေနဲ့ ပေါ်လာပါတယ်။ [[mark:dock-2]] အဆိုးဆုံးက ငွေ ဘယ်နေရာမှာ ပျောက်သွားလဲ ဆိုတာကို
+      ပြန်ရှာလို့ မရတော့တာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+    actions:
+      - { id: close-why, type: slide.close, at: { mark: close-why } }
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target: { file: main.go, after: "\tfmt.Println(a+b == 0.3)\n", occurrence: 1 }
+        text: "\n\ttotal := 0.0\n\tfor i := 0; i < 1000000; i++ {\n\t\ttotal += 0.1\n\t}\n\tfmt.Println(total)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "100000.00000133288",
+          timeoutMs: 8000,
+        }
+      - id: pt-total
+        type: console.point
+        at: { mark: pt-total }
+        target: { text: "100000.00000133288", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: magnitude
+    chapter: ပမာဏ ကြီးရင် အသေးတွေ ပျောက်တယ်
+    narration: >-
+      [[mark:show-limit]] ဒုတိယ ပြဿနာက ပမာဏ ကြီးလာတဲ့အခါ ဖြစ်ပါတယ်။ float တစ်ခုမှာ ဂဏန်းအတွက်
+      သုံးလို့ရတဲ့ bit က ၅၃ လုံးပဲ ရှိပါတယ်။ [[mark:pt-max]] ဒါကြောင့် ကိန်းပြည့်တိုင်းကို တစ်လုံးမကျန်
+      အတိအကျ မှတ်နိုင်တာက နှစ်ရဲ့ ၅၃ ထပ်အထိပဲ ဖြစ်ပြီး၊ decimal နဲ့ဆို ဂဏန်း ၁၆ လုံးလောက်ပါ။
+      [[mark:limit-2]] ဒီ အကန့်အသတ်ကို တကယ့် system တွေမှာ မြန်မြန် ရောက်ပါတယ်။ [[mark:pt-wei]] Ethereum
+      မှာ ether တစ်ခုကို အသေးဆုံး unit ဖြစ်တဲ့ wei နဲ့ ရေတွက်ရင် တစ် နောက်မှာ သုည ၁၈ လုံး ပါပါတယ်။
+      [[mark:pt-gt]] ဆိုလိုတာက ether တစ်ခုတည်းမှာတောင် float က wei တစ်ခုချင်းကို မခွဲနိုင်တော့ပါဘူး။
+      [[mark:close-limit]] code နဲ့ စမ်းကြည့်ရအောင်။ [[mark:type-wei]] ether တစ်ခုစာ wei ကို float ထဲ
+      ထည့်ပြီး၊ wei တစ်ခု ထပ်ပေါင်းလိုက်ရင် တန်ဖိုး ပြောင်းသွားသလား ဆိုတာ စစ်ပါမယ်။ ပြောင်းရင် false၊
+      မပြောင်းရင် true ထွက်ပါမယ်။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-true]] true လို့ ထွက်ပါတယ်။
+      တစ်ခု ပေါင်းပြီးတာတောင် အရင် တန်ဖိုးနဲ့ အတူတူပဲ ဖြစ်နေတာပါ။ ပေါင်းလိုက်တဲ့ wei က error မတက်ဘဲ
+      တိတ်တိတ်လေး ပျောက်သွားပါတယ်။ [[mark:dock-3]] ငွေ system မှာ data ပျောက်တာထက် ပိုဆိုးတာက
+      ပျောက်မှန်း မသိတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+      - {
+          title: "ethereum.org — Intro to ether: denominations of ether",
+          url: "https://ethereum.org/en/developers/docs/intro-to-ether/#denominations",
+        }
+      - {
+          title: "MDN — Number.MAX_SAFE_INTEGER",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER",
+        }
+    actions:
+      - {
+          id: show-limit,
+          type: slide.show,
+          at: { mark: show-limit, offsetMs: -700 },
+          slideId: limit-1,
+        }
+      - { id: pt-max, type: slide.point, at: { mark: pt-max }, target: { x: 0.1, y: 0.453 } }
+      - { id: limit-2, type: slide.show, at: { mark: limit-2 }, slideId: limit-2 }
+      - { id: pt-wei, type: slide.point, at: { mark: pt-wei }, target: { x: 0.1, y: 0.72 } }
+      - { id: pt-gt, type: slide.point, at: { mark: pt-gt }, target: { x: 0.295, y: 0.887 } }
+      - { id: close-limit, type: slide.close, at: { mark: close-limit } }
+      - id: type-wei
+        type: editor.type
+        at: { mark: type-wei }
+        target: { file: main.go, after: "\tfmt.Println(total)\n", occurrence: 1 }
+        text: "\n\twei := 1e18\n\tfmt.Println(wei+1 == wei)\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "true",
+          timeoutMs: 8000,
+        }
+      - id: pt-true
+        type: console.point
+        at: { mark: pt-true }
+        target: { text: "true", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: options
+    chapter: ဒါဆို ဘာနဲ့ ကိုယ်စားပြုမလဲ
+    narration: >-
+      [[mark:show-options]] ဒါဆို ဘာသုံးမလဲ။ ရွေးစရာ လေးမျိုး ရှိပါတယ်။ ပထမတစ်ခုက float ပါ။ အမြန်ဆုံးနဲ့
+      memory အသက်သာဆုံး ဖြစ်ပေမဲ့ ခုနက မြင်ခဲ့တဲ့အတိုင်း ငွေအတွက် မသုံးသင့်ပါဘူး။ [[mark:opt-2]]
+      ဒုတိယက arbitrary precision decimal ပါ။ Java ရဲ့ BigDecimal လို type မျိုးဖြစ်ပြီး၊ ဒသမ ဘယ်နှလုံး
+      ထားမလဲ၊ ဘယ်နေရာမှာ ဘယ်လို round လုပ်မလဲ ဆိုတာကို ကိုယ်တိုင် ထိန်းနိုင်ပါတယ်။ FX နဲ့ pricing လို
+      အဆင့်ဆင့် တွက်ရတဲ့ နေရာတွေနဲ့ ကိုက်ပါတယ်။ [[mark:opt-3]] တတိယက minor unit ပါ။ ပမာဏကို currency
+      ရဲ့ အသေးဆုံး unit နဲ့ ကိန်းပြည့်အဖြစ် သိမ်းတာပါ။ ဥပမာ ဆယ့်နှစ်ယူရို ၃၄ ဆင့်ကို ၁၂၃၄ လို့
+      သိမ်းပါတယ်။ မြန်ပြီး အတိအကျ ဖြစ်လို့ ledger နဲ့ API တွေမှာ အသုံးအများဆုံးပါ။ [[mark:opt-4]]
+      စတုတ္ထက rational number ပါ။ ပိုင်းဝေနဲ့ ပိုင်းခြေကို သီးသန့် သိမ်းထားလို့ precision လုံးဝ
+      မပျောက်ပါဘူး။ ဒါပေမဲ့ အနှေးဆုံး ဖြစ်ပြီး၊ တခြား format ကို ပြောင်းတဲ့အခါ round လုပ်ရတာကတော့
+      မလွတ်ပါဘူး။ [[mark:opt-5]] သတိထားရမှာက ဒီလေးမျိုးထဲက တစ်ခုတည်းကို ရွေးရတာ မဟုတ်ပါဘူး။ ဘယ်လို
+      သိမ်းမလဲ ဆိုတာနဲ့ ဘယ်လို တွက်မလဲ ဆိုတာက သီးခြား ဆုံးဖြတ်ချက် နှစ်ခုပါ။ system အများစုက
+      ကိန်းပြည့်နဲ့ သိမ်းပြီး၊ ကြားထဲက တွက်ချက်မှုတွေကို decimal နဲ့ လုပ်ကြပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+      - {
+          title: "Java SE API — java.math.BigDecimal",
+          url: "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/math/BigDecimal.html",
+        }
+    actions:
+      - {
+          id: show-options,
+          type: slide.show,
+          at: { mark: show-options, offsetMs: -700 },
+          slideId: options-1,
+        }
+      - {
+          id: pt-opt-1,
+          type: slide.point,
+          at: { afterAction: show-options },
+          target: { x: 0.138, y: 0.381 },
+        }
+      - { id: opt-2, type: slide.show, at: { mark: opt-2 }, slideId: options-2 }
+      - {
+          id: pt-opt-2,
+          type: slide.point,
+          at: { afterAction: opt-2 },
+          target: { x: 0.138, y: 0.483 },
+        }
+      - { id: opt-3, type: slide.show, at: { mark: opt-3 }, slideId: options-3 }
+      - {
+          id: pt-opt-3,
+          type: slide.point,
+          at: { afterAction: opt-3 },
+          target: { x: 0.138, y: 0.586 },
+        }
+      - { id: opt-4, type: slide.show, at: { mark: opt-4 }, slideId: options-4 }
+      - {
+          id: pt-opt-4,
+          type: slide.point,
+          at: { afterAction: opt-4 },
+          target: { x: 0.138, y: 0.688 },
+        }
+      - { id: opt-5, type: slide.show, at: { mark: opt-5 }, slideId: options-5 }
+      - {
+          id: pt-opt-5,
+          type: slide.point,
+          at: { afterAction: opt-5 },
+          target: { x: 0.336, y: 0.847 },
+        }
+
+  - id: fix
+    chapter: ကိန်းပြည့်နဲ့ ပြန်တွက်ကြည့်
+    narration: >-
+      [[mark:close-options]] ခုနက loop ကို ကိန်းပြည့်နဲ့ ပြန်ရေးကြည့်ရအောင်။ [[mark:type-cents]]
+      ဒီတစ်ခါ စုစုပေါင်းကို ဆင့်နဲ့ ရေတွက်တဲ့ ကိန်းပြည့် variable ထဲ ထားပြီး၊ အခေါက်တိုင်းမှာ ဆယ်ဆင့်
+      ပေါင်းပါတယ်။ တွက်တဲ့ အရေအတွက်က အရင်အတိုင်း တစ်သန်းပါပဲ။ [[mark:run-4]] run လိုက်ရအောင်။
+      [[mark:pt-cents]] ဆင့် တစ်ကုဋေ အတိအကျ ထွက်ပါတယ်၊ ဒေါ်လာနဲ့ဆို တစ်သိန်းပါ။ အပေါ်က float နဲ့
+      တွက်ထားတဲ့ စုစုပေါင်းနဲ့ ယှဉ်ကြည့်ပါ။ ကိန်းပြည့်မှာ ပေါင်းတာ၊ နုတ်တာ၊ ညီသလား စစ်တာ အားလုံး
+      အတိအကျ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+    actions:
+      - { id: close-options, type: slide.close, at: { mark: close-options } }
+      - id: type-cents
+        type: editor.type
+        at: { mark: type-cents }
+        target: { file: main.go, after: "\tfmt.Println(wei+1 == wei)\n", occurrence: 1 }
+        text: "\n\tvar cents int64\n\tfor i := 0; i < 1000000; i++ {\n\t\tcents += 10\n\t}\n\tfmt.Println(cents)\n"
+        cadence: line-by-line
+      - { id: run-4, type: runtime.run, at: { mark: run-4, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-4,
+          type: expect.output,
+          at: { afterAction: run-4 },
+          contains: "10000000",
+          timeoutMs: 8000,
+        }
+      - id: pt-cents
+        type: console.point
+        at: { mark: pt-cents }
+        target: { text: "10000000", occurrence: 1 }
+      - {
+          id: expect-file-cents,
+          type: expect.file,
+          at: { afterAction: run-4 },
+          path: main.go,
+          contains: "cents += 10",
+        }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ ငွေအတွက် float ဘာလို့ မသုံးတာလဲ ဆိုတာ မေးလေ့ရှိပါတယ်။
+      rounding error ရှိလို့ပါ လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး။ အချက် သုံးချက်နဲ့ ဖြေပါ။ [[mark:iv-a]] ပထမ၊
+      decimal အပိုင်းကိန်း အများစုကို binary နဲ့ အတိအကျ မရေးနိုင်လို့ အမှားက တွက်ချက်မှု မစခင်၊ တန်ဖိုး
+      ထည့်လိုက်ကတည်းက ပါနေတာပါ။ [[mark:iv-b]] ဒုတိယ၊ အဲဒီ အမှားတွေက စုလာပြီး ညီသလား စစ်တာတွေ
+      မှားလာတော့ ledger နဲ့ report မကိုက်တော့ပါဘူး။ [[mark:iv-c]] တတိယ၊ precision က ဂဏန်း ၁၆
+      လုံးလောက်ပဲ ရှိလို့ ပမာဏ ကြီးလာရင် အသေးဆုံး unit တွေက အသိမပေးဘဲ ပျောက်ပါတယ်။ [[mark:iv-d]]
+      ပြီးရင် ကိုယ် ဘာသုံးမလဲ ဆိုတာ ဆက်ပြောပါ။ သိမ်းတာကို minor unit ကိန်းပြည့်နဲ့၊ ကြားထဲက
+      တွက်ချက်မှုကို decimal နဲ့ လုပ်ပြီး၊ rounding ကို သတ်မှတ်ထားတဲ့ နေရာမှာပဲ လုပ်မယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ဒီ line က ဂဏန်း
+      နှစ်လုံးကို လေးပုံတစ်ပုံ နဲ့ နှစ်ပုံတစ်ပုံ၊ ဆိုလိုတာက သုည ဒသမ နှစ်ငါး နဲ့ သုည ဒသမ ငါး လို့
+      ပြောင်းပါ။ အောက်က စစ်တဲ့ တန်ဖိုးကိုလည်း သုည ဒသမ ခုနစ်ငါး လို့ ပြောင်းပြီး run ကြည့်ပါ။ ဒီတစ်ခါ
+      true ထွက်ပါလိမ့်မယ်၊ ဘာကြောင့်လဲဆိုတော့ အဲဒီ ဂဏန်းတွေက နှစ်ရဲ့ ထပ်ကိန်း အပိုင်းတွေ ဖြစ်လို့ပါ။
+      [[mark:try-why]] float bug တွေ test မှာ မပေါ်ဘဲ production ရောက်မှ ပေါ်တတ်တာ ဒါကြောင့်ပါ၊ test ထဲက ဂဏန်းတွေက
+      မတော်တဆ အတိအကျ ဖြစ်နေတတ်လို့ပါ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ float က ငွေပမာဏကို ခန့်မှန်းခြေနဲ့ပဲ သိမ်းနိုင်ပြီး၊
+      ငွေ system မှာ ခန့်မှန်းခြေ ဆိုတာ မရှိပါဘူး။ နောက် lesson မှာတော့ minor unit ကို အသေးစိတ်
+      ကြည့်ပါမယ်။ currency တိုင်းမှာ ဒသမ နှစ်လုံး မဟုတ်တာနဲ့၊ crypto ပမာဏတွေက ၆၄ bit ကိန်းပြည့်ထဲတောင်
+      မဆံ့တာကို တွေ့ရပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "a, b := 0.1, 0.2", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
