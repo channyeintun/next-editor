@@ -268,7 +268,9 @@ class ControlLink {
 
   /**
    * True when the gateway answered recently or answers a ping now. `probe`
-   * always pings: a page load must not be sent to a runtime that has just gone.
+   * always sends a ping of its own: a page load must not be sent to a runtime
+   * that has just gone, and a ping already in flight may have been answered
+   * before it went.
    */
   isAlive(probe = false): Promise<boolean> {
     if (this.#closed) {
@@ -277,7 +279,14 @@ class ControlLink {
     if (!probe && Date.now() - this.#lastHeard < this.#timings.idleMs) {
       return Promise.resolve(true);
     }
-    this.#ping ??= new Promise<boolean>((resolve) => {
+    if (probe || this.#ping === null) {
+      this.#ping = this.#sendPing();
+    }
+    return this.#ping;
+  }
+
+  #sendPing(): Promise<boolean> {
+    const ping: Promise<boolean> = new Promise<boolean>((resolve) => {
       const id = this.#nextId++;
       const timer = setTimeout(() => {
         this.#pongs.delete(id);
@@ -289,9 +298,11 @@ class ControlLink {
       });
       this.#post({ type: "ping", id });
     }).finally(() => {
-      this.#ping = null;
+      if (this.#ping === ping) {
+        this.#ping = null;
+      }
     });
-    return this.#ping;
+    return ping;
   }
 
   /** Sends a WebSocket's port on to the gateway, with the cookies the browser would send. */

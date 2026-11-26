@@ -401,6 +401,23 @@ describe("preview service worker", () => {
     expect(await response.text()).toBe(PREVIEW_CONNECT_HTML);
   });
 
+  it("probes a page load with a ping of its own, not one the gateway answered before it went", async () => {
+    const worker = createWorker({ idleMs: 0, pingTimeoutMs: 30, attachTimeoutMs: 30 });
+    const far = worker.attachRaw();
+    const firstPing = new Promise<number>((resolve) => {
+      far.onmessage = (event) => {
+        if (event.data.type === "ping") resolve(event.data.id);
+      };
+    });
+    // A request's own check is still waiting for its pong when the page loads.
+    void worker.fetch(new Request(`${ORIGIN}/x`));
+    const id = await firstPing;
+    const page = worker.fetch(new Request(`${ORIGIN}/`), { navigate: true });
+    far.postMessage({ type: "pong", id });
+    far.close();
+    expect(await (await page)!.text()).toBe(PREVIEW_CONNECT_HTML);
+  });
+
   it("forwards a page WebSocket to the gateway, or fails it without a control port", async () => {
     const worker = createWorker();
     const orphan = new MessageChannel();
