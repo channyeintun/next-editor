@@ -24,7 +24,7 @@ import { pinnedRunIdIssues } from "./fixtureRuns";
  * The one runtime kind each lesson type may declare. Go, Kotlin, Rust, Zig,
  * and Haskell execute through their selective proxies, Kite on its in-page
  * WebAssembly compiler, asm on its in-page TypeScript assembler and x86-64
- * machine; JavaScript and TypeScript run in the versioned Node.js runtime
+ * machine, Python on its in-page CPython interpreter; JavaScript and TypeScript run in the versioned Node.js runtime
  * adapter, driving a dev server + preview — the per-lesson action rules are
  * enforced in `runtimeContractIssues` below.
  */
@@ -38,6 +38,7 @@ export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind
   haskell: "haskell-playground",
   kite: "kite-playground",
   asm: "asm-playground",
+  python: "python-playground",
 };
 
 type PreviewClickAction = Extract<StudioPlanAction, { type: "preview.click" }>;

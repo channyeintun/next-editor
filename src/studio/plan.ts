@@ -4,6 +4,7 @@ import { parseGoPlaygroundRunResult } from "../runtime/goPlayground/types";
 import { parseHaskellPlaygroundRunResult } from "../runtime/haskellPlayground/types";
 import { parseKitePlaygroundRunResult } from "../runtime/kitePlayground/types";
 import { parseKotlinPlaygroundRunResult } from "../runtime/kotlinPlayground/types";
+import { parsePythonPlaygroundRunResult } from "../runtime/pythonPlayground/types";
 import { parseRustPlaygroundRunResult } from "../runtime/rustPlayground/types";
 import { parseZigPlaygroundRunResult } from "../runtime/zigPlayground/types";
 import { totalTypingDurationMs } from "./cadence";
@@ -514,8 +515,8 @@ export function planActionBusyMs(action: StudioActionTiming): number {
  * templates (react, vue, …), which are just seeded workspace conveniences.
  * javascript/typescript lessons pin arbitrary Node.js runtime workspaces;
  * go/kotlin/rust/zig/haskell use their
- * playgrounds; kite and asm need no service at all, compiling and running in
- * the page.
+ * playgrounds; kite, asm and python need no service at all, compiling and
+ * running in the page.
  * Each value is also a valid `WorkspaceLessonType` for the pinned project.
  */
 export const studioLessonTypeSchema = z.enum([
@@ -528,6 +529,7 @@ export const studioLessonTypeSchema = z.enum([
   "haskell",
   "kite",
   "asm",
+  "python",
 ]);
 export type StudioLessonType = z.infer<typeof studioLessonTypeSchema>;
 
@@ -925,6 +927,34 @@ export const kiteRunFixtureSchema = playgroundFixture(
 );
 
 /**
+ * Python stand-in result.
+ *
+ * The only transient error kind is "unavailable", as for Kite and assembly:
+ * the interpreter is CPython built to WebAssembly, running in the page, so a
+ * lesson cannot be rate-limited or timed out by a service it does not call.
+ *
+ * One `output`, as Go and Zig have, and for Zig's reason: a Python program's
+ * standard output and standard error reach the console as one stream, in the
+ * order written, so a traceback is pinned where it prints — after the lines
+ * the program printed before it failed. `exitCode` is the status Python exited
+ * with; `exitDetail` is there instead when the runner stopped the program (too
+ * much output, too long); `hint` is the line the runner adds under a traceback
+ * it can explain (`input()` with no keyboard, an import of a missing package).
+ */
+export const pythonRunFixtureSchema = playgroundFixture(
+  ["unavailable"] as const,
+  z
+    .strictObject({
+      status: z.enum(["success", "runtime-error"]),
+      output: z.string(),
+      exitCode: z.number().int().optional(),
+      exitDetail: z.string().optional(),
+      hint: z.string().optional(),
+    })
+    .superRefine(runnerContract(parsePythonPlaygroundRunResult, "Python")),
+);
+
+/**
  * One Playground runtime variant, so every kind carries the same fields.
  *
  * `dockStartsCollapsed` in particular is not optional per kind: these variant
@@ -990,6 +1020,7 @@ export const studioRuntimeSchema = z.discriminatedUnion("kind", [
   playgroundRuntime("haskell-playground", haskellRunFixtureSchema),
   playgroundRuntime("kite-playground", kiteRunFixtureSchema),
   playgroundRuntime("asm-playground", asmRunFixtureSchema),
+  playgroundRuntime("python-playground", pythonRunFixtureSchema),
 ]);
 export type StudioRuntime = z.infer<typeof studioRuntimeSchema>;
 export type StudioRuntimeKind = StudioRuntime["kind"];
@@ -1022,8 +1053,8 @@ export type StudioPlaygroundRuntimeKind = StudioPlaygroundRuntime["kind"];
  * `isPlaygroundRuntimeKind` and dying mid-performance at `runtime.run`.
  *
  * None of these needs a signed-in session for a live render. Go, Kotlin, Rust,
- * Zig and Haskell call their `/api/<kind>` proxy, which needs no sign-in; Kite
- * and asm compile and run in the page.
+ * Zig and Haskell call their `/api/<kind>` proxy, which needs no sign-in; Kite,
+ * asm and Python compile and run in the page.
  */
 const PLAYGROUND_RUNTIME_KIND_TABLE: Record<StudioPlaygroundRuntimeKind, true> = {
   "go-playground": true,
@@ -1033,6 +1064,7 @@ const PLAYGROUND_RUNTIME_KIND_TABLE: Record<StudioPlaygroundRuntimeKind, true> =
   "haskell-playground": true,
   "kite-playground": true,
   "asm-playground": true,
+  "python-playground": true,
 };
 
 const PLAYGROUND_RUNTIME_KINDS = new Set<string>(Object.keys(PLAYGROUND_RUNTIME_KIND_TABLE));

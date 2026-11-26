@@ -194,6 +194,22 @@ function minimalScriptShell(lessonType: StudioLessonType) {
           fixture: { latencyMs: 10, result: { status: "success", stdout: "", stderr: "" } },
         },
       };
+    case "python":
+      return {
+        ...base,
+        lesson: {
+          slug: "t-python",
+          title: "T",
+          locale: "en-US",
+          workspace: workspace({ "main.py": 'print("hi")\n' }, "main.py"),
+        },
+        runtime: {
+          kind: "python-playground",
+          defaultMode: "fixture",
+          // One merged stream, as a terminal shows it — see pythonRunFixtureSchema.
+          fixture: { latencyMs: 10, result: { status: "success", output: "hi\n" } },
+        },
+      };
     case "javascript":
       return {
         ...base,

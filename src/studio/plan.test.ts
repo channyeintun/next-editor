@@ -307,6 +307,7 @@ const PLAYGROUND_RESULTS: Record<StudioPlaygroundRuntimeKind, unknown> = {
   "haskell-playground": { status: "success", stdout: "", stderr: "" },
   "kite-playground": { status: "success", stdout: "", stderr: "" },
   "asm-playground": { status: "success", stdout: "", stderr: "" },
+  "python-playground": { status: "success", output: "" },
 };
 
 describe("studio Playground runtime schemas", () => {
@@ -347,8 +348,8 @@ describe("studio Playground runtime schemas", () => {
     ] as const) {
       expect(parses(kind, ["rate-limited", "timeout", "unavailable"])).toBe(true);
     }
-    // Kite and asm run in the page: there is no service to rate-limit or time out.
-    for (const kind of ["kite-playground", "asm-playground"] as const) {
+    // Kite, asm and Python run in the page: there is no service to rate-limit or time out.
+    for (const kind of ["kite-playground", "asm-playground", "python-playground"] as const) {
       expect(parses(kind, ["unavailable"])).toBe(true);
       expect(parses(kind, ["timeout"])).toBe(false);
       expect(parses(kind, ["rate-limited"])).toBe(false);

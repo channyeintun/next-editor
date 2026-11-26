@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type { ComponentType } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-// The seven runner panels, driven through fake runtime clients: the panels (and
+// The eight runner panels, driven through fake runtime clients: the panels (and
 // whatever hooks sit behind them) are real, the network and the in-page
 // compilers are not.
 const harness = vi.hoisted(() => {
@@ -178,6 +178,10 @@ vi.mock("../runtime/asmPlayground/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../runtime/asmPlayground/client")>()),
   AsmPlaygroundClient: harness.clientClass("asm"),
 }));
+vi.mock("../runtime/pythonPlayground/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../runtime/pythonPlayground/client")>()),
+  PythonPlaygroundClient: harness.clientClass("python"),
+}));
 
 import {
   RuntimePanelStoreProvider,
@@ -198,6 +202,7 @@ import GoPlaygroundRunnerPanel, { GO_RUNNER } from "./GoPlaygroundRunnerPanel";
 import HaskellPlaygroundRunnerPanel, { HASKELL_RUNNER } from "./HaskellPlaygroundRunnerPanel";
 import KitePlaygroundRunnerPanel, { KITE_RUNNER } from "./KitePlaygroundRunnerPanel";
 import KotlinPlaygroundRunnerPanel, { KOTLIN_RUNNER } from "./KotlinPlaygroundRunnerPanel";
+import PythonPlaygroundRunnerPanel, { PYTHON_RUNNER } from "./PythonPlaygroundRunnerPanel";
 import RustPlaygroundRunnerPanel, { RUST_RUNNER } from "./RustPlaygroundRunnerPanel";
 import ZigPlaygroundRunnerPanel, { ZIG_RUNNER } from "./ZigPlaygroundRunnerPanel";
 
@@ -237,6 +242,11 @@ interface PanelCase {
    * what the status region then says when that is not the last line untagged.
    */
   run: { result: unknown; lines: string[]; status?: string };
+  /**
+   * Set where a Run is handed the workspace's other text files too, for the
+   * program to read; every other language submits its own sources only.
+   */
+  submitsEveryTextFile?: true;
   refusedRun: { files: Record<string, string>; line: string } | null;
   tags: { error: string; success: string; warning: string | null };
   format: FormatCase | null;
@@ -429,6 +439,24 @@ const CASES: PanelCase[] = [
     },
     refusedRun: null,
     tags: { error: "[asm-run error]", success: "[asm-run]", warning: null },
+    format: null,
+  },
+  {
+    kind: "python-playground",
+    Panel: PythonPlaygroundRunnerPanel,
+    language: PYTHON_RUNNER,
+    surface: "python-runner",
+    runnerTab: "Python Runner",
+    command: "python main.py",
+    entry: "main.py",
+    run: {
+      // A list is what a Python program prints most, and it is not a tag.
+      result: { status: "success", output: "[1, 2, 3]\n" },
+      lines: ["[python-run] python main.py", "[1, 2, 3]", "[python-run] Program exited"],
+    },
+    submitsEveryTextFile: true,
+    refusedRun: null,
+    tags: { error: "[python-run error]", success: "[python-run]", warning: null },
     format: null,
   },
 ];
@@ -647,7 +675,10 @@ describe("playground runner panels", () => {
     expect(harness.client.run).toHaveBeenCalledTimes(1);
     const [, request] = harness.client.run.mock.calls[0];
     const files = Array.isArray(request) ? request : (request as { files: unknown }).files;
-    expect(files).toEqual([{ path: panel.entry, content: SOURCE }]);
+    expect(files).toEqual([
+      { path: panel.entry, content: SOURCE },
+      ...(panel.submitsEveryTextFile ? [{ path: "README.md", content: "# Lesson" }] : []),
+    ]);
     expect(consoleLines()).toEqual(panel.run.lines);
   });
 

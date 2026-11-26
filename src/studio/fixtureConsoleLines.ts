@@ -3,6 +3,7 @@ import { goRunResultToConsoleLines } from "../runtime/goPlayground/console";
 import { haskellRunResultToConsoleLines } from "../runtime/haskellPlayground/console";
 import { kiteRunResultToConsoleLines } from "../runtime/kitePlayground/console";
 import { kotlinRunResultToConsoleLines } from "../runtime/kotlinPlayground/console";
+import { pythonRunResultToConsoleLines } from "../runtime/pythonPlayground/console";
 import { rustRunResultToConsoleLines } from "../runtime/rustPlayground/console";
 import { zigRunResultToConsoleLines } from "../runtime/zigPlayground/console";
 import { CLEAN_RUN_STATUS, pinnedRunResult, pinnedRunStatus } from "./fixtureRuns";
@@ -39,6 +40,8 @@ export function fixtureRunConsoleLines(
       return kiteRunResultToConsoleLines(pinnedRunResult(runtime.fixture, runActionId));
     case "asm-playground":
       return asmRunConsoleLines(pinnedRunResult(runtime.fixture, runActionId));
+    case "python-playground":
+      return pythonRunResultToConsoleLines(pinnedRunResult(runtime.fixture, runActionId));
   }
 }
 

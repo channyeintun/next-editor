@@ -376,13 +376,13 @@ browser, as above).
 
 ### Runtime modes
 
-- `fixture`: Playground kinds (Go, Kotlin, Rust, Zig, Haskell, Kite, asm)
+- `fixture`: Playground kinds (Go, Kotlin, Rust, Zig, Haskell, Kite, asm, Python)
   replay the script's pinned result through the same console formatting/store
   path as a live run, after a fixed planned latency. It works signed-out and
   offline; the manifest records `runtimeMode: "fixture"`.
 - `live`: Go/Kotlin/Rust/Zig/Haskell call their Playground proxy, which needs
-  no sign-in, while Kite and asm run their in-page compiler/assembler. JavaScript,
-  TypeScript, and console-only Python run their pinned commands in the
+  no sign-in, while Kite, asm and Python run their in-page compiler, assembler
+  and interpreter. JavaScript and TypeScript run their pinned commands in the
   Node.js runtime and therefore require `live`; JS/TS additionally wait for the
   declared preview server and acknowledged iframe bridge.
 

@@ -73,8 +73,8 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      every `whiteboard.apply` (the default board panel is the only one lessons
      use; a maximized board looks bad in the recorded lesson).
    - The fixture result is the program's exact output, every line
-     `\n`-terminated — `result.output` for Go/Kotlin/Zig, `result.stdout` for
-     Rust/Haskell/Kite/asm (Node.js lessons pin the workspace instead of
+     `\n`-terminated — `result.output` for Go/Kotlin/Zig/Python, `result.stdout`
+     for Rust/Haskell/Kite/asm (Node.js lessons pin the workspace instead of
      a fixture).
    - Studio automatically reserves two quiet seconds before the first dialog
      and after the final dialog/action. Do not add filler narration, blank

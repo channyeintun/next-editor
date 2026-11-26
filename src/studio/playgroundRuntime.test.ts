@@ -95,6 +95,24 @@ function kiteRuntime(transientErrorKinds: Transient = []): StudioRuntime {
   };
 }
 
+function pythonRuntime(): StudioRuntime {
+  return {
+    kind: "python-playground",
+    dockStartsCollapsed: false,
+    defaultMode: "fixture",
+    fixture: {
+      latencyMs: 5,
+      transientErrorKinds: [],
+      // One stream, as the console shows it: the traceback after the print.
+      result: {
+        status: "runtime-error",
+        output: "before\nZeroDivisionError: division by zero\n",
+        exitCode: 1,
+      },
+    },
+  };
+}
+
 function haskellRuntime(transientErrorKinds: Transient = []): StudioRuntime {
   return {
     kind: "haskell-playground",
@@ -245,6 +263,46 @@ describe("preparePlaygroundRun", () => {
     expect(ambiguousKite[1]).toMatch(/^Name the file this lesson runs `main\.kite`/);
   });
 
+  it("replays a pinned Python failure as the console a live run prints", async () => {
+    // A Python run is given every text file of the workspace, and starts from
+    // the script: the data file beside it is not a second program.
+    const prepared = prepare(pythonRuntime(), projectWith("scores.csv", "main.py", "helpers.py"));
+    expect(prepared.startedLines).toEqual(["[python-run] python main.py"]);
+    await expect(prepared.run()).resolves.toMatchObject({
+      // The pinned run failed, as the lesson means it to; the fixture replayed.
+      ok: false,
+      status: "runtime-error",
+      resultLines: [
+        "before",
+        "ZeroDivisionError: division by zero",
+        "[python-run error] Program exited with status 1",
+      ],
+    });
+  });
+
+  it("lets the Python client pick the script, refusing what it would refuse", async () => {
+    // A single script is the program whatever it is called; the notes are not one.
+    await expect(
+      prepare(pythonRuntime(), projectWith("report.py", "notes.md")).run(),
+    ).resolves.toMatchObject({ status: "runtime-error", attempts: 1 });
+
+    const refusal = async (...paths: string[]) => {
+      const failure = await prepare(pythonRuntime(), projectWith(...paths))
+        .run()
+        .catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(PlaygroundTerminalError);
+      return (failure as PlaygroundTerminalError).consoleLines;
+    };
+
+    expect(await refusal("notes.md")).toEqual([
+      "[python-run error] This program can't run in a Python lesson",
+      "Add a .py file to run this lesson",
+    ]);
+    const ambiguous = await refusal("a.py", "b.py");
+    expect(ambiguous[0]).toBe("[python-run error] This program can't run in a Python lesson");
+    expect(ambiguous[1]).toMatch(/^Name the file this lesson runs `main\.py`/);
+  });
+
   it("still writes an error line for a kind the language's own table lacks", async () => {
     // The retry engine synthesizes "timeout" from its deadline for every kind,
     // including the in-page runners whose tables have no such entry. An
@@ -354,6 +412,7 @@ describe("runErrorPrefixFor", () => {
     expect(runErrorPrefixFor("zig-playground")).toBe("[zig-run error]");
     expect(runErrorPrefixFor("kite-playground")).toBe("[kite-run error]");
     expect(runErrorPrefixFor("asm-playground")).toBe("[asm-run error]");
+    expect(runErrorPrefixFor("python-playground")).toBe("[python-run error]");
   });
 });
 
@@ -371,6 +430,7 @@ const PLAYGROUND_FIXTURE_INPUTS: Record<StudioPlaygroundRuntimeKind, unknown> = 
   "haskell-playground": { latencyMs: 5, result: { status: "success", stdout: "", stderr: "" } },
   "kite-playground": { latencyMs: 5, result: { status: "success", stdout: "", stderr: "" } },
   "asm-playground": { latencyMs: 5, result: { status: "success", stdout: "", stderr: "" } },
+  "python-playground": { latencyMs: 5, result: { status: "success", output: "" } },
 };
 
 /** The file each kind's fixture run compiles. */
@@ -382,6 +442,7 @@ const PLAYGROUND_ENTRY_PATHS: Record<StudioPlaygroundRuntimeKind, string> = {
   "haskell-playground": "Main.hs",
   "kite-playground": "main.kite",
   "asm-playground": "main.asm",
+  "python-playground": "main.py",
 };
 
 describe("fixture runs", () => {
@@ -457,6 +518,8 @@ const IMPOSSIBLE_FIXTURE_RESULTS: Record<StudioPlaygroundRuntimeKind, unknown> =
   "haskell-playground": { status: "success", stdout: "", stderr: "", compileErrors: "boom" },
   "kite-playground": { status: "success", stdout: "", stderr: "", compileErrors: "boom" },
   "asm-playground": { status: "success", stdout: "", stderr: "", assembleErrors: "boom" },
+  // Python has no compile step to report: its impossible success is one the runner stopped.
+  "python-playground": { status: "success", output: "", exitDetail: "boom" },
 };
 
 describe("run fixture schemas", () => {
@@ -514,6 +577,7 @@ describe("isPlaygroundRuntimeKind", () => {
       "haskell-playground",
       "kite-playground",
       "asm-playground",
+      "python-playground",
       "webcontainer",
       "none",
     ] as const;
@@ -527,6 +591,7 @@ describe("isPlaygroundRuntimeKind", () => {
       "haskell-playground": true,
       "kite-playground": true,
       "asm-playground": true,
+      "python-playground": true,
       webcontainer: false,
       none: false,
     });

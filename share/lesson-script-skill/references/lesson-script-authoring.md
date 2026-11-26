@@ -244,6 +244,7 @@ the schema rejects an omitted block or a mismatch:
 | `haskell`                  | `haskell-playground`    | `runtime.run`, `expect.output`                                         |
 | `kite`                     | `kite-playground`       | `runtime.run`, `expect.output`                                         |
 | `asm`                      | `asm-playground`        | `runtime.run`, `expect.output`                                         |
+| `python`                   | `python-playground`     | `runtime.run`, `expect.output`                                         |
 | `javascript`, `typescript` | `webcontainer`          | `runtime.start`, `runtime.waitForReady`, `preview.*`, `expect.preview` |
 
 A `javascript` (Node.js) or `typescript` lesson pins whatever Node.js runtime
@@ -284,7 +285,7 @@ Playground path). A JavaScript/TypeScript lesson asserts browser-visible
 behavior with `expect.preview`, never `expect.output`.
 
 Go, Kotlin, Rust, Zig and Haskell remain limited to their Playground services.
-Two lesson types need **no service at all**, for two different reasons. `kitec` is a Rust
+Three lesson types need **no service at all**, for three different reasons. `kitec` is a Rust
 program — normally a native binary you install — and Rust builds for WebAssembly
 too, so Run and Format instantiate a Wasm build of that same compiler in the
 page: no proxy, no rate limit, and no lesson that stops working
@@ -313,6 +314,43 @@ clear error rather than an execution. Two things follow for authoring:
   field replays none. Pin them when the narration points at a register.
 - **The exit status is always printed** (`[asm-run] Program exited with status
   0`), because a program that exits non-zero has said something.
+
+A `python` lesson needs no service because the interpreter is CPython 3.14
+itself, built to WebAssembly (Pyodide) and run in a worker of the page. Its
+fixture `transientErrorKinds` therefore also admits only `unavailable`. A run
+is `python main.py` in a new interpreter, with every text file of the pinned
+workspace beside the script: the other `.py` files import as modules, and a
+data file opens by its workspace path (`open("scores.csv")`). What a lesson can
+and cannot use:
+
+- **The standard library, and nothing else.** There is no `pip`, so `numpy`,
+  `pandas`, `requests` and every other package fail with
+  `ModuleNotFoundError`. `sqlite3`, `json`, `csv`, `dataclasses`, `asyncio` and
+  the rest of the standard library are there.
+- **No keyboard.** `input()` raises `EOFError`. Put a program's values in the
+  code, never in a prompt.
+- **No threads, processes, sockets or network**, and files a program writes are
+  gone when it exits.
+- **A program is stopped** when it prints more than 256 KiB or runs for more
+  than 10 seconds, so keep a `time.sleep` demonstration short.
+
+Three things follow for authoring:
+
+- **One `output`, in the order written.** Standard output and standard error
+  reach the console as one stream, as a terminal shows them. A fixture pins a
+  traceback where it prints: after the lines the program printed before it
+  failed.
+- **A failure is `runtime-error` with `exitCode: 1`.** Python has no separate
+  compile step to report: a `SyntaxError` is a `runtime-error` too, and nothing
+  the program would have printed before it appears. `sys.exit(3)` is
+  `exitCode: 3`. The console's last line is then
+  `[python-run error] Program exited with status 1`.
+- **Never transcribe a traceback by hand.** It names files under `/lesson/`
+  (`File "/lesson/main.py", line 3, in <module>`) and underlines the failing
+  expression with `~` and `^`, and one wrong column fails a live render. Run
+  the program and paste what it prints: `bun scripts/python-run.ts <folder>`
+  runs the folder's `main.py` on the same interpreter and prints the fixture
+  `result` as YAML. Use it for every Python fixture, clean runs included.
 
 A fixture holds **exactly one** of `result` or `results`:
 
@@ -369,9 +407,16 @@ Per-kind fixture result shapes (`result`, or each `results` entry; all fields ex
   (`assemble-error`, not `compile-error` — nothing is compiled; `registers` is a
   list of `{ name, value }` with `value` a **decimal string**, because a 64-bit
   value does not survive JSON as a number)
+- `python-playground` — `{ status: success | runtime-error, output, exitCode?, exitDetail?, hint? }`
+  (one `output` field: stdout and stderr in the order written. A
+  `runtime-error` has **either** a non-zero `exitCode`, when Python exited by
+  itself, **or** an `exitDetail`, when the runner stopped the program. `hint` is
+  the line the runner adds under a traceback it can explain — `input()` with no
+  keyboard, an import of a module that is not there — and `python-run.ts`
+  prints it when there is one)
 
 Language formatting rules carry over from the real editors: Go files use tabs;
-Kotlin, Rust, and Zig use 4-space indentation, Haskell 2-space. Rust
+Kotlin, Rust, Zig, and Python use 4-space indentation, Haskell 2-space. Rust
 workspaces must contain **exactly one file, `main.rs`** (the Rust Playground
 executes a single crate root), Zig workspaces **exactly one file, `main.zig`**
 (there is no `build.zig` and no way to import a sibling file — structure a
@@ -379,7 +424,9 @@ longer program with structs and functions), Haskell workspaces **exactly one
 file, `Main.hs`** (the playground compiles a single module named `Main`; there
 is no cabal file and no package manager), and `asm` workspaces **exactly one
 file, `main.asm`** (there is no linker); Go and Kotlin workspaces need at least
-one `.go` / `.kt` file. Assembly uses NASM syntax, four-space indentation, and
+one `.go` / `.kt` file. A Python workspace needs a `main.py` (a single `.py`
+file is the program whatever it is called) and may hold more modules and data
+files beside it. Assembly uses NASM syntax, four-space indentation, and
 `;` for comments.
 
 Zig scripts must target **Zig 0.16** specifically, which is the version the
@@ -495,7 +542,7 @@ Action catalog:
 | `slide.point`          | `target: {x, y}`                                                      | **Points at a spot on the slide that is showing**: `x` and `y` are fractions of the slide (0–1 from its left and top edge), so `{ x: 0.5, y: 0.5 }` is its centre. For a deck page laid out in points, divide by the page size (720 × 405 pt for the lesson template): a bullet whose text starts at (80, 190) pt and is 24 pt tall is pointed at from under its first words with `{ x: 0.2, y: 0.54 }`. The arrow's tip is its top-left corner, so aim just **below** the words, never on them. Needs a slide showing (after `slide.show`, before `slide.close`) and no whiteboard open over it. ~0.8 s busy time. See The pointer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `whiteboard.apply`     | `open?`, `maximized?`, `upsertIds: []`, `clear?`, `drawMs?`           | Ids from `lesson.whiteboardAssets`. Must open/close, clear, or upsert ≥1 asset (checked when the script is parsed). Never set `maximized: true`: lessons use the default board panel only (see Whiteboard assets). `drawMs` draws the upserts in instead of applying them at once, and `clear` wipes the board first (both under Whiteboard assets); `drawMs` must be under the action's `timeoutMs` and at most 6000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `whiteboard.point`     | `target: {assetId}`                                                   | **Points back at something already on the whiteboard**: the pointer moves to the asset and rests with its tip on the middle of the asset's bottom edge — under a label, on the lower border of a box — so nothing is covered. The asset must be on the open board at that moment (drawn by an earlier `whiteboard.apply` and not wiped by a `clear` since); otherwise the compile step fails. ~0.8 s busy time. See The pointer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `expect.output`        | `contains`, `timeoutMs`                                               | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` / `[zig-run error]` / `[haskell-run error]` / `[asm-run error]` line fails it, except the pinned lines of a run the fixture pins to fail. Use with Playground runtimes after `runtime.run`; it is not a JavaScript/TypeScript preview assertion. In Playground lessons the string must be in the pinned console of the most recent `runtime.run` before it (checked like `console.point`, before any synthesis).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `expect.output`        | `contains`, `timeoutMs`                                               | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` / `[zig-run error]` / `[haskell-run error]` / `[asm-run error]` / `[python-run error]` line fails it, except the pinned lines of a run the fixture pins to fail. Use with Playground runtimes after `runtime.run`; it is not a JavaScript/TypeScript preview assertion. In Playground lessons the string must be in the pinned console of the most recent `runtime.run` before it (checked like `console.point`, before any synthesis).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `expect.file`          | `path`, `contains`                                                    | Asserts the final workspace file contains the string.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 Every Node.js runtime/preview action requires an explicit bounded retry policy:
@@ -678,9 +725,9 @@ screen, point at it, with the point at the mark where the words about it begin:
 
 ### The fixture must be the truth
 
-The fixture result's program output (`output` for Go/Kotlin/Zig, `stdout` for
-Rust, Haskell, Kite, and asm) must be **exactly** what the real program prints
-(every line, `\n`-terminated). Two reasons: `expect.output` runs against it in
+The fixture result's program output (`output` for Go/Kotlin/Zig/Python, `stdout`
+for Rust, Haskell, Kite, and asm) must be **exactly** what the real program
+prints (every line, `\n`-terminated). Two reasons: `expect.output` runs against it in
 fixture mode, and a later `--runtime=live` render runs the real Playground —
 if your pinned program and fixture disagree, live renders fail. Mentally
 execute the final code (pinned files + your insertions) and transcribe its
