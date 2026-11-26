@@ -1,0 +1,935 @@
+# Fintech Engineering, lesson 16: immutability and the right to erasure (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Immutability vs GDPR" (CC BY 4.0, Voytek Pitula); fact A15.
+# Start state: ledger.go (Line, Tx, Ledger, Post, Balance, cents from kit/go/ledger.go), pii.go
+# (PII store: profiles and per-user keys, Seal / Open with AES-GCM; demo keys and nonces are
+# derived, with comments saying real systems use random ones), main.go records two deposits in
+# the ledger and as events whose receipt email is sealed with the user's key, and reads them back.
+# Edits, all insert-only:
+#   1. pii.go: Forget deletes the profile row and the key
+#   2. main.go: forget user 1042, read the events again  -> run-2: 1042's email unreadable, 2077's fine
+#   3. main.go: what the ledger owes after the erasure   -> run-3: 100.00 and 150.00, unchanged
+# Figures: clash (erasure vs retention, with the A15 periods), split (ledger ids vs the PII store),
+# shred (per-user keys; one deleted), keys (backups and the key store), iv.
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-16-gdpr
+  title: "Fintech Engineering 16: Immutable ledger နဲ့ GDPR"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. It knows users only by opaque ids.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // kindOf reads the account type from the name: "asset:bank" is an asset.
+        func kindOf(account string) string {
+        	kind, _, _ := strings.Cut(account, ":")
+        	return kind
+        }
+
+        // Balance derives an account's balance on the side where that kind of account grows.
+        func (l *Ledger) Balance(account string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind := kindOf(account); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // Event is an immutable record. Its receipt email is personal data, so it is sealed.
+        type Event struct {
+        	Seq     uint64
+        	User    string // an opaque id, never a name
+        	Amount  int64
+        	Receipt []byte // the receipt email, encrypted with the user's key
+        }
+
+        func main() {
+        	p := NewPII()
+        	p.Add("1042", "user1042@example.com")
+        	p.Add("2077", "user2077@example.com")
+        	var l Ledger
+        	events := []Event{
+        		deposit(p, &l, 1, "1042", 10000),
+        		deposit(p, &l, 2, "2077", 5000),
+        	}
+        	for _, e := range events {
+        		show(p, e)
+        	}
+        }
+
+        // deposit posts the money to the ledger and records an event with the receipt email sealed.
+        func deposit(p *PII, l *Ledger, seq uint64, user string, amount int64) Event {
+        	must(l.Post(Tx{ID: fmt.Sprint("tx-", seq), Memo: "deposit", Lines: []Line{
+        		{Account: "asset:bank", Debit: amount},
+        		{Account: "liability:user:" + user, Credit: amount},
+        	}}))
+        	return Event{Seq: seq, User: user, Amount: amount, Receipt: p.Seal(user, seq, p.profiles[user])}
+        }
+
+        func show(p *PII, e Event) {
+        	receipt, err := p.Open(e.User, e.Seq, e.Receipt)
+        	if err != nil {
+        		receipt = "unreadable, " + err.Error()
+        	}
+        	fmt.Printf("#%d user %s deposit %6s  receipt: %s\n", e.Seq, e.User, cents(e.Amount), receipt)
+        }
+
+        func must(err error) {
+        	if err != nil {
+        		panic(err)
+        	}
+        }
+      pii.go: |
+        package main
+
+        import (
+        	"crypto/aes"
+        	"crypto/cipher"
+        	"crypto/sha256"
+        	"encoding/binary"
+        	"errors"
+        )
+
+        // PII is the separate, mutable store for everything personal, keyed by the opaque user id.
+        type PII struct {
+        	profiles map[string]string // user id → email
+        	keys     map[string][]byte // user id → the key for that user's fields inside events
+        }
+
+        func NewPII() *PII {
+        	return &PII{profiles: map[string]string{}, keys: map[string][]byte{}}
+        }
+
+        // Add stores a user's profile and gives the user a key of their own.
+        // Demo only: real keys are random and live in a key store, never derived from the id.
+        func (p *PII) Add(user, email string) {
+        	p.profiles[user] = email
+        	key := sha256.Sum256([]byte("demo key for user " + user))
+        	p.keys[user] = key[:]
+        }
+
+        // nonce must never repeat for one key. Demo only: here it is the event's sequence number;
+        // real systems use a random nonce for every encryption.
+        func nonce(seq uint64) []byte {
+        	n := make([]byte, 12)
+        	binary.BigEndian.PutUint64(n[4:], seq)
+        	return n
+        }
+
+        func gcm(key []byte) cipher.AEAD {
+        	block, err := aes.NewCipher(key)
+        	must(err)
+        	aead, err := cipher.NewGCM(block)
+        	must(err)
+        	return aead
+        }
+
+        // Seal encrypts a personal field with the user's own key (AES-GCM).
+        func (p *PII) Seal(user string, seq uint64, field string) []byte {
+        	return gcm(p.keys[user]).Seal(nil, nonce(seq), []byte(field), []byte(user))
+        }
+
+        // Open decrypts a sealed field. Without the user's key there is nothing to decrypt with.
+        func (p *PII) Open(user string, seq uint64, sealed []byte) (string, error) {
+        	key, ok := p.keys[user]
+        	if !ok {
+        		return "", errors.New("no key for user " + user)
+        	}
+        	plain, err := gcm(key).Open(nil, nonce(seq), sealed, []byte(user))
+        	return string(plain), err
+        }
+  slides:
+    - id: clash-1
+      contentType: html
+      name: "GDPR vs immutability 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">GDPR VS IMMUTABILITY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဖျက်ခိုင်းခွင့် နဲ့ မဖျက်ရတဲ့ ledger</text>
+        <g class="in"><rect x="80" y="220" width="560" height="150" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="102" y="263" width="64" height="64" style="color:#6cb2f5"/><text x="400" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Right to erasure</text><text x="400" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8">GDPR Article 17</text></g>
+        <g class="in"><rect x="960" y="220" width="560" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="982" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="1280" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Immutable ledger</text><text x="1280" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8">posted = never deleted</text></g>
+        <path d="M650 295L946 295" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" marker-start="url(#ah-red)" class="dr"/><text x="798" y="278.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">?</text>
+        </svg>
+    - id: clash-2
+      contentType: html
+      name: "GDPR vs immutability 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">GDPR VS IMMUTABILITY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဖျက်ခိုင်းခွင့် နဲ့ မဖျက်ရတဲ့ ledger</text>
+        <rect x="80" y="220" width="560" height="150" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="102" y="263" width="64" height="64" style="color:#6cb2f5"/><text x="400" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Right to erasure</text><text x="400" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8">GDPR Article 17</text>
+        <rect x="960" y="220" width="560" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="982" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="1280" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Immutable ledger</text><text x="1280" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8">posted = never deleted</text>
+        <path d="M650 295L946 295" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" marker-start="url(#ah-red)"/><text x="798" y="278.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">?</text>
+        <g class="in"><rect x="80" y="430" width="896.2" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="80" y="430" width="896.2" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="528.1" y="464.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">Art. 17(3)(b): a legal obligation to keep → erasure does not apply</text></g>
+        </svg>
+    - id: clash-3
+      contentType: html
+      name: "GDPR vs immutability 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">GDPR VS IMMUTABILITY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဖျက်ခိုင်းခွင့် နဲ့ မဖျက်ရတဲ့ ledger</text>
+        <rect x="80" y="220" width="560" height="150" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="102" y="263" width="64" height="64" style="color:#6cb2f5"/><text x="400" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Right to erasure</text><text x="400" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8">GDPR Article 17</text>
+        <rect x="960" y="220" width="560" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="982" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="1280" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Immutable ledger</text><text x="1280" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8">posted = never deleted</text>
+        <path d="M650 295L946 295" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" marker-start="url(#ah-red)"/><text x="798" y="278.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">?</text>
+        <rect x="80" y="430" width="896.2" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="80" y="430" width="896.2" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="528.1" y="464.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">Art. 17(3)(b): a legal obligation to keep → erasure does not apply</text>
+        <g class="in"><path d="M120 690H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M174.4 672H800" stroke="#4fd1c5" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="487.2" y="656" font-size="24" text-anchor="middle" fill="#4fd1c5" font-weight="600">keep</text></g><g><path d="M800 672H1371.2" stroke="#f6ad55" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="1085.6" y="656" font-size="24" text-anchor="middle" fill="#f6ad55" font-weight="600">keep, if extended</text></g><g><circle cx="174.4" cy="690" r="10" fill="#e9edf5"/><path d="M174.4 690V736" stroke="#e9edf5" stroke-width="2.5"/><text x="174.4" y="772" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="700">relationship ends</text><text x="174.4" y="804" font-size="23" text-anchor="middle" fill="#8a94a8">AML: CDD + transactions</text></g><g><circle cx="800" cy="690" r="10" fill="#f6c453"/><path d="M800 690V736" stroke="#f6c453" stroke-width="2.5"/><text x="800" y="772" font-size="28" text-anchor="middle" fill="#f6c453" font-weight="700">+5 years</text><text x="800" y="804" font-size="23" text-anchor="middle" fill="#8a94a8">Directive 2015/849 Art. 40</text></g><g><circle cx="1371.2" cy="690" r="10" fill="#f6ad55"/><path d="M1371.2 690V736" stroke="#f6ad55" stroke-width="2.5"/><text x="1371.2" y="772" font-size="28" text-anchor="middle" fill="#f6ad55" font-weight="700">up to +5 more</text><text x="1371.2" y="804" font-size="23" text-anchor="middle" fill="#8a94a8">Member State option</text></g></g>
+        <g class="in"><rect x="1100" y="505" width="420.4" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="1100" y="505" width="420.4" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="1310.2" y="539.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">then delete the personal data</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">User က data ဖျက်ခိုင်းရင် immutable ledger နဲ့ ဘယ်လို ညှိမလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">User က data ဖျက်ခိုင်းရင် immutable ledger နဲ့ ဘယ်လို ညှိမလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Exemption — ဥပဒေအရ သိမ်းရမယ့် transaction data ကို မဖျက်</text><text x="188" y="311" font-size="26" fill="#8a94a8">AML retention ကုန်ရင်တော့ personal data ကို ဖျက်ရတယ်</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">User က data ဖျက်ခိုင်းရင် immutable ledger နဲ့ ဘယ်လို ညှိမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Exemption — ဥပဒေအရ သိမ်းရမယ့် transaction data ကို မဖျက်</text><text x="188" y="311" font-size="26" fill="#8a94a8">AML retention ကုန်ရင်တော့ personal data ကို ဖျက်ရတယ်</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Separate — ledger မှာ opaque id ပဲ၊ PII က mutable store မှာ</text><text x="188" y="443" font-size="26" fill="#8a94a8">erasure = အဲဒီ store ထဲက row ကို ဖျက် ဒါမှမဟုတ် redact</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">User က data ဖျက်ခိုင်းရင် immutable ledger နဲ့ ဘယ်လို ညှိမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Exemption — ဥပဒေအရ သိမ်းရမယ့် transaction data ကို မဖျက်</text><text x="188" y="311" font-size="26" fill="#8a94a8">AML retention ကုန်ရင်တော့ personal data ကို ဖျက်ရတယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Separate — ledger မှာ opaque id ပဲ၊ PII က mutable store မှာ</text><text x="188" y="443" font-size="26" fill="#8a94a8">erasure = အဲဒီ store ထဲက row ကို ဖျက် ဒါမှမဟုတ် redact</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#b794f6"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Crypto-shred — record ထဲက PII ကို per-user key နဲ့ encrypt</text><text x="188" y="575" font-size="26" fill="#8a94a8">erasure = key ဖျက်တာ၊ history ကို ပြန်မရေးဘူး</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">User က data ဖျက်ခိုင်းရင် immutable ledger နဲ့ ဘယ်လို ညှိမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Exemption — ဥပဒေအရ သိမ်းရမယ့် transaction data ကို မဖျက်</text><text x="188" y="311" font-size="26" fill="#8a94a8">AML retention ကုန်ရင်တော့ personal data ကို ဖျက်ရတယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Separate — ledger မှာ opaque id ပဲ၊ PII က mutable store မှာ</text><text x="188" y="443" font-size="26" fill="#8a94a8">erasure = အဲဒီ store ထဲက row ကို ဖျက် ဒါမှမဟုတ် redact</text></g><g><circle cx="138" cy="513" r="25" fill="#b794f6"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Crypto-shred — record ထဲက PII ကို per-user key နဲ့ encrypt</text><text x="188" y="575" font-size="26" fill="#8a94a8">erasure = key ဖျက်တာ၊ history ကို ပြန်မရေးဘူး</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">key store backup နဲ့ retention schedule ကိုပါ ပြော</text><text x="188" y="707" font-size="26" fill="#8a94a8">ဘယ် field သိမ်းရမလဲ ဆိုတာ compliance နဲ့ ဆုံးဖြတ်</text></g>
+        </svg>
+    - id: keys-1
+      contentType: html
+      name: "The key store 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">THE KEY STORE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ခက်တဲ့ အပိုင်းက key store</text>
+        <g class="in"><rect x="560" y="380" width="480" height="170" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-key" x="582" y="433" width="64" height="64" style="color:#b794f6"/><text x="840" y="455.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key store</text><text x="840" y="496.6" font-size="24" text-anchor="middle" fill="#8a94a8">per-user keys</text></g>
+        <g class="in"><rect x="80" y="230" width="400" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="102" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="320" y="294.8" font-size="29" text-anchor="middle" fill="#e9edf5" font-weight="600">event log backups</text><text x="320" y="334.6" font-size="24" text-anchor="middle" fill="#8a94a8">ciphertext only</text></g>
+        <g class="in"><circle cx="474" cy="236" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="460.2" y="222.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/></g>
+        <g class="in"><text x="80" y="430" font-size="26" fill="#8a94a8">key ဖျက်ရင် backup ထဲမှာလည်း</text><text x="80" y="471.6" font-size="26" fill="#8a94a8">ဖတ်မရတော့ဘူး</text></g>
+        </svg>
+    - id: keys-2
+      contentType: html
+      name: "The key store 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">THE KEY STORE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ခက်တဲ့ အပိုင်းက key store</text>
+        <rect x="560" y="380" width="480" height="170" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-key" x="582" y="433" width="64" height="64" style="color:#b794f6"/><text x="840" y="455.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key store</text><text x="840" y="496.6" font-size="24" text-anchor="middle" fill="#8a94a8">per-user keys</text>
+        <rect x="80" y="230" width="400" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="102" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="320" y="294.8" font-size="29" text-anchor="middle" fill="#e9edf5" font-weight="600">event log backups</text><text x="320" y="334.6" font-size="24" text-anchor="middle" fill="#8a94a8">ciphertext only</text>
+        <circle cx="474" cy="236" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="460.2" y="222.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/>
+        <text x="80" y="430" font-size="26" fill="#8a94a8">key ဖျက်ရင် backup ထဲမှာလည်း</text><text x="80" y="471.6" font-size="26" fill="#8a94a8">ဖတ်မရတော့ဘူး</text>
+        <g class="in"><rect x="1100" y="230" width="440" height="150" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1320" y="293.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key store backups</text><text x="1320" y="337.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဖျက်ထားတဲ့ key ကျန်နေသလား</text></g>
+        <g class="in"><circle cx="1534" cy="236" r="24" fill="#0b0e14" stroke="#f6ad55" stroke-width="3"/><use href="#i-warn" x="1520.2" y="222.2" width="27.599999999999998" height="27.599999999999998" style="color:#f6ad55" stroke-width="5"/></g>
+        <path d="M1043.5 455.6L1095.1 318.1" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: keys-3
+      contentType: html
+      name: "The key store 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">THE KEY STORE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ခက်တဲ့ အပိုင်းက key store</text>
+        <rect x="560" y="380" width="480" height="170" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-key" x="582" y="433" width="64" height="64" style="color:#b794f6"/><text x="840" y="455.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key store</text><text x="840" y="496.6" font-size="24" text-anchor="middle" fill="#8a94a8">per-user keys</text>
+        <rect x="80" y="230" width="400" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="102" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="320" y="294.8" font-size="29" text-anchor="middle" fill="#e9edf5" font-weight="600">event log backups</text><text x="320" y="334.6" font-size="24" text-anchor="middle" fill="#8a94a8">ciphertext only</text>
+        <circle cx="474" cy="236" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="460.2" y="222.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/>
+        <text x="80" y="430" font-size="26" fill="#8a94a8">key ဖျက်ရင် backup ထဲမှာလည်း</text><text x="80" y="471.6" font-size="26" fill="#8a94a8">ဖတ်မရတော့ဘူး</text>
+        <rect x="1100" y="230" width="440" height="150" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1320" y="293.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key store backups</text><text x="1320" y="337.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဖျက်ထားတဲ့ key ကျန်နေသလား</text>
+        <circle cx="1534" cy="236" r="24" fill="#0b0e14" stroke="#f6ad55" stroke-width="3"/><use href="#i-warn" x="1520.2" y="222.2" width="27.599999999999998" height="27.599999999999998" style="color:#f6ad55" stroke-width="5"/>
+        <path d="M1043.5 455.6L1095.1 318.1" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><rect x="1100" y="610" width="440" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="1320" y="675.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key store ပျက်ရင်</text><text x="1320" y="721.7" font-size="24" text-anchor="middle" fill="#8a94a8">သိမ်းရမယ့် record ပါ ဖတ်မရ</text></g>
+        <path d="M1042.6 474.6L1096.3 671.5" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <g class="in"><rect x="80" y="690" width="742.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="80" y="690" width="742.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="451.1" y="724.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">key ဖျက်ချိန် = retention ကုန်ချိန် ဒါမှမဟုတ် erasure</text></g>
+        </svg>
+    - id: shred-1
+      contentType: html
+      name: "Crypto-shredding 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">CRYPTO-SHREDDING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Erasure က key တစ်ခု ဖျက်တာ ဖြစ်သွားတယ်</text>
+        <g class="in"><text x="80" y="240" font-size="26" fill="#4fd1c5" font-weight="700">event log · immutable</text></g>
+        <g class="in"><rect x="80" y="265" width="680" height="121" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="104" y="299" font-size="22" fill="#8a94a8" font-weight="700" class="mono">#1 user 1042 deposit 100.00</text><path d="M80 311H760" stroke="#2a3345" stroke-width="2"/><g><text x="104" y="357.1" font-size="26" class="mono" xml:space="preserve" fill="#f6c453">receipt 26491952092e8f78…</text></g></g>
+        <g class="in"><rect x="80" y="475" width="680" height="121" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="104" y="509" font-size="22" fill="#8a94a8" font-weight="700" class="mono">#2 user 2077 deposit 50.00</text><path d="M80 521H760" stroke="#2a3345" stroke-width="2"/><g><text x="104" y="567.1" font-size="26" class="mono" xml:space="preserve" fill="#f6c453">receipt 82ee3a02003f12c3…</text></g></g>
+        <g class="in"><text x="1000" y="240" font-size="26" fill="#b794f6" font-weight="700">key store</text></g>
+        <g class="in"><rect x="1000" y="265" width="520" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-key" x="1022" y="293" width="64" height="64" style="color:#b794f6"/><text x="1300" y="335" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">key 1042</text></g>
+        <g class="in"><rect x="1000" y="475" width="520" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-key" x="1022" y="503" width="64" height="64" style="color:#b794f6"/><text x="1300" y="545" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">key 2077</text></g>
+        <path d="M990 325L774 325.5" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/><text x="882" y="309" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">decrypts</text>
+        <path d="M990 535L774 535.5" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/><text x="882" y="519" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">decrypts</text>
+        </svg>
+    - id: shred-2
+      contentType: html
+      name: "Crypto-shredding 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-trash" viewBox="0 0 48 48"><path d="M8 13h32M18 13V7h12v6M12 13l2 29h20l2-29M20 21v14M28 21v14"/></symbol><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">CRYPTO-SHREDDING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Erasure က key တစ်ခု ဖျက်တာ ဖြစ်သွားတယ်</text>
+        <text x="80" y="240" font-size="26" fill="#4fd1c5" font-weight="700">event log · immutable</text>
+        <rect x="80" y="265" width="680" height="121" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="104" y="299" font-size="22" fill="#8a94a8" font-weight="700" class="mono">#1 user 1042 deposit 100.00</text><path d="M80 311H760" stroke="#2a3345" stroke-width="2"/><g><text x="104" y="357.1" font-size="26" class="mono" xml:space="preserve" fill="#f6c453">receipt 26491952092e8f78…</text></g>
+        <rect x="80" y="475" width="680" height="121" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="104" y="509" font-size="22" fill="#8a94a8" font-weight="700" class="mono">#2 user 2077 deposit 50.00</text><path d="M80 521H760" stroke="#2a3345" stroke-width="2"/><g><text x="104" y="567.1" font-size="26" class="mono" xml:space="preserve" fill="#f6c453">receipt 82ee3a02003f12c3…</text></g>
+        <text x="1000" y="240" font-size="26" fill="#b794f6" font-weight="700">key store</text>
+        <g class="in"><rect x="1000" y="265" width="520" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-trash" x="1022" y="293" width="64" height="64" style="color:#fc8181"/><text x="1300" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">key 1042</text><text x="1300" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">deleted</text></g>
+        <rect x="1000" y="475" width="520" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-key" x="1022" y="503" width="64" height="64" style="color:#b794f6"/><text x="1300" y="545" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">key 2077</text>
+        <path d="M990 535L774 535.5" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/><text x="882" y="519" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">decrypts</text>
+        <g class="in"><rect x="80" y="690" width="484" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="80" y="690" width="484" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="322" y="724.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">#1 receipt: bytes nobody can read</text></g>
+        <g class="in"><circle cx="754" cy="271" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="740.2" y="257.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        <g class="in"><rect x="80" y="770" width="482.6" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="80" y="770" width="482.6" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="321.3" y="804.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">event log: not one record changed</text></g>
+        </svg>
+    - id: split-1
+      contentType: html
+      name: "Separate the PII 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">SEPARATE THE PII</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ledger က id ကိုပဲ သိတယ်</text>
+        <g class="in"><text x="80" y="240" font-size="26" fill="#4fd1c5" font-weight="700">immutable ledger</text></g>
+        <g class="in"><rect x="80" y="265" width="640" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="300" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="698" y="300" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M80 317H720" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="358" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="698" y="358" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M96 379H704" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="420" font-size="28" fill="#e9edf5" class="mono">liability:user:2077</text><text x="698" y="420" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">50.00</text></g><g><path d="M96 441H704" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="482" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="698" y="482" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">150.00</text></g></g>
+        </svg>
+    - id: split-2
+      contentType: html
+      name: "Separate the PII 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">SEPARATE THE PII</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ledger က id ကိုပဲ သိတယ်</text>
+        <text x="80" y="240" font-size="26" fill="#4fd1c5" font-weight="700">immutable ledger</text>
+        <rect x="80" y="265" width="640" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="300" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="698" y="300" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M80 317H720" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="358" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="698" y="358" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M96 379H704" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="420" font-size="28" fill="#e9edf5" class="mono">liability:user:2077</text><text x="698" y="420" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">50.00</text></g><g><path d="M96 441H704" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="482" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="698" y="482" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">150.00</text></g>
+        <g class="in"><text x="900" y="240" font-size="26" fill="#b794f6" font-weight="700">PII store · mutable</text></g>
+        <g class="in"><rect x="900" y="265" width="620" height="176" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="922" y="300" font-size="22" fill="#8a94a8" font-weight="700">id</text><text x="1087.3" y="300" font-size="22" fill="#8a94a8" font-weight="700">email · address · documents</text><path d="M900 317H1520" stroke="#2a3345" stroke-width="2"/><g><text x="922" y="358" font-size="28" fill="#9aa5b8" class="mono">1042</text><text x="1087.3" y="358" font-size="28" fill="#e9edf5" class="mono">user1042@example.com</text></g><g><path d="M916 379H1504" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="420" font-size="28" fill="#9aa5b8" class="mono">2077</text><text x="1087.3" y="420" font-size="28" fill="#e9edf5" class="mono">user2077@example.com</text></g></g>
+        <path d="M900 360L720 360" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="810" y="343.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">id only</text>
+        </svg>
+    - id: split-3
+      contentType: html
+      name: "Separate the PII 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">SEPARATE THE PII</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ledger က id ကိုပဲ သိတယ်</text>
+        <text x="80" y="240" font-size="26" fill="#4fd1c5" font-weight="700">immutable ledger</text>
+        <rect x="80" y="265" width="640" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="300" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="698" y="300" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M80 317H720" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="358" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="698" y="358" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M96 379H704" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="420" font-size="28" fill="#e9edf5" class="mono">liability:user:2077</text><text x="698" y="420" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">50.00</text></g><g><path d="M96 441H704" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="482" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="698" y="482" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">150.00</text></g>
+        <text x="900" y="240" font-size="26" fill="#b794f6" font-weight="700">PII store · mutable</text>
+        <rect x="900" y="265" width="620" height="176" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="922" y="300" font-size="22" fill="#8a94a8" font-weight="700">id</text><text x="1087.3" y="300" font-size="22" fill="#8a94a8" font-weight="700">email · address · documents</text><path d="M900 317H1520" stroke="#2a3345" stroke-width="2"/><g><text x="922" y="358" font-size="28" fill="#9aa5b8" class="mono">1042</text><text x="1087.3" y="358" font-size="28" fill="#e9edf5" class="mono">user1042@example.com</text></g><g><path d="M916 379H1504" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="420" font-size="28" fill="#9aa5b8" class="mono">2077</text><text x="1087.3" y="420" font-size="28" fill="#e9edf5" class="mono">user2077@example.com</text></g>
+        <path d="M900 360L720 360" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="810" y="343.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">id only</text>
+        <g class="in"><rect x="900" y="500" width="620" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="1210" y="553.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">1042 → erased</text><text x="1210" y="597.7" font-size="24" text-anchor="middle" fill="#8a94a8">သိမ်းဖို့ တာဝန် မရှိတဲ့ field တွေ</text></g>
+        <g class="in"><rect x="80" y="600" width="640" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="400" y="655.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger မပြောင်းဘူး</text><text x="400" y="701.7" font-size="24" text-anchor="middle" fill="#8a94a8">entry တစ်ကြောင်းမှ မထိ</text></g>
+        <g class="in"><circle cx="714" cy="606" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="700.2" y="592.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9516
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "#1 user 1042 deposit 100.00  receipt: user1042@example.com\n#2 user 2077 deposit  50.00  receipt: user2077@example.com\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "#1 user 1042 deposit 100.00  receipt: user1042@example.com\n#2 user 2077 deposit  50.00  receipt: user2077@example.com\nprofile 1042: \"\"\n#1 user 1042 deposit 100.00  receipt: unreadable, no key for user 1042\n#2 user 2077 deposit  50.00  receipt: user2077@example.com\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "#1 user 1042 deposit 100.00  receipt: user1042@example.com\n#2 user 2077 deposit  50.00  receipt: user2077@example.com\nprofile 1042: \"\"\n#1 user 1042 deposit 100.00  receipt: unreadable, no key for user 1042\n#2 user 2077 deposit  50.00  receipt: user2077@example.com\nowed to user:1042: 100.00\nowed to all users: 150.00\n"
+
+scenes:
+  - id: hook
+    chapter: ဖျက်ခိုင်းရင် ဘာလုပ်မလဲ
+    narration: >-
+      ငွေ system တစ်ခုကို user တစ်ယောက်က ကိုယ့်ရဲ့ personal data အားလုံး ဖျက်ပေးပါ လို့
+      တောင်းဆိုလာတယ် ဆိုပါစို့။ [[mark:sel-receipt]] ဒီ program မှာ deposit event တွေ ရှိပြီး၊ event
+      တစ်ခုစီထဲမှာ receipt ပို့ရမယ့် email ပါပါတယ်၊ ဒါက personal data ပါ။ [[mark:sel-post]] တစ်ချိန်တည်းမှာ
+      ငွေကို ledger ထဲ post လုပ်ပါတယ်။ ledger ရော event log ရော append-only ဖြစ်လို့ ဘယ်တော့မှ
+      မဖျက်ရပါဘူး။ [[mark:run-1]] run လိုက်ရအောင်။ [[mark:pt-r1]] event နှစ်ခုလုံးမှာ email ကို ဖတ်လို့
+      ရပါတယ်။ [[mark:dock-1]] ဒါဆို ဖျက်ပေးပါ ဆိုတဲ့ request နဲ့ ဘယ်တော့မှ မဖျက်ရတဲ့ record တွေကို
+      ဘယ်လို ညှိမလဲ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Immutability vs GDPR (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#immutability-vs-gdpr",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-receipt
+        type: editor.select
+        at: { mark: sel-receipt }
+        target:
+          {
+            file: main.go,
+            text: "Receipt []byte // the receipt email, encrypted with the user's key",
+            occurrence: 1,
+          }
+      - id: sel-post
+        type: editor.select
+        at: { mark: sel-post }
+        target:
+          {
+            file: main.go,
+            text: '{Account: "liability:user:" + user, Credit: amount},',
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "receipt: user1042@example.com",
+          timeoutMs: 8000,
+        }
+      - id: pt-r1
+        type: console.point
+        at: { mark: pt-r1 }
+        target: { text: "receipt: user1042@example.com", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: clash
+    chapter: Erasure နဲ့ retention
+    narration: >-
+      [[mark:show-clash]] EU ရဲ့ GDPR မှာ right to erasure ရှိပါတယ်၊ ကိုယ့်အကြောင်း data ကို ဖျက်ခိုင်းနိုင်တဲ့
+      အခွင့်အရေးပါ။ [[mark:pt-ledger]] တစ်ဖက်မှာတော့ ငွေ မှတ်တမ်းတွေကို ဘယ်တော့မှ မပြင်၊ မဖျက်ရပါဘူး။
+      ကြည့်လိုက်ရင် နှစ်ခု ဆန့်ကျင်နေသလိုပါပဲ။ [[mark:clash-2]] လက်တွေ့မှာ financial record တွေက
+      အများစု ခြွင်းချက် ရပါတယ်။ GDPR ရဲ့ Article ၁၇ ကိုယ်တိုင်က၊ EU ဒါမှမဟုတ် member state ဥပဒေ
+      တစ်ခုက ပေးထားတဲ့ တာဝန်ကို လိုက်နာဖို့ data လိုအပ်ရင် erasure မသက်ရောက်ဘူး လို့ ခြွင်းချက်
+      ထားပါတယ်။ [[mark:clash-3]] အဲဒီ တာဝန်တွေထဲက တစ်ခုက AML ပါ၊ AML ဆိုတာ ငွေကြေး ခဝါချမှုကို
+      တားဆီးတဲ့ စည်းမျဉ်းတွေပါ။ EU ရဲ့ AML Directive က customer ကို စစ်ဆေးခဲ့တဲ့ မှတ်တမ်းနဲ့
+      transaction သက်သေတွေကို business relationship ပြီးဆုံးပြီး ငါးနှစ် သိမ်းထားဖို့ တောင်းဆိုပါတယ်။
+      [[mark:pt-ten]] member state တွေက နောက်ထပ် ငါးနှစ်အထိ တိုးနိုင်ပါတယ်။ [[mark:pt-del]] သတိထားရမှာက
+      ဒါ အမြဲတမ်း သိမ်းခွင့် မဟုတ်ပါဘူး။ ၂၀၂၇ ခုနှစ် ဇူလိုင် ၁၀ ရက်ကစပြီး သက်ရောက်မယ့် AML
+      Regulation အသစ်က ငါးနှစ်ကို ဆက်ထားပြီး၊ ကာလ ကုန်ရင် personal data ကို ဖျက်ဖို့ တောင်းဆိုပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Immutability vs GDPR (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#immutability-vs-gdpr",
+        }
+      - { title: "GDPR Article 17 — Right to erasure", url: "https://gdpr-info.eu/art-17-gdpr/" }
+      - {
+          title: "Directive (EU) 2015/849 Article 40; Regulation (EU) 2024/1624 Articles 77 and 90",
+          url: "https://www.legislation.gov.uk/eudr/2015/849/article/40",
+        }
+    actions:
+      - {
+          id: show-clash,
+          type: slide.show,
+          at: { mark: show-clash, offsetMs: -700 },
+          slideId: clash-1,
+        }
+      - {
+          id: pt-erase,
+          type: slide.point,
+          at: { afterAction: show-clash },
+          target: { x: 0.225, y: 0.42 },
+        }
+      - { id: pt-ledger, type: slide.point, at: { mark: pt-ledger }, target: { x: 0.775, y: 0.42 } }
+      - { id: clash-2, type: slide.show, at: { mark: clash-2 }, slideId: clash-2 }
+      - {
+          id: pt-exc,
+          type: slide.point,
+          at: { afterAction: clash-2 },
+          target: { x: 0.324, y: 0.542 },
+        }
+      - { id: clash-3, type: slide.show, at: { mark: clash-3 }, slideId: clash-3 }
+      - {
+          id: pt-five,
+          type: slide.point,
+          at: { afterAction: clash-3 },
+          target: { x: 0.481, y: 0.907 },
+        }
+      - { id: pt-ten, type: slide.point, at: { mark: pt-ten }, target: { x: 0.838, y: 0.907 } }
+      - { id: pt-del, type: slide.point, at: { mark: pt-del }, target: { x: 0.813, y: 0.626 } }
+
+  - id: split
+    chapter: Personal data ကို ခွဲထားမယ်
+    narration: >-
+      [[mark:show-split]] ဒါပေမဲ့ ခြွင်းချက်က သိမ်းဖို့ တာဝန်ရှိတာကိုပဲ ကာကွယ်ပေးတာပါ၊ သိမ်းထားချင်တာ
+      အားလုံးကို မဟုတ်ပါဘူး။ ဥပမာ marketing အတွက် သိမ်းထားချင်တဲ့ data က ဥပဒေက သိမ်းခိုင်းတဲ့ data မဟုတ်ပါဘူး။ ဒါကြောင့် ပထမ နည်းက personal data ကို financial data ကနေ ခွဲထားတာပါ။
+      [[mark:pt-ids]] immutable ledger က user ကို opaque id နဲ့ပဲ သိပါတယ်၊ opaque id ဆိုတာ ဘယ်သူလဲ
+      ဆိုတဲ့ အဓိပ္ပာယ် မပါတဲ့ internal နံပါတ်ပါ။ [[mark:split-2]] နာမည်၊ လိပ်စာ၊ document တွေက
+      သီးသန့် mutable store မှာ ရှိပြီး၊ id တစ်ခုတည်းက နှစ်ဖက်ကို ချိတ်ပေးပါတယ်။ [[mark:split-3]]
+      erasure request လာရင် အဲဒီ store ထဲမှာ သိမ်းဖို့ တာဝန် မရှိတဲ့ field တွေကို ဖျက် ဒါမှမဟုတ် redact
+      လုပ်ပြီး၊ တာဝန်ရှိတာကိုတော့ ကာလ ကုန်တဲ့အထိ ထားပါတယ်။ [[mark:pt-same]] ledger ထဲက entry တွေကတော့
+      တစ်ကြောင်းမှ မပြောင်းပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Immutability vs GDPR (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#immutability-vs-gdpr",
+        }
+    actions:
+      - {
+          id: show-split,
+          type: slide.show,
+          at: { mark: show-split, offsetMs: -700 },
+          slideId: split-1,
+        }
+      - { id: pt-ids, type: slide.point, at: { mark: pt-ids }, target: { x: 0.098, y: 0.414 } }
+      - { id: split-2, type: slide.show, at: { mark: split-2 }, slideId: split-2 }
+      - {
+          id: pt-pii,
+          type: slide.point,
+          at: { afterAction: split-2 },
+          target: { x: 0.609, y: 0.414 },
+        }
+      - { id: split-3, type: slide.show, at: { mark: split-3 }, slideId: split-3 }
+      - {
+          id: pt-gone,
+          type: slide.point,
+          at: { afterAction: split-3 },
+          target: { x: 0.756, y: 0.709 },
+        }
+      - { id: pt-same, type: slide.point, at: { mark: pt-same }, target: { x: 0.25, y: 0.82 } }
+
+  - id: shred
+    chapter: Crypto-shredding
+    narration: >-
+      [[mark:show-shred]] ဒါပေမဲ့ personal data က immutable record ထဲကို ဝင်သွားရတဲ့ အခါတွေ ရှိပါတယ်၊
+      ဥပမာ event payload ထဲက email လိုမျိုးပါ။ အဲဒီအတွက် crypto-shredding ကို သုံးပါတယ်။
+      [[mark:pt-keys]] user တစ်ယောက်စီအတွက် key သီးသန့် ထားပြီး၊ သူ့ရဲ့ personal field တွေကို အဲဒီ key နဲ့
+      encrypt လုပ်ပြီးမှ event ထဲ ထည့်ပါတယ်။ [[mark:shred-2]] ဖျက်ခိုင်းရင် event ကို မထိဘဲ key ကိုပဲ
+      ဖျက်ပါတယ်။ [[mark:pt-noise]] key မရှိတော့ရင် ciphertext က ဘယ်သူမှ ဖတ်မရတဲ့ byte တွေပဲ ကျန်ပါတယ်။
+      ဆိုလိုတာက erasure က history ကို ပြန်ရေးတာ မဟုတ်ဘဲ key တစ်ခု ဖျက်တာ ဖြစ်သွားပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Immutability vs GDPR (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#immutability-vs-gdpr",
+        }
+    actions:
+      - {
+          id: show-shred,
+          type: slide.show,
+          at: { mark: show-shred, offsetMs: -700 },
+          slideId: shred-1,
+        }
+      - {
+          id: pt-e1,
+          type: slide.point,
+          at: { afterAction: show-shred },
+          target: { x: 0.263, y: 0.438 },
+        }
+      - { id: pt-keys, type: slide.point, at: { mark: pt-keys }, target: { x: 0.788, y: 0.437 } }
+      - { id: shred-2, type: slide.show, at: { mark: shred-2 }, slideId: shred-2 }
+      - {
+          id: pt-k1gone,
+          type: slide.point,
+          at: { afterAction: shred-2 },
+          target: { x: 0.788, y: 0.437 },
+        }
+      - { id: pt-noise, type: slide.point, at: { mark: pt-noise }, target: { x: 0.195, y: 0.831 } }
+
+  - id: forget
+    chapter: Key ကို ဖျက်ကြည့်မယ်
+    narration: >-
+      [[mark:close-shred]] code မှာ ကြည့်ရအောင်။ [[mark:open-pii]] personal data ကို ကိုင်တဲ့ store က
+      ဒီဖိုင်မှာပါ။ [[mark:sel-store]] profile တွေနဲ့ user တစ်ယောက်ချင်းရဲ့ key တွေကို id နဲ့ သိမ်းထားပါတယ်။
+      demo ဖြစ်လို့ key ကို id ကနေ ထုတ်ထားပါတယ်။ တကယ့် system မှာ ဒီလို မလုပ်ရပါဘူး၊ id ကနေ key ကို
+      ပြန်ထုတ်လို့ ရရင် key ကို ဖျက်တာက ဘာမှ ဖျက်တာ မဟုတ်လို့ပါ၊ random key ကို key store မှာပဲ ထားရပါတယ်။
+      [[mark:sel-seal]] seal လုပ်တဲ့ function က user ရဲ့ key နဲ့ AES GCM ကို သုံးပြီး encrypt လုပ်ပါတယ်။
+      nonce ကိုလည်း demo မှာ event ရဲ့ နံပါတ်ကနေ ယူထားပြီး၊ တကယ့် system မှာ encrypt တိုင်း random
+      nonce ကို သုံးပါတယ်။ [[mark:type-forget]] erasure request အတွက် function တစ်ခု ထည့်ပါမယ်။ profile row ကို
+      ဖျက်ပြီး၊ key ကိုလည်း ဖျက်ပါတယ်၊ event log ကိုတော့ လုံးဝ မထိပါဘူး။ [[mark:open-main-2]] main ထဲမှာ
+      အဲဒီ function ကို ခေါ်ပါမယ်။ [[mark:type-call]] user ၁၀၄၂ ရဲ့ data ကို ဖျက်ပြီး၊ profile နဲ့ event တွေကို
+      ပြန်ဖတ်ပါတယ်။ ဒုတိယ user ရဲ့ event ကရော ဘာဖြစ်မလဲ။ run မလုပ်ခင် ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]]
+      run လိုက်ရအောင်။ [[mark:pt-profile]] profile က ဗလာ ဖြစ်သွားပါပြီ။ [[mark:pt-unread]] user ၁၀၄၂ ရဲ့
+      event က ရှိနေဆဲ ဖြစ်ပေမဲ့ email ကို ဖတ်လို့ မရတော့ပါဘူး၊ key မရှိလို့ပါ။ [[mark:pt-other]] user ၂၀၇၇
+      ရဲ့ event ကတော့ ဖတ်လို့ ရနေဆဲပါ၊ key တွေ သီးသန့် ဖြစ်လို့ တစ်ယောက်ကို ဖျက်တာက တခြားသူကို
+      မထိပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Immutability vs GDPR (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#immutability-vs-gdpr",
+        }
+      - {
+          title: "Go standard library — crypto/cipher (GCM)",
+          url: "https://pkg.go.dev/crypto/cipher#NewGCM",
+        }
+    actions:
+      - { id: close-shred, type: slide.close, at: { mark: close-shred } }
+      - { id: open-pii, type: workspace.openFile, at: { mark: open-pii }, path: pii.go }
+      - id: sel-store
+        type: editor.select
+        at: { mark: sel-store }
+        target:
+          {
+            file: pii.go,
+            text: "profiles map[string]string // user id → email\n\tkeys     map[string][]byte // user id → the key for that user's fields inside events",
+            occurrence: 1,
+          }
+      - id: sel-seal
+        type: editor.select
+        at: { mark: sel-seal }
+        target:
+          {
+            file: pii.go,
+            text: "return gcm(p.keys[user]).Seal(nil, nonce(seq), []byte(field), []byte(user))",
+            occurrence: 1,
+          }
+      - id: type-forget
+        type: editor.type
+        at: { mark: type-forget }
+        target: { file: pii.go, after: "\treturn string(plain), err\n}\n", occurrence: 1 }
+        text: "\n// Forget honours an erasure request: the profile row goes, and so does the key.\nfunc (p *PII) Forget(user string) {\n\tdelete(p.profiles, user)\n\tdelete(p.keys, user)\n}\n"
+        cadence: line-by-line
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call }
+        target:
+          {
+            file: main.go,
+            after: "\tfor _, e := range events {\n\t\tshow(p, e)\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\n\tp.Forget(\"1042\") // user 1042 asked to be erased\n\tfmt.Printf(\"profile 1042: %q\\n\", p.profiles[\"1042\"])\n\tfor _, e := range events {\n\t\tshow(p, e)\n\t}\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "unreadable, no key for user 1042",
+          timeoutMs: 8000,
+        }
+      - id: pt-profile
+        type: console.point
+        at: { mark: pt-profile }
+        target: { text: "profile 1042", occurrence: 1 }
+      - id: pt-unread
+        type: console.point
+        at: { mark: pt-unread }
+        target: { text: "unreadable, no key for user 1042", occurrence: 1 }
+      - id: pt-other
+        type: console.point
+        at: { mark: pt-other }
+        target: { text: "receipt: user2077@example.com", occurrence: 2 }
+      - {
+          id: expect-file-forget,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: pii.go,
+          contains: "delete(p.keys, user)",
+        }
+
+  - id: owed
+    narration: >-
+      [[mark:type-owed]] ငွေ ဘက်က ဘာဖြစ်လဲ စစ်ကြည့်ရအောင်။ ဒီ line တွေက user ၁၀၄၂ ကို ပေးစရာ ရှိတာနဲ့၊
+      user အားလုံးကို ပေးစရာ ရှိတဲ့ စုစုပေါင်းကို ledger ကနေ တွက်ပါတယ်။ erasure က ledger ကို မထိလို့
+      ဒီ ဂဏန်းတွေ မပြောင်းသင့်ပါဘူး။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-owed]] user ၁၀၄၂ ကို
+      ပေးစရာ ယူရို ၁၀၀ က ledger ထဲမှာ အတိအကျ ကျန်ပါတယ်။ [[mark:pt-all]] စုစုပေါင်း ယူရို ၁၅၀ လည်း
+      မပြောင်းပါဘူး။ [[mark:dock-3]] personal data ကို ဖျက်လိုက်ပေမဲ့ financial history ကတော့ တစ်ကြောင်းမှ
+      မပျောက်ပါဘူး။ ဒါက no lost data ဆိုတဲ့ မူပါ၊ ငွေနဲ့ ပတ်သက်ပြီး ဖြစ်ခဲ့သမျှ မပျောက်ရဘူး ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Immutability vs GDPR (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#immutability-vs-gdpr",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - id: type-owed
+        type: editor.type
+        at: { mark: type-owed }
+        target: { file: main.go, after: "\t\tshow(p, e)\n\t}\n", occurrence: 2 }
+        text: "\towed := l.Balance(\"liability:user:1042\") + l.Balance(\"liability:user:2077\")\n\tfmt.Println(\"owed to user:1042:\", cents(l.Balance(\"liability:user:1042\")))\n\tfmt.Println(\"owed to all users:\", cents(owed))\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "owed to all users: 150.00",
+          timeoutMs: 8000,
+        }
+      - id: pt-owed
+        type: console.point
+        at: { mark: pt-owed }
+        target: { text: "owed to user:1042: 100.00", occurrence: 1 }
+      - id: pt-all
+        type: console.point
+        at: { mark: pt-all }
+        target: { text: "owed to all users: 150.00", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: keys
+    chapter: ခက်တဲ့ အပိုင်းက key store
+    narration: >-
+      [[mark:show-keys]] ဒီနည်းမှာ ခက်တဲ့ အပိုင်းက key store ပါ။ [[mark:pt-logb]] event log ရဲ့ backup တွေထဲမှာ
+      ciphertext ပဲ ရှိလို့၊ key ဖျက်လိုက်တာနဲ့ backup ထဲက personal data လည်း တစ်ပါတည်း ဖတ်မရတော့ပါဘူး။
+      immutable backup တွေကို ပြန်ရေးစရာ မလိုတာ ဒီနည်းရဲ့ အားသာချက်ပါ။ [[mark:keys-2]] ဒါပေမဲ့ key store
+      ကိုယ်တိုင်ရဲ့ backup ထဲမှာ ဖျက်လိုက်တဲ့ key ကျန်နေရင် erasure က တကယ် မဖြစ်သေးပါဘူး။ log ဒါမှမဟုတ် cache ထဲမှာ plaintext email ကျန်ခဲ့ရင်လည်း key ဖျက်တာက အဲဒါကို မထိပါဘူး၊ crypto-shredding က ciphertext ကိုပဲ ဖတ်မရအောင် လုပ်တာပါ။ [[mark:keys-3]]
+      ပြောင်းပြန်အနေနဲ့ key store ပျက်သွားရင်၊ သိမ်းဖို့ တာဝန်ရှိတဲ့ record တွေထဲက personal data ပါ ဖတ်လို့
+      မရတော့ပါဘူး၊ ဒါလည်း data ပျောက်တာပါပဲ။ [[mark:pt-sched]] ဒါကြောင့် key store ကို ledger လိုပဲ
+      ဂရုစိုက်ရပြီး၊ key ကို ဖျက်တဲ့ အချိန်ကို erasure request နဲ့ retention ကာလ ကုန်တာနဲ့ ချိတ်ထားရပါတယ်။
+      ဘယ် field ကို ဘယ်လောက်ကြာ သိမ်းရမလဲ ဆိုတာ legal နဲ့ compliance ဆုံးဖြတ်ရတာပါ။ engineering ရဲ့
+      အလုပ်က အဲဒီ ဆုံးဖြတ်ချက် ဘာပဲ ဖြစ်ဖြစ်၊ ledger ကို မထိဘဲ လုပ်နိုင်အောင် ပြင်ထားတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Immutability vs GDPR (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#immutability-vs-gdpr",
+        }
+      - {
+          title: "Regulation (EU) 2024/1624 Article 77 (retention, then deletion)",
+          url: "https://eur-lex.europa.eu/eli/reg/2024/1624/oj/eng",
+        }
+    actions:
+      - {
+          id: show-keys,
+          type: slide.show,
+          at: { mark: show-keys, offsetMs: -700 },
+          slideId: keys-1,
+        }
+      - {
+          id: pt-store,
+          type: slide.point,
+          at: { afterAction: show-keys },
+          target: { x: 0.5, y: 0.62 },
+        }
+      - { id: pt-logb, type: slide.point, at: { mark: pt-logb }, target: { x: 0.175, y: 0.431 } }
+      - { id: keys-2, type: slide.show, at: { mark: keys-2 }, slideId: keys-2 }
+      - {
+          id: pt-keyb,
+          type: slide.point,
+          at: { afterAction: keys-2 },
+          target: { x: 0.825, y: 0.431 },
+        }
+      - { id: keys-3, type: slide.show, at: { mark: keys-3 }, slideId: keys-3 }
+      - {
+          id: pt-lost,
+          type: slide.point,
+          at: { afterAction: keys-3 },
+          target: { x: 0.825, y: 0.853 },
+        }
+      - { id: pt-sched, type: slide.point, at: { mark: pt-sched }, target: { x: 0.276, y: 0.831 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ user က data ဖျက်ခိုင်းရင် immutable ledger နဲ့ ဘယ်လို
+      ညှိမလဲ လို့ မေးတတ်ပါတယ်။ ledger ကို ဖျက်မယ် လို့ ဖြေတာရော၊ ဘာမှ မဖျက်ဘူး လို့ ဖြေတာရော
+      မှားပါတယ်။ အချက် သုံးချက်နဲ့ ဖြေပါ။ [[mark:iv-a]] ပထမ၊ ဥပဒေအရ သိမ်းရမယ့် transaction data ကို
+      GDPR ကိုယ်တိုင်က ခြွင်းချက် ပေးထားပြီး၊ AML ရဲ့ retention ကာလ ကုန်ရင်တော့ personal data ကို
+      ဖျက်ရတယ် လို့ ပြောပါ။ [[mark:iv-b]] ဒုတိယ၊ ledger က opaque id ပဲ သိပြီး personal data က ဖျက်လို့
+      ရတဲ့ သီးသန့် store မှာ ရှိပါတယ်။ [[mark:iv-c]] တတိယ၊ immutable record ထဲ ထည့်ရတဲ့ personal field
+      တွေကို user တစ်ယောက်ချင်း key နဲ့ encrypt လုပ်ပြီး၊ key ကို ဖျက်တာနဲ့ erase လုပ်ပါတယ်။
+      [[mark:iv-d]] ပြီးရင် key store ရဲ့ backup ကို ဘယ်လို ကိုင်မလဲ၊ ဘယ် field ကို သိမ်းရမလဲ ဆိုတာ
+      compliance နဲ့ ဘယ်လို ဆုံးဖြတ်မလဲ ဆိုတာ ဆက်ပြောပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Immutability vs GDPR (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#immutability-vs-gdpr",
+        }
+      - { title: "GDPR Article 17 — Right to erasure", url: "https://gdpr-info.eu/art-17-gdpr/" }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ဒီ line အောက်မှာ user ၂၀၇၇
+      အတွက်လည်း erasure ကို ခေါ်တဲ့ line တစ်ကြောင်း ထည့်ပြီး run ကြည့်ပါ။ event နှစ်ခုလုံးရဲ့ email ကို
+      ဖတ်မရတော့ပေမဲ့၊ user တွေကို ပေးစရာ ရှိတဲ့ စုစုပေါင်းက ယူရို ၁၅၀ အတိုင်း ကျန်ပါလိမ့်မယ်။
+      [[mark:recap]] ပြန်ချုပ်ရရင်၊ ledger မှာ personal data မထားဘဲ id ပဲ ထားပြီး၊ record ထဲ ဝင်ရတဲ့
+      personal data ကို user ရဲ့ key နဲ့ encrypt လုပ်ထားရင်၊ erasure က history ကို ပြန်ရေးတာ မဟုတ်ဘဲ row
+      တစ်ခုနဲ့ key တစ်ခု ဖျက်တာ ဖြစ်သွားပါတယ်။ နောက် lesson ကစပြီး ငွေ flow တွေကို execute လုပ်တဲ့
+      အပိုင်းကို ရောက်ပါပြီ။ invariant တစ်ခုကို ဘယ်လို ထိန်းမလဲ ဆိုတဲ့ နည်း သုံးမျိုးနဲ့ စပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Immutability vs GDPR (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#immutability-vs-gdpr",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target:
+          { file: main.go, text: 'p.Forget("1042") // user 1042 asked to be erased', occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
