@@ -1,0 +1,933 @@
+# Fintech Engineering, lesson 31: the testing menu for money systems (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Testing" (generative idempotency, crash and resume
+# injection, round-trip, golden, backward compatibility, testing in production) (CC BY 4.0,
+# Voytek Pitula).
+# Start state: ops.go holds a tiny wallet and three operations with idempotency keys (Fee forgets
+# its key check: the harness is meant to find it); flow.go a three-step withdrawal flow that saves
+# its progress and can be made to crash; compat.go a fee breakdown, its golden string, a corpus of
+# old event payloads and today's decoder; money.go the course's Money helpers; main.go the
+# apply-twice harness.
+# Edits, all insert-only, in main.go:
+#   1. crash injection after every step of the flow, then resume -> run-2: the fee step differs
+#   2. a golden check of the fee breakdown and the old-event corpus with a round trip -> run-3
+# Figures: menu (the six techniques), twice (apply once vs twice), crash (a crash after each step),
+# prod (testing in production through the same books), iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-31-testing-menu
+  title: "Fintech Engineering 31: ငွေ system အတွက် test နည်းများ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      compat.go: |
+        package main
+
+        import (
+        	"encoding/json"
+        	"fmt"
+        	"strings"
+        )
+
+        // feeBreakdown splits the fee on a payment into its parts (example rates, not real ones).
+        func feeBreakdown(amount int64) string {
+        	processing, fixed, platform := amount*14/1000, int64(25), amount*125/10000
+        	return fmt.Sprintf("processing %s + fixed %s + platform %s = %s", format(processing, 2),
+        		format(fixed, 2), format(platform, 2), format(processing+fixed+platform, 2))
+        }
+
+        // goldenFee is the breakdown of a 100.00 payment as a reviewer checked it once.
+        const goldenFee = "processing 1.40 + fixed 0.25 + platform 1.25 = 2.90"
+
+        // corpus holds events as older versions of the code wrote them.
+        var corpus = []string{
+        	`{"v":1,"amount":"12.34","currency":"EUR"}`,
+        	`{"v":2,"amount_minor":1234,"currency":"EUR"}`,
+        }
+
+        type event struct {
+        	V           int    `json:"v"`
+        	Amount      string `json:"amount,omitempty"`
+        	AmountMinor int64  `json:"amount_minor"`
+        	Currency    string `json:"currency"`
+        }
+
+        // decode reads every version this system ever wrote into today's Money.
+        func decode(raw string) (Money, error) {
+        	var e event
+        	if err := json.NewDecoder(strings.NewReader(raw)).Decode(&e); err != nil {
+        		return Money{}, err
+        	}
+        	if e.V == 1 {
+        		n, err := parseMinor(e.Amount, exponent[e.Currency])
+        		return Money{n, e.Currency}, err
+        	}
+        	return Money{e.AmountMinor, e.Currency}, nil
+        }
+
+        // encode writes today's version.
+        func encode(m Money) string {
+        	b, _ := json.Marshal(event{V: 2, AmountMinor: m.Amount, Currency: m.Currency})
+        	return string(b)
+        }
+      flow.go: |
+        package main
+
+        // flow is three steps, money in, the fee and the payout, each an operation with its own key.
+        var flow = []Op{Deposit{"d-1", 10000}, Fee{"f-1", 290}, Payout{"p-1", 8000}}
+
+        // run performs the flow from its saved step. With crashAfter >= 0 the process dies right after
+        // that step's effect and before its progress is saved: the worst moment to crash.
+        func run(s *State, crashAfter int) {
+        	for i := s.Step; i < len(flow); i++ {
+        		flow[i].Apply(s)
+        		if i == crashAfter {
+        			return
+        		}
+        		s.Step = i + 1
+        	}
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        	for _, op := range flow {
+        		once, twice := fresh(), fresh()
+        		op.Apply(once)
+        		op.Apply(twice)
+        		op.Apply(twice)
+        		if twice.String() == once.String() {
+        			fmt.Println("twice", op.Name()+": no change")
+        		} else {
+        			fmt.Println("twice", op.Name()+": changed,", twice)
+        		}
+        	}
+        }
+      money.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // exponent is the number of decimal places of each currency this system accepts (ISO 4217).
+        var exponent = map[string]int{"EUR": 2, "USD": 2, "JPY": 0, "BHD": 3}
+
+        // Money is an amount counted in the currency's minor units. It is never a float.
+        type Money struct {
+        	Amount   int64
+        	Currency string
+        }
+
+        // String prints 1234 EUR as "12.34 EUR".
+        func (m Money) String() string {
+        	return format(m.Amount, exponent[m.Currency]) + " " + m.Currency
+        }
+
+        // format prints minor units with exp decimal places: format(1234, 2) is "12.34".
+        func format(minor int64, exp int) string {
+        	sign := ""
+        	if minor < 0 {
+        		sign, minor = "-", -minor
+        	}
+        	digits := fmt.Sprintf("%0*d", exp+1, minor)
+        	if exp == 0 {
+        		return sign + digits
+        	}
+        	return sign + digits[:len(digits)-exp] + "." + digits[len(digits)-exp:]
+        }
+
+        // parseMinor reads a decimal string such as "12.34" into minor units without using a float.
+        func parseMinor(s string, exp int) (int64, error) {
+        	whole, frac, _ := strings.Cut(s, ".")
+        	if len(frac) > exp {
+        		return 0, fmt.Errorf("%q has more than %d decimal places", s, exp)
+        	}
+        	frac += strings.Repeat("0", exp-len(frac))
+        	var n int64
+        	for _, c := range whole + frac {
+        		if c < '0' || c > '9' {
+        			return 0, fmt.Errorf("%q is not a decimal number", s)
+        		}
+        		n = n*10 + int64(c-'0')
+        	}
+        	return n, nil
+        }
+      ops.go: |
+        package main
+
+        import "fmt"
+
+        // State is a tiny wallet: its balance, what it paid out, the fees taken, the idempotency
+        // keys already handled, and the flow's saved progress (steps finished so far).
+        type State struct {
+        	Balance, PaidOut, Fees int64
+        	Seen                   map[string]bool
+        	Step                   int
+        }
+
+        // fresh is a wallet that already holds 100.00.
+        func fresh() *State { return &State{Balance: 10000, Seen: map[string]bool{}} }
+
+        func (s *State) String() string {
+        	return fmt.Sprintf("balance %s, paid out %s, fees %s",
+        		format(s.Balance, 2), format(s.PaidOut, 2), format(s.Fees, 2))
+        }
+
+        // Op is an operation the system declares. Each one carries its idempotency key.
+        type Op interface {
+        	Apply(s *State)
+        	Name() string
+        }
+
+        type Deposit struct {
+        	Key    string
+        	Amount int64
+        }
+
+        type Fee struct {
+        	Key    string
+        	Amount int64
+        }
+
+        type Payout struct {
+        	Key    string
+        	Amount int64
+        }
+
+        func (o Deposit) Name() string { return "deposit" }
+        func (o Fee) Name() string     { return "fee" }
+        func (o Payout) Name() string  { return "payout" }
+
+        func (o Deposit) Apply(s *State) {
+        	if s.Seen[o.Key] {
+        		return
+        	}
+        	s.Seen[o.Key] = true
+        	s.Balance += o.Amount
+        }
+
+        func (o Fee) Apply(s *State) {
+        	s.Balance -= o.Amount
+        	s.Fees += o.Amount
+        }
+
+        func (o Payout) Apply(s *State) {
+        	if s.Seen[o.Key] {
+        		return
+        	}
+        	s.Seen[o.Key] = true
+        	s.Balance -= o.Amount
+        	s.PaidOut += o.Amount
+        }
+  slides:
+    - id: crash-1
+      contentType: html
+      name: "Crash and resume 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">CRASH AND RESUME</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Step တိုင်းနောက်မှာ crash ထည့်ပြီး resume လုပ်</text>
+        <g class="in"><rect x="80" y="250" width="300" height="140" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="230" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">deposit</text><text x="230" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">d-1 · +100.00</text></g>
+        <g class="in"><rect x="650" y="250" width="300" height="140" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="800" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">fee</text><text x="800" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">f-1 · −2.90</text></g>
+        <g class="in"><rect x="1220" y="250" width="300" height="140" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1370" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">payout</text><text x="1370" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">p-1 · −80.00</text></g>
+        <path d="M390 320L636 320" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="513" y="303.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">saved: 1</text>
+        <path d="M960 320L1206 320" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="1083" y="303.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">saved: 2</text>
+        </svg>
+    - id: crash-2
+      contentType: html
+      name: "Crash and resume 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">CRASH AND RESUME</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Step တိုင်းနောက်မှာ crash ထည့်ပြီး resume လုပ်</text>
+        <rect x="80" y="250" width="300" height="140" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="230" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">deposit</text><text x="230" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">d-1 · +100.00</text>
+        <rect x="650" y="250" width="300" height="140" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="800" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">fee</text><text x="800" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">f-1 · −2.90</text>
+        <rect x="1220" y="250" width="300" height="140" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1370" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">payout</text><text x="1370" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">p-1 · −80.00</text>
+        <path d="M390 320L636 320" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="513" y="303.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">saved: 1</text>
+        <path d="M960 320L1206 320" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="1083" y="303.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">saved: 2</text>
+        <g class="in"><use href="#i-warn" x="1049" y="444" width="72" height="72" style="color:#fc8181"/></g>
+        <g class="in"><text x="1140" y="490" font-size="26" fill="#fc8181" class="mono">crash before saved: 2</text></g>
+        <path d="M1050 485Q917.3 477.4 813.1 395" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <g class="in"><text x="560" y="520" font-size="26" fill="#fc8181" font-weight="700">resume → fee runs again</text></g>
+        </svg>
+    - id: crash-3
+      contentType: html
+      name: "Crash and resume 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">CRASH AND RESUME</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Step တိုင်းနောက်မှာ crash ထည့်ပြီး resume လုပ်</text>
+        <rect x="80" y="250" width="300" height="140" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="230" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">deposit</text><text x="230" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">d-1 · +100.00</text>
+        <rect x="650" y="250" width="300" height="140" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="800" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">fee</text><text x="800" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">f-1 · −2.90</text>
+        <rect x="1220" y="250" width="300" height="140" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1370" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">payout</text><text x="1370" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">p-1 · −80.00</text>
+        <path d="M390 320L636 320" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="513" y="303.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">saved: 1</text>
+        <path d="M960 320L1206 320" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="1083" y="303.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">saved: 2</text>
+        <use href="#i-warn" x="1049" y="444" width="72" height="72" style="color:#fc8181"/>
+        <text x="1140" y="490" font-size="26" fill="#fc8181" class="mono">crash before saved: 2</text>
+        <path d="M1050 485Q917.3 477.4 813.1 395" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <text x="560" y="520" font-size="26" fill="#fc8181" font-weight="700">resume → fee runs again</text>
+        <g class="in"><rect x="71.1" y="640" width="317.8" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="71.1" y="640" width="317.8" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="230" y="674.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">crash after deposit ✓</text></g>
+        <g class="in"><rect x="669.5" y="640" width="261" height="50" rx="25" fill="#fc8181" opacity="1"/><text x="800" y="674.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700">crash after fee ✗</text></g>
+        <g class="in"><rect x="1215.9" y="640" width="308.3" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="1215.9" y="640" width="308.3" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="1370" y="674.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">crash after payout ✓</text></g>
+        <g class="in"><text x="800" y="780" font-size="26" text-anchor="middle" fill="#8a94a8">each end state is compared with a run that never crashed</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency နဲ့ crash safety ကို ဘယ်လို test ရေးမလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency နဲ့ crash safety ကို ဘယ်လို test ရေးမလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Op တွေကို registry တစ်ခုမှာ declare — harness က အကုန် နှစ်ခါ run</text><text x="188" y="311" font-size="26" fill="#8a94a8">ဒုတိယ call ပြီး state မပြောင်းရ၊ op အသစ် ထည့်တာနဲ့ test ပါပြီးသား</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency နဲ့ crash safety ကို ဘယ်လို test ရေးမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Op တွေကို registry တစ်ခုမှာ declare — harness က အကုန် နှစ်ခါ run</text><text x="188" y="311" font-size="26" fill="#8a94a8">ဒုတိယ call ပြီး state မပြောင်းရ၊ op အသစ် ထည့်တာနဲ့ test ပါပြီးသား</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Flow ရဲ့ step တိုင်းနောက်မှာ crash inject၊ resume၊ ယှဉ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">effect ပြီး၊ progress မသိမ်းခင် — အဆိုးဆုံး အချိန်</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency နဲ့ crash safety ကို ဘယ်လို test ရေးမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Op တွေကို registry တစ်ခုမှာ declare — harness က အကုန် နှစ်ခါ run</text><text x="188" y="311" font-size="26" fill="#8a94a8">ဒုတိယ call ပြီး state မပြောင်းရ၊ op အသစ် ထည့်တာနဲ့ test ပါပြီးသား</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Flow ရဲ့ step တိုင်းနောက်မှာ crash inject၊ resume၊ ယှဉ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">effect ပြီး၊ progress မသိမ်းခင် — အဆိုးဆုံး အချိန်</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Oracle က crash မဖြစ်တဲ့ run ရဲ့ end state နဲ့ invariant တွေ</text><text x="188" y="575" font-size="26" fill="#8a94a8">random op sequence နဲ့ ပေါင်းသုံး၊ seed ကို log</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency နဲ့ crash safety ကို ဘယ်လို test ရေးမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Op တွေကို registry တစ်ခုမှာ declare — harness က အကုန် နှစ်ခါ run</text><text x="188" y="311" font-size="26" fill="#8a94a8">ဒုတိယ call ပြီး state မပြောင်းရ၊ op အသစ် ထည့်တာနဲ့ test ပါပြီးသား</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Flow ရဲ့ step တိုင်းနောက်မှာ crash inject၊ resume၊ ယှဉ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">effect ပြီး၊ progress မသိမ်းခင် — အဆိုးဆုံး အချိန်</text></g><g><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Oracle က crash မဖြစ်တဲ့ run ရဲ့ end state နဲ့ invariant တွေ</text><text x="188" y="575" font-size="26" fill="#8a94a8">random op sequence နဲ့ ပေါင်းသုံး၊ seed ကို log</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">CI မှာ မဖြစ်မနေ run၊ production မှာ synthetic tx ကို ledger ထဲကပဲ</text><text x="188" y="707" font-size="26" fill="#8a94a8">test ငွေကို reversal နဲ့ ရှင်း၊ back door မထား</text></g>
+        </svg>
+    - id: menu-1
+      contentType: html
+      name: "Testing menu 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">TESTING MENU</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="934.4" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေ system အတွက် test menu</text>
+        <g class="in"><rect x="90" y="200" width="1420" height="556" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="235" font-size="22" fill="#8a94a8" font-weight="700">technique</text><text x="571.4" y="235" font-size="22" fill="#8a94a8" font-weight="700">ဘာကို သက်သေပြလဲ</text><text x="1384.7" y="235" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">principle</text><path d="M90 252H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="304" font-size="28" fill="#f6c453" font-weight="700">generative idempotency</text><text x="571.4" y="304" font-size="28" fill="#e9edf5">ဒုတိယ call က ဘာမှ မပြောင်းဘူး</text><text x="1384.7" y="304" font-size="28" text-anchor="middle" fill="#f6c453">invented</text></g><g><path d="M106 336H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="388" font-size="28" fill="#f6c453" font-weight="700">crash + resume injection</text><text x="571.4" y="388" font-size="28" fill="#e9edf5">step ကြားမှာ သေလည်း အဆုံး state တူတယ်</text><text x="1384.7" y="388" font-size="28" text-anchor="middle" fill="#f6c453">invented</text></g></g>
+        <g class="in"><text x="90" y="815" font-size="26" fill="#8a94a8">+ property-based testing, invariants between steps (lesson 30)</text></g>
+        </svg>
+    - id: menu-2
+      contentType: html
+      name: "Testing menu 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">TESTING MENU</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="934.4" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေ system အတွက် test menu</text>
+        <rect x="90" y="200" width="1420" height="556" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="235" font-size="22" fill="#8a94a8" font-weight="700">technique</text><text x="571.4" y="235" font-size="22" fill="#8a94a8" font-weight="700">ဘာကို သက်သေပြလဲ</text><text x="1384.7" y="235" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">principle</text><path d="M90 252H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="304" font-size="28" fill="#f6c453" font-weight="700">generative idempotency</text><text x="571.4" y="304" font-size="28" fill="#e9edf5">ဒုတိယ call က ဘာမှ မပြောင်းဘူး</text><text x="1384.7" y="304" font-size="28" text-anchor="middle" fill="#f6c453">invented</text></g><g><path d="M106 336H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="388" font-size="28" fill="#f6c453" font-weight="700">crash + resume injection</text><text x="571.4" y="388" font-size="28" fill="#e9edf5">step ကြားမှာ သေလည်း အဆုံး state တူတယ်</text><text x="1384.7" y="388" font-size="28" text-anchor="middle" fill="#f6c453">invented</text></g><g class="in"><path d="M106 420H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="472" font-size="28" fill="#4fd1c5" font-weight="700">round-trip</text><text x="571.4" y="472" font-size="28" fill="#e9edf5">encode → decode ပြန်ရောက်တယ်</text><text x="1384.7" y="472" font-size="28" text-anchor="middle" fill="#4fd1c5">lost</text></g><g class="in"><path d="M106 504H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="556" font-size="28" fill="#b794f6" font-weight="700">golden</text><text x="571.4" y="556" font-size="28" fill="#e9edf5">review လုပ်ပြီးသား output နဲ့ diff</text><text x="1384.7" y="556" font-size="28" text-anchor="middle" fill="#b794f6">trust</text></g><g class="in"><path d="M106 588H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="640" font-size="28" fill="#4fd1c5" font-weight="700">backward compatibility</text><text x="571.4" y="640" font-size="28" fill="#e9edf5">data အဟောင်းကို ဒီနေ့ code ဖတ်နိုင်တယ်</text><text x="1384.7" y="640" font-size="28" text-anchor="middle" fill="#4fd1c5">lost</text></g>
+        <text x="90" y="815" font-size="26" fill="#8a94a8">+ property-based testing, invariants between steps (lesson 30)</text>
+        </svg>
+    - id: menu-3
+      contentType: html
+      name: "Testing menu 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">TESTING MENU</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="934.4" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေ system အတွက် test menu</text>
+        <rect x="90" y="200" width="1420" height="556" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="235" font-size="22" fill="#8a94a8" font-weight="700">technique</text><text x="571.4" y="235" font-size="22" fill="#8a94a8" font-weight="700">ဘာကို သက်သေပြလဲ</text><text x="1384.7" y="235" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">principle</text><path d="M90 252H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="304" font-size="28" fill="#f6c453" font-weight="700">generative idempotency</text><text x="571.4" y="304" font-size="28" fill="#e9edf5">ဒုတိယ call က ဘာမှ မပြောင်းဘူး</text><text x="1384.7" y="304" font-size="28" text-anchor="middle" fill="#f6c453">invented</text></g><g><path d="M106 336H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="388" font-size="28" fill="#f6c453" font-weight="700">crash + resume injection</text><text x="571.4" y="388" font-size="28" fill="#e9edf5">step ကြားမှာ သေလည်း အဆုံး state တူတယ်</text><text x="1384.7" y="388" font-size="28" text-anchor="middle" fill="#f6c453">invented</text></g><g><path d="M106 420H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="472" font-size="28" fill="#4fd1c5" font-weight="700">round-trip</text><text x="571.4" y="472" font-size="28" fill="#e9edf5">encode → decode ပြန်ရောက်တယ်</text><text x="1384.7" y="472" font-size="28" text-anchor="middle" fill="#4fd1c5">lost</text></g><g><path d="M106 504H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="556" font-size="28" fill="#b794f6" font-weight="700">golden</text><text x="571.4" y="556" font-size="28" fill="#e9edf5">review လုပ်ပြီးသား output နဲ့ diff</text><text x="1384.7" y="556" font-size="28" text-anchor="middle" fill="#b794f6">trust</text></g><g><path d="M106 588H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="640" font-size="28" fill="#4fd1c5" font-weight="700">backward compatibility</text><text x="571.4" y="640" font-size="28" fill="#e9edf5">data အဟောင်းကို ဒီနေ့ code ဖတ်နိုင်တယ်</text><text x="1384.7" y="640" font-size="28" text-anchor="middle" fill="#4fd1c5">lost</text></g><g class="in"><path d="M106 672H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="724" font-size="28" fill="#f6ad55" font-weight="700">testing in production</text><text x="571.4" y="724" font-size="28" fill="#e9edf5">တကယ့် ငွေ၊ ledger တစ်ခုတည်းထဲမှာ</text><text x="1384.7" y="724" font-size="28" text-anchor="middle" fill="#b794f6">trust</text></g>
+        <text x="90" y="815" font-size="26" fill="#8a94a8">+ property-based testing, invariants between steps (lesson 30)</text>
+        </svg>
+    - id: prod-1
+      contentType: html
+      name: "Testing in production 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-scale" viewBox="0 0 48 48"><path d="M24 6v36M13 42h22M8 14h32"/><path d="M8 14 3 27a6 6 0 0 0 10 0zM40 14l-5 13a6 6 0 0 0 10 0z"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">TESTING IN PRODUCTION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Production test က တကယ့် ငွေကို ရွှေ့တယ်</text>
+        <g class="in"><rect x="80" y="205" width="655.1" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="80" y="205" width="655.1" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="407.6" y="239.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">canary · small rollout · synthetic transactions</text></g>
+        <g class="in"><rect x="80" y="300" width="330" height="150" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-retry" x="102" y="343" width="64" height="64" style="color:#6cb2f5"/><text x="285" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1.00 EUR</text><text x="285" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">tag: synthetic</text></g>
+        <g class="in"><rect x="500" y="300" width="300" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="522" y="343" width="64" height="64" style="color:#4fd1c5"/><text x="690" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="690" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">same postings</text></g>
+        <g class="in"><rect x="870" y="300" width="300" height="150" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-scale" x="892" y="343" width="64" height="64" style="color:#68d391"/><text x="1060" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">reconcile</text><text x="1060" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">same checks</text></g>
+        <g class="in"><rect x="1250" y="300" width="280" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-doc" x="1272" y="343" width="64" height="64" style="color:#4fd1c5"/><text x="1430" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">audit</text><text x="1430" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">same trail</text></g>
+        <path d="M420 375L486 375" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M420 375L486 375')"/>
+        <path d="M810 375L856 375" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M1180 375L1236 375" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: prod-2
+      contentType: html
+      name: "Testing in production 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-scale" viewBox="0 0 48 48"><path d="M24 6v36M13 42h22M8 14h32"/><path d="M8 14 3 27a6 6 0 0 0 10 0zM40 14l-5 13a6 6 0 0 0 10 0z"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">TESTING IN PRODUCTION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Production test က တကယ့် ငွေကို ရွှေ့တယ်</text>
+        <rect x="80" y="205" width="655.1" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="80" y="205" width="655.1" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="407.6" y="239.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">canary · small rollout · synthetic transactions</text>
+        <rect x="80" y="300" width="330" height="150" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-retry" x="102" y="343" width="64" height="64" style="color:#6cb2f5"/><text x="285" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1.00 EUR</text><text x="285" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">tag: synthetic</text>
+        <rect x="500" y="300" width="300" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="522" y="343" width="64" height="64" style="color:#4fd1c5"/><text x="690" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="690" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">same postings</text>
+        <rect x="870" y="300" width="300" height="150" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-scale" x="892" y="343" width="64" height="64" style="color:#68d391"/><text x="1060" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">reconcile</text><text x="1060" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">same checks</text>
+        <rect x="1250" y="300" width="280" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-doc" x="1272" y="343" width="64" height="64" style="color:#4fd1c5"/><text x="1430" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">audit</text><text x="1430" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">same trail</text>
+        <path d="M420 375L486 375" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M420 375L486 375')"/>
+        <path d="M810 375L856 375" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M1180 375L1236 375" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><rect x="440" y="570" width="420" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-retry" x="462" y="603" width="64" height="64" style="color:#f6ad55"/><text x="690" y="626.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">reversal</text><text x="690" y="666.3" font-size="23" text-anchor="middle" fill="#8a94a8">the normal correction path</text></g>
+        <path d="M650 460L650 556" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="725.1" y="515.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600">clean up</text>
+        </svg>
+    - id: prod-3
+      contentType: html
+      name: "Testing in production 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-scale" viewBox="0 0 48 48"><path d="M24 6v36M13 42h22M8 14h32"/><path d="M8 14 3 27a6 6 0 0 0 10 0zM40 14l-5 13a6 6 0 0 0 10 0z"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-trash" viewBox="0 0 48 48"><path d="M8 13h32M18 13V7h12v6M12 13l2 29h20l2-29M20 21v14M28 21v14"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">TESTING IN PRODUCTION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Production test က တကယ့် ငွေကို ရွှေ့တယ်</text>
+        <rect x="80" y="205" width="655.1" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="80" y="205" width="655.1" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="407.6" y="239.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">canary · small rollout · synthetic transactions</text>
+        <rect x="80" y="300" width="330" height="150" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-retry" x="102" y="343" width="64" height="64" style="color:#6cb2f5"/><text x="285" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1.00 EUR</text><text x="285" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">tag: synthetic</text>
+        <rect x="500" y="300" width="300" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="522" y="343" width="64" height="64" style="color:#4fd1c5"/><text x="690" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="690" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">same postings</text>
+        <rect x="870" y="300" width="300" height="150" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-scale" x="892" y="343" width="64" height="64" style="color:#68d391"/><text x="1060" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">reconcile</text><text x="1060" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">same checks</text>
+        <rect x="1250" y="300" width="280" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-doc" x="1272" y="343" width="64" height="64" style="color:#4fd1c5"/><text x="1430" y="365.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">audit</text><text x="1430" y="406.6" font-size="24" text-anchor="middle" fill="#8a94a8">same trail</text>
+        <path d="M420 375L486 375" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M420 375L486 375')"/>
+        <path d="M810 375L856 375" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M1180 375L1236 375" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <rect x="440" y="570" width="420" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-retry" x="462" y="603" width="64" height="64" style="color:#f6ad55"/><text x="690" y="626.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">reversal</text><text x="690" y="666.3" font-size="23" text-anchor="middle" fill="#8a94a8">the normal correction path</text>
+        <path d="M650 460L650 556" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><text x="725.1" y="515.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600">clean up</text>
+        <g class="in"><rect x="1000" y="580" width="470" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-trash" x="1022" y="613" width="64" height="64" style="color:#fc8181"/><text x="1275" y="634.8" font-size="29" text-anchor="middle" fill="#e9edf5" font-weight="600">DELETE the test rows</text><text x="1275" y="674.6" font-size="24" text-anchor="middle" fill="#8a94a8">a back door past the books</text></g>
+        <g class="in"><circle cx="1464" cy="586" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="1450.2" y="572.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        </svg>
+    - id: twice-1
+      contentType: html
+      name: "Generative idempotency 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">GENERATIVE IDEMPOTENCY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Operation တိုင်းကို နှစ်ခါ run ပြီး state ကို ယှဉ်</text>
+        <g class="in"><text x="80" y="250" font-size="26" fill="#f6c453" font-weight="700" class="mono">deposit  key d-1</text></g>
+        <g class="in"><rect x="80" y="280" width="340" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="250" y="335.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.00</text><text x="250" y="376.6" font-size="24" text-anchor="middle" fill="#8a94a8">start</text></g>
+        <g class="in"><rect x="630" y="280" width="340" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="800" y="335.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">200.00</text><text x="800" y="376.6" font-size="24" text-anchor="middle" fill="#8a94a8">once</text></g>
+        <g class="in"><rect x="1180" y="280" width="340" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><rect x="1180" y="280" width="340" height="130" rx="18" fill="#68d391" opacity="0.13"/><text x="1350" y="335.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">200.00</text><text x="1350" y="376.6" font-size="24" text-anchor="middle" fill="#8a94a8">twice</text></g>
+        <path d="M430 345L616 345" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="523" y="328.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">+100.00</text>
+        <path d="M980 345L1166 345" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="1073" y="328.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">key seen</text>
+        <g class="in"><circle cx="1514" cy="286" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="1500.2" y="272.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/></g>
+        </svg>
+    - id: twice-2
+      contentType: html
+      name: "Generative idempotency 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">GENERATIVE IDEMPOTENCY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Operation တိုင်းကို နှစ်ခါ run ပြီး state ကို ယှဉ်</text>
+        <text x="80" y="250" font-size="26" fill="#f6c453" font-weight="700" class="mono">deposit  key d-1</text>
+        <rect x="80" y="280" width="340" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="250" y="335.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.00</text><text x="250" y="376.6" font-size="24" text-anchor="middle" fill="#8a94a8">start</text>
+        <rect x="630" y="280" width="340" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="800" y="335.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">200.00</text><text x="800" y="376.6" font-size="24" text-anchor="middle" fill="#8a94a8">once</text>
+        <rect x="1180" y="280" width="340" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><rect x="1180" y="280" width="340" height="130" rx="18" fill="#68d391" opacity="0.13"/><text x="1350" y="335.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">200.00</text><text x="1350" y="376.6" font-size="24" text-anchor="middle" fill="#8a94a8">twice</text>
+        <path d="M430 345L616 345" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><text x="523" y="328.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">+100.00</text>
+        <path d="M980 345L1166 345" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="1073" y="328.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">key seen</text>
+        <circle cx="1514" cy="286" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="1500.2" y="272.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/>
+        <g class="in"><text x="80" y="530" font-size="26" fill="#fc8181" font-weight="700" class="mono">fee  key f-1</text></g>
+        <g class="in"><rect x="80" y="560" width="340" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="250" y="615.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.00</text><text x="250" y="656.6" font-size="24" text-anchor="middle" fill="#8a94a8">start</text></g>
+        <g class="in"><rect x="630" y="560" width="340" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="800" y="615.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">97.10</text><text x="800" y="656.6" font-size="24" text-anchor="middle" fill="#8a94a8">once</text></g>
+        <g class="in"><rect x="1180" y="560" width="340" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><rect x="1180" y="560" width="340" height="130" rx="18" fill="#fc8181" opacity="0.13"/><text x="1350" y="615.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">94.20</text><text x="1350" y="656.6" font-size="24" text-anchor="middle" fill="#8a94a8">twice — fee taken again</text></g>
+        <path d="M430 625L616 625" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="523" y="608.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">−2.90</text>
+        <path d="M980 625L1166 625" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/><text x="1073" y="608.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600" class="mono">−2.90</text>
+        <g class="in"><circle cx="1514" cy="566" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="1500.2" y="552.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        <g class="in"><rect x="362" y="760" width="876.1" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="362" y="760" width="876.1" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="800" y="794.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">every declared op · apply twice · the 2nd call changes nothing</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9531
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "twice deposit: no change\ntwice fee: changed, balance 94.20, paid out 0.00, fees 5.80\ntwice payout: no change\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "twice deposit: no change\ntwice fee: changed, balance 94.20, paid out 0.00, fees 5.80\ntwice payout: no change\ncrash after deposit, resume: true\ncrash after fee, resume: false\ncrash after payout, resume: true\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "twice deposit: no change\ntwice fee: changed, balance 94.20, paid out 0.00, fees 5.80\ntwice payout: no change\ncrash after deposit, resume: true\ncrash after fee, resume: false\ncrash after payout, resume: true\ngolden fee: true\nold event v1: 12.34 EUR, round trip: true\nold event v2: 12.34 EUR, round trip: true\n"
+
+scenes:
+  - id: hook
+    chapter: Test menu
+    narration: >-
+      ငွေ system မှာ retry တစ်ခုက ငွေကို နှစ်ခါ ရွှေ့နိုင်ပြီး၊ crash တစ်ခုက flow ကို တစ်ဝက်မှာ ရပ်သွားစေနိုင်ပါတယ်။ idempotency နဲ့ resumable flow တွေကို ဒါတွေအတွက် တည်ဆောက်ခဲ့ပေမဲ့၊ code ထဲမှာ တကယ် မှန်နေကြောင်း test က ပြရပါတယ်။ [[mark:show-menu]] property test အပြင် ရွေးလို့ရတဲ့ နည်း ခြောက်မျိုး ရှိပြီး၊ menu တစ်ခုလိုပဲ ကိုယ့် system မှာ အကျိုးအရှိဆုံး နည်းတွေကို ရွေးသုံးရပါတယ်။ [[mark:pt-row1]] ပထမ နှစ်မျိုးက retry နဲ့ crash အတွက်ပါ။ No invented data၊ ဆိုလိုတာက ငွေကို မရှိဘဲ မဖန်တီးရဘူး ဆိုတဲ့ မူကို ထိန်းပြီး၊ ပြန်လုပ်တာနဲ့ ပြန်ဆက်တာက ငွေကို နှစ်ခါ မတွက်ကြောင်း ပြပါတယ်။ [[mark:menu-2]] နောက် သုံးမျိုးက data ရဲ့ boundary နဲ့ အချိန်အတွက်ပါ။ golden test က review လုပ်ထားတဲ့ တွက်ချက်မှု မထင်မှတ်ဘဲ မပြောင်းကြောင်း ပြပါတယ်။ round-trip နဲ့ data အဟောင်း test ကတော့ precision နဲ့ history က format ပြောင်းတာ၊ နှစ်တွေ ကြာတာကို ဖြတ်ပြီး ကျန်ကြောင်း ပြပါတယ်။ ဒါက No lost data၊ ဆိုလိုတာက ငွေနဲ့ ပတ်သက်ပြီး ဖြစ်ခဲ့သမျှ မပျောက်ရဘူး ဆိုတဲ့ မူပါ။ [[mark:menu-3]] နောက်ဆုံးက production ထဲမှာ test လုပ်တာပါ။ No trust၊ ဆိုလိုတာက ဘယ်သူ့ကိုမှ၊ ကိုယ့် component ကိုတောင် အလိုလို မယုံရဘူး ဆိုတဲ့ မူအရ တချို့ ယုံကြည်မှုကို တကယ့် system ပေါ်မှာပဲ ရနိုင်လို့ပါ။ ပထမ နှစ်မျိုးကနေ code နဲ့ စကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - {
+          id: show-menu,
+          type: slide.show,
+          at: { mark: show-menu, offsetMs: -700 },
+          slideId: menu-1,
+        }
+      - { id: pt-row1, type: slide.point, at: { mark: pt-row1 }, target: { x: 0.131, y: 0.367 } }
+      - { id: menu-2, type: slide.show, at: { mark: menu-2 }, slideId: menu-2 }
+      - {
+          id: pt-row3,
+          type: slide.point,
+          at: { afterAction: menu-2 },
+          target: { x: 0.131, y: 0.553 },
+        }
+      - { id: menu-3, type: slide.show, at: { mark: menu-3 }, slideId: menu-3 }
+      - {
+          id: pt-row6,
+          type: slide.point,
+          at: { afterAction: menu-3 },
+          target: { x: 0.131, y: 0.833 },
+        }
+
+  - id: twice
+    chapter: Generative idempotency
+    narration: >-
+      [[mark:close-menu]] ops ဖိုင်မှာ wallet တစ်ခုနဲ့ operation သုံးခု ရှိပါတယ်၊ deposit၊ fee နဲ့ payout ပါ။ [[mark:open-ops]] တစ်ခုစီမှာ idempotency key ပါပါတယ်။ [[mark:sel-key]] deposit က အဲဒီ key ကို အရင် မြင်ဖူးရင် ဘာမှ မလုပ်ဘဲ ပြန်ထွက်ပါတယ်။ သုံးခုထဲက တစ်ခုကို ဒီ check မပါဘဲ ရည်ရွယ်ချက်ရှိရှိ ရေးထားပြီး၊ ဘယ်ဟာလဲ ဆိုတာကို harness က ရှာရမှာပါ။ [[mark:open-main]] ဒီ loop က system declare လုပ်ထားတဲ့ operation တိုင်းကို ယူပါတယ်။ [[mark:sel-twice]] wallet အသစ် နှစ်ခုပေါ်မှာ တစ်ခုကို တစ်ခါ၊ နောက်တစ်ခုကို နှစ်ခါ apply လုပ်ပြီး state နှစ်ခုကို ယှဉ်ပါတယ်။ ဒုတိယ call က ဘာမှ မပြောင်းရင် idempotent ပါ။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: close-menu, type: slide.close, at: { mark: close-menu } }
+      - { id: open-ops, type: workspace.openFile, at: { mark: open-ops }, path: ops.go }
+      - id: sel-key
+        type: editor.select
+        at: { mark: sel-key }
+        target: { file: ops.go, text: "\tif s.Seen[o.Key] {\n\t\treturn\n\t}", occurrence: 1 }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: main.go }
+      - id: sel-twice
+        type: editor.select
+        at: { mark: sel-twice }
+        target:
+          {
+            file: main.go,
+            text: "\t\top.Apply(once)\n\t\top.Apply(twice)\n\t\top.Apply(twice)",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "twice fee: changed, balance 94.20",
+          timeoutMs: 8000,
+        }
+
+  - id: read-twice
+    narration: >-
+      [[mark:pt-dep]] deposit နဲ့ payout က ဒုတိယ call မှာ ဘာမှ မပြောင်းပါဘူး။ [[mark:pt-fee]] fee ကတော့ နှစ်ခါ ကောက်သွားလို့ balance က ယူရို ၉၄ ဒသမ နှစ် ဖြစ်သွားပြီး fee စုစုပေါင်း နှစ်ဆ ဖြစ်နေပါတယ်။ [[mark:show-twice]] ဒီ harness က ဘယ်လို အလုပ်လုပ်လဲ ဆိုတာ ပြန်ကြည့်ရအောင်။ deposit ကို ဒုတိယ အကြိမ် ခေါ်တော့ key ကို မြင်ပြီးသား ဖြစ်လို့ state မပြောင်းပါဘူး။ [[mark:twice-2]] fee မှာတော့ key ကို မစစ်လို့ ယူရို နှစ်ဒသမ ကိုး ထပ်ကောက်ပါတယ်။ [[mark:pt-rule]] အဓိက အချက်က operation တွေကို တစ်နေရာတည်းမှာ declare လုပ်ထားတာပါ။ ဒါမှ operation အသစ် ထည့်တာနဲ့ harness က အလိုလို နှစ်ခါ စမ်းပေးပြီး၊ test ရေးဖို့ မေ့သွားလို့ မရတော့ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - id: pt-dep
+        type: console.point
+        at: { mark: pt-dep }
+        target: { text: "twice deposit: no change", occurrence: 1 }
+      - id: pt-fee
+        type: console.point
+        at: { mark: pt-fee }
+        target: { text: "twice fee: changed, balance 94.20", occurrence: 1 }
+      - {
+          id: show-twice,
+          type: slide.show,
+          at: { mark: show-twice, offsetMs: -700 },
+          slideId: twice-1,
+        }
+      - {
+          id: pt-d2,
+          type: slide.point,
+          at: { afterAction: show-twice },
+          target: { x: 0.844, y: 0.464 },
+        }
+      - { id: twice-2, type: slide.show, at: { mark: twice-2 }, slideId: twice-2 }
+      - {
+          id: pt-f2,
+          type: slide.point,
+          at: { afterAction: twice-2 },
+          target: { x: 0.844, y: 0.776 },
+        }
+      - { id: pt-rule, type: slide.point, at: { mark: pt-rule }, target: { x: 0.494, y: 0.909 } }
+
+  - id: crash
+    chapter: Crash နဲ့ resume
+    narration: >-
+      [[mark:close-twice]] ဒုတိယ နည်းက flow တစ်ခုကို step ကြားမှာ သေခိုင်းတာပါ။ flow ဖိုင်ထဲက flow မှာ deposit၊ fee၊ payout ဆိုတဲ့ step သုံးခု ရှိပြီး၊ step တစ်ခု ပြီးတိုင်း ဘယ်အထိ ရောက်ပြီလဲ ဆိုတာကို သိမ်းပါတယ်။ [[mark:type-crash]] ဒီ code က ပထမဆုံး crash မဖြစ်တဲ့ run ကို အဖြေမှန်အဖြစ် ယူပါတယ်။ ပြီးရင် step တိုင်းအတွက် wallet အသစ် တစ်ခုပေါ်မှာ flow ကို အဲဒီ step ရဲ့ effect ပြီးပြီး progress မသိမ်းရသေးခင်မှာ သေခိုင်းပါတယ်။ ဒါက crash ဖြစ်ဖို့ အဆိုးဆုံး အချိန်ပါ။ ပြီးတော့ resume လုပ်ပြီး အဆုံး state ကို အဖြေမှန်နဲ့ ယှဉ်ပါတယ်။ ဘယ် step မှာ မကိုက်မလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-c1]] deposit ပြီးတဲ့ နောက် သေရင် resume က deposit ကို ပြန် run ပေမဲ့ key ကြောင့် တစ်ခါပဲ တွက်ပါတယ်။ [[mark:pt-c2]] fee ပြီးတဲ့ နောက် သေရင်တော့ အဆုံး state မတူပါဘူး။ [[mark:pt-c3]] payout ကလည်း key ကြောင့် ပြန် run တာကို ကာကွယ်ထားလို့ မှန်ပါတယ်။ [[mark:dock-2]] ပထမ harness က ရှာတွေ့တဲ့ bug ကို တခြား လမ်းကနေ ပြန်တွေ့တာပါ။ retry မရှိတဲ့ system မှာတောင် crash တစ်ခုက operation ကို နှစ်ခါ run စေနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+    actions:
+      - { id: close-twice, type: slide.close, at: { mark: close-twice } }
+      - id: type-crash
+        type: editor.type
+        at: { mark: type-crash }
+        target:
+          {
+            file: main.go,
+            after: "\t\t\tfmt.Println(\"twice\", op.Name()+\": changed,\", twice)\n\t\t}\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\n\twant := fresh()\n\trun(want, -1)\n\tfor crash := range flow {\n\t\ts := fresh()\n\t\trun(s, crash)\n\t\trun(s, -1)\n\t\tfmt.Println(\"crash after\", flow[crash].Name()+\", resume:\", s.String() == want.String())\n\t}\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "crash after fee, resume: false",
+          timeoutMs: 8000,
+        }
+      - id: pt-c1
+        type: console.point
+        at: { mark: pt-c1 }
+        target: { text: "crash after deposit, resume: true", occurrence: 1 }
+      - id: pt-c2
+        type: console.point
+        at: { mark: pt-c2 }
+        target: { text: "crash after fee, resume: false", occurrence: 1 }
+      - id: pt-c3
+        type: console.point
+        at: { mark: pt-c3 }
+        target: { text: "crash after payout, resume: true", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: crash-fig
+    narration: >-
+      [[mark:show-crash]] flow ကို step တစ်ခုချင်း ကြည့်ရအောင်။ step တစ်ခု ပြီးတိုင်း progress ကို သိမ်းထားလို့ crash ဖြစ်ရင် နောက်ဆုံး သိမ်းထားတဲ့ နေရာကနေ ဆက်ပါတယ်။ [[mark:crash-2]] fee ရဲ့ effect ပြီးပြီ၊ ဒါပေမဲ့ progress မသိမ်းရသေးခင် သေသွားတော့ resume က fee ကို နောက်တစ်ခါ run ပါတယ်။ idempotency key မစစ်တဲ့ fee က ယူရို နှစ်ဒသမ ကိုး ထပ်ကောက်ပါတယ်။ [[mark:crash-3]] ဒီ test က step တိုင်းနောက်မှာ crash ကို တစ်ခုချင်း ထည့်ပြီး၊ crash မဖြစ်တဲ့ run နဲ့ ယှဉ်ပါတယ်။ တကယ့် harness မှာ ဒီ crash point တွေကို လက်နဲ့ ရွေးမထားဘဲ database write နဲ့ provider call တိုင်းမှာ အလိုလို ထည့်တာ ပိုကောင်းပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+    actions:
+      - {
+          id: show-crash,
+          type: slide.show,
+          at: { mark: show-crash, offsetMs: -700 },
+          slideId: crash-1,
+        }
+      - {
+          id: pt-s2,
+          type: slide.point,
+          at: { afterAction: show-crash },
+          target: { x: 0.5, y: 0.442 },
+        }
+      - { id: crash-2, type: slide.show, at: { mark: crash-2 }, slideId: crash-2 }
+      - {
+          id: pt-boom,
+          type: slide.point,
+          at: { afterAction: crash-2 },
+          target: { x: 0.75, y: 0.558 },
+        }
+      - { id: crash-3, type: slide.show, at: { mark: crash-3 }, slideId: crash-3 }
+      - {
+          id: pt-r2,
+          type: slide.point,
+          at: { afterAction: crash-3 },
+          target: { x: 0.494, y: 0.776 },
+        }
+
+  - id: golden
+    chapter: Golden၊ round-trip၊ data အဟောင်း
+    narration: >-
+      [[mark:close-crash]] နောက် သုံးမျိုးကို code တစ်ပိုင်းတည်းမှာ ကြည့်ရအောင်။ [[mark:type-golden]] ပထမ line က golden test ပါ။ ယူရို ၁၀၀ payment ရဲ့ fee breakdown ကို တစ်ခါ review လုပ်ပြီး string အဖြစ် သိမ်းထားပြီး၊ ဒီနေ့ code ရဲ့ output နဲ့ အတိအကျ ယှဉ်ပါတယ်။ [[mark:corpus]] အောက်က loop ကတော့ code အဟောင်းတွေ ရေးခဲ့တဲ့ event တွေကို ဒီနေ့ decoder နဲ့ ဖတ်ပါတယ်။ version တစ်က ပမာဏကို decimal string နဲ့ ရေးပြီး၊ version နှစ်က minor unit ကိန်းပြည့်နဲ့ ရေးပါတယ်။ ဖတ်ပြီးရင် format အသစ်နဲ့ encode လုပ်၊ ပြန် decode လုပ်ပြီး မူလ တန်ဖိုး ပြန်ရလား စစ်ပါတယ်၊ ဒါက round-trip test ပါ။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-gold]] fee breakdown က review လုပ်ထားတဲ့ အဖြေနဲ့ ကိုက်ပါတယ်။ fee တွက်ပုံ တစ်နေရာ ပြောင်းမိရင် ဒီ line က false ဖြစ်သွားပြီး၊ breakdown အသစ်နဲ့ အဟောင်းကို ယှဉ်ကြည့်ခိုင်းပါတယ်။ [[mark:pt-v1]] version တစ် event ကို ယူရို ဆယ့်နှစ် ဒသမ သုံးလေး အဖြစ် အတိအကျ ဖတ်နိုင်ပြီး၊ [[mark:pt-v2]] version နှစ်ကလည်း တန်ဖိုး အတူတူ ရပြီး round-trip လည်း မှန်ပါတယ်။ [[mark:dock-3]] event တွေက နှစ်ပေါင်းများစွာ သိမ်းထားရတာ ဖြစ်လို့ schema ပြောင်းတိုင်း history ကို တိတ်တိတ်လေး မပျက်စေဖို့ ဒီ corpus က ကာကွယ်ပေးပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+      - { title: "Go standard library — encoding/json", url: "https://pkg.go.dev/encoding/json" }
+    actions:
+      - { id: close-crash, type: slide.close, at: { mark: close-crash } }
+      - id: type-golden
+        type: editor.type
+        at: { mark: type-golden }
+        target:
+          {
+            file: main.go,
+            after: "\t\tfmt.Println(\"crash after\", flow[crash].Name()+\", resume:\", s.String() == want.String())\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\n\tfmt.Println(\"golden fee:\", feeBreakdown(10000) == goldenFee)\n\tfor i, raw := range corpus {\n\t\tm, err := decode(raw)\n\t\tback, _ := decode(encode(m))\n\t\tfmt.Printf(\"old event v%d: %v, round trip: %v\\n\", i+1, m, err == nil && back == m)\n\t}\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "old event v1: 12.34 EUR, round trip: true",
+          timeoutMs: 8000,
+        }
+      - id: pt-gold
+        type: console.point
+        at: { mark: pt-gold }
+        target: { text: "golden fee: true", occurrence: 1 }
+      - id: pt-v1
+        type: console.point
+        at: { mark: pt-v1 }
+        target: { text: "old event v1: 12.34 EUR, round trip: true", occurrence: 1 }
+      - id: pt-v2
+        type: console.point
+        at: { mark: pt-v2 }
+        target: { text: "old event v2: 12.34 EUR, round trip: true", occurrence: 1 }
+      - {
+          id: expect-file-crash,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "run(s, crash)",
+        }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: prod
+    chapter: Production ထဲမှာ test လုပ်ခြင်း
+    narration: >-
+      [[mark:show-prod]] တချို့ ယုံကြည်မှုကိုတော့ တကယ့် system ပေါ်မှာပဲ ရနိုင်ပါတယ်။ provider sandbox တွေက production နဲ့ အများကြီး ကွာတတ်ပါတယ်။ ဒါကြောင့် integration တစ်ခု အလုပ်လုပ်ကြောင်း နောက်ဆုံး သက်သေကို များသောအားဖြင့် canary release၊ blast radius သေးတဲ့ rollout ဒါမှမဟုတ် ငွေ အနည်းငယ်ကို အမြဲ ဖြတ်ပို့နေတဲ့ synthetic transaction တွေနဲ့ ယူရပါတယ်။ [[mark:pt-syn]] ငွေ system မှာ ထူးခြားတာက ဒီ test တွေက တကယ့် ငွေကို ရွှေ့တာပါ။ ဒါကြောင့် တခြား ငွေတွေ ဖြတ်တဲ့ ledger၊ reconciliation နဲ့ audit trail ထဲကပဲ ဖြတ်ရပြီး၊ synthetic လို့ tag ရှင်းရှင်း တပ်ထားရပါတယ်။ [[mark:prod-2]] test ပြီးရင် ရှင်းတာကိုလည်း ပုံမှန် reversal လမ်းကြောင်းနဲ့ပဲ လုပ်ရပါတယ်။ [[mark:prod-3]] test row တွေကို database ထဲကနေ တိုက်ရိုက် ဖျက်တာက books ကို ကျော်တဲ့ back door ဖြစ်ပြီး၊ နောက်တစ်ကြိမ် reconcile လုပ်တဲ့ အခါ ledger နဲ့ ဘဏ် မကိုက်တော့ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Consuming APIs (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#consuming-apis",
+        }
+    actions:
+      - {
+          id: show-prod,
+          type: slide.show,
+          at: { mark: show-prod, offsetMs: -700 },
+          slideId: prod-1,
+        }
+      - {
+          id: pt-kinds,
+          type: slide.point,
+          at: { afterAction: show-prod },
+          target: { x: 0.248, y: 0.292 },
+        }
+      - { id: pt-syn, type: slide.point, at: { mark: pt-syn }, target: { x: 0.153, y: 0.509 } }
+      - { id: prod-2, type: slide.show, at: { mark: prod-2 }, slideId: prod-2 }
+      - {
+          id: pt-rev,
+          type: slide.point,
+          at: { afterAction: prod-2 },
+          target: { x: 0.406, y: 0.787 },
+        }
+      - { id: prod-3, type: slide.show, at: { mark: prod-3 }, slideId: prod-3 }
+      - {
+          id: pt-door,
+          type: slide.point,
+          at: { afterAction: prod-3 },
+          target: { x: 0.772, y: 0.798 },
+        }
+
+  - id: senior
+    narration: >-
+      [[mark:close-prod]] ဒီ နည်းတွေ ကြာလာရင် ပျက်တတ်တဲ့ နေရာ နှစ်ခု ရှိပါတယ်။ [[mark:open-compat]] ပထမက golden test ပါ။ [[mark:sel-golden]] ဒီ string က reviewer တစ်ယောက် စစ်ပြီးသား အဖြေပါ။ fail တဲ့ အခါ test ကို pass အောင် string ကို အသစ်နဲ့ အစားထိုးလိုက်ရင် golden test ရဲ့ အဓိပ္ပာယ် ပျောက်သွားပါတယ်။ ဒါကြောင့် golden ပြောင်းတာကို code change တစ်ခုလိုပဲ diff ကို review လုပ်ပြီးမှ လက်ခံရပါတယ်။ [[mark:sel-corpus]] ဒုတိယက corpus ပါ။ code အဟောင်း ရေးခဲ့မယ်လို့ ကိုယ် ထင်တာကို လက်နဲ့ ရေးထားရင် ကိုယ့် ယူဆချက်ကိုပဲ စစ်တာ ဖြစ်ပါတယ်။ production storage ထဲက တကယ့် payload အဟောင်းတွေကို နမူနာ ယူထားမှ မှတ်မထားမိတဲ့ field၊ format ကွဲတာတွေ ပါလာပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - { id: close-prod, type: slide.close, at: { mark: close-prod } }
+      - { id: open-compat, type: workspace.openFile, at: { mark: open-compat }, path: compat.go }
+      - id: sel-golden
+        type: editor.select
+        at: { mark: sel-golden }
+        target:
+          {
+            file: compat.go,
+            text: 'const goldenFee = "processing 1.40 + fixed 0.25 + platform 1.25 = 2.90"',
+            occurrence: 1,
+          }
+      - id: sel-corpus
+        type: editor.select
+        at: { mark: sel-corpus }
+        target: { file: compat.go, text: "var corpus = []string{", occurrence: 1 }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ idempotency နဲ့ crash safety ကို ဘယ်လို test ရေးမလဲ လို့ မေးလေ့ရှိပါတယ်။ key ပါတဲ့ request ကို နှစ်ခါ ပို့ကြည့်ပါမယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး။ [[mark:iv-a]] ပထမ၊ operation တွေကို registry တစ်ခုမှာ declare လုပ်ပြီး harness က အားလုံးကို နှစ်ခါ run ပါတယ်။ operation အသစ် ထည့်တာနဲ့ test ပါပြီးသား ဖြစ်ပါတယ်။ [[mark:iv-b]] ဒုတိယ၊ flow ရဲ့ step တိုင်းနောက်မှာ crash ကို inject လုပ်ပြီး resume လုပ်ပါတယ်။ effect ပြီးပြီး progress မသိမ်းရသေးတဲ့ အချိန်က အဆိုးဆုံးပါ။ [[mark:iv-c]] တတိယ၊ oracle က crash မဖြစ်တဲ့ run ရဲ့ အဆုံး state နဲ့ invariant တွေပါ။ random operation sequence နဲ့ ပေါင်းသုံးပြီး seed ကို log ထုတ်ထားပါတယ်။ [[mark:iv-d]] ပြီးရင် ဒါတွေကို CI မှာ မဖြစ်မနေ run ပြီး၊ production မှာ synthetic transaction ကို ledger ထဲကပဲ ဖြတ်ပြီး reversal နဲ့ ရှင်းမယ် လို့ ဆက်ပြောပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:open-ops2]] ops ဖိုင်ထဲက fee ကို ပြင်ရမှာပါ။ [[mark:sel-try]] deposit ရဲ့ ထိပ်ဆုံးက key စစ်တဲ့ line သုံးကြောင်းနဲ့ key ကို မှတ်တဲ့ line ကို fee ရဲ့ အစမှာ ထည့်ပြီး run ကြည့်ပါ။ နှစ်ခါ run တဲ့ harness မှာ fee က no change ဖြစ်သွားပြီး၊ crash harness မှာလည်း step သုံးခုလုံး true ဖြစ်ပါလိမ့်မယ်။ bug တစ်ခုတည်းကို ပြင်တာနဲ့ test နှစ်မျိုးလုံး ပြောင်းသွားတာပါ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ ငွေ system ရဲ့ test က menu တစ်ခုပါ။ နှစ်ခါ run တာ၊ crash ထည့်တာက ငွေ ပိုမထွက်ကြောင်း ပြပါတယ်။ round-trip နဲ့ data အဟောင်း test က precision နဲ့ history မပျောက်ကြောင်း၊ golden က တွက်ချက်မှု မထင်မှတ်ဘဲ မပြောင်းကြောင်း ပြပြီး၊ production test ကတော့ books ထဲကပဲ ဖြတ်ရပါတယ်။ နောက် lesson ကစပြီး domain ကို သိအောင် လေ့လာပါမယ်။ card ကို tap လိုက်တာကနေ merchant ရဲ့ bank account ထဲ ငွေ ရောက်တဲ့အထိ ဘယ်သူတွေ၊ ဘယ် message တွေ ပါလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - { id: open-ops2, type: workspace.openFile, at: { mark: open-ops2 }, path: ops.go }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: ops.go, text: "func (o Fee) Apply(s *State) {", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
