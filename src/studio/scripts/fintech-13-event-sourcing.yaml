@@ -1,0 +1,905 @@
+# Fintech Engineering, lesson 13: event sourcing (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Event sourcing" (CC BY 4.0, Voytek Pitula).
+# Start state: main.go holds one account's event stream and folds it into a balance; events.go
+# holds Event, State, apply (the only place state changes), fold, decode and show.
+# Edits, all insert-only:
+#   1. a stored snapshot after event 3, folded with the events after it -> run-2: same balance
+#   2. an old v1 event (no currency) decoded from JSON and folded       -> run-3: error, no currency
+#   3. upcast (v1 → v2, end of main.go) and the same fold through it     -> run-4: 10.00 EUR
+# Figures: drift (state + log drifting vs events only; the ledger is this pattern), project (one
+# log, many projections; the price), evolve (v1 → upcaster → v2), when (where to use it; the
+# traps for money), iv.
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-13-event-sourcing
+  title: "Fintech Engineering 13: Event sourcing"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      events.go: |
+        package main
+
+        import (
+        	"encoding/json"
+        	"fmt"
+        )
+
+        // Event is one fact that happened to an account. Stored events are never changed.
+        type Event struct {
+        	Version  int    `json:"v"`
+        	Seq      int    `json:"seq"`
+        	Type     string `json:"type"`
+        	Amount   int64  `json:"amount"`   // cents
+        	Currency string `json:"currency"` // added in schema v2
+        }
+
+        // State is derived from events. It can be cached or snapshotted, never edited by hand.
+        type State struct {
+        	Seq      int
+        	Balance  int64
+        	Currency string
+        }
+
+        // apply is the only place where state changes.
+        func apply(s State, e Event) (State, error) {
+        	if e.Currency == "" {
+        		return s, fmt.Errorf("event %d has no currency", e.Seq)
+        	}
+        	if s.Currency == "" {
+        		s.Currency = e.Currency
+        	}
+        	if e.Currency != s.Currency {
+        		return s, fmt.Errorf("event %d has currency %q, account is %s", e.Seq, e.Currency, s.Currency)
+        	}
+        	switch e.Type {
+        	case "deposited":
+        		s.Balance += e.Amount
+        	case "withdrawn", "fee-charged":
+        		s.Balance -= e.Amount
+        	}
+        	s.Seq = e.Seq
+        	return s, nil
+        }
+
+        // fold applies events in order, starting from s.
+        func fold(s State, events []Event) (State, error) {
+        	for _, e := range events {
+        		var err error
+        		if s, err = apply(s, e); err != nil {
+        			return s, err
+        		}
+        	}
+        	return s, nil
+        }
+
+        // decode reads one stored event.
+        func decode(raw string) Event {
+        	var e Event
+        	if err := json.Unmarshal([]byte(raw), &e); err != nil {
+        		panic(err)
+        	}
+        	return e
+        }
+
+        // show prints a folded state, or the error that stopped the fold.
+        func show(s State, err error) string {
+        	if err != nil {
+        		return "error: " + err.Error()
+        	}
+        	return fmt.Sprintf("%d.%02d %s after event %d", s.Balance/100, s.Balance%100, s.Currency, s.Seq)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // The event stream of one account, oldest first.
+        var stream = []Event{
+        	{Version: 2, Seq: 1, Type: "deposited", Amount: 10000, Currency: "EUR"},
+        	{Version: 2, Seq: 2, Type: "fee-charged", Amount: 290, Currency: "EUR"},
+        	{Version: 2, Seq: 3, Type: "withdrawn", Amount: 4000, Currency: "EUR"},
+        	{Version: 2, Seq: 4, Type: "deposited", Amount: 2500, Currency: "EUR"},
+        }
+
+        func main() {
+        	fmt.Println("all events:        ", show(fold(State{}, stream)))
+        }
+  slides:
+    - id: drift-1
+      contentType: html
+      name: "Event sourcing 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">EVENT SOURCING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">State ဘေးက log က ကွဲသွားနိုင်တယ်</text>
+        <g class="in"><rect x="100" y="205" width="680" height="530" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="122" y="241" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">STATE + LOG</text></g>
+        <g class="in"><rect x="140" y="265" width="600" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="162" y="293" width="64" height="64" style="color:#4fd1c5"/><text x="480" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">balance = 82.10</text><text x="480" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">accounts table · UPDATE</text></g>
+        <g class="in"><rect x="140" y="420" width="600" height="120" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-doc" x="162" y="448" width="64" height="64" style="color:#9aa5b8"/><text x="480" y="470.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">audit log: 4 rows</text><text x="480" y="511.6" font-size="24" text-anchor="middle" fill="#8a94a8">INSERT · separate write</text></g>
+        </svg>
+    - id: drift-2
+      contentType: html
+      name: "Event sourcing 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">EVENT SOURCING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">State ဘေးက log က ကွဲသွားနိုင်တယ်</text>
+        <rect x="100" y="205" width="680" height="530" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="122" y="241" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">STATE + LOG</text>
+        <rect x="140" y="265" width="600" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="162" y="293" width="64" height="64" style="color:#4fd1c5"/><text x="480" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">balance = 82.10</text><text x="480" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">accounts table · UPDATE</text>
+        <g class="in"><rect x="140" y="420" width="600" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-doc" x="162" y="448" width="64" height="64" style="color:#fc8181"/><text x="480" y="470.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">audit log: 3 rows</text><text x="480" y="511.6" font-size="24" text-anchor="middle" fill="#8a94a8">INSERT lost</text></g>
+        <g class="in"><circle cx="734" cy="426" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="720.2" y="412.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        <g class="in"><rect x="140" y="600" width="473.4" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="140" y="600" width="473.4" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="376.7" y="634.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">balance ≠ log → ဘယ်ဟာ မှန်လဲ</text></g>
+        </svg>
+    - id: drift-3
+      contentType: html
+      name: "Event sourcing 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">EVENT SOURCING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">State ဘေးက log က ကွဲသွားနိုင်တယ်</text>
+        <rect x="100" y="205" width="680" height="530" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="122" y="241" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">STATE + LOG</text>
+        <rect x="140" y="265" width="600" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="162" y="293" width="64" height="64" style="color:#4fd1c5"/><text x="480" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">balance = 82.10</text><text x="480" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">accounts table · UPDATE</text>
+        <rect x="140" y="420" width="600" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-doc" x="162" y="448" width="64" height="64" style="color:#fc8181"/><text x="480" y="470.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">audit log: 3 rows</text><text x="480" y="511.6" font-size="24" text-anchor="middle" fill="#8a94a8">INSERT lost</text>
+        <circle cx="734" cy="426" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="720.2" y="412.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="140" y="600" width="473.4" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="140" y="600" width="473.4" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="376.7" y="634.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">balance ≠ log → ဘယ်ဟာ မှန်လဲ</text>
+        <g class="in"><rect x="820" y="205" width="680" height="530" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="842" y="241" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">EVENTS ONLY</text></g>
+        <g class="in"><rect x="860" y="255" width="600" height="260" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="882" y="290" font-size="22" fill="#8a94a8" font-weight="700">#</text><text x="978.8" y="290" font-size="22" fill="#8a94a8" font-weight="700">event</text><text x="1438" y="290" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M860 307H1460" stroke="#2a3345" stroke-width="2"/><g><text x="882" y="343" font-size="28" fill="#9aa5b8" class="mono">1</text><text x="978.8" y="343" font-size="28" fill="#e9edf5" class="mono">deposited</text><text x="1438" y="343" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M876 359H1444" stroke="#2a3345" stroke-width="1.5"/><text x="882" y="395" font-size="28" fill="#9aa5b8" class="mono">2</text><text x="978.8" y="395" font-size="28" fill="#e9edf5" class="mono">fee-charged</text><text x="1438" y="395" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">-2.90</text></g><g><path d="M876 411H1444" stroke="#2a3345" stroke-width="1.5"/><text x="882" y="447" font-size="28" fill="#9aa5b8" class="mono">3</text><text x="978.8" y="447" font-size="28" fill="#e9edf5" class="mono">withdrawn</text><text x="1438" y="447" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">-40.00</text></g><g><path d="M876 463H1444" stroke="#2a3345" stroke-width="1.5"/><text x="882" y="499" font-size="28" fill="#9aa5b8" class="mono">4</text><text x="978.8" y="499" font-size="28" fill="#e9edf5" class="mono">deposited</text><text x="1438" y="499" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">25.00</text></g></g>
+        <g class="in"><rect x="860" y="610" width="600" height="96" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><rect x="860" y="610" width="600" height="96" rx="18" fill="#68d391" opacity="0.13"/><text x="1160" y="667" font-size="29" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">balance = fold(events) = 82.10</text></g>
+        <path d="M1160 525L1160 596" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/><text x="1200" y="568.3" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">fold</text>
+        </svg>
+    - id: drift-4
+      contentType: html
+      name: "Event sourcing 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">EVENT SOURCING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">State ဘေးက log က ကွဲသွားနိုင်တယ်</text>
+        <rect x="100" y="205" width="680" height="530" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="122" y="241" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">STATE + LOG</text>
+        <rect x="140" y="265" width="600" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="162" y="293" width="64" height="64" style="color:#4fd1c5"/><text x="480" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">balance = 82.10</text><text x="480" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">accounts table · UPDATE</text>
+        <rect x="140" y="420" width="600" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-doc" x="162" y="448" width="64" height="64" style="color:#fc8181"/><text x="480" y="470.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">audit log: 3 rows</text><text x="480" y="511.6" font-size="24" text-anchor="middle" fill="#8a94a8">INSERT lost</text>
+        <circle cx="734" cy="426" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="720.2" y="412.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="140" y="600" width="473.4" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="140" y="600" width="473.4" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="376.7" y="634.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">balance ≠ log → ဘယ်ဟာ မှန်လဲ</text>
+        <rect x="820" y="205" width="680" height="530" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="842" y="241" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">EVENTS ONLY</text>
+        <rect x="860" y="255" width="600" height="260" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="882" y="290" font-size="22" fill="#8a94a8" font-weight="700">#</text><text x="978.8" y="290" font-size="22" fill="#8a94a8" font-weight="700">event</text><text x="1438" y="290" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M860 307H1460" stroke="#2a3345" stroke-width="2"/><g><text x="882" y="343" font-size="28" fill="#9aa5b8" class="mono">1</text><text x="978.8" y="343" font-size="28" fill="#e9edf5" class="mono">deposited</text><text x="1438" y="343" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M876 359H1444" stroke="#2a3345" stroke-width="1.5"/><text x="882" y="395" font-size="28" fill="#9aa5b8" class="mono">2</text><text x="978.8" y="395" font-size="28" fill="#e9edf5" class="mono">fee-charged</text><text x="1438" y="395" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">-2.90</text></g><g><path d="M876 411H1444" stroke="#2a3345" stroke-width="1.5"/><text x="882" y="447" font-size="28" fill="#9aa5b8" class="mono">3</text><text x="978.8" y="447" font-size="28" fill="#e9edf5" class="mono">withdrawn</text><text x="1438" y="447" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">-40.00</text></g><g><path d="M876 463H1444" stroke="#2a3345" stroke-width="1.5"/><text x="882" y="499" font-size="28" fill="#9aa5b8" class="mono">4</text><text x="978.8" y="499" font-size="28" fill="#e9edf5" class="mono">deposited</text><text x="1438" y="499" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">25.00</text></g>
+        <rect x="860" y="610" width="600" height="96" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><rect x="860" y="610" width="600" height="96" rx="18" fill="#68d391" opacity="0.13"/><text x="1160" y="667" font-size="29" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">balance = fold(events) = 82.10</text>
+        <path d="M1160 525L1160 596" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/><text x="1200" y="568.3" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">fold</text>
+        <g class="in"><rect x="100" y="775" width="1134.1" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="100" y="775" width="1134.1" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="667" y="809.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">double-entry ledger = ငွေအတွက် event sourcing · balance ကို entry တွေကနေ တွက်</text></g>
+        </svg>
+    - id: evolve-1
+      contentType: html
+      name: "Schema evolution 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SCHEMA EVOLUTION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event တွေက နှစ်ပေါင်းများစွာ နေရတယ်</text>
+        <g class="in"><rect x="100" y="215" width="500" height="316" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">stored years ago · v1</text><path d="M100 261H600" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "v": 1,</text></g><g><text x="124" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "seq": 1,</text></g><g><text x="124" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "type": "deposited",</text></g><g><text x="124" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 1000</text></g><g><text x="124" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g></g>
+        <g class="in"><rect x="100" y="590" width="546.9" height="48" rx="24" fill="#fc8181" opacity="0.16"/><rect x="100" y="590" width="546.9" height="48" rx="24" fill="none" stroke="#fc8181" stroke-width="2"/><text x="373.4" y="622.4" font-size="24" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">today's apply: no currency → error</text></g>
+        </svg>
+    - id: evolve-2
+      contentType: html
+      name: "Schema evolution 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SCHEMA EVOLUTION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event တွေက နှစ်ပေါင်းများစွာ နေရတယ်</text>
+        <rect x="100" y="215" width="500" height="316" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">stored years ago · v1</text><path d="M100 261H600" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "v": 1,</text></g><g><text x="124" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "seq": 1,</text></g><g><text x="124" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "type": "deposited",</text></g><g><text x="124" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 1000</text></g><g><text x="124" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g>
+        <rect x="100" y="590" width="546.9" height="48" rx="24" fill="#fc8181" opacity="0.16"/><rect x="100" y="590" width="546.9" height="48" rx="24" fill="none" stroke="#fc8181" stroke-width="2"/><text x="373.4" y="622.4" font-size="24" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">today's apply: no currency → error</text>
+        <g class="in"><rect x="650" y="330" width="300" height="150" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-gear" x="672" y="373" width="64" height="64" style="color:#b794f6"/><text x="840" y="397.1" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">upcast</text><text x="840" y="435.9" font-size="22" text-anchor="middle" fill="#8a94a8">v1 → v2 on read</text></g>
+        <g class="in"><rect x="1000" y="215" width="500" height="355" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="1024" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">what today's code reads · v2</text><path d="M1000 261H1500" stroke="#2a3345" stroke-width="2"/><g><text x="1024" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><text x="1024" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "v": 2,</text></g><g><text x="1024" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "seq": 1,</text></g><g><text x="1024" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "type": "deposited",</text></g><g><text x="1024" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 1000,</text></g><g><rect x="1008" y="477.4" width="484" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="1024" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "currency": "EUR"</text></g><g><text x="1024" y="541.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g></g>
+        <path d="M608.4 378.4L638.2 397.5" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M959.7 402.6L986.4 395.9" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/>
+        </svg>
+    - id: evolve-3
+      contentType: html
+      name: "Schema evolution 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SCHEMA EVOLUTION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event တွေက နှစ်ပေါင်းများစွာ နေရတယ်</text>
+        <rect x="100" y="215" width="500" height="316" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">stored years ago · v1</text><path d="M100 261H600" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "v": 1,</text></g><g><text x="124" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "seq": 1,</text></g><g><text x="124" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "type": "deposited",</text></g><g><text x="124" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 1000</text></g><g><text x="124" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g>
+        <rect x="650" y="330" width="300" height="150" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-gear" x="672" y="373" width="64" height="64" style="color:#b794f6"/><text x="840" y="397.1" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">upcast</text><text x="840" y="435.9" font-size="22" text-anchor="middle" fill="#8a94a8">v1 → v2 on read</text>
+        <rect x="1000" y="215" width="500" height="355" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="1024" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">what today's code reads · v2</text><path d="M1000 261H1500" stroke="#2a3345" stroke-width="2"/><g><text x="1024" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><text x="1024" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "v": 2,</text></g><g><text x="1024" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "seq": 1,</text></g><g><text x="1024" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "type": "deposited",</text></g><g><text x="1024" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 1000,</text></g><g><rect x="1008" y="477.4" width="484" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="1024" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "currency": "EUR"</text></g><g><text x="1024" y="541.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g>
+        <path d="M608.4 378.4L638.2 397.5" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M959.7 402.6L986.4 395.9" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/>
+        <g class="in"><rect x="100" y="640" width="736.2" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="100" y="640" width="736.2" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="468.1" y="674.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">stored event ကို ပြန်မရေး — ဖတ်တဲ့အချိန်မှာ upcast</text></g>
+        <g class="in"><rect x="100" y="725" width="860.9" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="100" y="725" width="860.9" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="530.5" y="759.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">v1 … vN အားလုံးကို ဒီနေ့ code က ဖတ်နိုင်ရမယ် · test လုပ်ထား</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event sourcing ကို ဘယ်အချိန် သုံးသင့်လဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event sourcing ကို ဘယ်အချိန် သုံးသင့်လဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Event ကပဲ source of truth — state က fold လုပ်ထားတဲ့ ရလဒ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">trail နဲ့ state ကွဲစရာ မရှိ · ledger က ဒီ pattern ပဲ</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event sourcing ကို ဘယ်အချိန် သုံးသင့်လဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Event ကပဲ source of truth — state က fold လုပ်ထားတဲ့ ရလဒ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">trail နဲ့ state ကွဲစရာ မရှိ · ledger က ဒီ pattern ပဲ</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">ဈေး — projection၊ snapshot၊ schema evolution</text><text x="188" y="443" font-size="26" fill="#8a94a8">event ကို query မရ · v1 event ကို ဒီနေ့ code ဖတ်နိုင်ရ</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event sourcing ကို ဘယ်အချိန် သုံးသင့်လဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Event ကပဲ source of truth — state က fold လုပ်ထားတဲ့ ရလဒ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">trail နဲ့ state ကွဲစရာ မရှိ · ledger က ဒီ pattern ပဲ</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">ဈေး — projection၊ snapshot၊ schema evolution</text><text x="188" y="443" font-size="26" fill="#8a94a8">event ကို query မရ · v1 event ကို ဒီနေ့ code ဖတ်နိုင်ရ</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">ငွေ invariant ကို fold လုပ်ထားတဲ့ stream ပေါ်မှာ စစ်</text><text x="188" y="575" font-size="26" fill="#8a94a8">lag ရှိတဲ့ projection နဲ့ funds check မလုပ်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event sourcing ကို ဘယ်အချိန် သုံးသင့်လဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Event ကပဲ source of truth — state က fold လုပ်ထားတဲ့ ရလဒ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">trail နဲ့ state ကွဲစရာ မရှိ · ledger က ဒီ pattern ပဲ</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">ဈေး — projection၊ snapshot၊ schema evolution</text><text x="188" y="443" font-size="26" fill="#8a94a8">event ကို query မရ · v1 event ကို ဒီနေ့ code ဖတ်နိုင်ရ</text></g><g><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">ငွေ invariant ကို fold လုပ်ထားတဲ့ stream ပေါ်မှာ စစ်</text><text x="188" y="575" font-size="26" fill="#8a94a8">lag ရှိတဲ့ projection နဲ့ funds check မလုပ်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">ledger ကို ES၊ ဘေးက domain တွေကို model + change log</text><text x="188" y="707" font-size="26" fill="#8a94a8">audit trail လိုတဲ့ နေရာမှာပဲ ဈေးပေး</text></g>
+        </svg>
+    - id: project-1
+      contentType: html
+      name: "Projections 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-queue" viewBox="0 0 48 48"><rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/></symbol><symbol id="i-wallet" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="29" rx="4"/><path d="M43 21H33a4.500 4.500 0 0 0 0 9h10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">PROJECTIONS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event log တစ်ခု၊ projection အများ</text>
+        <g class="in"><rect x="100" y="330" width="440" height="250" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="100" y="330" width="440" height="250" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-queue" x="288" y="377" width="64" height="64" style="color:#4fd1c5"/><text x="320" y="483.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">event log</text><text x="320" y="524.6" font-size="24" text-anchor="middle" fill="#8a94a8">append-only · source of truth</text></g>
+        <g class="in"><rect x="900" y="215" width="600" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-wallet" x="922" y="238" width="64" height="64" style="color:#f6c453"/><text x="1240" y="258.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">balance per account</text><text x="1240" y="302.7" font-size="24" text-anchor="middle" fill="#8a94a8">app မှာ user ကို ပြဖို့</text></g>
+        <path d="M548.9 450.4L887.5 276.4" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: project-2
+      contentType: html
+      name: "Projections 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-queue" viewBox="0 0 48 48"><rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/></symbol><symbol id="i-wallet" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="29" rx="4"/><path d="M43 21H33a4.500 4.500 0 0 0 0 9h10"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-chart" viewBox="0 0 48 48"><path d="M7 7v34h34M15 35V25M23 35V15M31 35V21M39 35V11"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">PROJECTIONS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event log တစ်ခု၊ projection အများ</text>
+        <rect x="100" y="330" width="440" height="250" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="100" y="330" width="440" height="250" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-queue" x="288" y="377" width="64" height="64" style="color:#4fd1c5"/><text x="320" y="483.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">event log</text><text x="320" y="524.6" font-size="24" text-anchor="middle" fill="#8a94a8">append-only · source of truth</text>
+        <rect x="900" y="215" width="600" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-wallet" x="922" y="238" width="64" height="64" style="color:#f6c453"/><text x="1240" y="258.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">balance per account</text><text x="1240" y="302.7" font-size="24" text-anchor="middle" fill="#8a94a8">app မှာ user ကို ပြဖို့</text>
+        <path d="M548.9 450.4L887.5 276.4" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><rect x="900" y="350" width="600" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-doc" x="922" y="373" width="64" height="64" style="color:#6cb2f5"/><text x="1240" y="393.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">monthly statement</text><text x="1240" y="437.7" font-size="24" text-anchor="middle" fill="#8a94a8">user ကို ပို့ဖို့</text></g>
+        <g class="in"><rect x="900" y="485" width="600" height="110" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-chart" x="922" y="508" width="64" height="64" style="color:#68d391"/><text x="1240" y="530.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">fee revenue by month</text><text x="1240" y="571.6" font-size="24" text-anchor="middle" fill="#8a94a8">finance report</text></g>
+        <g class="in"><rect x="900" y="620" width="600" height="110" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="922" y="643" width="64" height="64" style="color:#b794f6"/><text x="1240" y="663.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">withdrawals per day</text><text x="1240" y="707.7" font-size="24" text-anchor="middle" fill="#8a94a8">risk rule ရဲ့ input</text></g>
+        <path d="M549.9 453.6L886.1 406.9" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M549.7 457.3L886.4 536.8" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M548.5 460.2L888.1 667.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: project-3
+      contentType: html
+      name: "Projections 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-queue" viewBox="0 0 48 48"><rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/></symbol><symbol id="i-wallet" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="29" rx="4"/><path d="M43 21H33a4.500 4.500 0 0 0 0 9h10"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-chart" viewBox="0 0 48 48"><path d="M7 7v34h34M15 35V25M23 35V15M31 35V21M39 35V11"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">PROJECTIONS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event log တစ်ခု၊ projection အများ</text>
+        <rect x="100" y="330" width="440" height="250" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="100" y="330" width="440" height="250" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-queue" x="288" y="377" width="64" height="64" style="color:#4fd1c5"/><text x="320" y="483.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">event log</text><text x="320" y="524.6" font-size="24" text-anchor="middle" fill="#8a94a8">append-only · source of truth</text>
+        <rect x="900" y="215" width="600" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-wallet" x="922" y="238" width="64" height="64" style="color:#f6c453"/><text x="1240" y="258.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">balance per account</text><text x="1240" y="302.7" font-size="24" text-anchor="middle" fill="#8a94a8">app မှာ user ကို ပြဖို့</text>
+        <path d="M548.9 450.4L887.5 276.4" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <rect x="900" y="350" width="600" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-doc" x="922" y="373" width="64" height="64" style="color:#6cb2f5"/><text x="1240" y="393.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">monthly statement</text><text x="1240" y="437.7" font-size="24" text-anchor="middle" fill="#8a94a8">user ကို ပို့ဖို့</text>
+        <rect x="900" y="485" width="600" height="110" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-chart" x="922" y="508" width="64" height="64" style="color:#68d391"/><text x="1240" y="530.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">fee revenue by month</text><text x="1240" y="571.6" font-size="24" text-anchor="middle" fill="#8a94a8">finance report</text>
+        <rect x="900" y="620" width="600" height="110" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="922" y="643" width="64" height="64" style="color:#b794f6"/><text x="1240" y="663.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">withdrawals per day</text><text x="1240" y="707.7" font-size="24" text-anchor="middle" fill="#8a94a8">risk rule ရဲ့ input</text>
+        <path d="M549.9 453.6L886.1 406.9" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M549.7 457.3L886.4 536.8" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M548.5 460.2L888.1 667.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><rect x="100" y="780" width="1075.9" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="100" y="780" width="1075.9" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="637.9" y="814.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">event တွေကို တိုက်ရိုက် query မရ → projection တစ်ခုစီ code · storage · rebuild</text></g>
+        </svg>
+    - id: when-1
+      contentType: html
+      name: "Trade-offs 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">TRADE-OFFS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event sourcing ကို ဘယ်မှာ သုံးမလဲ</text>
+        <g class="in"><rect x="100" y="215" width="680" height="150" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="100" y="215" width="680" height="150" rx="18" fill="#f6c453" opacity="0.13"/><use href="#i-ledger" x="122" y="258" width="64" height="64" style="color:#f6c453"/><text x="480" y="278.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger · money</text><text x="480" y="322.7" font-size="24" text-anchor="middle" fill="#8a94a8">balance က entry တွေကနေ — ES ပြီးသား</text></g>
+        <g class="in"><circle cx="774" cy="221" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="760.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/></g>
+        <g class="in"><rect x="820" y="215" width="680" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="842" y="258" width="64" height="64" style="color:#4fd1c5"/><text x="1200" y="278.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">profile · settings · KYC case</text><text x="1200" y="322.7" font-size="24" text-anchor="middle" fill="#8a94a8">ပုံမှန် model + reliable change log</text></g>
+        </svg>
+    - id: when-2
+      contentType: html
+      name: "Trade-offs 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">TRADE-OFFS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event sourcing ကို ဘယ်မှာ သုံးမလဲ</text>
+        <rect x="100" y="215" width="680" height="150" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="100" y="215" width="680" height="150" rx="18" fill="#f6c453" opacity="0.13"/><use href="#i-ledger" x="122" y="258" width="64" height="64" style="color:#f6c453"/><text x="480" y="278.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger · money</text><text x="480" y="322.7" font-size="24" text-anchor="middle" fill="#8a94a8">balance က entry တွေကနေ — ES ပြီးသား</text>
+        <circle cx="774" cy="221" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="760.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/>
+        <rect x="820" y="215" width="680" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="842" y="258" width="64" height="64" style="color:#4fd1c5"/><text x="1200" y="278.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">profile · settings · KYC case</text><text x="1200" y="322.7" font-size="24" text-anchor="middle" fill="#8a94a8">ပုံမှန် model + reliable change log</text>
+        <g class="in"><text x="100" y="430" font-size="26" fill="#8a94a8">ပေးရတဲ့ ဈေး</text></g>
+        <g class="in"><rect x="100" y="460" width="332.9" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="100" y="460" width="332.9" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="266.5" y="494.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">projection အများကြီး</text></g>
+        <g class="in"><rect x="460" y="460" width="271.6" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="460" y="460" width="271.6" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="595.8" y="494.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">schema evolution</text></g>
+        <g class="in"><rect x="760" y="460" width="218" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="760" y="460" width="218" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="869" y="494.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">projection lag</text></g>
+        <g class="in"><rect x="1030" y="460" width="195.9" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="1030" y="460" width="195.9" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="1128" y="494.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">rebuild time</text></g>
+        </svg>
+    - id: when-3
+      contentType: html
+      name: "Trade-offs 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">TRADE-OFFS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Event sourcing ကို ဘယ်မှာ သုံးမလဲ</text>
+        <rect x="100" y="215" width="680" height="150" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="100" y="215" width="680" height="150" rx="18" fill="#f6c453" opacity="0.13"/><use href="#i-ledger" x="122" y="258" width="64" height="64" style="color:#f6c453"/><text x="480" y="278.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger · money</text><text x="480" y="322.7" font-size="24" text-anchor="middle" fill="#8a94a8">balance က entry တွေကနေ — ES ပြီးသား</text>
+        <circle cx="774" cy="221" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="760.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/>
+        <rect x="820" y="215" width="680" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="842" y="258" width="64" height="64" style="color:#4fd1c5"/><text x="1200" y="278.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">profile · settings · KYC case</text><text x="1200" y="322.7" font-size="24" text-anchor="middle" fill="#8a94a8">ပုံမှန် model + reliable change log</text>
+        <text x="100" y="430" font-size="26" fill="#8a94a8">ပေးရတဲ့ ဈေး</text>
+        <rect x="100" y="460" width="332.9" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="100" y="460" width="332.9" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="266.5" y="494.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">projection အများကြီး</text>
+        <rect x="460" y="460" width="271.6" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="460" y="460" width="271.6" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="595.8" y="494.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">schema evolution</text>
+        <rect x="760" y="460" width="218" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="760" y="460" width="218" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="869" y="494.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">projection lag</text>
+        <rect x="1030" y="460" width="195.9" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="1030" y="460" width="195.9" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="1128" y="494.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">rebuild time</text>
+        <g class="in"><text x="100" y="585" font-size="26" fill="#8a94a8">ငွေမှာ သတိထားရမှာ</text></g>
+        <g class="in"><rect x="100" y="615" width="897" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="100" y="615" width="897" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="548.5" y="649.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">funds check → event stream ကို fold · lag ရှိတဲ့ projection မဟုတ်</text></g>
+        <g class="in"><rect x="100" y="700" width="936.3" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="100" y="700" width="936.3" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="568.1" y="734.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">snapshot = cache · seq + code version ပါ · apply ပြောင်းရင် rebuild</text></g>
+        <g class="in"><rect x="100" y="785" width="742" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="100" y="785" width="742" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="471" y="819.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">အမှားကို event အသစ်နဲ့ ပြင် · stored event ကို မပြင်</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9513
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "all events:         82.10 EUR after event 4\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "all events:         82.10 EUR after event 4\nsnapshot + events:  82.10 EUR after event 4\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "all events:         82.10 EUR after event 4\nsnapshot + events:  82.10 EUR after event 4\nv1 as stored:       error: event 1 has no currency\n"
+      run-4:
+        status: success
+        exitCode: 0
+        output: "all events:         82.10 EUR after event 4\nsnapshot + events:  82.10 EUR after event 4\nv1 as stored:       error: event 1 has no currency\nv1 upcast:          10.00 EUR after event 1\n"
+
+scenes:
+  - id: hook
+    chapter: State ဘေးက log
+    narration: >-
+      ငွေ system မှာ audit trail လိုတဲ့အခါ ပုံမှန် လုပ်ကြတာက balance column ကို update လုပ်ပြီး ဘေးက
+      log table ထဲမှာ row တစ်ကြောင်း ထည့်တာပါ။ [[mark:show-drift]] ဒီ design မှာ write နှစ်ခု
+      ရှိပါတယ်။ [[mark:pt-st]] state တစ်ခုရယ်၊ အဲဒီ state ဘယ်လို ဖြစ်လာလဲ ဆိုတဲ့ မှတ်တမ်း တစ်ခုရယ်ပါ။
+      [[mark:drift-2]] နှစ်ခုကြားမှာ crash ဖြစ်တာ၊ log ရေးဖို့ မေ့သွားတဲ့ code လမ်းကြောင်း တစ်ခု
+      ရှိတာနဲ့ balance က ပြောင်းသွားပြီး log ထဲမှာ မပါတော့ပါဘူး။ [[mark:pt-which]] အဲဒီအခါ နှစ်ခု
+      မကိုက်တော့ဘဲ ဘယ်ဟာ မှန်လဲ ဆိုတာ ဘယ်သူမှ မပြောနိုင်တော့ပါဘူး။ [[mark:drift-3]] event sourcing
+      က ဒီ ပြဿနာကို အခြေကနေ ဖြေရှင်းပါတယ်။ state ကို မသိမ်းဘဲ ဖြစ်ခဲ့တဲ့ event တွေကိုပဲ သိမ်းပြီး၊
+      state ကို အဲဒီ event တွေကနေ တွက်ယူပါတယ်။ [[mark:pt-der]] trail ကိုယ်တိုင်က source of truth
+      ဖြစ်သွားလို့ state နဲ့ ကွဲစရာ မရှိတော့ပါဘူး။ [[mark:drift-4]] ဒါ အသစ်အဆန်း မဟုတ်ပါဘူး။ double-entry
+      ledger က ငွေအတွက် ဒီ pattern ပဲ ဖြစ်ပါတယ်၊ balance ကို မသိမ်းဘဲ entry တွေကနေ တွက်ယူတာပါ။
+      [[mark:pt-lost]] No lost data ဆိုတဲ့ မူ၊ ဆိုလိုတာက ငွေနဲ့ ပတ်သက်ပြီး ဖြစ်ခဲ့သမျှ မပျောက်ရဘူး
+      ဆိုတာကို system တစ်ခုလုံးရဲ့ အဆင့်မှာ ထိန်းပေးတဲ့ နည်းပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: show-drift,
+          type: slide.show,
+          at: { mark: show-drift, offsetMs: -700 },
+          slideId: drift-1,
+        }
+      - { id: pt-st, type: slide.point, at: { mark: pt-st }, target: { x: 0.275, y: 0.437 } }
+      - { id: drift-2, type: slide.show, at: { mark: drift-2 }, slideId: drift-2 }
+      - {
+          id: pt-lg2,
+          type: slide.point,
+          at: { afterAction: drift-2 },
+          target: { x: 0.275, y: 0.609 },
+        }
+      - { id: pt-which, type: slide.point, at: { mark: pt-which }, target: { x: 0.229, y: 0.731 } }
+      - { id: drift-3, type: slide.show, at: { mark: drift-3 }, slideId: drift-3 }
+      - {
+          id: pt-ev,
+          type: slide.point,
+          at: { afterAction: drift-3 },
+          target: { x: 0.725, y: 0.581 },
+        }
+      - { id: pt-der, type: slide.point, at: { mark: pt-der }, target: { x: 0.725, y: 0.793 } }
+      - { id: drift-4, type: slide.show, at: { mark: drift-4 }, slideId: drift-4 }
+      - {
+          id: pt-esledger,
+          type: slide.point,
+          at: { afterAction: drift-4 },
+          target: { x: 0.411, y: 0.926 },
+        }
+      - { id: pt-lost, type: slide.point, at: { mark: pt-lost }, target: { x: 0.885, y: 0.12 } }
+
+  - id: fold
+    chapter: Event ကနေ state ကို တွက်
+    narration: >-
+      [[mark:close-drift]] code နဲ့ ကြည့်ရအောင်။ [[mark:sel-stream]] ဒီမှာ account တစ်ခုရဲ့ event stream
+      ရှိပါတယ်။ deposit တစ်ခု၊ fee တစ်ခု၊ withdrawal တစ်ခုနဲ့ နောက်ထပ် deposit တစ်ခုပါ၊ balance ကိုတော့
+      ဘယ်နေရာမှာမှ သိမ်းမထားပါဘူး။ [[mark:open-ev]] state ပြောင်းတဲ့ နေရာက တစ်ခုတည်း ရှိပါတယ်။
+      [[mark:sel-apply]] apply က event တစ်ခုကို ယူပြီး state အသစ် ပြန်ပေးပါတယ်။ currency မပါတဲ့ event၊
+      account နဲ့ currency မကိုက်တဲ့ event ကိုတော့ လက်မခံပါဘူး။ [[mark:sel-fold]] fold က event တွေကို
+      အစဉ်လိုက် apply လုပ်ပေးတာပါ။ [[mark:run-1]] run လိုက်ရအောင်။ [[mark:pt-all]] event လေးခုကနေ
+      ယူရို ၈၂ နဲ့ ဆင့် ၁၀ ရပါတယ်။ ဒီ balance ကို ဘယ်မှာမှ ရေးမထားပါဘူး၊ event တွေကနေ အခု
+      တွက်ထုတ်လိုက်တာပါ။ [[mark:dock-1]] ဒါကြောင့် event တွေ ရှိနေသမျှ balance ကို ဘယ်အချိန်မဆို
+      ပြန်တွက်နိုင်ပြီး၊ ဘယ် event အထိဆိုရင် ဘယ်လောက် ရှိခဲ့လဲ ဆိုတာလည်း မေးလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+    actions:
+      - { id: close-drift, type: slide.close, at: { mark: close-drift } }
+      - id: sel-stream
+        type: editor.select
+        at: { mark: sel-stream }
+        target:
+          {
+            file: main.go,
+            text: "\t{Version: 2, Seq: 1, Type: \"deposited\", Amount: 10000, Currency: \"EUR\"},\n\t{Version: 2, Seq: 2, Type: \"fee-charged\", Amount: 290, Currency: \"EUR\"},\n\t{Version: 2, Seq: 3, Type: \"withdrawn\", Amount: 4000, Currency: \"EUR\"},\n\t{Version: 2, Seq: 4, Type: \"deposited\", Amount: 2500, Currency: \"EUR\"},",
+            occurrence: 1,
+          }
+      - { id: open-ev, type: workspace.openFile, at: { mark: open-ev }, path: events.go }
+      - id: sel-apply
+        type: editor.select
+        at: { mark: sel-apply }
+        target:
+          { file: events.go, text: "func apply(s State, e Event) (State, error) {", occurrence: 1 }
+      - id: sel-fold
+        type: editor.select
+        at: { mark: sel-fold }
+        target:
+          {
+            file: events.go,
+            text: "func fold(s State, events []Event) (State, error) {",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "82.10 EUR after event 4",
+          timeoutMs: 8000,
+        }
+      - id: pt-all
+        type: console.point
+        at: { mark: pt-all }
+        target: { text: "all events", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: snapshot
+    chapter: Snapshot
+    narration: >-
+      [[mark:back-main]] event လေးခုဆိုရင် ပြဿနာ မရှိပေမဲ့၊ account တစ်ခုမှာ event သိန်းချီ ရှိလာရင်
+      balance မေးတိုင်း အစကနေ fold လုပ်ရတာ နှေးပါတယ်။ [[mark:type-snap]] ledger မှာ balance ကို cache လုပ်ခဲ့သလိုပဲ derived state ကိုလည်း
+      သိမ်းထားလို့ ရပါတယ်။ snapshot ဆိုတာ event တစ်ခုခု အထိ fold လုပ်ထားတဲ့ state ကို သိမ်းထားတာပါ။ ဒီမှာ တတိယ
+      event အထိ ရောက်ခဲ့တဲ့ state ကို သိမ်းထားပြီး၊ အဲဒီ နောက်က event တွေကိုပဲ fold လုပ်ပါတယ်။ snapshot
+      ထဲမှာ ဘယ် event အထိလဲ ဆိုတဲ့ sequence number ပါတာက အဓိကပါ။ [[mark:run-2]] run လိုက်ရအောင်။
+      [[mark:pt-snap]] event အားလုံးကနေ တွက်တာနဲ့ အတူတူပဲ ရပါတယ်။ snapshot က အမြန်နှုန်းအတွက်ပဲ ဖြစ်ပြီး
+      source of truth က event တွေ ဖြစ်နေဆဲပါ။ [[mark:dock-2]] snapshot ပျောက်သွားရင်၊ မှားနေရင် ဖျက်ပစ်ပြီး
+      event တွေကနေ ပြန်ဆောက်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+    actions:
+      - { id: back-main, type: workspace.openFile, at: { mark: back-main }, path: main.go }
+      - id: type-snap
+        type: editor.type
+        at: { mark: type-snap }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"all events:        \", show(fold(State{}, stream)))\n",
+            occurrence: 1,
+          }
+        text: "\n\tsnap := State{Seq: 3, Balance: 5710, Currency: \"EUR\"} // stored after event 3\n\tfmt.Println(\"snapshot + events: \", show(fold(snap, stream[snap.Seq:])))\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "snapshot + events:  82.10 EUR after event 4",
+          timeoutMs: 8000,
+        }
+      - id: pt-snap
+        type: console.point
+        at: { mark: pt-snap }
+        target: { text: "snapshot + events", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: project
+    chapter: Projection
+    narration: >-
+      [[mark:show-project]] event sourcing ရဲ့ ဈေးကြီးတဲ့ အပိုင်းက ဒီမှာပါ။ event log ကို မေးခွန်း တစ်ခုချင်းအတွက်
+      တိုက်ရိုက် query လုပ်ပြီး ထိထိရောက်ရောက် ဖြေလို့ မရပါဘူး။ [[mark:pt-p1]] app မှာ user ကို balance ပြဖို့ဆိုရင် balance projection ကို ဆောက်ရပါတယ်။
+      projection ဆိုတာ event တွေကို query လုပ်လို့ရတဲ့ ပုံစံ တစ်ခုအဖြစ် ပြောင်းထားတဲ့ derived view ပါ။
+      [[mark:project-2]] user ကို ပို့မယ့် လစဉ် statement၊ finance အတွက် လစဉ် fee revenue၊ risk rule
+      အတွက် တစ်ရက်ချင်း withdrawal အရေအတွက် စတဲ့ မေးခွန်း တစ်ခုစီအတွက် projection တစ်ခုစီ လိုပါတယ်။
+      [[mark:project-3]] projection တစ်ခုစီက code၊ storage နဲ့ event အားလုံးကနေ ပြန်ဆောက်ရတဲ့ အချိန်
+      ကုန်ပါတယ်၊ apply logic ပြောင်းတိုင်းလည်း ပြန်ဆောက်ရပါတယ်။ ဒါကြောင့် event sourcing က audit trail
+      အတွက် အရမ်းကောင်းတဲ့ ဖြေရှင်းချက် ဖြစ်ပေမဲ့ system ရှုပ်ထွေးမှုမှာ ဈေး အရမ်းကြီးပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+    actions:
+      - {
+          id: show-project,
+          type: slide.show,
+          at: { mark: show-project, offsetMs: -700 },
+          slideId: project-1,
+        }
+      - { id: pt-p1, type: slide.point, at: { mark: pt-p1 }, target: { x: 0.75, y: 0.37 } }
+      - { id: project-2, type: slide.show, at: { mark: project-2 }, slideId: project-2 }
+      - {
+          id: pt-p3,
+          type: slide.point,
+          at: { afterAction: project-2 },
+          target: { x: 0.75, y: 0.67 },
+        }
+      - { id: project-3, type: slide.show, at: { mark: project-3 }, slideId: project-3 }
+      - {
+          id: pt-price,
+          type: slide.point,
+          at: { afterAction: project-3 },
+          target: { x: 0.392, y: 0.931 },
+        }
+
+  - id: old-event
+    chapter: နှစ်တွေ အကြာက event
+    narration: >-
+      [[mark:close-project]] နောက်ထပ် ဈေး တစ်ခုက အချိန်ပါ။ [[mark:type-v1]] ငွေ system က event တွေကို
+      နှစ်ပေါင်းများစွာ သိမ်းထားရပါတယ်။ ဒီ JSON က multi-currency မထည့်ခင် ရေးခဲ့တဲ့ version တစ် event
+      ပါ၊ currency field မပါပါဘူး။ ဒီနေ့ code က အဲဒီ event ကို fold လုပ်ရင် ဘာဖြစ်မလဲ ခန့်မှန်းကြည့်ပါ။
+      [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-v1]] error နဲ့ ရပ်သွားပါတယ်။ ဒီနေ့ apply က currency ကို
+      မဖြစ်မနေ လိုအပ်ပေမဲ့ နှစ်တွေ အကြာက event မှာ အဲဒီ field မရှိခဲ့ပါဘူး။ [[mark:dock-3]] ဆိုလိုတာက ဒီ
+      account ရဲ့ balance ကို ဒီနေ့ code နဲ့ ပြန်တွက်လို့ မရတော့တာပါ၊ event sourcing မှာ ဒါက history
+      တစ်ခုလုံး ပျောက်တာနဲ့ အတူတူပါပဲ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+      - {
+          title: "Go standard library — package encoding/json",
+          url: "https://pkg.go.dev/encoding/json",
+        }
+    actions:
+      - { id: close-project, type: slide.close, at: { mark: close-project } }
+      - id: type-v1
+        type: editor.type
+        at: { mark: type-v1 }
+        target: { file: main.go, after: "show(fold(snap, stream[snap.Seq:])))\n", occurrence: 1 }
+        text: "\n\tv1 := decode(`{\"v\":1,\"seq\":1,\"type\":\"deposited\",\"amount\":1000}`) // opened years ago\n\tfmt.Println(\"v1 as stored:      \", show(fold(State{}, []Event{v1})))\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "event 1 has no currency",
+          timeoutMs: 8000,
+        }
+      - id: pt-v1
+        type: console.point
+        at: { mark: pt-v1 }
+        target: { text: "v1 as stored", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: evolve
+    chapter: Upcaster
+    narration: >-
+      [[mark:show-evolve]] stored event ကို ပြန်ပြင်တာ ဖြေရှင်းနည်း မဟုတ်ပါဘူး၊ event တွေက ဘယ်တော့မှ
+      မပြောင်းရတဲ့ မှတ်တမ်းတွေ ဖြစ်လို့ပါ။ [[mark:evolve-2]] ဒါကြောင့် ဖတ်တဲ့အချိန်မှာ ပြောင်းပေးတဲ့
+      upcaster ကို သုံးပါတယ်။ upcaster က version အဟောင်း event ကို ယူပြီး ဒီနေ့ code နားလည်တဲ့ version
+      အသစ် ပုံစံ ပြန်ပေးပါတယ်။ [[mark:pt-cur]] ဒီ ဥပမာမှာ version တစ်က currency မရှိခင်က ရေးခဲ့တာ ဖြစ်လို့
+      amount တိုင်းကို ယူရို လို့ ယူဆပြီး ဖြည့်ပေးပါတယ်။ အဲဒီ ယူဆချက်ကိုယ်တိုင်က business က အတည်ပြုရမယ့်
+      စည်းမျဉ်း တစ်ခုပါ။ [[mark:evolve-3]] stored data ကို migration နဲ့ ပြန်ရေးတာ မဟုတ်ဘဲ ဖတ်တိုင်း
+      ပြောင်းတာပါ။ version တစ်ကနေ ဒီနေ့ version အထိ event အားလုံးကို ဒီနေ့ code က ဖတ်နိုင်ရမှာ ဖြစ်လို့
+      version တိုင်းရဲ့ sample event တွေနဲ့ test လုပ်ထားရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+    actions:
+      - {
+          id: show-evolve,
+          type: slide.show,
+          at: { mark: show-evolve, offsetMs: -700 },
+          slideId: evolve-1,
+        }
+      - {
+          id: pt-err,
+          type: slide.point,
+          at: { afterAction: show-evolve },
+          target: { x: 0.227, y: 0.718 },
+        }
+      - { id: evolve-2, type: slide.show, at: { mark: evolve-2 }, slideId: evolve-2 }
+      - {
+          id: pt-up,
+          type: slide.point,
+          at: { afterAction: evolve-2 },
+          target: { x: 0.5, y: 0.542 },
+        }
+      - { id: pt-cur, type: slide.point, at: { mark: pt-cur }, target: { x: 0.686, y: 0.571 } }
+      - { id: evolve-3, type: slide.show, at: { mark: evolve-3 }, slideId: evolve-3 }
+      - {
+          id: pt-keep,
+          type: slide.point,
+          at: { afterAction: evolve-3 },
+          target: { x: 0.286, y: 0.776 },
+        }
+
+  - id: upcast
+    narration: >-
+      [[mark:close-evolve]] upcaster ကို ရေးကြည့်ရအောင်။ [[mark:type-up]] version တစ် ဖြစ်ရင် currency ကို
+      ယူရို ဖြည့်ပြီး version နှစ် လို့ ပြောင်းပါတယ်။ တခြား version ဆိုရင်တော့ မပြောင်းဘဲ ပြန်ပေးပါတယ်။
+      [[mark:type-use]] main ထဲမှာ အဲဒီ event အဟောင်းကို upcast လုပ်ပြီးမှ fold လုပ်ပါတယ်၊ stored JSON
+      ကိုတော့ မထိပါဘူး။ ကျန်တဲ့ code ကလည်း version နှစ် ပုံစံ တစ်မျိုးတည်းကိုပဲ သိဖို့ လိုပါတော့တယ်။
+      [[mark:run-4]] run လိုက်ရအောင်။ [[mark:pt-upcast]] ဒီတစ်ခါ ယူရို ဆယ် ဆိုတဲ့ balance ထွက်ပါတယ်။
+      event အဟောင်းကို ဒီနေ့ code က ဖတ်နိုင်ပြီး history က ပြည့်စုံနေဆဲပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+    actions:
+      - { id: close-evolve, type: slide.close, at: { mark: close-evolve } }
+      - id: type-up
+        type: editor.type
+        at: { mark: type-up }
+        target: { file: main.go, after: "show(fold(State{}, []Event{v1})))\n}\n", occurrence: 1 }
+        text: "\n// upcast reads a v1 event as v2. v1 predates multi-currency: every amount was EUR.\nfunc upcast(e Event) Event {\n\tif e.Version == 1 {\n\t\te.Version, e.Currency = 2, \"EUR\"\n\t}\n\treturn e\n}\n"
+        cadence: line-by-line
+      - id: type-use
+        type: editor.type
+        at: { mark: type-use }
+        target: { file: main.go, after: "show(fold(State{}, []Event{v1})))\n", occurrence: 1 }
+        text: "\tfmt.Println(\"v1 upcast:         \", show(fold(State{}, []Event{upcast(v1)})))\n"
+        cadence: line-by-line
+      - { id: run-4, type: runtime.run, at: { mark: run-4, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-4,
+          type: expect.output,
+          at: { afterAction: run-4 },
+          contains: "v1 upcast:          10.00 EUR after event 1",
+          timeoutMs: 8000,
+        }
+      - id: pt-upcast
+        type: console.point
+        at: { mark: pt-upcast }
+        target: { text: "v1 upcast", occurrence: 1 }
+      - {
+          id: expect-file-upcast,
+          type: expect.file,
+          at: { afterAction: run-4 },
+          path: main.go,
+          contains: 'e.Version, e.Currency = 2, "EUR"',
+        }
+
+  - id: when
+    chapter: ဘယ်မှာ သုံးမလဲ
+    narration: >-
+      [[mark:show-when]] ဒါဆို system တစ်ခုလုံးကို event sourcing နဲ့ ဆောက်ရမလား ဆိုတော့ မလိုပါဘူး။
+      [[mark:pt-ledger]] ငွေကို ledger က ဖုံးထားပြီးသားပါ။ [[mark:pt-around]] user profile၊ settings၊ KYC
+      case လို ဘေးက domain တွေအတွက်တော့ ပုံမှန် model နဲ့ ယုံကြည်ရတဲ့ change log တစ်ခုက များသောအားဖြင့်
+      လုံလောက်ပါတယ်။ [[mark:when-2]] ပေးရတဲ့ ဈေးကတော့ projection အများကြီး၊ schema evolution၊
+      projection တွေ နောက်ကျတာနဲ့ ပြန်ဆောက်ရတဲ့ အချိန် တို့ပါ။ [[mark:when-3]] ငွေမှာ သုံးရင် သတိထားရမှာ
+      သုံးခု ရှိပါတယ်။ [[mark:pt-t1]] ပထမ၊ projection တွေက event နောက်ကနေ asynchronous လိုက်တာ ဖြစ်လို့
+      withdrawal တစ်ခုအတွက် funds check ကို နောက်ကျနေတဲ့ projection ပေါ်မှာ မလုပ်ရပါဘူး။ account ရဲ့
+      stream ကို snapshot နဲ့ နောက်ဆုံး event တွေကနေ fold လုပ်ပြီး၊ event အသစ် append လုပ်တဲ့အခါ sequence
+      number ကို စစ်ပြီးမှ ရေးရပါမယ်။ [[mark:pt-t2]] ဒုတိယ၊ snapshot က cache ဖြစ်လို့ ဘယ် event အထိ၊
+      apply ရဲ့ ဘယ် version နဲ့ တွက်ထားလဲ ပါရပါမယ်။ apply ကို ပြင်ရင် snapshot အဟောင်းတွေ မမှန်တော့လို့
+      ပြန်ဆောက်ရပါတယ်။ [[mark:pt-t3]] တတိယ၊ event မှားသွားရင် stored event ကို မပြင်ဘဲ ပြင်ပေးတဲ့ event
+      အသစ် ထည့်ရပါတယ်၊ ဒီအကြောင်းကို reversal lesson မှာ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+    actions:
+      - {
+          id: show-when,
+          type: slide.show,
+          at: { mark: show-when, offsetMs: -700 },
+          slideId: when-1,
+        }
+      - {
+          id: pt-ledger,
+          type: slide.point,
+          at: { mark: pt-ledger },
+          target: { x: 0.275, y: 0.414 },
+        }
+      - {
+          id: pt-around,
+          type: slide.point,
+          at: { mark: pt-around },
+          target: { x: 0.725, y: 0.414 },
+        }
+      - { id: when-2, type: slide.show, at: { mark: when-2 }, slideId: when-2 }
+      - {
+          id: pt-cost,
+          type: slide.point,
+          at: { afterAction: when-2 },
+          target: { x: 0.16, y: 0.576 },
+        }
+      - { id: when-3, type: slide.show, at: { mark: when-3 }, slideId: when-3 }
+      - { id: pt-t1, type: slide.point, at: { mark: pt-t1 }, target: { x: 0.337, y: 0.748 } }
+      - { id: pt-t2, type: slide.point, at: { mark: pt-t2 }, target: { x: 0.349, y: 0.842 } }
+      - { id: pt-t3, type: slide.point, at: { mark: pt-t3 }, target: { x: 0.288, y: 0.937 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ event sourcing ကို ဘယ်အချိန် သုံးသင့်ပြီး ဘယ်အချိန်
+      မသုံးသင့်လဲ ဆိုတာ မေးတတ်ပါတယ်။ audit trail ရလို့ပါ လို့ပဲ ဖြေရင် ပေးရတဲ့ ဈေးကို မေ့ထားသလို
+      ဖြစ်ပါတယ်၊ အချက် သုံးချက်နဲ့ ဖြေပါ။ [[mark:iv-a]] ပထမ၊ event တွေကပဲ source of truth ဖြစ်ပြီး state က
+      fold လုပ်ထားတဲ့ ရလဒ်ပါ၊ ဒါကြောင့် trail နဲ့ state ကွဲစရာ မရှိပါဘူး၊ double-entry ledger ကိုယ်တိုင်က
+      ဒီ pattern ပါ။ [[mark:iv-b]] ဒုတိယ၊ ဈေးက projection၊ snapshot နဲ့ schema evolution ပါ၊ event ကို
+      တိုက်ရိုက် query မလုပ်နိုင်ပြီး version အဟောင်း event တွေကို ဒီနေ့ code က ဖတ်နိုင်ရပါမယ်။
+      [[mark:iv-c]] တတိယ၊ ငွေ invariant ကို stream ပေါ်မှာ စစ်ရပြီး နောက်ကျနေတဲ့ projection နဲ့ funds
+      check မလုပ်ရပါဘူး။ [[mark:iv-d]] ပြီးရင် ကိုယ် ဘာလုပ်မလဲ ဆက်ပြောပါ။ ledger ကို event sourcing နဲ့
+      ထားပြီး ဘေးက domain တွေကို ပုံမှန် model နဲ့ change log နဲ့ ထားမယ်၊ audit trail တကယ် လိုတဲ့ နေရာမှာပဲ
+      ဈေးပေးမယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] snapshot ကို ဒုတိယ event
+      အထိ ရွှေ့ကြည့်ပါ။ sequence ကို နှစ်၊ balance ကို ယူရို ၉၇ နဲ့ ဆင့် ၁၀ လို့ ပြောင်းပြီး run ပါ။ balance
+      က အရင်အတိုင်း ထွက်ပါလိမ့်မယ်၊ ဘယ် event မှာ snapshot ယူယူ ရလဒ် မပြောင်းပါဘူး။ [[mark:try-why]]
+      balance ကို တမင် မှားအောင် ပြောင်းရင်တော့ ရလဒ်ပါ မှားသွားပါမယ်၊ snapshot ကို event တွေနဲ့ ပြန်စစ်နိုင်ရတာ
+      ဒါကြောင့်ပါ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ event sourcing မှာ ဖြစ်ခဲ့တာကိုပဲ သိမ်းပြီး state ကို အမြဲ
+      တွက်ယူလို့ trail က အမှန်နဲ့ ကွဲစရာ မရှိပါဘူး၊ ဈေးကတော့ projection နဲ့ schema evolution ပါ။ နောက်
+      lesson မှာတော့ အဲဒီ event log ကို ဘယ်သူမှ မပြင်ခဲ့ဘူး ဆိုတာ ဘယ်လို သက်သေပြမလဲ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "State{Seq: 3, Balance: 5710", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
