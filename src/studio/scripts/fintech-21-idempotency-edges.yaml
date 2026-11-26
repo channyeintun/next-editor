@@ -1,0 +1,985 @@
+# Fintech Engineering, lesson 21: the hard edges of idempotency (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Idempotency" (errors, payload validation, time windows,
+# testing, out-of-order retries, both sides) (CC BY 4.0, Voytek Pitula).
+# Start state: idem.go is lesson 20's barrier moved into Keys.Do (claim first, replay the saved
+# row; it stores a fingerprint but never compares it; prune forgets keys a window old). api.go has
+# Pay (503 while the provider is down), Hold, Release and a 24-hour window. main.go: a payment
+# failed by the provider and retried after it recovers; a payment resent with the same key and a
+# new amount.
+# Edits, all insert-only:
+#   1. idem.go: compare the fingerprint            -> run-2: the 30.00 resend gets 422
+#   2. main.go: hold h-1, release it, retry it late, then again 25 hours later
+#                                                  -> run-3: replayed (75.00), then hold-2 (35.00)
+# Figures: errors (which errors replay), both (keys on both sides), order (a retry after release),
+# window (the pruned key; two layers), iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-21-idempotency-edges
+  title: "Fintech Engineering 21: Idempotency ရဲ့ ခက်တဲ့ အပိုင်း"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      api.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"time"
+        )
+
+        // Request is one call to the API. The client picks Key once per operation.
+        type Request struct {
+        	Client string
+        	Key    string
+        	From   string
+        	To     string
+        	Amount int64
+        }
+
+        // fingerprint is what the request asks for, everything but the key.
+        func (r Request) fingerprint() string { return fmt.Sprint(r.From, r.To, r.Amount) }
+
+        // Response is an HTTP status and a body.
+        type Response struct {
+        	Status int
+        	Body   string
+        }
+
+        func (r Response) String() string { return fmt.Sprintf("%d %s", r.Status, r.Body) }
+
+        // Server is the API: a ledger, holds on user 1042's funds, and one key table.
+        type Server struct {
+        	ledger       Ledger
+        	keys         Keys
+        	holds        map[string]int64
+        	held         int64
+        	now          time.Time
+        	txs, nHolds  int
+        	providerDown bool
+        }
+
+        func newServer() *Server {
+        	s := &Server{holds: map[string]int64{}, now: time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)}
+        	s.keys = Keys{rows: map[string]row{}, window: 24 * time.Hour}
+        	s.ledger.Post(Tx{ID: "deposit", Lines: []Line{
+        		{Account: "asset:bank", Debit: 10000}, {Account: "liability:user:1042", Credit: 10000}}})
+        	return s
+        }
+
+        // Pay moves money once per key. A provider that is down fails it with a 503.
+        func (s *Server) Pay(r Request) Response {
+        	return s.keys.Do(r.Client+"/pay/"+r.Key, r.fingerprint(), s.now, func() Response {
+        		if s.providerDown {
+        			return Response{503, "provider unavailable"}
+        		}
+        		s.txs++
+        		id := fmt.Sprintf("tx-%d", s.txs)
+        		s.ledger.Post(Tx{ID: id, Lines: []Line{
+        			{Account: r.From, Debit: r.Amount}, {Account: r.To, Credit: r.Amount}}})
+        		return Response{201, id}
+        	})
+        }
+
+        // Hold reserves funds once per key; Release gives a hold's funds back.
+        func (s *Server) Hold(r Request) Response {
+        	return s.keys.Do(r.Client+"/hold/"+r.Key, r.fingerprint(), s.now, func() Response {
+        		s.nHolds++
+        		id := fmt.Sprintf("hold-%d", s.nHolds)
+        		s.holds[id] = r.Amount
+        		s.held += r.Amount
+        		return Response{201, id}
+        	})
+        }
+
+        func (s *Server) Release(id string) { s.held -= s.holds[id]; delete(s.holds, id) }
+
+        // wait moves the clock on by some hours; the nightly key cleanup runs on the way.
+        func (s *Server) wait(hours int) {
+        	s.now = s.now.Add(time.Duration(hours) * time.Hour)
+        	s.keys.prune(s.now)
+        }
+
+        // balance and available are user 1042's money: all of it, and what is not on hold.
+        func (s *Server) balance() string { return cents(s.ledger.Balance("liability:user:1042")) }
+
+        func (s *Server) available() string {
+        	return cents(s.ledger.Balance("liability:user:1042") - s.held)
+        }
+      idem.go: |
+        package main
+
+        import "time"
+
+        // row is one entry of the key table: (client, operation, key) → what happened.
+        type row struct {
+        	fingerprint string    // what the first request with this key asked for
+        	resp        Response  // the saved response; 409 while the first call runs
+        	at          time.Time // when the key was first seen
+        }
+
+        // Keys is lesson 20's barrier, moved into one place that every operation uses.
+        type Keys struct {
+        	rows   map[string]row
+        	order  []string      // keys in the order they arrived, for the cleanup
+        	window time.Duration // the cleanup forgets keys at least this old
+        }
+
+        // Do runs work once per scoped key and answers every repeat from the saved row.
+        func (ks *Keys) Do(scope, fingerprint string, now time.Time, work func() Response) Response {
+        	if saved, ok := ks.rows[scope]; ok {
+        		return saved.resp
+        	}
+        	ks.rows[scope] = row{fingerprint, Response{409, "in progress"}, now}
+        	ks.order = append(ks.order, scope)
+        	resp := work()
+        	ks.rows[scope] = row{fingerprint, resp, now}
+        	return resp
+        }
+
+        // prune is the nightly cleanup: it forgets every key at least one window old.
+        func (ks *Keys) prune(now time.Time) {
+        	for _, k := range ks.order {
+        		if saved, ok := ks.rows[k]; ok && now.Sub(saved.at) >= ks.window {
+        			delete(ks.rows, k)
+        		}
+        	}
+        }
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // kindOf reads the account type from the name: "asset:bank" is an asset.
+        func kindOf(account string) string {
+        	kind, _, _ := strings.Cut(account, ":")
+        	return kind
+        }
+
+        // Balance derives an account's balance on the side where that kind of account grows:
+        // assets and expenses grow with debits; liabilities, equity and revenue grow with credits.
+        func (l *Ledger) Balance(account string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind := kindOf(account); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        	s := newServer()
+        	p := Request{Client: "app", Key: "k-1", Amount: 2500,
+        		From: "liability:user:1042", To: "liability:user:2077"}
+
+        	s.providerDown = true
+        	fmt.Println("k-1 provider down:", s.Pay(p))
+        	s.providerDown = false
+        	fmt.Println("k-1 retry:        ", s.Pay(p)) // the provider is back
+
+        	p.Key = "k-2"
+        	fmt.Println("k-2 for 25.00:    ", s.Pay(p))
+        	p.Amount = 3000 // the client edits the amount and resends with the same key
+        	fmt.Println("k-2 for 30.00:    ", s.Pay(p))
+        	fmt.Println("user 1042:", s.balance())
+
+        }
+  slides:
+    - id: both-1
+      contentType: html
+      name: "Both sides 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">BOTH SIDES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency က ခေါ်တဲ့ဘက်ရော ခံရတဲ့ဘက်ပါ လိုတယ်</text>
+        <g class="in"><rect x="100" y="330" width="340" height="140" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="122" y="368" width="64" height="64" style="color:#6cb2f5"/><text x="310" y="390.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="310" y="431.6" font-size="24" text-anchor="middle" fill="#8a94a8">app</text></g>
+        <g class="in"><rect x="630" y="330" width="340" height="140" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="630" y="330" width="340" height="140" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-server" x="652" y="368" width="64" height="64" style="color:#b794f6"/><text x="840" y="388.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Our API</text><text x="840" y="432.7" font-size="24" text-anchor="middle" fill="#8a94a8">ကိုယ့် system</text></g>
+        <path d="M450 400L616 400" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="533" y="383.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">key=k-1</text>
+        <g class="in"><rect x="630" y="540" width="356.2" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="630" y="540" width="356.2" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="808.1" y="574.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">လက်ခံတဲ့ key ကို dedupe</text></g>
+        </svg>
+    - id: both-2
+      contentType: html
+      name: "Both sides 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-globe" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M6 24h36M24 6c7 6 7 30 0 36M24 6c-7 6-7 30 0 36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">BOTH SIDES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency က ခေါ်တဲ့ဘက်ရော ခံရတဲ့ဘက်ပါ လိုတယ်</text>
+        <rect x="100" y="330" width="340" height="140" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="122" y="368" width="64" height="64" style="color:#6cb2f5"/><text x="310" y="390.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="310" y="431.6" font-size="24" text-anchor="middle" fill="#8a94a8">app</text>
+        <rect x="630" y="330" width="340" height="140" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="630" y="330" width="340" height="140" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-server" x="652" y="368" width="64" height="64" style="color:#b794f6"/><text x="840" y="388.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Our API</text><text x="840" y="432.7" font-size="24" text-anchor="middle" fill="#8a94a8">ကိုယ့် system</text>
+        <g class="in"><rect x="1160" y="330" width="340" height="140" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-globe" x="1182" y="368" width="64" height="64" style="color:#9aa5b8"/><text x="1370" y="390.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Provider</text><text x="1370" y="431.6" font-size="24" text-anchor="middle" fill="#8a94a8">card network</text></g>
+        <path d="M450 400L616 400" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="533" y="383.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">key=k-1</text>
+        <rect x="630" y="540" width="356.2" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="630" y="540" width="356.2" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="808.1" y="574.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">လက်ခံတဲ့ key ကို dedupe</text>
+        <path d="M980 400L1146 400" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1063" y="383.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">key=pay-k-1</text>
+        <g class="in"><rect x="1160" y="540" width="331.5" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="1160" y="540" width="331.5" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1325.8" y="574.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">ပို့တဲ့ key ကို သူ dedupe</text></g>
+        <g class="in"><rect x="100" y="720" width="1343.3" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="100" y="720" width="1343.3" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="771.6" y="754.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">timeout ပြီး re-process လုပ်ရင် key တူတူ ရောက် — provider က dedupe လုပ်ရင် ဒုတိယ charge မဖြစ်</text></g>
+        </svg>
+    - id: errors-1
+      contentType: html
+      name: "Errors 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">ERRORS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Retry က error ကို ပြန်ရမလား၊ အလုပ် ပြန်လုပ်မလား</text>
+        <g class="in"><rect x="100" y="210" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာ ကျခဲ့လဲ</text><text x="642" y="245" font-size="22" fill="#8a94a8" font-weight="700">example</text><text x="862" y="245" font-size="22" fill="#8a94a8" font-weight="700">key တူတဲ့ retry</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="318" font-size="28" fill="#e9edf5">အလုပ် မစခင် ငြင်းတာ</text><text x="642" y="318" font-size="28" fill="#9aa5b8" class="mono">amount ≤ 0</text><text x="862" y="318" font-size="28" fill="#68d391">replay ဖြစ်ဖြစ် re-run ဖြစ်ဖြစ် အဖြေ တူတယ်</text></g></g>
+        <g class="in"><rect x="100" y="720" width="1278.2" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="100" y="720" width="1278.2" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="739.1" y="754.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">မူလ ရွေးချယ်မှု — error ကို ရလဒ်လို့ သဘောထားပြီး replay၊ client က key အသစ်နဲ့ ပြန်ကြိုးစား</text></g>
+        </svg>
+    - id: errors-2
+      contentType: html
+      name: "Errors 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">ERRORS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Retry က error ကို ပြန်ရမလား၊ အလုပ် ပြန်လုပ်မလား</text>
+        <rect x="100" y="210" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာ ကျခဲ့လဲ</text><text x="642" y="245" font-size="22" fill="#8a94a8" font-weight="700">example</text><text x="862" y="245" font-size="22" fill="#8a94a8" font-weight="700">key တူတဲ့ retry</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="318" font-size="28" fill="#e9edf5">အလုပ် မစခင် ငြင်းတာ</text><text x="642" y="318" font-size="28" fill="#9aa5b8" class="mono">amount ≤ 0</text><text x="862" y="318" font-size="28" fill="#68d391">replay ဖြစ်ဖြစ် re-run ဖြစ်ဖြစ် အဖြေ တူတယ်</text></g><g class="in"><path d="M116 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="410" font-size="28" fill="#e9edf5">အလုပ် စပြီးမှ ကျတာ</text><text x="642" y="410" font-size="28" fill="#9aa5b8" class="mono">500</text><text x="862" y="410" font-size="28" fill="#4fd1c5">သိမ်းထားတဲ့ error ကို replay</text></g>
+        <rect x="100" y="720" width="1278.2" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="100" y="720" width="1278.2" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="739.1" y="754.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">မူလ ရွေးချယ်မှု — error ကို ရလဒ်လို့ သဘောထားပြီး replay၊ client က key အသစ်နဲ့ ပြန်ကြိုးစား</text>
+        <g class="in"><rect x="100" y="800" width="1234.7" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="100" y="800" width="1234.7" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="717.3" y="834.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">Stripe (API v1): 500 ကိုလည်း သိမ်းပြီး replay၊ validation မအောင်တဲ့ request ကို မသိမ်း</text></g>
+        </svg>
+    - id: errors-3
+      contentType: html
+      name: "Errors 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">ERRORS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Retry က error ကို ပြန်ရမလား၊ အလုပ် ပြန်လုပ်မလား</text>
+        <rect x="100" y="210" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာ ကျခဲ့လဲ</text><text x="642" y="245" font-size="22" fill="#8a94a8" font-weight="700">example</text><text x="862" y="245" font-size="22" fill="#8a94a8" font-weight="700">key တူတဲ့ retry</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="318" font-size="28" fill="#e9edf5">အလုပ် မစခင် ငြင်းတာ</text><text x="642" y="318" font-size="28" fill="#9aa5b8" class="mono">amount ≤ 0</text><text x="862" y="318" font-size="28" fill="#68d391">replay ဖြစ်ဖြစ် re-run ဖြစ်ဖြစ် အဖြေ တူတယ်</text></g><g><path d="M116 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="410" font-size="28" fill="#e9edf5">အလုပ် စပြီးမှ ကျတာ</text><text x="642" y="410" font-size="28" fill="#9aa5b8" class="mono">500</text><text x="862" y="410" font-size="28" fill="#4fd1c5">သိမ်းထားတဲ့ error ကို replay</text></g><g class="in"><path d="M116 446H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="502" font-size="28" fill="#e9edf5">provider က မလုပ်ဘူး လို့ ပြန်ပြော</text><text x="642" y="502" font-size="28" fill="#9aa5b8" class="mono">503</text><text x="862" y="502" font-size="28" fill="#f6ad55">re-process လုပ်လို့ ရနိုင်တယ်</text></g>
+        <rect x="100" y="720" width="1278.2" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="100" y="720" width="1278.2" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="739.1" y="754.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">မူလ ရွေးချယ်မှု — error ကို ရလဒ်လို့ သဘောထားပြီး replay၊ client က key အသစ်နဲ့ ပြန်ကြိုးစား</text>
+        <rect x="100" y="800" width="1234.7" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="100" y="800" width="1234.7" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="717.3" y="834.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">Stripe (API v1): 500 ကိုလည်း သိမ်းပြီး replay၊ validation မအောင်တဲ့ request ကို မသိမ်း</text>
+        </svg>
+    - id: errors-4
+      contentType: html
+      name: "Errors 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">ERRORS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Retry က error ကို ပြန်ရမလား၊ အလုပ် ပြန်လုပ်မလား</text>
+        <rect x="100" y="210" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာ ကျခဲ့လဲ</text><text x="642" y="245" font-size="22" fill="#8a94a8" font-weight="700">example</text><text x="862" y="245" font-size="22" fill="#8a94a8" font-weight="700">key တူတဲ့ retry</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="318" font-size="28" fill="#e9edf5">အလုပ် မစခင် ငြင်းတာ</text><text x="642" y="318" font-size="28" fill="#9aa5b8" class="mono">amount ≤ 0</text><text x="862" y="318" font-size="28" fill="#68d391">replay ဖြစ်ဖြစ် re-run ဖြစ်ဖြစ် အဖြေ တူတယ်</text></g><g><path d="M116 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="410" font-size="28" fill="#e9edf5">အလုပ် စပြီးမှ ကျတာ</text><text x="642" y="410" font-size="28" fill="#9aa5b8" class="mono">500</text><text x="862" y="410" font-size="28" fill="#4fd1c5">သိမ်းထားတဲ့ error ကို replay</text></g><g><path d="M116 446H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="502" font-size="28" fill="#e9edf5">provider က မလုပ်ဘူး လို့ ပြန်ပြော</text><text x="642" y="502" font-size="28" fill="#9aa5b8" class="mono">503</text><text x="862" y="502" font-size="28" fill="#f6ad55">re-process လုပ်လို့ ရနိုင်တယ်</text></g><g class="in"><rect x="106" y="543" width="1388" height="82" rx="10" fill="#fc8181" opacity="0.14"/><path d="M116 538H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="594" font-size="28" fill="#e9edf5">provider ဆီက အဖြေ မလာ</text><text x="642" y="594" font-size="28" fill="#9aa5b8" class="mono">timeout</text><text x="862" y="594" font-size="28" fill="#fc8181">provider ကို key တူတူ ပို့မှ re-process</text></g>
+        <rect x="100" y="720" width="1278.2" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="100" y="720" width="1278.2" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="739.1" y="754.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">မူလ ရွေးချယ်မှု — error ကို ရလဒ်လို့ သဘောထားပြီး replay၊ client က key အသစ်နဲ့ ပြန်ကြိုးစား</text>
+        <rect x="100" y="800" width="1234.7" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="100" y="800" width="1234.7" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="717.3" y="834.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">Stripe (API v1): 500 ကိုလည်း သိမ်းပြီး replay၊ validation မအောင်တဲ့ request ကို မသိမ်း</text>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency key ကို ဘယ်လောက်ကြာ သိမ်းမလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency key ကို ဘယ်လောက်ကြာ သိမ်းမလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="32" fill="#e9edf5" font-weight="600">အမြဲ သိမ်းရင် မှန်ပေမဲ့ data က မဆုံးဘူး၊ window နဲ့ဆို late retry က အသစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">Stripe: အနည်းဆုံး 24 နာရီ ကြာမှ ဖျက်နိုင်၊ ဖျက်ပြီးရင် key တူလည်း request အသစ်</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency key ကို ဘယ်လောက်ကြာ သိမ်းမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="32" fill="#e9edf5" font-weight="600">အမြဲ သိမ်းရင် မှန်ပေမဲ့ data က မဆုံးဘူး၊ window နဲ့ဆို late retry က အသစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">Stripe: အနည်းဆုံး 24 နာရီ ကြာမှ ဖျက်နိုင်၊ ဖျက်ပြီးရင် key တူလည်း request အသစ်</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">window ကို client retry လုပ်နိုင်တဲ့ အရှည်ဆုံး ကာလထက် ရှည်အောင်</text><text x="188" y="443" font-size="26" fill="#8a94a8">backoff၊ queue၊ offline app၊ လူက ပြန် run တာ — အဲဒီ ကာလ ပြီးရင် retry ရပ်</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency key ကို ဘယ်လောက်ကြာ သိမ်းမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="32" fill="#e9edf5" font-weight="600">အမြဲ သိမ်းရင် မှန်ပေမဲ့ data က မဆုံးဘူး၊ window နဲ့ဆို late retry က အသစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">Stripe: အနည်းဆုံး 24 နာရီ ကြာမှ ဖျက်နိုင်၊ ဖျက်ပြီးရင် key တူလည်း request အသစ်</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">window ကို client retry လုပ်နိုင်တဲ့ အရှည်ဆုံး ကာလထက် ရှည်အောင်</text><text x="188" y="443" font-size="26" fill="#8a94a8">backoff၊ queue၊ offline app၊ လူက ပြန် run တာ — အဲဒီ ကာလ ပြီးရင် retry ရပ်</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#68d391"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">ငွေရွေ့တဲ့ row ပေါ်မှာ key ကို unique constraint နဲ့ အမြဲ ထား</text><text x="188" y="575" font-size="26" fill="#8a94a8">row က ဘယ်လိုမှ အမြဲ ရှိရမယ် — column နဲ့ index ပဲ ပိုတယ်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Idempotency key ကို ဘယ်လောက်ကြာ သိမ်းမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="32" fill="#e9edf5" font-weight="600">အမြဲ သိမ်းရင် မှန်ပေမဲ့ data က မဆုံးဘူး၊ window နဲ့ဆို late retry က အသစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">Stripe: အနည်းဆုံး 24 နာရီ ကြာမှ ဖျက်နိုင်၊ ဖျက်ပြီးရင် key တူလည်း request အသစ်</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">window ကို client retry လုပ်နိုင်တဲ့ အရှည်ဆုံး ကာလထက် ရှည်အောင်</text><text x="188" y="443" font-size="26" fill="#8a94a8">backoff၊ queue၊ offline app၊ လူက ပြန် run တာ — အဲဒီ ကာလ ပြီးရင် retry ရပ်</text></g><g><circle cx="138" cy="513" r="25" fill="#68d391"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">ငွေရွေ့တဲ့ row ပေါ်မှာ key ကို unique constraint နဲ့ အမြဲ ထား</text><text x="188" y="575" font-size="26" fill="#8a94a8">row က ဘယ်လိုမှ အမြဲ ရှိရမယ် — column နဲ့ index ပဲ ပိုတယ်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">response cache ကို window နဲ့၊ barrier ကို အမြဲ</text><text x="188" y="707" font-size="26" fill="#8a94a8">error replay နဲ့ fingerprint ကို ဘယ်လို ဆုံးဖြတ်ထားလဲ ဆက်ပြော</text></g>
+        </svg>
+    - id: order-1
+      contentType: html
+      name: "Out-of-order retry 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">OUT-OF-ORDER RETRY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">State ပြောင်းပြီးမှ ရောက်လာတဲ့ retry</text>
+        <g class="in"><path d="M245 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-gear" x="140" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="271" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Flow</text><path d="M800 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="695" y="223" width="40" height="40" style="color:#b794f6"/><text x="826" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">API</text><path d="M1355 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-lock" x="1250" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="1381" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Holds</text><g><path d="M253 356.2H788" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="522.5" y="343.2" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">hold  key=h-1</text></g><g><path d="M808 431H1343" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="1077.5" y="418" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">hold-1  40.00</text></g></g>
+        </svg>
+    - id: order-2
+      contentType: html
+      name: "Out-of-order retry 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">OUT-OF-ORDER RETRY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">State ပြောင်းပြီးမှ ရောက်လာတဲ့ retry</text>
+        <path d="M245 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-gear" x="140" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="271" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Flow</text><path d="M800 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="695" y="223" width="40" height="40" style="color:#b794f6"/><text x="826" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">API</text><path d="M1355 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-lock" x="1250" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="1381" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Holds</text><g><path d="M253 356.2H788" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="522.5" y="343.2" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">hold  key=h-1</text></g><g><path d="M808 431H1343" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="1077.5" y="418" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">hold-1  40.00</text></g><g class="in"><path d="M253 505.9H788" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="522.5" y="492.9" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">release hold-1</text></g><g class="in"><path d="M808 580.7H1343" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gray)"/><text x="1077.5" y="567.7" font-size="25" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">hold-1 removed</text></g>
+        </svg>
+    - id: order-3
+      contentType: html
+      name: "Out-of-order retry 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">OUT-OF-ORDER RETRY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">State ပြောင်းပြီးမှ ရောက်လာတဲ့ retry</text>
+        <path d="M245 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-gear" x="140" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="271" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Flow</text><path d="M800 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="695" y="223" width="40" height="40" style="color:#b794f6"/><text x="826" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">API</text><path d="M1355 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-lock" x="1250" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="1381" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Holds</text><g><path d="M253 356.2H788" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="522.5" y="343.2" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">hold  key=h-1</text></g><g><path d="M808 431H1343" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="1077.5" y="418" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">hold-1  40.00</text></g><g><path d="M253 505.9H788" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="522.5" y="492.9" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">release hold-1</text></g><g><path d="M808 580.7H1343" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gray)"/><text x="1077.5" y="567.7" font-size="25" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">hold-1 removed</text></g><g class="in"><path d="M253 655.6H788" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="522.5" y="642.6" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">hold  key=h-1  (late)</text></g><g class="in"><rect x="610.1" y="704.5" width="379.8" height="48" rx="12" fill="#0b0e14" stroke="#68d391" stroke-width="2"/><text x="800" y="737.5" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600">key ရှိပြီ → hold အသစ် မလုပ်</text></g><g class="in"><path d="M792 805.3H257" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="522.5" y="792.3" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600" class="mono">201 hold-1</text></g>
+        </svg>
+    - id: window-1
+      contentType: html
+      name: "Time window 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">TIME WINDOW</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Key ကို ဖျက်ပြီးရင် late retry က အသစ် ဖြစ်သွားတယ်</text>
+        <g class="in"><path d="M120 400H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M201.6 382H908.8" stroke="#68d391" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="555.2" y="366" font-size="24" text-anchor="middle" fill="#68d391" font-weight="600">window: replay</text></g><g><circle cx="201.6" cy="400" r="10" fill="#4fd1c5"/><path d="M201.6 400V446" stroke="#4fd1c5" stroke-width="2.5"/><text x="201.6" y="482" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700">h-1 first seen</text><text x="201.6" y="514" font-size="23" text-anchor="middle" fill="#8a94a8">hold-1</text></g><g><circle cx="446.4" cy="400" r="10" fill="#9aa5b8"/><path d="M446.4 400V354" stroke="#9aa5b8" stroke-width="2.5"/><text x="446.4" y="340" font-size="28" text-anchor="middle" fill="#9aa5b8" font-weight="700">released</text></g></g>
+        </svg>
+    - id: window-2
+      contentType: html
+      name: "Time window 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">TIME WINDOW</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Key ကို ဖျက်ပြီးရင် late retry က အသစ် ဖြစ်သွားတယ်</text>
+        <path d="M120 400H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M201.6 382H908.8" stroke="#68d391" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="555.2" y="366" font-size="24" text-anchor="middle" fill="#68d391" font-weight="600">window: replay</text></g><g><circle cx="201.6" cy="400" r="10" fill="#4fd1c5"/><path d="M201.6 400V446" stroke="#4fd1c5" stroke-width="2.5"/><text x="201.6" y="482" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700">h-1 first seen</text><text x="201.6" y="514" font-size="23" text-anchor="middle" fill="#8a94a8">hold-1</text></g><g><circle cx="446.4" cy="400" r="10" fill="#9aa5b8"/><path d="M446.4 400V354" stroke="#9aa5b8" stroke-width="2.5"/><text x="446.4" y="340" font-size="28" text-anchor="middle" fill="#9aa5b8" font-weight="700">released</text></g><g class="in"><circle cx="908.8" cy="400" r="10" fill="#f6ad55"/><path d="M908.8 400V446" stroke="#f6ad55" stroke-width="2.5"/><text x="908.8" y="482" font-size="28" text-anchor="middle" fill="#f6ad55" font-weight="700">key pruned</text><text x="908.8" y="514" font-size="23" text-anchor="middle" fill="#8a94a8">≥ 24h</text></g>
+        <g class="in"><rect x="120" y="230" width="1226.1" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="120" y="230" width="1226.1" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="733" y="264.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">Stripe: key ကို အနည်းဆုံး 24 နာရီ ကြာမှ ဖျက်နိုင်၊ ဖျက်ပြီးရင် key တူလည်း request အသစ်</text></g>
+        </svg>
+    - id: window-3
+      contentType: html
+      name: "Time window 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">TIME WINDOW</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Key ကို ဖျက်ပြီးရင် late retry က အသစ် ဖြစ်သွားတယ်</text>
+        <path d="M120 400H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M201.6 382H908.8" stroke="#68d391" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="555.2" y="366" font-size="24" text-anchor="middle" fill="#68d391" font-weight="600">window: replay</text></g><g class="in"><path d="M908.8 382H1289.6" stroke="#fc8181" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="1099.2" y="366" font-size="24" text-anchor="middle" fill="#fc8181" font-weight="600">key မရှိ → new</text></g><g><circle cx="201.6" cy="400" r="10" fill="#4fd1c5"/><path d="M201.6 400V446" stroke="#4fd1c5" stroke-width="2.5"/><text x="201.6" y="482" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700">h-1 first seen</text><text x="201.6" y="514" font-size="23" text-anchor="middle" fill="#8a94a8">hold-1</text></g><g><circle cx="446.4" cy="400" r="10" fill="#9aa5b8"/><path d="M446.4 400V354" stroke="#9aa5b8" stroke-width="2.5"/><text x="446.4" y="340" font-size="28" text-anchor="middle" fill="#9aa5b8" font-weight="700">released</text></g><g><circle cx="908.8" cy="400" r="10" fill="#f6ad55"/><path d="M908.8 400V446" stroke="#f6ad55" stroke-width="2.5"/><text x="908.8" y="482" font-size="28" text-anchor="middle" fill="#f6ad55" font-weight="700">key pruned</text><text x="908.8" y="514" font-size="23" text-anchor="middle" fill="#8a94a8">≥ 24h</text></g><g class="in"><circle cx="1289.6" cy="400" r="10" fill="#fc8181"/><path d="M1289.6 400V446" stroke="#fc8181" stroke-width="2.5"/><text x="1289.6" y="482" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700">late retry</text><text x="1289.6" y="514" font-size="23" text-anchor="middle" fill="#8a94a8">25h → hold-2</text></g>
+        <rect x="120" y="230" width="1226.1" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="120" y="230" width="1226.1" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="733" y="264.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">Stripe: key ကို အနည်းဆုံး 24 နာရီ ကြာမှ ဖျက်နိုင်၊ ဖျက်ပြီးရင် key တူလည်း request အသစ်</text>
+        </svg>
+    - id: window-4
+      contentType: html
+      name: "Time window 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">TIME WINDOW</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Key ကို ဖျက်ပြီးရင် late retry က အသစ် ဖြစ်သွားတယ်</text>
+        <path d="M120 400H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M201.6 382H908.8" stroke="#68d391" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="555.2" y="366" font-size="24" text-anchor="middle" fill="#68d391" font-weight="600">window: replay</text></g><g><path d="M908.8 382H1289.6" stroke="#fc8181" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="1099.2" y="366" font-size="24" text-anchor="middle" fill="#fc8181" font-weight="600">key မရှိ → new</text></g><g><circle cx="201.6" cy="400" r="10" fill="#4fd1c5"/><path d="M201.6 400V446" stroke="#4fd1c5" stroke-width="2.5"/><text x="201.6" y="482" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700">h-1 first seen</text><text x="201.6" y="514" font-size="23" text-anchor="middle" fill="#8a94a8">hold-1</text></g><g><circle cx="446.4" cy="400" r="10" fill="#9aa5b8"/><path d="M446.4 400V354" stroke="#9aa5b8" stroke-width="2.5"/><text x="446.4" y="340" font-size="28" text-anchor="middle" fill="#9aa5b8" font-weight="700">released</text></g><g><circle cx="908.8" cy="400" r="10" fill="#f6ad55"/><path d="M908.8 400V446" stroke="#f6ad55" stroke-width="2.5"/><text x="908.8" y="482" font-size="28" text-anchor="middle" fill="#f6ad55" font-weight="700">key pruned</text><text x="908.8" y="514" font-size="23" text-anchor="middle" fill="#8a94a8">≥ 24h</text></g><g><circle cx="1289.6" cy="400" r="10" fill="#fc8181"/><path d="M1289.6 400V446" stroke="#fc8181" stroke-width="2.5"/><text x="1289.6" y="482" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700">late retry</text><text x="1289.6" y="514" font-size="23" text-anchor="middle" fill="#8a94a8">25h → hold-2</text></g>
+        <rect x="120" y="230" width="1226.1" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="120" y="230" width="1226.1" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="733" y="264.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">Stripe: key ကို အနည်းဆုံး 24 နာရီ ကြာမှ ဖျက်နိုင်၊ ဖျက်ပြီးရင် key တူလည်း request အသစ်</text>
+        <g class="in"><rect x="120" y="620" width="660" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-key" x="142" y="663" width="64" height="64" style="color:#4fd1c5"/><text x="490" y="683.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key table</text><text x="490" y="727.7" font-size="24" text-anchor="middle" fill="#8a94a8">response ကို replay — window နဲ့</text></g>
+        <g class="in"><rect x="820" y="620" width="660" height="150" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-ledger" x="842" y="663" width="64" height="64" style="color:#68d391"/><text x="1190" y="683.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">UNIQUE (client, op, key)</text><text x="1190" y="727.7" font-size="24" text-anchor="middle" fill="#8a94a8">hold / ledger row ပေါ်မှာ — အမြဲတမ်း</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9521
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "k-1 provider down: 503 provider unavailable\nk-1 retry:         503 provider unavailable\nk-2 for 25.00:     201 tx-1\nk-2 for 30.00:     201 tx-1\nuser 1042: 75.00\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "k-1 provider down: 503 provider unavailable\nk-1 retry:         503 provider unavailable\nk-2 for 25.00:     201 tx-1\nk-2 for 30.00:     422 key reused for a different request\nuser 1042: 75.00\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "k-1 provider down: 503 provider unavailable\nk-1 retry:         503 provider unavailable\nk-2 for 25.00:     201 tx-1\nk-2 for 30.00:     422 key reused for a different request\nuser 1042: 75.00\nh-1 late retry: 201 hold-1   available: 75.00\nh-1 after 25h:  201 hold-2   available: 35.00\n"
+
+scenes:
+  - id: hook
+    chapter: Key store ရဲ့ ခက်တဲ့ မေးခွန်းတွေ
+    narration: >-
+      Payment retry တိုင်းကို ပထမ response နဲ့ ပြန်ဖြေတယ် ဆိုတဲ့ idempotency key store ရဲ့ စည်းမျဉ်းက
+      ရိုးရှင်းပါတယ်။ ပြဿနာက ပထမ response က error ဖြစ်နေရင်၊ retry မှာ ပမာဏ ပြောင်းလာရင်၊ ဒါမှမဟုတ်
+      ရက်တွေ ကြာမှ ရောက်လာရင် ဘာလုပ်မလဲ ဆိုတာပါ။ [[mark:sel-claim]] ဒါက ပြီးခဲ့တဲ့ lesson ရဲ့ barrier ပါ၊
+      operation တိုင်း သုံးလို့ရအောင် function တစ်ခုထဲ ရွှေ့ထားတာပါ။ key ကို အလုပ် မစခင် claim လုပ်ပြီး၊
+      ရှိပြီးသား key ဆိုရင် သိမ်းထားတဲ့ response ကို ပြန်ပေးပါတယ်။ [[mark:open-main]] main ထဲမှာ payment
+      နှစ်ခု ရှိပါတယ်။ [[mark:sel-down]] ပထမ တစ်ခုက provider ကျနေတုန်း ရောက်ပြီး၊ provider ပြန်ကောင်းမှ key
+      အတူတူနဲ့ retry လုပ်ပါတယ်။ [[mark:sel-edit]] ဒုတိယ တစ်ခုက ယူရို ၂၅ ပေးပြီးမှ client က ပမာဏကို ၃၀
+      လို့ ပြင်ပြီး key အဟောင်းနဲ့ ပြန်ပို့ပါတယ်။ [[mark:predict]] retry နှစ်ခုက ဘာပြန်ရမလဲ၊ run မလုပ်ခင်
+      ခန့်မှန်းကြည့်ပါ။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: open-idem, type: workspace.openFile, at: { scene: start }, path: idem.go }
+      - id: sel-claim
+        type: editor.select
+        at: { mark: sel-claim }
+        target:
+          {
+            file: idem.go,
+            text: 'ks.rows[scope] = row{fingerprint, Response{409, "in progress"}, now}',
+            occurrence: 1,
+          }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: main.go }
+      - id: sel-down
+        type: editor.select
+        at: { mark: sel-down }
+        target: { file: main.go, text: "s.providerDown = true", occurrence: 1 }
+      - id: sel-edit
+        type: editor.select
+        at: { mark: sel-edit }
+        target: { file: main.go, text: "p.Amount = 3000", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "k-2 for 30.00:     201 tx-1",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-503]] provider ပြန်ကောင်းနေပြီ ဖြစ်ပေမဲ့ retry က ပထမ error ကိုပဲ ပြန်ရပါတယ်။ store က error
+      ကိုလည်း ရလဒ်လို့ သဘောထားပြီး replay လုပ်လို့ပါ။ [[mark:pt-30]] ပမာဏ ပြင်ထားတဲ့ request ကတော့ ယူရို
+      ၂၅ ရဲ့ response ကို ပြန်ရပါတယ်။ [[mark:pt-bal]] ငွေကလည်း ၂၅ ပဲ ရွေ့ပါတယ်၊ client ကတော့ ၃၀
+      ပေးပြီးပြီလို့ ထင်နေမှာပါ။ [[mark:dock-1]] နှစ်ခုလုံးက store ရဲ့ မူလ အပြုအမူပါ။ ပထမ တစ်ခုက ရွေးချယ်မှု
+      တစ်ခု ဖြစ်ပေမဲ့၊ ဒုတိယ တစ်ခုကတော့ client ကို မှားတဲ့ အဖြေ ပေးနေတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - id: pt-503
+        type: console.point
+        at: { mark: pt-503 }
+        target: { text: "k-1 retry:", occurrence: 1 }
+      - id: pt-30
+        type: console.point
+        at: { mark: pt-30 }
+        target: { text: "k-2 for 30.00", occurrence: 1 }
+      - id: pt-bal
+        type: console.point
+        at: { mark: pt-bal }
+        target: { text: "user 1042: 75.00", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: errors
+    chapter: Error ကို replay လုပ်မလား
+    narration: >-
+      [[mark:show-errors]] error ကို ရလဒ်လို့ သဘောထားပြီး replay လုပ်တာက ရိုးရှင်းပြီး client ဘက်က ဘာရမလဲ
+      ကြိုသိနိုင်ပါတယ်။ client က ထပ်ကြိုးစားချင်ရင် key အသစ်နဲ့ ပို့ရုံပါပဲ။ ဒါပေမဲ့ error တိုင်း အတူတူ မဟုတ်ပါဘူး။
+      [[mark:pt-e1]] အလုပ် မစခင် validation မှာ ငြင်းတာဆိုရင် ဘာမှ မဖြစ်ခဲ့လို့ replay လုပ်လုပ်၊ ပြန် run
+      လုပ်လုပ် အဖြေ တူတူပါပဲ။ [[mark:errors-2]] အလုပ် စပြီးမှ ကိုယ့် code ထဲမှာ ကျသွားတာဆိုရင် တစ်ဝက်တစ်ပျက်
+      ဖြစ်ခဲ့လား မသိလို့ သိမ်းထားတဲ့ error ကိုပဲ replay လုပ်တာ ပိုလုံခြုံပါတယ်။ [[mark:pt-stripe]] Stripe
+      ရဲ့ API version တစ် ဆိုရင် ၅၀၀ error တွေကိုလည်း သိမ်းပြီး replay လုပ်ပါတယ်၊ parameter validation
+      မအောင်တဲ့ request ကိုတော့ မသိမ်းပါဘူး။ [[mark:errors-3]] provider က ဒီ request ကို မလုပ်ဘူးလို့
+      ရှင်းရှင်း ပြန်ပြောတဲ့ temporary error ဆိုရင်တော့ ဘာမှ မဖြစ်ခဲ့မှန်း သေချာလို့ ပြန် process လုပ်လို့
+      ရနိုင်ပါတယ်။ [[mark:errors-4]] ခက်တာက timeout ပါ။ provider ဆီ ရောက်ခဲ့လား မသိတော့ ပြန် process
+      လုပ်ရင် ငွေ နှစ်ခါ ဖြတ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+      - {
+          title: "Stripe API reference — Idempotent requests",
+          url: "https://docs.stripe.com/api/idempotent_requests",
+        }
+    actions:
+      - {
+          id: show-errors,
+          type: slide.show,
+          at: { mark: show-errors, offsetMs: -700 },
+          slideId: errors-1,
+        }
+      - {
+          id: pt-def,
+          type: slide.point,
+          at: { afterAction: show-errors },
+          target: { x: 0.456, y: 0.864 },
+        }
+      - { id: pt-e1, type: slide.point, at: { mark: pt-e1 }, target: { x: 0.138, y: 0.387 } }
+      - { id: errors-2, type: slide.show, at: { mark: errors-2 }, slideId: errors-2 }
+      - {
+          id: pt-e2,
+          type: slide.point,
+          at: { afterAction: errors-2 },
+          target: { x: 0.138, y: 0.489 },
+        }
+      - {
+          id: pt-stripe,
+          type: slide.point,
+          at: { mark: pt-stripe },
+          target: { x: 0.442, y: 0.953 },
+        }
+      - { id: errors-3, type: slide.show, at: { mark: errors-3 }, slideId: errors-3 }
+      - {
+          id: pt-e3,
+          type: slide.point,
+          at: { afterAction: errors-3 },
+          target: { x: 0.138, y: 0.591 },
+        }
+      - { id: errors-4, type: slide.show, at: { mark: errors-4 }, slideId: errors-4 }
+      - {
+          id: pt-e4,
+          type: slide.point,
+          at: { afterAction: errors-4 },
+          target: { x: 0.138, y: 0.693 },
+        }
+
+  - id: both
+    narration: >-
+      [[mark:show-both]] ဒါကြောင့် idempotency က ခေါ်ခံရတဲ့ဘက်မှာတင် မဟုတ်ပါဘူး။ [[mark:pt-we]] client
+      ဆီက key ကို ကိုယ်က dedupe လုပ်သလို၊ [[mark:both-2]] provider ကို ခေါ်တဲ့အခါ ကိုယ့် operation အလိုက်
+      ထုတ်ထားတဲ့ key ကို ကိုယ်တိုင် ပို့ရပါတယ်။ [[mark:pt-why]] ဒါဆိုရင် timeout ပြီးလို့ ပြန် process
+      လုပ်လည်း provider ဆီ key တူတူ ရောက်ပြီး၊ provider က အဲဒီ key ကို dedupe လုပ်ရင် ဒုတိယ charge မဖြစ်ပါဘူး။ operation တစ်ခုကို ခေါ်တိုင်း၊ API အဖြစ် ဖွင့်ပေးတိုင်း
+      ဒီ နှစ်ဖက်လုံးကို စဉ်းစားရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: show-both, type: slide.show, at: { mark: show-both }, slideId: both-1 }
+      - { id: pt-we, type: slide.point, at: { mark: pt-we }, target: { x: 0.499, y: 0.664 } }
+      - { id: both-2, type: slide.show, at: { mark: both-2 }, slideId: both-2 }
+      - {
+          id: pt-they,
+          type: slide.point,
+          at: { afterAction: both-2 },
+          target: { x: 0.822, y: 0.664 },
+        }
+      - { id: pt-why, type: slide.point, at: { mark: pt-why }, target: { x: 0.476, y: 0.864 } }
+
+  - id: payload
+    chapter: Key တူ၊ request မတူ
+    narration: >-
+      [[mark:close-both]] ပမာဏ ပြင်ထားတဲ့ request ကို ပြန်ကြည့်ရအောင်။ [[mark:sel-fp]] row က ပထမ request
+      ဘာတောင်းခဲ့လဲ ဆိုတဲ့ fingerprint ကို သိမ်းထားပြီးသားပါ၊ key မပါဘဲ request ထဲက ကျန်တာ အားလုံးပါ။ ဒါပေမဲ့
+      retry ရောက်လာတဲ့အခါ အဲဒါကို မတိုက်ပါဘူး။ [[mark:type-fp]] သိမ်းထားတဲ့ row ရဲ့ fingerprint နဲ့ အခု request ရဲ့
+      fingerprint မတူရင် response ကို replay မလုပ်ဘဲ unprocessable ဆိုတဲ့ error ပြန်ပေးပါမယ်။ ဒါဆိုရင်
+      client က သူ့ request မှားနေမှန်း ချက်ချင်း သိပါတယ်။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-422]]
+      key ကို တခြား request အတွက် ပြန်သုံးတယ် ဆိုပြီး ငြင်းပါတယ်။ [[mark:dock-2]] Stripe ကလည်း ဒီလိုပဲ
+      parameter တွေကို ပထမ request နဲ့ တိုက်ပြီး မတူရင် error ပြန်ပေးပါတယ်။ ဒါပေမဲ့ ဒီ check မှာ ကုန်ကျစရိတ်
+      ရှိပါတယ်။ ဘယ် field တွေ ပါရမလဲ ဆုံးဖြတ်ရပြီး၊ client က ကောင်းတဲ့ အကြောင်းနဲ့ request ကို ပြင်ချင်တာကိုလည်း
+      ပိတ်လိုက်ပါတယ်။ စစ်မလား မစစ်ဘူးလား ဆိုတာကို ဆုံးဖြတ်ချက်အဖြစ် ချထားပါ၊ code ထဲမှာ အလိုလို ဖြစ်နေတာမျိုး
+      မဖြစ်ပါစေနဲ့။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+      - {
+          title: "Stripe API reference — Idempotent requests",
+          url: "https://docs.stripe.com/api/idempotent_requests",
+        }
+    actions:
+      - { id: close-both, type: slide.close, at: { mark: close-both } }
+      - {
+          id: open-idem-2,
+          type: workspace.openFile,
+          at: { mark: sel-fp, offsetMs: -600 },
+          path: idem.go,
+        }
+      - id: sel-fp
+        type: editor.select
+        at: { mark: sel-fp }
+        target: { file: idem.go, text: "fingerprint string", occurrence: 1 }
+      - id: type-fp
+        type: editor.type
+        at: { mark: type-fp }
+        target: { file: idem.go, after: "\tif saved, ok := ks.rows[scope]; ok {\n", occurrence: 1 }
+        text: "\t\tif saved.fingerprint != fingerprint {\n\t\t\treturn Response{422, \"key reused for a different request\"}\n\t\t}\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "422 key reused for a different request",
+          timeoutMs: 8000,
+        }
+      - id: pt-422
+        type: console.point
+        at: { mark: pt-422 }
+        target: { text: "422 key reused", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+      - {
+          id: expect-file-fp,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: idem.go,
+          contains: "if saved.fingerprint != fingerprint {",
+        }
+
+  - id: order
+    chapter: State ပြောင်းပြီးမှ ရောက်တဲ့ retry
+    narration: >-
+      [[mark:show-order]] နောက်ထပ် ခက်တာက retry ရောက်လာချိန်မှာ system က နောက် state ကို ရောက်နေပြီ ဖြစ်တာပါ။
+      [[mark:pt-hold]] flow တစ်ခုက key တစ်ခုနဲ့ ယူရို ၄၀ ကို hold လုပ်ခိုင်းပါတယ်။ [[mark:order-2]]
+      အလုပ်ပြီးလို့ hold ကို release လုပ်ပြီးသွားပါပြီ။ [[mark:order-3]] အဲဒီနောက်မှ ပထမ hold request ရဲ့
+      retry တစ်ခု ရောက်လာပါတယ်။ [[mark:pt-hit]] အခု state ကို ကြည့်ပြီး hold မရှိသေးလို့ အသစ် လုပ်လိုက်ရင်
+      ဘယ် flow မှ မပိုင်တဲ့ hold တစ်ခုက user ရဲ့ ငွေကို ချုပ်ထားပါလိမ့်မယ်။ မှန်တဲ့ အဖြေက ဘာမှ မလုပ်ဘဲ
+      မူလ response ကို ပြန်ပေးတာပါ။ ဆိုလိုတာက idempotency ကို အခု state နဲ့ မဆုံးဖြတ်ဘဲ key ရဲ့ မှတ်တမ်းနဲ့
+      ဆုံးဖြတ်ရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - {
+          id: show-order,
+          type: slide.show,
+          at: { mark: show-order, offsetMs: -700 },
+          slideId: order-1,
+        }
+      - { id: pt-hold, type: slide.point, at: { mark: pt-hold }, target: { x: 0.648, y: 0.494 } }
+      - { id: order-2, type: slide.show, at: { mark: order-2 }, slideId: order-2 }
+      - {
+          id: pt-rel,
+          type: slide.point,
+          at: { afterAction: order-2 },
+          target: { x: 0.302, y: 0.578 },
+        }
+      - { id: order-3, type: slide.show, at: { mark: order-3 }, slideId: order-3 }
+      - {
+          id: pt-late-o,
+          type: slide.point,
+          at: { afterAction: order-3 },
+          target: { x: 0.302, y: 0.744 },
+        }
+      - { id: pt-hit, type: slide.point, at: { mark: pt-hit }, target: { x: 0.475, y: 0.827 } }
+
+  - id: late
+    narration: >-
+      [[mark:close-order]] Code နဲ့ စမ်းကြည့်ရအောင်။ [[mark:type-holds]] ယူရို ၄၀ ကို hold လုပ်ပြီး ချက်ချင်း
+      release လုပ်ပါတယ်။ ပြီးတော့ hold request ကို key အတူတူနဲ့ နောက်ကျပြီး ပြန်ပို့ပါတယ်။ နောက်ဆုံး line
+      နှစ်ကြောင်းက ၂၅ နာရီ စောင့်ပြီး၊ ညတိုင်း run တဲ့ key cleanup ပြီးသွားမှ အဲဒီ retry ကို ထပ်ပို့ပါတယ်။
+      [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-late]] release ပြီးမှ ရောက်လာတဲ့ retry က hold အသစ် မလုပ်ဘဲ
+      မူလ response ကို ပြန်ရပြီး၊ available balance က ယူရို ၇၅ အပြည့် ရှိနေပါတယ်။ [[mark:pt-25h]] ၂၅ နာရီ
+      ကြာမှ ရောက်တဲ့ retry ကတော့ hold အသစ် ဖြစ်သွားပြီး ယူရို ၄၀ ကို ဘယ်သူမှ release မလုပ်မယ့် hold က
+      ချုပ်ထားပါတယ်။ [[mark:dock-3]] payment ဆိုရင် ဒါက ဒုတိယ charge ပါ။ ဘာကြောင့်လဲဆိုတော့ cleanup က
+      window ထက် ဟောင်းတဲ့ key ကို ဖျက်လိုက်တော့ ဒီ retry က ပထမဆုံး request လို ဖြစ်သွားလို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: close-order, type: slide.close, at: { mark: close-order } }
+      - {
+          id: open-main-2,
+          type: workspace.openFile,
+          at: { mark: type-holds, offsetMs: -600 },
+          path: main.go,
+        }
+      - id: type-holds
+        type: editor.type
+        at: { mark: type-holds }
+        target:
+          { file: main.go, after: "\tfmt.Println(\"user 1042:\", s.balance())\n", occurrence: 1 }
+        text: "\n\th := Request{Client: \"app\", Key: \"h-1\", From: \"liability:user:1042\", Amount: 4000}\n\ts.Release(s.Hold(h).Body) // the flow finishes and gives the funds back\n\tfmt.Println(\"h-1 late retry:\", s.Hold(h), \"  available:\", s.available())\n\ts.wait(25)\n\tfmt.Println(\"h-1 after 25h: \", s.Hold(h), \"  available:\", s.available())\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "h-1 after 25h:  201 hold-2",
+          timeoutMs: 8000,
+        }
+      - id: pt-late
+        type: console.point
+        at: { mark: pt-late }
+        target: { text: "h-1 late retry", occurrence: 1 }
+      - id: pt-25h
+        type: console.point
+        at: { mark: pt-25h }
+        target: { text: "h-1 after 25h", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: window
+    chapter: Key ကို ဘယ်လောက်ကြာ ထားမလဲ
+    narration: >-
+      [[mark:show-window]] key တွေကို အမြဲ သိမ်းထားရင် data က ဘယ်တော့မှ မရပ်ဘဲ တိုးနေပါတယ်။ ဒါကြောင့်
+      window တစ်ခု သတ်မှတ်ပြီး ဟောင်းတဲ့ key တွေကို ဖျက်ချင်စိတ် ဖြစ်ပါတယ်။ [[mark:window-2]] Stripe က ဒီ
+      window ကို docs မှာ ရှင်းရှင်း ရေးထားပါတယ်။ [[mark:pt-stripe-w]] key ကို အနည်းဆုံး ၂၄ နာရီ ကြာမှ
+      ဖျက်နိုင်ပြီး၊ ဖျက်ပြီးနောက် key တူတဲ့ request က request အသစ် ဖြစ်သွားပါတယ်။ [[mark:window-3]] ဆိုလိုတာက
+      window ပြီးမှ ရောက်တဲ့ retry ကို system က duplicate လို့ မသိတော့ပါဘူး။ implementation ကို အများကြီး
+      ရိုးရှင်းစေပေမဲ့ မှန်ကန်မှုကို ပေးလိုက်ရတာပါ၊ တကယ် မလွဲမရှောင်သာမှ ရွေးသင့်ပါတယ်။ [[mark:window-4]]
+      လက်တွေ့မှာ အလွှာ နှစ်ခု ခွဲထားနိုင်ပါတယ်။ [[mark:pt-cache]] response ကို replay လုပ်ဖို့ key table က
+      window နဲ့ ဖျက်လို့ ရပါတယ်။ [[mark:pt-row]] ငွေကို တကယ် ရွှေ့တဲ့ ledger row ပေါ်မှာ၊ ဒါမှမဟုတ် release
+      လုပ်ပြီးလည်း မဖျက်ဘဲ released လို့ မှတ်ထားတဲ့ hold row ပေါ်မှာတော့ key ကို unique constraint နဲ့ အမြဲ
+      ထားနိုင်ပါတယ်။ အဲဒီ row တွေက ဘယ်လိုမှ အမြဲ ရှိနေရမှာမို့ column တစ်ခုနဲ့ index တစ်ခုပဲ ပိုကုန်ပါတယ်။ [[mark:pt-inv]] ဒါဆိုရင် cleanup ပြီးတဲ့ late retry ကလည်း ငွေကို ဒုတိယ အကြိမ် မရွှေ့နိုင်တော့ပါဘူး၊ ဒါက
+      ငွေကို မရှိဘဲ မဖန်တီးရဘူး ဆိုတဲ့ No invented data မူပါ။ [[mark:testing]] ဒီ edge တွေကို စစ်ဖို့
+      integration test မှာ call တိုင်းကို နှစ်ခါ ပို့တဲ့ middleware ထည့်ပြီး ဒုတိယ call က ဘာမှ မပြောင်းစေဘူး
+      ဆိုတာ assert လုပ်တာ အကျိုးရှိပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+      - {
+          title: "Stripe API reference — Idempotent requests",
+          url: "https://docs.stripe.com/api/idempotent_requests",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - {
+          id: show-window,
+          type: slide.show,
+          at: { mark: show-window, offsetMs: -700 },
+          slideId: window-1,
+        }
+      - {
+          id: pt-seen,
+          type: slide.point,
+          at: { afterAction: show-window },
+          target: { x: 0.107, y: 0.584 },
+        }
+      - { id: window-2, type: slide.show, at: { mark: window-2 }, slideId: window-2 }
+      - {
+          id: pt-pruned,
+          type: slide.point,
+          at: { afterAction: window-2 },
+          target: { x: 0.549, y: 0.584 },
+        }
+      - {
+          id: pt-stripe-w,
+          type: slide.point,
+          at: { mark: pt-stripe-w },
+          target: { x: 0.452, y: 0.32 },
+        }
+      - { id: window-3, type: slide.show, at: { mark: window-3 }, slideId: window-3 }
+      - {
+          id: pt-late-w,
+          type: slide.point,
+          at: { afterAction: window-3 },
+          target: { x: 0.787, y: 0.584 },
+        }
+      - { id: window-4, type: slide.show, at: { mark: window-4 }, slideId: window-4 }
+      - { id: pt-cache, type: slide.point, at: { mark: pt-cache }, target: { x: 0.281, y: 0.864 } }
+      - { id: pt-row, type: slide.point, at: { mark: pt-row }, target: { x: 0.719, y: 0.864 } }
+      - { id: pt-inv, type: slide.point, at: { mark: pt-inv }, target: { x: 0.864, y: 0.12 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Idempotency key ကို ဘယ်လောက်ကြာ သိမ်းထားမလဲ၊ trade-off က ဘာလဲ ဆိုတာ
+      မေးလေ့ရှိပါတယ်။ ၂၄ နာရီ လို့ ဂဏန်း တစ်ခုတည်း ဖြေရင် မလုံလောက်ပါဘူး။ အချက် သုံးချက်နဲ့ ဖြေပါ။
+      [[mark:iv-a]] ပထမ၊ အမြဲ သိမ်းရင် မှန်ပေမဲ့ data က မဆုံးဘူး၊ window နဲ့ဆို ရိုးရှင်းပေမဲ့ window ပြီးမှ
+      ရောက်တဲ့ retry က operation အသစ် ဖြစ်သွားတယ်။ [[mark:iv-b]] ဒုတိယ၊ window ကို client တွေ retry
+      လုပ်နိုင်တဲ့ အရှည်ဆုံး ကာလထက် ရှည်အောင် ထားပြီး၊ backoff၊ queue၊ offline ဖြစ်နေတဲ့ app၊ လူက ပြန် run
+      တာ အားလုံးကို ထည့်တွက်ရတယ်။ [[mark:iv-c]] တတိယ၊ ငွေရွေ့တဲ့ row ပေါ်မှာ key ကို unique constraint နဲ့
+      အမြဲ ထားရင် cleanup ပြီးတာတောင် ငွေ နှစ်ခါ မရွေ့ဘူး။ [[mark:iv-d]] ပြီးရင် ကိုယ့် design ကို ပြောပါ။
+      response cache ကို window နဲ့ ထားပြီး barrier ကို အမြဲ ထားမယ်၊ error ကို ဘယ်လို replay လုပ်မလဲ၊ payload
+      မတူရင် ဘာလုပ်မလဲ ဆိုတာလည်း ဆုံးဖြတ်ထားကြောင်း ဆက်ပြောပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ဒီ line က key table ရဲ့
+      window ပါ။ ၂၄ နာရီကို ၄၈ နာရီ လို့ ပြောင်းပြီး run ကြည့်ပါ။ ၂၅ နာရီ ကြာမှ ရောက်တဲ့ retry ကလည်း
+      မူလ response ကို ပြန်ရပြီး available balance က ယူရို ၇၅ ပြန်ဖြစ်ပါလိမ့်မယ်။ ဒါပေမဲ့ ပြဿနာ ပျောက်သွားတာ
+      မဟုတ်ဘဲ နယ်နိမိတ်ကို ရွှေ့လိုက်တာပဲ ဆိုတာ သတိထားပါ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ idempotency ရဲ့
+      ခက်တဲ့ အပိုင်းက key ကို စစ်တာ မဟုတ်ဘဲ error၊ payload ပြောင်းတာ၊ state ပြောင်းသွားတာ၊ အချိန်ကြာတာ ဆိုတဲ့
+      edge တွေမှာ ဘာလုပ်မလဲ ဆိုတာကို ကြိုဆုံးဖြတ်ထားတာပါ။ နောက် lesson မှာတော့ အဆင့် များတဲ့ flow တစ်ခုက
+      အလယ်မှာ crash ဖြစ်သွားရင် ဘယ်လို ဆက်သွားမလဲ ဆိုတာ ကြည့်ပါမယ်၊ in progress မှာ တန်းလန်း ကျန်ခဲ့တဲ့ key
+      လည်း အဲဒီ ပြဿနာရဲ့ တစ်စိတ်တစ်ပိုင်းပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - {
+          id: open-api,
+          type: workspace.openFile,
+          at: { mark: sel-try, offsetMs: -700 },
+          path: api.go,
+        }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: api.go, text: "window: 24 * time.Hour", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
