@@ -2,7 +2,7 @@
 // A Worker's kept standard streams, both ends over a real MessageChannel:
 // what the thread's side posts, the parent's side receives.
 import { setMaxListeners } from "node:events";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setRuntime } from "../runtime";
 import { createFakeRuntime, type FakeRuntime } from "../testing/fakeRuntime";
 import { Buffer } from "./buffer";
@@ -76,11 +76,14 @@ describe("a thread's stdout and stderr its Worker kept", () => {
     process.stdout?.write("7468726565", "hex");
     process.stderr?.write("oops");
     threadEnd.postMessage("the program's own message");
-    await settle();
+    // Waited for, not timed: a port delivers when the machine gets to it, and a
+    // busy one took longer than any fixed wait here.
+    await vi.waitFor(() => {
+      expect(Buffer.concat(out.chunks as Uint8Array[]).toString()).toBe("one two three");
+      expect(Buffer.concat(err.chunks as Uint8Array[]).toString()).toBe("oops");
+      expect(others).toEqual(["the program's own message"]);
+    });
     expect(out.chunks.every((chunk) => Buffer.isBuffer(chunk))).toBe(true);
-    expect(Buffer.concat(out.chunks as Uint8Array[]).toString()).toBe("one two three");
-    expect(Buffer.concat(err.chunks as Uint8Array[]).toString()).toBe("oops");
-    expect(others).toEqual(["the program's own message"]);
     expect(stdio.stdin).toBe(null);
   });
 

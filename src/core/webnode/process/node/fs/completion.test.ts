@@ -236,17 +236,19 @@ describe("fs completions run from the event loop", () => {
       const { fs, root } = sides[side];
       const storage: { run(store: string, callback: () => void): void; getStore(): unknown } =
         side === "node" ? new NodeAsyncLocalStorage<string>() : new AsyncLocalStorage<string>();
-      const seen = await new Promise<unknown[]>((resolve) => {
-        const stores: unknown[] = [];
-        storage.run("first", () => fs.stat(root, () => stores.push(storage.getStore())));
-        storage.run("second", () =>
-          fs.readdir(root, () => {
-            stores.push(storage.getStore());
-            resolve(stores);
-          }),
-        );
+      // Which of the two finishes first is the thread pool's call (Node gives
+      // no order, and a busy pool does flip them), so each callback reports
+      // under its own name and the test waits for both.
+      const seen = await new Promise<Record<string, unknown>>((resolve) => {
+        const stores: Record<string, unknown> = {};
+        const report = (call: string) => {
+          stores[call] = storage.getStore();
+          if ("stat" in stores && "readdir" in stores) resolve(stores);
+        };
+        storage.run("first", () => fs.stat(root, () => report("stat")));
+        storage.run("second", () => fs.readdir(root, () => report("readdir")));
       });
-      expect(seen).toEqual(["first", "second"]);
+      expect(seen).toEqual({ stat: "first", readdir: "second" });
     });
   }
 });
