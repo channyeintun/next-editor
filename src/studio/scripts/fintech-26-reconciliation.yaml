@@ -1,0 +1,895 @@
+# Fintech Engineering, lesson 26: reconciliation (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Reconciliation" and Appendix A "Reconciliation break",
+# "Netting" (CC BY 4.0, Voytek Pitula).
+# Start state: data.go holds five ledger records (each with the PSP's payment id), the PSP's report,
+# one payout and its bank-statement line; main.go classifies every record of both sides.
+# Edits, all insert-only:
+#   1. a pending case: not at the PSP yet but inside T+2      -> run-2 prints "pending: tx-4"
+#   2. the one-to-many check: payout items - fees vs the bank -> run-3 prints the po_77 line
+# Runs: run-1 (four classes, tx-4 a false alarm), run-2, run-3.
+# Figures: drift (where breaks come from), kinds (each class and its first-class fix), batch
+# (one transfer settles many payments), case (Synapse), iv (the interview answer).
+# Facts: B04 (Synapse, FDIC proposal), B25 (FDIC pass-through records).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-26-reconciliation
+  title: "Fintech Engineering 26: Reconciliation"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      data.go: |
+        package main
+
+        import "fmt"
+
+        const today = 14 // the business day the reconciliation job runs
+
+        // classes are the report's lines, in this order. Every record of both sides lands in one.
+        var classes = []string{"matched by id", "matched by amount+day", "amount differs", "pending",
+        	"missing at provider", "missing in ledger"}
+
+        // Record is one money movement as one system saw it. Ref is the other side's id, if we kept it.
+        type Record struct {
+        	ID     string
+        	Ref    string
+        	Amount int64
+        	Day    int
+        }
+
+        // ledger is what we booked.
+        var ledger = []Record{
+        	{ID: "tx-1", Ref: "pi_101", Amount: 100_00, Day: 10},
+        	{ID: "tx-2", Ref: "pi_102", Amount: 80_00, Day: 10},
+        	{ID: "tx-3", Ref: "pi_103", Amount: 50_00, Day: 11},
+        	{ID: "tx-4", Ref: "pi_104", Amount: 30_00, Day: 13},
+        	{ID: "tx-5", Ref: "pi_105", Amount: 20_00, Day: 9},
+        }
+
+        // provider is the PSP's report for the same days.
+        var provider = []Record{
+        	{ID: "pi_101", Amount: 100_00, Day: 10},
+        	{ID: "pi_102", Amount: 80_00, Day: 11},
+        	{ID: "pi_103", Amount: 5_00, Day: 11},
+        	{ID: "pi_106", Amount: 12_00, Day: 12},
+        }
+
+        // Payout is one bank transfer from the PSP that settles several payments, net of its fees.
+        type Payout struct {
+        	ID    string
+        	Items map[string]bool
+        	Fees  int64
+        }
+
+        var payout = Payout{ID: "po_77", Items: map[string]bool{"pi_101": true, "pi_102": true}, Fees: 2_90}
+
+        // bank is the line for that payout on our bank statement.
+        var bank = Record{ID: "po_77", Amount: 177_10, Day: 12}
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // guess pairs a record without a provider id with an unused one: same amount, a day apart.
+        func guess(o Record, theirs []Record, used map[string]bool) (Record, bool) {
+        	for _, t := range theirs {
+        		if !used[t.ID] && t.Amount == o.Amount && max(t.Day-o.Day, o.Day-t.Day) <= 1 {
+        			return t, true
+        		}
+        	}
+        	return Record{}, false
+        }
+
+        // reconcile puts every record of both sides in exactly one class.
+        func reconcile(ours, theirs []Record) map[string][]string {
+        	byID := map[string]Record{}
+        	for _, t := range theirs {
+        		byID[t.ID] = t
+        	}
+        	used, out := map[string]bool{}, map[string][]string{}
+        	add := func(class, s string) { out[class] = append(out[class], s) }
+        	for _, o := range ours {
+        		t, ok := byID[o.Ref]
+        		how := "matched by id"
+        		if !ok {
+        			t, ok = guess(o, theirs, used)
+        			how = "matched by amount+day"
+        		}
+        		switch {
+        		case ok && t.Amount != o.Amount:
+        			used[t.ID] = true
+        			add("amount differs", o.ID+" "+cents(o.Amount)+" vs "+cents(t.Amount))
+        		case ok:
+        			used[t.ID] = true
+        			add(how, o.ID)
+        		default:
+        			add("missing at provider", o.ID)
+        		}
+        	}
+        	for _, t := range theirs {
+        		if !used[t.ID] {
+        			add("missing in ledger", t.ID+" "+cents(t.Amount))
+        		}
+        	}
+        	return out
+        }
+
+        func main() {
+        	report := reconcile(ledger, provider)
+        	for _, c := range classes {
+        		if len(report[c]) > 0 {
+        			fmt.Printf("%s: %s\n", c, strings.Join(report[c], ", "))
+        		}
+        	}
+        }
+  slides:
+    - id: batch-1
+      contentType: html
+      name: "One-to-many 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">ONE-TO-MANY</text>
+        <text x="80" y="150" font-size="48" fill="#e9edf5" font-weight="700">Bank transfer တစ်ခုက payment အများကို settle လုပ်တယ်</text>
+        <g class="in"><rect x="80" y="220" width="990" height="400" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="102" y="256" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">PSP REPORT</text></g>
+        <g class="in"><rect x="130" y="290" width="340" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-card" x="152" y="313" width="64" height="64" style="color:#f6c453"/><text x="340" y="335.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">pi_101</text><text x="340" y="376.6" font-size="24" text-anchor="middle" fill="#8a94a8">100.00</text></g>
+        <g class="in"><rect x="130" y="450" width="340" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-card" x="152" y="473" width="64" height="64" style="color:#f6c453"/><text x="340" y="495.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">pi_102</text><text x="340" y="536.6" font-size="24" text-anchor="middle" fill="#8a94a8">80.00</text></g>
+        <g class="in"><rect x="640" y="355" width="390" height="140" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><rect x="640" y="355" width="390" height="140" rx="18" fill="#f6ad55" opacity="0.13"/><use href="#i-building" x="662" y="393" width="64" height="64" style="color:#f6ad55"/><text x="875" y="415.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">payout po_77</text><text x="875" y="456.6" font-size="24" text-anchor="middle" fill="#8a94a8">180.00 − 2.90 fees</text></g>
+        <path d="M479 349.3L627.3 419" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/>
+        <path d="M479 500.7L627.3 431" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/>
+        </svg>
+    - id: batch-2
+      contentType: html
+      name: "One-to-many 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">ONE-TO-MANY</text>
+        <text x="80" y="150" font-size="48" fill="#e9edf5" font-weight="700">Bank transfer တစ်ခုက payment အများကို settle လုပ်တယ်</text>
+        <rect x="80" y="220" width="990" height="400" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="102" y="256" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">PSP REPORT</text>
+        <rect x="130" y="290" width="340" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-card" x="152" y="313" width="64" height="64" style="color:#f6c453"/><text x="340" y="335.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">pi_101</text><text x="340" y="376.6" font-size="24" text-anchor="middle" fill="#8a94a8">100.00</text>
+        <rect x="130" y="450" width="340" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-card" x="152" y="473" width="64" height="64" style="color:#f6c453"/><text x="340" y="495.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">pi_102</text><text x="340" y="536.6" font-size="24" text-anchor="middle" fill="#8a94a8">80.00</text>
+        <rect x="640" y="355" width="390" height="140" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><rect x="640" y="355" width="390" height="140" rx="18" fill="#f6ad55" opacity="0.13"/><use href="#i-building" x="662" y="393" width="64" height="64" style="color:#f6ad55"/><text x="875" y="415.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">payout po_77</text><text x="875" y="456.6" font-size="24" text-anchor="middle" fill="#8a94a8">180.00 − 2.90 fees</text>
+        <path d="M479 349.3L627.3 419" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <path d="M479 500.7L627.3 431" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <g class="in"><rect x="1140" y="220" width="400" height="400" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="1162" y="256" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">BANK STATEMENT</text></g>
+        <g class="in"><rect x="1180" y="355" width="320" height="140" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="1202" y="393" width="64" height="64" style="color:#4fd1c5"/><text x="1380" y="413.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">po_77</text><text x="1380" y="457.7" font-size="24" text-anchor="middle" fill="#8a94a8">177.10 ဝင်</text></g>
+        <path d="M1040 425L1166 425" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M1040 425L1166 425')"/><text x="1103" y="408.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">177.10</text>
+        <g class="in"><circle cx="1494" cy="361" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="1480.2" y="347.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/></g>
+        <g class="in"><rect x="80" y="690" width="877.5" height="56" rx="28" fill="#f6c453" opacity="0.16"/><rect x="80" y="690" width="877.5" height="56" rx="28" fill="none" stroke="#f6c453" stroke-width="2"/><text x="518.7" y="729.2" font-size="32" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Σ items − fees = the bank line   (netting)</text></g>
+        </svg>
+    - id: case-1
+      contentType: html
+      name: "Synapse, 2024 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">SYNAPSE, 2024</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ledger နဲ့ ဘဏ်ထဲက ငွေ မကိုက်တော့ရင်</text>
+        <g class="in"><rect x="110" y="230" width="520" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="132" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="410" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Partner banks</text><text x="410" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">FBO accounts ထဲက ငွေ</text></g>
+        <g class="in"><rect x="970" y="230" width="520" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="992" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="1270" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Synapse ledger</text><text x="1270" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဘယ် user ဘယ်လောက်</text></g>
+        <g class="in"><text x="800" y="318" font-size="72" text-anchor="middle" fill="#fc8181">≠</text></g>
+        <g class="in"><text x="110" y="520" font-size="96" fill="#fc8181" font-weight="800">≈ $85M</text><text x="110" y="566" font-size="26" fill="#8a94a8">trustee ရဲ့ ပထမ ခန့်မှန်း shortfall (နောက်ပိုင်း $65M – $96M)</text></g>
+        </svg>
+    - id: case-2
+      contentType: html
+      name: "Synapse, 2024 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">SYNAPSE, 2024</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ledger နဲ့ ဘဏ်ထဲက ငွေ မကိုက်တော့ရင်</text>
+        <rect x="110" y="230" width="520" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="132" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="410" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Partner banks</text><text x="410" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">FBO accounts ထဲက ငွေ</text>
+        <rect x="970" y="230" width="520" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="992" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="1270" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Synapse ledger</text><text x="1270" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဘယ် user ဘယ်လောက်</text>
+        <text x="800" y="318" font-size="72" text-anchor="middle" fill="#fc8181">≠</text>
+        <text x="110" y="520" font-size="96" fill="#fc8181" font-weight="800">≈ $85M</text><text x="110" y="566" font-size="26" fill="#8a94a8">trustee ရဲ့ ပထမ ခန့်မှန်း shortfall (နောက်ပိုင်း $65M – $96M)</text>
+        <g class="in"><rect x="110" y="720" width="1075" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="110" y="720" width="1075" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="647.5" y="754.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">FDIC 2024 proposal: owner တိုင်းရဲ့ balance ကို နေ့တိုင်း reconcile (proposal ပဲ)</text></g>
+        </svg>
+    - id: drift-1
+      contentType: html
+      name: "Data drift 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DATA DRIFT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ကိုယ့် ledger နဲ့ provider က ကွာလာတတ်တယ်</text>
+        <g class="in"><path d="M245 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="140" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="271" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M800 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="695" y="218" width="40" height="40" style="color:#b794f6"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our service</text><path d="M1355 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1250" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1381" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><g><path d="M1347 344.9H812" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1077.5" y="331.9" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">webhook pi_101 100.00</text></g><g><path d="M792 408.3H257" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="522.5" y="395.3" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">post tx-1 100.00</text></g></g>
+        </svg>
+    - id: drift-2
+      contentType: html
+      name: "Data drift 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DATA DRIFT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ကိုယ့် ledger နဲ့ provider က ကွာလာတတ်တယ်</text>
+        <path d="M245 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="140" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="271" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M800 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="695" y="218" width="40" height="40" style="color:#b794f6"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our service</text><path d="M1355 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1250" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1381" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><g><path d="M1347 344.9H812" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1077.5" y="331.9" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">webhook pi_101 100.00</text></g><g><path d="M792 408.3H257" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="522.5" y="395.3" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">post tx-1 100.00</text></g><g class="in"><path d="M1347 471.7H1022" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M1010 459.7l24 24M1034 459.7l-24 24" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="1188.5" y="458.7" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">webhook pi_106 12.00</text></g><g class="in"><rect x="82.4" y="509.2" width="325.3" height="48" rx="12" fill="#0b0e14" stroke="#fc8181" stroke-width="2"/><text x="245" y="542.2" font-size="25" text-anchor="middle" fill="#fc8181" font-weight="600">pi_106 ledger ထဲမှာ မရှိ</text></g>
+        </svg>
+    - id: drift-3
+      contentType: html
+      name: "Data drift 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DATA DRIFT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ကိုယ့် ledger နဲ့ provider က ကွာလာတတ်တယ်</text>
+        <path d="M245 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="140" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="271" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M800 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="695" y="218" width="40" height="40" style="color:#b794f6"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our service</text><path d="M1355 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1250" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1381" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><g><path d="M1347 344.9H812" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1077.5" y="331.9" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">webhook pi_101 100.00</text></g><g><path d="M792 408.3H257" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="522.5" y="395.3" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">post tx-1 100.00</text></g><g><path d="M1347 471.7H1022" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M1010 459.7l24 24M1034 459.7l-24 24" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="1188.5" y="458.7" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">webhook pi_106 12.00</text></g><g><rect x="82.4" y="509.2" width="325.3" height="48" rx="12" fill="#0b0e14" stroke="#fc8181" stroke-width="2"/><text x="245" y="542.2" font-size="25" text-anchor="middle" fill="#fc8181" font-weight="600">pi_106 ledger ထဲမှာ မရှိ</text></g><g class="in"><path d="M792 598.6H257" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="522.5" y="585.6" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">post tx-5 20.00</text></g><g class="in"><path d="M808 662H1133" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M1121 650l24 24M1145 650l-24 24" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="966.5" y="649" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">capture pi_105</text></g><g class="in"><rect x="1216.8" y="699.5" width="276.5" height="48" rx="12" fill="#0b0e14" stroke="#fc8181" stroke-width="2"/><text x="1355" y="732.5" font-size="25" text-anchor="middle" fill="#fc8181" font-weight="600">pi_105 PSP မှာ မရှိ</text></g>
+        </svg>
+    - id: drift-4
+      contentType: html
+      name: "Data drift 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DATA DRIFT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ကိုယ့် ledger နဲ့ provider က ကွာလာတတ်တယ်</text>
+        <path d="M245 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="140" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="271" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M800 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="695" y="218" width="40" height="40" style="color:#b794f6"/><text x="826" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our service</text><path d="M1355 276V760" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1250" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1381" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><g><path d="M1347 344.9H812" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1077.5" y="331.9" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">webhook pi_101 100.00</text></g><g><path d="M792 408.3H257" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="522.5" y="395.3" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">post tx-1 100.00</text></g><g><path d="M1347 471.7H1022" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M1010 459.7l24 24M1034 459.7l-24 24" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="1188.5" y="458.7" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">webhook pi_106 12.00</text></g><g><rect x="82.4" y="509.2" width="325.3" height="48" rx="12" fill="#0b0e14" stroke="#fc8181" stroke-width="2"/><text x="245" y="542.2" font-size="25" text-anchor="middle" fill="#fc8181" font-weight="600">pi_106 ledger ထဲမှာ မရှိ</text></g><g><path d="M792 598.6H257" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="522.5" y="585.6" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">post tx-5 20.00</text></g><g><path d="M808 662H1133" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M1121 650l24 24M1145 650l-24 24" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="966.5" y="649" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">capture pi_105</text></g><g><rect x="1216.8" y="699.5" width="276.5" height="48" rx="12" fill="#0b0e14" stroke="#fc8181" stroke-width="2"/><text x="1355" y="732.5" font-size="25" text-anchor="middle" fill="#fc8181" font-weight="600">pi_105 PSP မှာ မရှိ</text></g>
+        <g class="in"><rect x="120" y="800" width="837.4" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="120" y="800" width="837.4" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="538.7" y="834.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">drift ဖြစ်တတ်တယ် → schedule နဲ့ reconcile (hourly … yearly)</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ledger နဲ့ bank statement မကိုက်ရင် ဘာလုပ်မလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ledger နဲ့ bank statement မကိုက်ရင် ဘာလုပ်မလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Match — provider id နဲ့ တွဲ၊ မရှိမှ amount + time heuristic</text><text x="188" y="311" font-size="26" fill="#8a94a8">one-to-many payout ကို items − fees နဲ့ တိုက်</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ledger နဲ့ bank statement မကိုက်ရင် ဘာလုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Match — provider id နဲ့ တွဲ၊ မရှိမှ amount + time heuristic</text><text x="188" y="311" font-size="26" fill="#8a94a8">one-to-many payout ကို items − fees နဲ့ တိုက်</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Classify — missing / different / pending</text><text x="188" y="443" font-size="26" fill="#8a94a8">settlement window ထဲက item ကို break လို့ မသတ်မှတ်</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ledger နဲ့ bank statement မကိုက်ရင် ဘာလုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Match — provider id နဲ့ တွဲ၊ မရှိမှ amount + time heuristic</text><text x="188" y="311" font-size="26" fill="#8a94a8">one-to-many payout ကို items − fees နဲ့ တိုက်</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Classify — missing / different / pending</text><text x="188" y="443" font-size="26" fill="#8a94a8">settlement window ထဲက item ကို break လို့ မသတ်မှတ်</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Fix — first-class tool နဲ့ပဲ</text><text x="188" y="575" font-size="26" fill="#8a94a8">correction entry၊ webhook reprocess — row ကို overwrite မလုပ်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ledger နဲ့ bank statement မကိုက်ရင် ဘာလုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Match — provider id နဲ့ တွဲ၊ မရှိမှ amount + time heuristic</text><text x="188" y="311" font-size="26" fill="#8a94a8">one-to-many payout ကို items − fees နဲ့ တိုက်</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Classify — missing / different / pending</text><text x="188" y="443" font-size="26" fill="#8a94a8">settlement window ထဲက item ကို break လို့ မသတ်မှတ်</text></g><g><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Fix — first-class tool နဲ့ပဲ</text><text x="188" y="575" font-size="26" fill="#8a94a8">correction entry၊ webhook reprocess — row ကို overwrite မလုပ်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">schedule နဲ့ run၊ break တိုင်းကို owner နဲ့ queue ထဲ</text><text x="188" y="707" font-size="26" fill="#8a94a8">ဘယ် source ကိုမှ အလိုလို မှန်တယ်လို့ မယူ</text></g>
+        </svg>
+    - id: kinds-1
+      contentType: html
+      name: "Reconciliation 1/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RECONCILIATION</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1222" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Break တိုင်းကို နားလည်ပြီး tool နဲ့ ပြင်</text>
+        <g class="in"><rect x="100" y="210" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">class</text><text x="582" y="245" font-size="22" fill="#8a94a8" font-weight="700">ခက်လား</text><text x="802" y="245" font-size="22" fill="#8a94a8" font-weight="700">ပြင်နည်း</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="318" font-size="28" fill="#fc8181" class="mono">missing in ledger</text><text x="582" y="318" font-size="28" fill="#e9edf5">easy</text><text x="802" y="318" font-size="28" fill="#e9edf5">webhook ကို reprocess — ပုံမှန် path အတိုင်း post</text></g></g>
+        </svg>
+    - id: kinds-2
+      contentType: html
+      name: "Reconciliation 2/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RECONCILIATION</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1222" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Break တိုင်းကို နားလည်ပြီး tool နဲ့ ပြင်</text>
+        <rect x="100" y="210" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">class</text><text x="582" y="245" font-size="22" fill="#8a94a8" font-weight="700">ခက်လား</text><text x="802" y="245" font-size="22" fill="#8a94a8" font-weight="700">ပြင်နည်း</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="318" font-size="28" fill="#fc8181" class="mono">missing in ledger</text><text x="582" y="318" font-size="28" fill="#e9edf5">easy</text><text x="802" y="318" font-size="28" fill="#e9edf5">webhook ကို reprocess — ပုံမှန် path အတိုင်း post</text></g><g class="in"><path d="M116 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="410" font-size="28" fill="#fc8181" class="mono">missing at provider</text><text x="582" y="410" font-size="28" fill="#e9edf5">easy</text><text x="802" y="410" font-size="28" fill="#e9edf5">provider နဲ့ စစ်၊ မရောက်ရင် reversal</text></g>
+        </svg>
+    - id: kinds-3
+      contentType: html
+      name: "Reconciliation 3/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RECONCILIATION</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1222" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Break တိုင်းကို နားလည်ပြီး tool နဲ့ ပြင်</text>
+        <rect x="100" y="210" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">class</text><text x="582" y="245" font-size="22" fill="#8a94a8" font-weight="700">ခက်လား</text><text x="802" y="245" font-size="22" fill="#8a94a8" font-weight="700">ပြင်နည်း</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="318" font-size="28" fill="#fc8181" class="mono">missing in ledger</text><text x="582" y="318" font-size="28" fill="#e9edf5">easy</text><text x="802" y="318" font-size="28" fill="#e9edf5">webhook ကို reprocess — ပုံမှန် path အတိုင်း post</text></g><g><path d="M116 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="410" font-size="28" fill="#fc8181" class="mono">missing at provider</text><text x="582" y="410" font-size="28" fill="#e9edf5">easy</text><text x="802" y="410" font-size="28" fill="#e9edf5">provider နဲ့ စစ်၊ မရောက်ရင် reversal</text></g><g class="in"><path d="M116 446H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="502" font-size="28" fill="#f6ad55" class="mono">amount differs</text><text x="582" y="502" font-size="28" fill="#f6ad55">hard</text><text x="802" y="502" font-size="28" fill="#e9edf5">ဘာကြောင့် ကွာလဲ ရှာ၊ correction entry</text></g>
+        </svg>
+    - id: kinds-4
+      contentType: html
+      name: "Reconciliation 4/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RECONCILIATION</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1222" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Break တိုင်းကို နားလည်ပြီး tool နဲ့ ပြင်</text>
+        <rect x="100" y="210" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">class</text><text x="582" y="245" font-size="22" fill="#8a94a8" font-weight="700">ခက်လား</text><text x="802" y="245" font-size="22" fill="#8a94a8" font-weight="700">ပြင်နည်း</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="318" font-size="28" fill="#fc8181" class="mono">missing in ledger</text><text x="582" y="318" font-size="28" fill="#e9edf5">easy</text><text x="802" y="318" font-size="28" fill="#e9edf5">webhook ကို reprocess — ပုံမှန် path အတိုင်း post</text></g><g><path d="M116 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="410" font-size="28" fill="#fc8181" class="mono">missing at provider</text><text x="582" y="410" font-size="28" fill="#e9edf5">easy</text><text x="802" y="410" font-size="28" fill="#e9edf5">provider နဲ့ စစ်၊ မရောက်ရင် reversal</text></g><g><path d="M116 446H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="502" font-size="28" fill="#f6ad55" class="mono">amount differs</text><text x="582" y="502" font-size="28" fill="#f6ad55">hard</text><text x="802" y="502" font-size="28" fill="#e9edf5">ဘာကြောင့် ကွာလဲ ရှာ၊ correction entry</text></g><g class="in"><path d="M116 538H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="594" font-size="28" fill="#6cb2f5" class="mono">matched by amount+day</text><text x="582" y="594" font-size="28" fill="#6cb2f5">risky</text><text x="802" y="594" font-size="28" fill="#e9edf5">guess မှန်း မှတ်ထား၊ လူက review</text></g>
+        </svg>
+    - id: kinds-5
+      contentType: html
+      name: "Reconciliation 5/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RECONCILIATION</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1222" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Break တိုင်းကို နားလည်ပြီး tool နဲ့ ပြင်</text>
+        <rect x="100" y="210" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">class</text><text x="582" y="245" font-size="22" fill="#8a94a8" font-weight="700">ခက်လား</text><text x="802" y="245" font-size="22" fill="#8a94a8" font-weight="700">ပြင်နည်း</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="318" font-size="28" fill="#fc8181" class="mono">missing in ledger</text><text x="582" y="318" font-size="28" fill="#e9edf5">easy</text><text x="802" y="318" font-size="28" fill="#e9edf5">webhook ကို reprocess — ပုံမှန် path အတိုင်း post</text></g><g><path d="M116 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="410" font-size="28" fill="#fc8181" class="mono">missing at provider</text><text x="582" y="410" font-size="28" fill="#e9edf5">easy</text><text x="802" y="410" font-size="28" fill="#e9edf5">provider နဲ့ စစ်၊ မရောက်ရင် reversal</text></g><g><path d="M116 446H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="502" font-size="28" fill="#f6ad55" class="mono">amount differs</text><text x="582" y="502" font-size="28" fill="#f6ad55">hard</text><text x="802" y="502" font-size="28" fill="#e9edf5">ဘာကြောင့် ကွာလဲ ရှာ၊ correction entry</text></g><g><path d="M116 538H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="594" font-size="28" fill="#6cb2f5" class="mono">matched by amount+day</text><text x="582" y="594" font-size="28" fill="#6cb2f5">risky</text><text x="802" y="594" font-size="28" fill="#e9edf5">guess မှန်း မှတ်ထား၊ လူက review</text></g>
+        <g class="in"><rect x="100" y="700" width="843.9" height="54" rx="27" fill="#4fd1c5" opacity="0.16"/><rect x="100" y="700" width="843.9" height="54" rx="27" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="522" y="737.5" font-size="30" text-anchor="middle" fill="#4fd1c5" font-weight="700">provider id ကို write လုပ်ချိန်မှာ သိမ်း → guess မလို</text></g>
+        </svg>
+    - id: kinds-6
+      contentType: html
+      name: "Reconciliation 6/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RECONCILIATION</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1222" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Break တိုင်းကို နားလည်ပြီး tool နဲ့ ပြင်</text>
+        <rect x="100" y="210" width="1400" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">class</text><text x="582" y="245" font-size="22" fill="#8a94a8" font-weight="700">ခက်လား</text><text x="802" y="245" font-size="22" fill="#8a94a8" font-weight="700">ပြင်နည်း</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="318" font-size="28" fill="#fc8181" class="mono">missing in ledger</text><text x="582" y="318" font-size="28" fill="#e9edf5">easy</text><text x="802" y="318" font-size="28" fill="#e9edf5">webhook ကို reprocess — ပုံမှန် path အတိုင်း post</text></g><g><path d="M116 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="410" font-size="28" fill="#fc8181" class="mono">missing at provider</text><text x="582" y="410" font-size="28" fill="#e9edf5">easy</text><text x="802" y="410" font-size="28" fill="#e9edf5">provider နဲ့ စစ်၊ မရောက်ရင် reversal</text></g><g><path d="M116 446H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="502" font-size="28" fill="#f6ad55" class="mono">amount differs</text><text x="582" y="502" font-size="28" fill="#f6ad55">hard</text><text x="802" y="502" font-size="28" fill="#e9edf5">ဘာကြောင့် ကွာလဲ ရှာ၊ correction entry</text></g><g><path d="M116 538H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="594" font-size="28" fill="#6cb2f5" class="mono">matched by amount+day</text><text x="582" y="594" font-size="28" fill="#6cb2f5">risky</text><text x="802" y="594" font-size="28" fill="#e9edf5">guess မှန်း မှတ်ထား၊ လူက review</text></g>
+        <rect x="100" y="700" width="843.9" height="54" rx="27" fill="#4fd1c5" opacity="0.16"/><rect x="100" y="700" width="843.9" height="54" rx="27" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="522" y="737.5" font-size="30" text-anchor="middle" fill="#4fd1c5" font-weight="700">provider id ကို write လုပ်ချိန်မှာ သိမ်း → guess မလို</text>
+        <g class="in"><rect x="100" y="790" width="968.3" height="54" rx="27" fill="#fc8181" opacity="0.16"/><rect x="100" y="790" width="968.3" height="54" rx="27" fill="none" stroke="#fc8181" stroke-width="2"/><text x="584.1" y="827.5" font-size="30" text-anchor="middle" fill="#fc8181" font-weight="700">align ≠ overwrite — ledger row ကို ကိုက်အောင် ပြင်မရေးဘူး</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9526
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "matched by id: tx-1, tx-2\namount differs: tx-3 50.00 vs 5.00\nmissing at provider: tx-4, tx-5\nmissing in ledger: pi_106 12.00\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "matched by id: tx-1, tx-2\namount differs: tx-3 50.00 vs 5.00\npending: tx-4\nmissing at provider: tx-5\nmissing in ledger: pi_106 12.00\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "matched by id: tx-1, tx-2\namount differs: tx-3 50.00 vs 5.00\npending: tx-4\nmissing at provider: tx-5\nmissing in ledger: pi_106 12.00\npo_77: 180.00 - 2.90 fees = 177.10 | bank 177.10\n"
+
+scenes:
+  - id: hook
+    chapter: Ledger ကို ဘာနဲ့ တိုက်စစ်မလဲ
+    narration: >-
+      ledger က ကိုယ့်ဘက်က မှတ်ထားတဲ့ စာရင်းပါ။ ငွေ တကယ် ရှိနေတာကတော့ PSP မှာနဲ့ ဘဏ်မှာပါ။
+      ဒါကြောင့် ledger မှန်သလား ဆိုတာ ledger ကို ကြည့်ရုံနဲ့ ဘယ်တော့မှ မသိနိုင်ပါဘူး။
+      reconciliation က အပြင်က မှတ်တမ်းတွေနဲ့ တိုက်ရုံ မကဘဲ၊ ကွာတာတိုင်းကို ရှင်းပေးရပါတယ်။ [[mark:sel-ref]] ကိုယ့် ledger ထဲက record တိုင်းမှာ PSP ဘက်က payment id ကို
+      တွဲသိမ်းထားပါတယ်။ system နှစ်ခုကို တွဲဖို့ key က ဒါပါပဲ။ [[mark:sel-provider]] အောက်မှာတော့
+      အဲဒီ ရက်တွေအတွက် PSP ပို့ပေးတဲ့ report ရှိပါတယ်။ [[mark:open-main]] ခွဲခြားတဲ့ logic ကို ကြည့်ရအောင်။ [[mark:sel-byid]] reconcile
+      function က ကိုယ့် record တစ်ခုချင်းအတွက် PSP record ကို id နဲ့ ရှာပါတယ်။ [[mark:sel-switch]]
+      တွေ့ပြီး ပမာဏ ကွာရင် amount differs၊ ကိုက်ရင် matched၊ မတွေ့ရင် PSP မှာ မရှိဘူး လို့ class
+      ခွဲပါတယ်။ ဘယ်သူနဲ့မှ မတွဲမိခဲ့တဲ့ PSP record တွေကတော့ ledger ထဲမှာ မရှိတဲ့ class ပါ။
+      [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+    actions:
+      - { id: open-data, type: workspace.openFile, at: { scene: start }, path: data.go }
+      - id: sel-ref
+        type: editor.select
+        at: { mark: sel-ref }
+        target: { file: data.go, text: 'Ref: "pi_101"', occurrence: 1 }
+      - id: sel-provider
+        type: editor.select
+        at: { mark: sel-provider }
+        target: { file: data.go, text: "var provider = []Record{", occurrence: 1 }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: main.go }
+      - id: sel-byid
+        type: editor.select
+        at: { mark: sel-byid }
+        target: { file: main.go, text: "t, ok := byID[o.Ref]", occurrence: 1 }
+      - id: sel-switch
+        type: editor.select
+        at: { mark: sel-switch }
+        target: { file: main.go, text: "case ok && t.Amount != o.Amount:", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "missing at provider: tx-4, tx-5",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-m]] ပထမ record နှစ်ခုက id နဲ့ တွဲမိပြီး ပမာဏလည်း ကိုက်ပါတယ်။ [[mark:pt-diff]] တတိယ
+      record ကတော့ တွဲမိပေမဲ့ ကိုယ့်ဘက်မှာ ယူရို ငါးဆယ်၊ PSP ဘက်မှာ ငါးယူရိုပဲ ဖြစ်နေပါတယ်။
+      [[mark:pt-miss]] နောက်ဆုံး record နှစ်ခုကိုတော့ PSP report ထဲမှာ ရှာမတွေ့ပါဘူး။
+      [[mark:pt-extra]] ပြောင်းပြန်အနေနဲ့ PSP မှာ ရှိပြီး ကိုယ့် ledger ထဲမှာ မရှိတဲ့ ဆယ့်နှစ်ယူရို
+      payment တစ်ခု ပါလာပါတယ်။ reconciliation က ရှာတွေ့တဲ့ ကွာခြားချက် တစ်ခုချင်းကို break လို့
+      ခေါ်ပါတယ်။ [[mark:dock-1]] missing ဖြစ်တဲ့ break က ပြင်ရ မခက်ပါဘူး၊ ဘာ ပျောက်နေလဲ ဆိုတာ
+      သိနေလို့ပါ။ ပမာဏ ကွာတဲ့ break ကတော့ ပိုခက်ပါတယ်၊ ဘယ်ဘက်က မှန်လဲ ဆိုတာကို ကိုယ်တိုင်
+      ရှာဖွေရလို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+    actions:
+      - id: pt-m
+        type: console.point
+        at: { mark: pt-m }
+        target: { text: "matched by id: tx-1, tx-2", occurrence: 1 }
+      - id: pt-diff
+        type: console.point
+        at: { mark: pt-diff }
+        target: { text: "amount differs: tx-3", occurrence: 1 }
+      - id: pt-miss
+        type: console.point
+        at: { mark: pt-miss }
+        target: { text: "missing at provider", occurrence: 1 }
+      - id: pt-extra
+        type: console.point
+        at: { mark: pt-extra }
+        target: { text: "missing in ledger", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: drift
+    chapter: Drift ဘယ်က လာလဲ
+    narration: >-
+      [[mark:show-drift]] ဒီ break တွေက bug ကြောင့်ချည်း ဖြစ်တာ မဟုတ်ပါဘူး။ အပြင်က data ကို
+      အားကိုးတဲ့ system မှာ drift ဖြစ်တတ်ပါတယ်၊ ဆိုလိုတာက system နှစ်ခု တဖြည်းဖြည်း
+      မကိုက်တော့တာပါ။ [[mark:pt-ok]] ပုံမှန်ဆိုရင် PSP က webhook ပို့ပြီး ကိုယ်က ledger ထဲ post
+      လုပ်ပါတယ်။ [[mark:drift-2]] webhook တစ်ခု မရောက်လာရင်၊ PSP မှာ ရှိပြီး ledger ထဲမှာ မရှိတဲ့
+      payment ဖြစ်လာပါတယ်။ handler ဘယ်လောက် ကောင်းကောင်း၊ မရောက်လာတဲ့ webhook ကိုတော့ handle လုပ်လို့ မရပါဘူး။ [[mark:drift-3]] ပြောင်းပြန်အနေနဲ့ ledger ထဲ post လုပ်ပြီးမှ PSP ဆီ ပို့တဲ့
+      request မရောက်ရင်၊ ကိုယ့်ဘက်မှာပဲ ရှိတဲ့ record ဖြစ်လာပါတယ်။ [[mark:drift-4]] ဒါကြောင့်
+      reconciliation ကို schedule နဲ့ run ပါတယ်။ context ပေါ် မူတည်ပြီး တစ်နာရီ တစ်ခါကနေ တစ်နှစ် တစ်ခါအထိ ရှိနိုင်ပြီး၊ ledger၊ PSP နဲ့ ဘဏ် ဆိုပြီး system သုံးခု ပါလာလည်း စဉ်းစားပုံ အတူတူပါပဲ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Handling webhooks (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-webhooks",
+        }
+    actions:
+      - {
+          id: show-drift,
+          type: slide.show,
+          at: { mark: show-drift, offsetMs: -700 },
+          slideId: drift-1,
+        }
+      - { id: pt-ok, type: slide.point, at: { mark: pt-ok }, target: { x: 0.648, y: 0.399 } }
+      - { id: drift-2, type: slide.show, at: { mark: drift-2 }, slideId: drift-2 }
+      - {
+          id: pt-lost1,
+          type: slide.point,
+          at: { afterAction: drift-2 },
+          target: { x: 0.718, y: 0.54 },
+        }
+      - { id: drift-3, type: slide.show, at: { mark: drift-3 }, slideId: drift-3 }
+      - {
+          id: pt-lost2,
+          type: slide.point,
+          at: { afterAction: drift-3 },
+          target: { x: 0.579, y: 0.751 },
+        }
+      - { id: drift-4, type: slide.show, at: { mark: drift-4 }, slideId: drift-4 }
+      - {
+          id: pt-cad,
+          type: slide.point,
+          at: { afterAction: drift-4 },
+          target: { x: 0.33, y: 0.953 },
+        }
+
+  - id: window
+    chapter: Settlement window
+    narration: >-
+      [[mark:close-drift]] ခုနက break စာရင်းထဲမှာ တစ်ခုက break မဟုတ်ပါဘူး။ [[mark:sel-default]] PSP
+      မှာ မတွေ့တဲ့ record မှန်သမျှ ဒီ class ထဲ ရောက်နေပါတယ်။ ဒါပေမဲ့ စတုတ္ထ record ကို မနေ့ကမှ book
+      လုပ်ခဲ့တာပါ။ PSP က T plus two မှာ settle လုပ်ရင် ဒီ record က မနက်ဖြန်မှ report ထဲ
+      ရောက်ပါမယ်။ အဲဒါကို alert ပေးရင် false alarm ပါ။ [[mark:type-pend]] ဒါကြောင့် PSP မှာ
+      မတွေ့သေးတဲ့ record ကို settlement window မကျော်သေးရင် pending လို့ သတ်မှတ်ပါမယ်။ window ကို
+      provider နဲ့ rail တစ်ခုချင်းအလိုက် သတ်မှတ်ရပါတယ်။ ပဉ္စမ record ကလည်း PSP မှာ မရှိပါဘူး။ သူ
+      ဘယ် class ထဲ ရောက်မလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-pend]]
+      စတုတ္ထ record က pending ဖြစ်သွားပါပြီ။ [[mark:pt-miss2]] ပဉ္စမ record ကတော့ book လုပ်တာ
+      ငါးရက် ရှိပြီမို့ window ကျော်သွားပါပြီ။ ဒါကြောင့် တကယ့် break အဖြစ် ကျန်ပါတယ်။
+      [[mark:dock-2]] pending ဆိုတာ မေ့ထားလို့ရတဲ့ class မဟုတ်ပါဘူး၊ window ပြည့်တဲ့အထိ PSP မှာ
+      မပေါ်လာရင် နောက် run မှာ break ဖြစ်သွားမှာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Value time vs booking time vs settlement time (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#value-time-vs-booking-time-vs-settlement-time",
+        }
+    actions:
+      - { id: close-drift, type: slide.close, at: { mark: close-drift } }
+      - id: sel-default
+        type: editor.select
+        at: { mark: sel-default }
+        target: { file: main.go, text: 'add("missing at provider", o.ID)', occurrence: 1 }
+      - id: type-pend
+        type: editor.type
+        at: { mark: type-pend }
+        target: { file: main.go, after: "\t\t\tadd(how, o.ID)\n", occurrence: 1 }
+        text: "\t\tcase today-o.Day <= 2: // settles at T+2: not in the report yet\n\t\t\tadd(\"pending\", o.ID)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "pending: tx-4",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-pend,
+          type: expect.file,
+          at: { afterAction: expect-2 },
+          path: main.go,
+          contains: "case today-o.Day <= 2:",
+        }
+      - id: pt-pend
+        type: console.point
+        at: { mark: pt-pend }
+        target: { text: "pending: tx-4", occurrence: 1 }
+      - id: pt-miss2
+        type: console.point
+        at: { mark: pt-miss2 }
+        target: { text: "missing at provider: tx-5", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: kinds
+    chapter: Align လုပ်တာ overwrite မဟုတ်ဘူး
+    narration: >-
+      [[mark:show-kinds]] break တွေ့ပြီဆိုရင် အရေးကြီးဆုံးက ဘယ်လို ပြင်မလဲ ဆိုတာပါ။ [[mark:pt-k1]]
+      ledger ထဲမှာ မရှိတဲ့ payment ဆိုရင် ပျောက်သွားတဲ့ webhook ကို reprocess လုပ်ပါတယ်။ row ကို တိုက်ရိုက် ထည့်တာ မဟုတ်ဘဲ handler ရဲ့ path အတိုင်း ပြန်ဖြတ်လို့ idempotency check တွေ အကုန် ပါသွားပါတယ်။ [[mark:kinds-2]] PSP မှာ မရှိတဲ့ record
+      ဆိုရင် PSP နဲ့ အရင် စစ်ပါတယ်။ ငွေ တကယ် မရွေ့ခဲ့ဘူး ဆိုတာ သေချာမှ reversal နဲ့ ပယ်ပါတယ်။
+      [[mark:kinds-3]] ပမာဏ ကွာတာကတော့ ဘာကြောင့် ကွာလဲ အရင် ရှာရပါတယ်။ ကိုယ်က gross နဲ့ book လုပ်ပြီး PSP က net နဲ့ ပြတာလည်း ဖြစ်နိုင်၊ ကိုယ့် bug လည်း ဖြစ်နိုင်၊ PSP ဘက်က မှားတာလည်း ဖြစ်နိုင်ပါတယ်။ အကြောင်းရင်း သိမှ correction entry နဲ့ ပြင်ပါတယ်။
+      [[mark:kinds-4]] provider id မသိမ်းထားခဲ့ရင် ပမာဏနဲ့ ရက်နဲ့ ခန့်မှန်းတွဲရပါတယ်။ တစ်ရက်တည်းမှာ ယူရို ရှစ်ဆယ် payment နှစ်ခု ရှိရင် ဘယ်ဟာနဲ့ တွဲမလဲ မသေချာတော့ပါဘူး။
+      မှားတွဲမိရင် တကယ်တော့ break ဖြစ်နေတဲ့ record ကို matched လို့ ပြပြီး ဖုံးထားမိတာပါ။ [[mark:kinds-5]] ဒါကြောင့် ခန့်မှန်းတွဲတာကို guess မှန်း မှတ်ထားပြီး လူက review လုပ်တာ ကောင်းပါတယ်၊ provider id ကိုတော့ write လုပ်ချိန်မှာတင် သိမ်းထားတာ အကောင်းဆုံးပါ။
+      [[mark:kinds-6]] ဘယ် break ပဲ ဖြစ်ဖြစ်၊ report ကိုက်အောင် ledger row ကို ပြင်ရေးလိုက်တာကတော့
+      ဘယ်တော့မှ မလုပ်ရပါဘူး။ အဲဒါက ကွာခြားချက်ကို ဖျောက်လိုက်တာပါ။ ဘယ် source ကိုမှ အလိုလို မှန်တယ်လို့ မယူဘဲ အချင်းချင်း တိုက်စစ်တာက
+      No trust ပါ။ ပျောက်သွားတဲ့ webhook ကို အပြီးအပိုင် မပျောက်ခင် ဖမ်းမိတာကတော့ No lost data ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+    actions:
+      - {
+          id: show-kinds,
+          type: slide.show,
+          at: { mark: show-kinds, offsetMs: -700 },
+          slideId: kinds-1,
+        }
+      - { id: pt-k1, type: slide.point, at: { mark: pt-k1 }, target: { x: 0.138, y: 0.387 } }
+      - { id: kinds-2, type: slide.show, at: { mark: kinds-2 }, slideId: kinds-2 }
+      - {
+          id: pt-k2,
+          type: slide.point,
+          at: { afterAction: kinds-2 },
+          target: { x: 0.138, y: 0.489 },
+        }
+      - { id: kinds-3, type: slide.show, at: { mark: kinds-3 }, slideId: kinds-3 }
+      - {
+          id: pt-k3,
+          type: slide.point,
+          at: { afterAction: kinds-3 },
+          target: { x: 0.138, y: 0.591 },
+        }
+      - { id: kinds-4, type: slide.show, at: { mark: kinds-4 }, slideId: kinds-4 }
+      - {
+          id: pt-k4,
+          type: slide.point,
+          at: { afterAction: kinds-4 },
+          target: { x: 0.138, y: 0.693 },
+        }
+      - { id: kinds-5, type: slide.show, at: { mark: kinds-5 }, slideId: kinds-5 }
+      - {
+          id: pt-k5,
+          type: slide.point,
+          at: { afterAction: kinds-5 },
+          target: { x: 0.32, y: 0.847 },
+        }
+      - { id: kinds-6, type: slide.show, at: { mark: kinds-6 }, slideId: kinds-6 }
+      - {
+          id: pt-k6,
+          type: slide.point,
+          at: { afterAction: kinds-6 },
+          target: { x: 0.359, y: 0.947 },
+        }
+
+  - id: batch
+    chapter: One-to-many settlement
+    narration: >-
+      [[mark:show-batch]] ကိုယ့် ဘဏ် statement ကို ကြည့်ရင် payment တစ်ခုချင်းကို မတွေ့ရပါဘူး။ PSP က
+      payment အများကို စုပြီး fee နုတ်၊ payout တစ်ခုတည်းနဲ့ လွှဲပေးပါတယ်။ netting ဆိုတာ ပေးစရာ
+      အများကြီးကို တစ်ခုချင်း မလွှဲဘဲ net ပမာဏ တစ်ခုတည်းနဲ့ settle လုပ်တာပါ။ [[mark:batch-2]]
+      ဒါကြောင့် ဘဏ်က line တစ်ကြောင်းကို PSP record အများနဲ့ တိုက်ရပါတယ်။ item တွေကို ပေါင်းပြီး fee
+      နုတ်ရင် ဘဏ်ထဲ ဝင်တဲ့ ပမာဏ အတိအကျ ထွက်ရပါမယ်။ [[mark:close-batch]] ဒီ စစ်ချက်ကို
+      ထည့်ကြည့်ရအောင်။ [[mark:type-batch]] payout ထဲ ပါတဲ့ PSP record တွေရဲ့ ပမာဏကို ပေါင်းပြီး၊ fee
+      နုတ်ထားတဲ့ ရလဒ်ကို ဘဏ် statement ထဲက ပမာဏနဲ့ တစ်ကြောင်းတည်းမှာ ထုတ်ပြပါတယ်။ တကယ့် system မှာ မညီရင် break တစ်ခု ဖွင့်ပါတယ်။ [[mark:run-3]] run
+      လိုက်ရအောင်။ [[mark:pt-batch]] item နှစ်ခု ပေါင်းရင် ယူရို တစ်ရာ့ရှစ်ဆယ်ပါ၊ fee နှစ်ဒသမ ကိုး
+      ယူရို နုတ်လိုက်ရင် ဘဏ်ထဲ ဝင်တဲ့ ပမာဏနဲ့ အတိအကျ ကိုက်ပါတယ်။ [[mark:dock-3]] သတိထားရမှာက
+      အဲဒီ fee ကိုလည်း ledger ထဲမှာ expense အဖြစ် post လုပ်ထားရပါမယ်။ မဟုတ်ရင် PSP ဆီက ရစရာ ရှိတဲ့
+      receivable account မှာ နှစ်ဒသမ ကိုး ယူရို ကျန်နေပြီး ဘယ်တော့မှ သုည မဖြစ်တော့ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Transactions, timing & settlement: netting (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#transactions-timing-settlement",
+        }
+    actions:
+      - {
+          id: show-batch,
+          type: slide.show,
+          at: { mark: show-batch, offsetMs: -700 },
+          slideId: batch-1,
+        }
+      - {
+          id: pt-po,
+          type: slide.point,
+          at: { afterAction: show-batch },
+          target: { x: 0.522, y: 0.559 },
+        }
+      - { id: batch-2, type: slide.show, at: { mark: batch-2 }, slideId: batch-2 }
+      - {
+          id: pt-sum,
+          type: slide.point,
+          at: { afterAction: batch-2 },
+          target: { x: 0.318, y: 0.838 },
+        }
+      - { id: close-batch, type: slide.close, at: { mark: close-batch } }
+      - id: type-batch
+        type: editor.type
+        at: { mark: type-batch }
+        target:
+          {
+            file: main.go,
+            after: "\t\t\tfmt.Printf(\"%s: %s\\n\", c, strings.Join(report[c], \", \"))\n\t\t}\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\n\tvar gross int64\n\tfor _, t := range provider {\n\t\tif payout.Items[t.ID] {\n\t\t\tgross += t.Amount\n\t\t}\n\t}\n\tfmt.Println(payout.ID+\":\", cents(gross), \"-\", cents(payout.Fees), \"fees =\",\n\t\tcents(gross-payout.Fees), \"| bank\", cents(bank.Amount))\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "| bank 177.10",
+          timeoutMs: 8000,
+        }
+      - id: pt-batch
+        type: console.point
+        at: { mark: pt-batch }
+        target: { text: "po_77:", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: case
+    chapter: Reconcile မလုပ်နိုင်ရင်
+    narration: >-
+      [[mark:show-case]] ledger နဲ့ ဘဏ်ထဲက ငွေ မကိုက်တော့ရင် ဘာဖြစ်လဲ ဆိုတာ Synapse Financial Technologies
+      မှာ မြင်ရပါတယ်။ Synapse က ၂၀၂၄ ခုနှစ် ဧပြီလ ၂၂ ရက်နေ့မှာ Chapter ၁၁ bankruptcy ကို
+      လျှောက်ခဲ့ပါတယ်။ [[mark:pt-banks]] user တွေ ကိုယ်စား ဘဏ်မှာ ငွေ စုထားတဲ့ account ကို for
+      benefit of account၊ အတိုကောက် FBO account လို့ ခေါ်ပါတယ်။ [[mark:pt-gap]] Chapter ၁၁ trustee က
+      partner ဘဏ်တွေရဲ့ FBO account ထဲက ငွေနဲ့ Synapse ရဲ့ ledger ကြားမှာ ဒေါ်လာ သန်း ၈၅ လောက်
+      shortfall ရှိတယ်လို့ ပထမ ခန့်မှန်းခဲ့ပါတယ်။ နောက်ပိုင်းမှာ သန်း ၆၅ ကနေ ၉၆ ကြားလို့ ခန့်မှန်းခဲ့ပါတယ်၊ ကွာဟချက်ကိုတောင် ဂဏန်း တစ်ခုတည်းနဲ့ မပြောနိုင်တာပါ။ [[mark:case-2]] ၂၀၂၄
+      စက်တင်ဘာ ၁၇ ရက်နေ့မှာ FDIC Board က custodial account တချို့ကို ကိုင်တဲ့ ဘဏ်တွေအတွက် rule
+      တစ်ခု propose လုပ်ခဲ့ပါတယ်။ beneficial owner တစ်ယောက်ချင်းကို သိနိုင်တဲ့ record ထားဖို့နဲ့
+      owner တစ်ယောက်ချင်းရဲ့ balance ကို နေ့တိုင်း reconcile လုပ်ဖို့ပါ၊ အခုထိ proposal အဆင့်ပဲ
+      ရှိပါသေးတယ်။ [[mark:case-3]] insured ဘဏ် ပြုတ်တဲ့အခါ owner တစ်ယောက်ချင်းကို ကာကွယ်ပေးတဲ့ FDIC ရဲ့ pass-through insurance ကလည်း၊ owner တစ်ယောက်ချင်း
+      ဘယ်လောက် ပိုင်လဲ ဆိုတာ record ကနေ သက်သေပြနိုင်မှ အလုပ်လုပ်ပါတယ်။
+      ဆိုလိုတာက reconciliation ဟာ လကုန် စာရင်းပိတ်တဲ့ အလုပ် သက်သက် မဟုတ်ပါဘူး၊ user ငွေ ဘယ်မှာ
+      ဘယ်လောက် ရှိလဲ ဆိုတာကို သက်သေပြတဲ့ နည်းပါ။
+    sources:
+      - {
+          title: "Chapter 11 Trustee's status report, In re Synapse Financial Technologies, Case 1:24-bk-10646-MB, Doc 320 (16 Jul 2024)",
+          url: "https://cravath.com/a/web/jnsbxJAeoU5kw1zPqkWkVk/9gax7m/9890-320-07_16_2024-pacer320-main-document-012731-00001-central-district-of-california.pdf",
+        }
+      - {
+          title: "FDIC — FDIC Proposes Deposit Insurance Recordkeeping Rule for Banks' Third-Party Deposits (17 Sep 2024)",
+          url: "https://www.fdic.gov/news/press-releases/2024/fdic-proposes-deposit-insurance-recordkeeping-rule-banks-third-party",
+        }
+      - {
+          title: "FDIC — Pass-through Deposit Insurance Coverage",
+          url: "https://www.fdic.gov/resources/deposit-insurance/diguidebankers/pass-through/index.html",
+        }
+    actions:
+      - {
+          id: show-case,
+          type: slide.show,
+          at: { mark: show-case, offsetMs: -700 },
+          slideId: case-1,
+        }
+      - { id: pt-banks, type: slide.point, at: { mark: pt-banks }, target: { x: 0.231, y: 0.409 } }
+      - { id: pt-gap, type: slide.point, at: { mark: pt-gap }, target: { x: 0.106, y: 0.642 } }
+      - { id: case-2, type: slide.show, at: { mark: case-2 }, slideId: case-2 }
+      - {
+          id: pt-fdic,
+          type: slide.point,
+          at: { afterAction: case-2 },
+          target: { x: 0.398, y: 0.864 },
+        }
+      - { id: pt-banks2, type: slide.point, at: { mark: case-3 }, target: { x: 0.231, y: 0.409 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ ledger နဲ့ bank statement မကိုက်ရင် ဘာလုပ်မလဲ လို့
+      မေးလေ့ရှိပါတယ်။ ရှာပြီး ပြင်မယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး။ [[mark:iv-a]] ပထမ၊
+      ဘယ်လို တွဲမလဲ ပြောပါ။ provider id နဲ့ တွဲမယ်၊ id မရှိမှ ပမာဏနဲ့ အချိန်နဲ့ ခန့်မှန်းတွဲမယ်၊
+      payout တစ်ခုကို item တွေ ပေါင်းပြီး fee နုတ်တာနဲ့ တိုက်မယ် ဆိုတာပါ။ [[mark:iv-b]] ဒုတိယ၊
+      ကွာတာတိုင်းကို class ခွဲပါ။ missing၊ ပမာဏ ကွာတာ၊ settlement window ထဲက pending ဆိုပြီး ခွဲရင် pending ကို alert မပေးရတော့ပါဘူး။ [[mark:iv-c]] တတိယ၊ ပြင်တာကို
+      first-class tool နဲ့ပဲ လုပ်ပါ။ correction entry နဲ့၊ webhook ကို reprocess လုပ်တာနဲ့ ပြင်ပြီး row
+      ကို overwrite မလုပ်ပါဘူး။ [[mark:iv-d]] ပြီးရင် ဘယ်လို run မလဲ ဆက်ပြောပါ။ schedule နဲ့ run ပြီး break တိုင်းကို တာဝန်ယူတဲ့သူ ရှိတဲ့ queue ထဲ ပိတ်တဲ့အထိ ထားမယ်၊ ဘယ် source ကိုမှ အလိုလို မယုံဘူး ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:open-data2]] ledger ထဲက ဒုတိယ
+      record ကို ကြည့်ပါ။ [[mark:sel-try]] သူ့ရဲ့ provider id ကို ဖျက်ပြီး run ကြည့်ပါ။ ဒုတိယ record က ပမာဏနဲ့ ရက်နဲ့ ခန့်မှန်းတွဲတဲ့ class ထဲ ရောက်သွားပါလိမ့်မယ်။ ပြီးရင် PSP report မှာ အဲဒီ payment ရဲ့ အပေါ်မှာ ယူရို ရှစ်ဆယ် record နောက်တစ်ခု ထည့်ကြည့်ပါ၊ ခန့်မှန်းချက် မှားသွားပြီး မှန်တဲ့ payment က ledger ထဲမှာ မရှိဘူး လို့ ပေါ်လာပါလိမ့်မယ်။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ reconciliation
+      ဆိုတာ ledger ကို အပြင်က source တွေနဲ့ တိုက်ပြီး ကွာတာတိုင်းကို class ခွဲ၊ နားလည်ပြီးမှ
+      first-class tool နဲ့ ပြင်တာပါ၊ ကိုက်အောင် ပြင်ရေးတာ မဟုတ်ပါဘူး။ နောက် lesson ကစပြီး controls
+      and access အပိုင်းကို ကြည့်ပါမယ်။ break တစ်ခုကို ပြင်တဲ့ correction entry ကို engineer
+      တစ်ယောက်တည်း post လုပ်ခွင့် ရှိသင့်လား ဆိုတဲ့ မေးခွန်းကနေ စပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - { id: open-data2, type: workspace.openFile, at: { mark: open-data2 }, path: data.go }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: data.go, text: 'Ref: "pi_102", ', occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
