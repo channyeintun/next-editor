@@ -1,0 +1,1023 @@
+# Fintech Engineering, lesson 35: custody and crypto (Burmese).
+#
+# Source: Fintech Engineering Handbook, Appendix A "Custody & crypto" and Appendix B "Flow 1"
+# (CC BY 4.0, Voytek Pitula).
+# Start state: utxo.go holds four unspent outputs and spend/balance; chain.go holds blocks 100-105
+# with two deposits, confirmations, reorg, credit and offChain; main.go spends two outputs.
+# Edits, all insert-only (main.go):
+#   1. print the tip and each deposit's confirmations          -> run-2: dep-a 2, dep-b 5
+#   2. credit with K=1 and K=3, reorg from block 104, check     -> run-3: the K=1 credit is off-chain
+# Runs: run-1 (a UTXO spend, change, implicit fee, balance as a sum), run-2, run-3.
+# Figures: keys (key -> address, seed, custody, hot/cold/multisig), models (UTXO vs account),
+# reorg (confirmations, a fork, the dropped deposit, ETC), sign (Ronin, Bybit), iv.
+# Facts: B15 (confirmations and finality), B16 (ETC reorgs), B07 (Bybit), B08 (Ronin).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-35-custody-crypto
+  title: "Fintech Engineering 35: Custody နဲ့ crypto"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      chain.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Block is one block: its height and the transactions it holds.
+        type Block struct {
+        	Height int
+        	Txs    []string
+        }
+
+        // chain is the node's current view, oldest block first.
+        var chain = []Block{
+        	{100, nil},
+        	{101, []string{"dep-b"}},
+        	{102, nil},
+        	{103, nil},
+        	{104, []string{"dep-a"}},
+        	{105, nil},
+        }
+
+        // deposits to one of our addresses, as the node reported them when they appeared.
+        var deposits = []struct {
+        	ID     string
+        	Amount int64
+        }{{"dep-a", 80_000}, {"dep-b", 50_000}}
+
+        func tip() int { return chain[len(chain)-1].Height }
+
+        // confirmations counts the blocks from the one holding tx up to the tip; 0 if no block holds it.
+        func confirmations(tx string) int {
+        	for _, b := range chain {
+        		for _, t := range b.Txs {
+        			if t == tx {
+        				return tip() - b.Height + 1
+        			}
+        		}
+        	}
+        	return 0
+        }
+
+        // reorg drops every block from height on and puts a longer competing branch of n blocks there.
+        func reorg(height, n int) {
+        	chain = chain[:height-chain[0].Height]
+        	for i := range n {
+        		chain = append(chain, Block{Height: height + i})
+        	}
+        }
+
+        // credit lists the deposits a rule of k confirmations would credit right now.
+        func credit(k int) []string {
+        	var ids []string
+        	for _, d := range deposits {
+        		if confirmations(d.ID) >= k {
+        			ids = append(ids, d.ID)
+        		}
+        	}
+        	return ids
+        }
+
+        // offChain says which credited deposits no block holds any more.
+        func offChain(ids []string) string {
+        	if len(ids) == 0 {
+        		return "nothing credited yet"
+        	}
+        	var gone []string
+        	for _, d := range deposits {
+        		for _, id := range ids {
+        			if id == d.ID && confirmations(id) == 0 {
+        				gone = append(gone, fmt.Sprintf("%s %d not on chain", d.ID, d.Amount))
+        			}
+        		}
+        	}
+        	if len(gone) == 0 {
+        		return "all on chain"
+        	}
+        	return strings.Join(gone, ", ")
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        	in, fee, err := spend([]string{"a1", "a2"}, []Output{
+        		{"b1", "merchant", 100_000},
+        		{"b2", "ours", 8_500}, // change
+        	})
+        	if err != nil {
+        		fmt.Println(err)
+        		return
+        	}
+        	fmt.Printf("in %d -> pay 100000 + change 8500 + fee %d\n", in, fee)
+        	total, n := balance("ours")
+        	fmt.Printf("balance ours: %d in %d unspent outputs\n", total, n)
+        }
+      utxo.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"slices"
+        )
+
+        // Output is one coin on a UTXO chain: an amount locked to an address.
+        // It is spent whole or not at all. Amounts are integers in the chain's smallest unit.
+        type Output struct {
+        	ID      string
+        	Address string
+        	Amount  int64
+        }
+
+        // unspent is the whole state of the chain. There is no balance field anywhere.
+        var unspent = []Output{
+        	{"a1", "ours", 70_000},
+        	{"a2", "ours", 40_000},
+        	{"a3", "ours", 20_000},
+        	{"a4", "ours", 300},
+        }
+
+        // spend consumes the inputs whole and creates the outputs.
+        // Whatever the outputs do not claim is the network fee.
+        func spend(inputs []string, outputs []Output) (in, fee int64, err error) {
+        	var out int64
+        	var kept []Output
+        	for _, o := range unspent {
+        		if slices.Contains(inputs, o.ID) {
+        			in += o.Amount
+        		} else {
+        			kept = append(kept, o)
+        		}
+        	}
+        	for _, o := range outputs {
+        		out += o.Amount
+        	}
+        	if out > in {
+        		return 0, 0, fmt.Errorf("outputs %d exceed inputs %d", out, in)
+        	}
+        	unspent = append(kept, outputs...)
+        	return in, in - out, nil
+        }
+
+        // balance is derived: the sum of the unspent outputs an address can spend.
+        func balance(address string) (total int64, n int) {
+        	for _, o := range unspent {
+        		if o.Address == address {
+        			total += o.Amount
+        			n++
+        		}
+        	}
+        	return total, n
+        }
+  slides:
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto deposit ကို ဘယ်အချိန်မှာ credit လုပ်မလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto deposit ကို ဘယ်အချိန်မှာ credit လုပ်မလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6ad55"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Seen ≠ final — reorg က recent block တွေကို ဖျက်နိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">mempool → block → K blocks deep</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto deposit ကို ဘယ်အချိန်မှာ credit လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6ad55"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Seen ≠ final — reorg က recent block တွေကို ဖျက်နိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">mempool → block → K blocks deep</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6c453"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">K confirmations — chain နဲ့ amount အလိုက် ရွေး</text><text x="188" y="443" font-size="26" fill="#8a94a8">Bitcoin: 6 ≈ 1 h on average · Ethereum finalized ≈ 15 min</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto deposit ကို ဘယ်အချိန်မှာ credit လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6ad55"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Seen ≠ final — reorg က recent block တွေကို ဖျက်နိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">mempool → block → K blocks deep</text></g><g><circle cx="138" cy="381" r="25" fill="#f6c453"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">K confirmations — chain နဲ့ amount အလိုက် ရွေး</text><text x="188" y="443" font-size="26" fill="#8a94a8">Bitcoin: 6 ≈ 1 h on average · Ethereum finalized ≈ 15 min</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Change နဲ့ ကိုယ့် transfer ကို deposit လို့ မယူ</text><text x="188" y="575" font-size="26" fill="#8a94a8">address ကို ကိုယ်ပိုင်လား၊ tx ကို ကိုယ်ပို့တာလား စစ်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Crypto deposit ကို ဘယ်အချိန်မှာ credit လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6ad55"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Seen ≠ final — reorg က recent block တွေကို ဖျက်နိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">mempool → block → K blocks deep</text></g><g><circle cx="138" cy="381" r="25" fill="#f6c453"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">K confirmations — chain နဲ့ amount အလိုက် ရွေး</text><text x="188" y="443" font-size="26" fill="#8a94a8">Bitcoin: 6 ≈ 1 h on average · Ethereum finalized ≈ 15 min</text></g><g><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Change နဲ့ ကိုယ့် transfer ကို deposit လို့ မယူ</text><text x="188" y="575" font-size="26" fill="#8a94a8">address ကို ကိုယ်ပိုင်လား၊ tx ကို ကိုယ်ပို့တာလား စစ်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">pending → credited၊ reorg ဖြစ်ရင် reverse + alert</text><text x="188" y="707" font-size="26" fill="#8a94a8">node နဲ့ ledger ကို နေ့တိုင်း reconcile</text></g>
+        </svg>
+    - id: keys-1
+      contentType: html
+      name: "Custody 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol><symbol id="i-wallet" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="29" rx="4"/><path d="M43 21H33a4.500 4.500 0 0 0 0 9h10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">CUSTODY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေကို ရွှေ့နိုင်တာက key ကိုင်ထားသူပါ</text>
+        <g class="in"><rect x="90" y="225" width="380" height="150" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="90" y="225" width="380" height="150" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-key" x="112" y="268" width="64" height="64" style="color:#b794f6"/><text x="320" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">private key</text><text x="320" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">secret · signs spends</text></g>
+        <g class="in"><rect x="610" y="225" width="380" height="150" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-lock" x="632" y="268" width="64" height="64" style="color:#9aa5b8"/><text x="840" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">public key</text><text x="840" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">derived from it</text></g>
+        <g class="in"><rect x="1130" y="225" width="380" height="150" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-wallet" x="1152" y="268" width="64" height="64" style="color:#f6c453"/><text x="1360" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">address</text><text x="1360" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">where funds arrive</text></g>
+        <path d="M480 300L596 300" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="538" y="283.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">one-way</text>
+        <path d="M1000 300L1116 300" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="1058" y="283.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">one-way</text>
+        </svg>
+    - id: keys-2
+      contentType: html
+      name: "Custody 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol><symbol id="i-wallet" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="29" rx="4"/><path d="M43 21H33a4.500 4.500 0 0 0 0 9h10"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">CUSTODY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေကို ရွှေ့နိုင်တာက key ကိုင်ထားသူပါ</text>
+        <rect x="90" y="225" width="380" height="150" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="90" y="225" width="380" height="150" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-key" x="112" y="268" width="64" height="64" style="color:#b794f6"/><text x="320" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">private key</text><text x="320" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">secret · signs spends</text>
+        <rect x="610" y="225" width="380" height="150" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-lock" x="632" y="268" width="64" height="64" style="color:#9aa5b8"/><text x="840" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">public key</text><text x="840" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">derived from it</text>
+        <rect x="1130" y="225" width="380" height="150" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-wallet" x="1152" y="268" width="64" height="64" style="color:#f6c453"/><text x="1360" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">address</text><text x="1360" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">where funds arrive</text>
+        <path d="M480 300L596 300" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="538" y="283.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">one-way</text>
+        <path d="M1000 300L1116 300" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="1058" y="283.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">one-way</text>
+        <g class="in"><rect x="90" y="455" width="380" height="120" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-doc" x="112" y="483" width="64" height="64" style="color:#f6ad55"/><text x="320" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">seed phrase</text><text x="320" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">rebuilds all the keys</text></g>
+        <path d="M280 445L280 389" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <g class="in"><rect x="610" y="455" width="380" height="120" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="632" y="483" width="64" height="64" style="color:#6cb2f5"/><text x="840" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">self-custody</text><text x="840" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">user holds the key</text></g>
+        <g class="in"><rect x="1130" y="455" width="380" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-building" x="1152" y="483" width="64" height="64" style="color:#4fd1c5"/><text x="1360" y="506.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">custodial</text><text x="1360" y="546.3" font-size="23" text-anchor="middle" fill="#8a94a8">platform holds the key</text></g>
+        </svg>
+    - id: keys-3
+      contentType: html
+      name: "Custody 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol><symbol id="i-wallet" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="29" rx="4"/><path d="M43 21H33a4.500 4.500 0 0 0 0 9h10"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">CUSTODY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေကို ရွှေ့နိုင်တာက key ကိုင်ထားသူပါ</text>
+        <rect x="90" y="225" width="380" height="150" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="90" y="225" width="380" height="150" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-key" x="112" y="268" width="64" height="64" style="color:#b794f6"/><text x="320" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">private key</text><text x="320" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">secret · signs spends</text>
+        <rect x="610" y="225" width="380" height="150" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-lock" x="632" y="268" width="64" height="64" style="color:#9aa5b8"/><text x="840" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">public key</text><text x="840" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">derived from it</text>
+        <rect x="1130" y="225" width="380" height="150" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-wallet" x="1152" y="268" width="64" height="64" style="color:#f6c453"/><text x="1360" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">address</text><text x="1360" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">where funds arrive</text>
+        <path d="M480 300L596 300" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="538" y="283.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">one-way</text>
+        <path d="M1000 300L1116 300" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="1058" y="283.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">one-way</text>
+        <rect x="90" y="455" width="380" height="120" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-doc" x="112" y="483" width="64" height="64" style="color:#f6ad55"/><text x="320" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">seed phrase</text><text x="320" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">rebuilds all the keys</text>
+        <path d="M280 445L280 389" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <rect x="610" y="455" width="380" height="120" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="632" y="483" width="64" height="64" style="color:#6cb2f5"/><text x="840" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">self-custody</text><text x="840" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">user holds the key</text>
+        <rect x="1130" y="455" width="380" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-building" x="1152" y="483" width="64" height="64" style="color:#4fd1c5"/><text x="1360" y="506.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">custodial</text><text x="1360" y="546.3" font-size="23" text-anchor="middle" fill="#8a94a8">platform holds the key</text>
+        <g class="in"><rect x="90" y="670" width="380" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-server" x="112" y="703" width="64" height="64" style="color:#f6ad55"/><text x="320" y="725.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">hot wallet</text><text x="320" y="766.6" font-size="24" text-anchor="middle" fill="#8a94a8">online · signs at once</text></g>
+        <g class="in"><rect x="610" y="670" width="380" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-shield" x="632" y="703" width="64" height="64" style="color:#4fd1c5"/><text x="840" y="725.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">cold wallet</text><text x="840" y="766.6" font-size="24" text-anchor="middle" fill="#8a94a8">offline · slow to use</text></g>
+        <g class="in"><rect x="1130" y="670" width="380" height="130" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-key" x="1152" y="703" width="64" height="64" style="color:#b794f6"/><text x="1360" y="725.5" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600">multisig / MPC</text><text x="1360" y="765.9" font-size="24" text-anchor="middle" fill="#8a94a8">several keys / shares</text></g>
+        </svg>
+    - id: models-1
+      contentType: html
+      name: "Accounting models 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">ACCOUNTING MODELS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">တူညီတဲ့ payment ကို model နှစ်မျိုးနဲ့</text>
+        <g class="in"><text x="90" y="236" font-size="26" fill="#8a94a8">UTXO — spend whole coins</text></g>
+        <g class="in"><rect x="90" y="290" width="240" height="96" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="210" y="347.7" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">a1  70,000</text></g>
+        <g class="in"><rect x="90" y="450" width="240" height="96" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="210" y="507.7" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">a2  40,000</text></g>
+        <g class="in"><rect x="400" y="330" width="110" height="180" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="455" y="430" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx</text></g>
+        <g class="in"><rect x="580" y="260" width="250" height="86" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="705" y="312" font-size="29" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">pay 100,000</text></g>
+        <g class="in"><rect x="580" y="377" width="250" height="86" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="580" y="377" width="250" height="86" rx="18" fill="#4fd1c5" opacity="0.13"/><text x="705" y="428.4" font-size="27" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">change 8,500</text></g>
+        <g class="in"><rect x="580" y="494" width="250" height="86" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5" stroke-dasharray="10 8"/><text x="705" y="547" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">fee 1,500</text></g>
+        <path d="M336.5 345.6L390.9 409.4" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/>
+        <path d="M336.7 490.6L390.6 430.4" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/>
+        <path d="M515.1 411.4L572.8 315" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/>
+        <path d="M520 420L566 420" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/>
+        <path d="M515.1 428.6L572.8 525" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <g class="in"><text x="580" y="625" font-size="23" fill="#8a94a8" class="mono">fee = in − out</text></g>
+        </svg>
+    - id: models-2
+      contentType: html
+      name: "Accounting models 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">ACCOUNTING MODELS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">တူညီတဲ့ payment ကို model နှစ်မျိုးနဲ့</text>
+        <text x="90" y="236" font-size="26" fill="#8a94a8">UTXO — spend whole coins</text>
+        <rect x="90" y="290" width="240" height="96" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="210" y="347.7" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">a1  70,000</text>
+        <rect x="90" y="450" width="240" height="96" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="210" y="507.7" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">a2  40,000</text>
+        <rect x="400" y="330" width="110" height="180" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="455" y="430" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx</text>
+        <rect x="580" y="260" width="250" height="86" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="705" y="312" font-size="29" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">pay 100,000</text>
+        <rect x="580" y="377" width="250" height="86" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="580" y="377" width="250" height="86" rx="18" fill="#4fd1c5" opacity="0.13"/><text x="705" y="428.4" font-size="27" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">change 8,500</text>
+        <rect x="580" y="494" width="250" height="86" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5" stroke-dasharray="10 8"/><text x="705" y="547" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">fee 1,500</text>
+        <path d="M336.5 345.6L390.9 409.4" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <path d="M336.7 490.6L390.6 430.4" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <path d="M515.1 411.4L572.8 315" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <path d="M520 420L566 420" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <path d="M515.1 428.6L572.8 525" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <text x="580" y="625" font-size="23" fill="#8a94a8" class="mono">fee = in − out</text>
+        <g class="in"><path d="M880 220L880 650" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/></g>
+        <g class="in"><text x="930" y="236" font-size="26" fill="#8a94a8">Account — running balances</text></g>
+        <g class="in"><rect x="930" y="280" width="580" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="952" y="315" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="1305.7" y="315" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">before</text><text x="1488" y="315" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">after</text><path d="M930 332H1510" stroke="#2a3345" stroke-width="2"/><g><text x="952" y="373" font-size="28" fill="#e9edf5" class="mono">ours</text><text x="1305.7" y="373" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">110,000</text><text x="1488" y="373" font-size="28" text-anchor="end" fill="#4fd1c5" class="mono">8,500</text></g><g><path d="M946 394H1494" stroke="#2a3345" stroke-width="1.5"/><text x="952" y="435" font-size="28" fill="#e9edf5" class="mono">merchant</text><text x="1305.7" y="435" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">0</text><text x="1488" y="435" font-size="28" text-anchor="end" fill="#f6c453" class="mono">100,000</text></g><g><path d="M946 456H1494" stroke="#2a3345" stroke-width="1.5"/><text x="952" y="497" font-size="28" fill="#9aa5b8" class="mono">gas fee</text><text x="1488" y="497" font-size="28" text-anchor="end" fill="#9aa5b8" class="mono">1,500</text></g></g>
+        <g class="in"><rect x="90" y="720" width="509.5" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="90" y="720" width="509.5" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="344.8" y="754.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">token (ERC-20) ≠ coin (BTC, ETH)</text></g>
+        <g class="in"><rect x="760" y="720" width="409.2" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="760" y="720" width="409.2" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="964.6" y="754.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">dust: output &lt; fee to move it</text></g>
+        </svg>
+    - id: reorg-1
+      contentType: html
+      name: "Finality 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">FINALITY</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1217.4" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Confirmation တစ်ခုက done မဟုတ်ဘူး</text>
+        <g class="in"><rect x="90" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="180" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100</text></g>
+        <g class="in"><rect x="300" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="390" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">101</text><text x="390" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">dep-b</text></g>
+        <g class="in"><rect x="510" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="600" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">102</text></g>
+        <g class="in"><rect x="720" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="810" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">103</text></g>
+        <g class="in"><rect x="930" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1020" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">104</text><text x="1020" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">dep-a</text></g>
+        <g class="in"><rect x="1140" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="1230" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">105</text></g>
+        </svg>
+    - id: reorg-2
+      contentType: html
+      name: "Finality 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">FINALITY</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1217.4" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Confirmation တစ်ခုက done မဟုတ်ဘူး</text>
+        <rect x="90" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="180" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100</text>
+        <rect x="300" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="390" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">101</text><text x="390" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">dep-b</text>
+        <rect x="510" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="600" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">102</text>
+        <rect x="720" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="810" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">103</text>
+        <rect x="930" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1020" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">104</text><text x="1020" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">dep-a</text>
+        <rect x="1140" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="1230" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">105</text>
+        <g class="in"><path d="M300 520q0 14 14 14H796q14 0 14 14q0 -14 14 -14H1306q14 0 14 -14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="810" y="582" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">dep-b: 5 confirmations</text></g>
+        <g class="in"><path d="M930 610q0 14 14 14H1111q14 0 14 14q0 -14 14 -14H1306q14 0 14 -14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="1125" y="672" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">dep-a: 2 confirmations</text></g>
+        </svg>
+    - id: reorg-3
+      contentType: html
+      name: "Finality 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">FINALITY</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1217.4" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Confirmation တစ်ခုက done မဟုတ်ဘူး</text>
+        <rect x="90" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="180" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100</text>
+        <rect x="300" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="390" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">101</text><text x="390" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">dep-b</text>
+        <rect x="510" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="600" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">102</text>
+        <rect x="720" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="810" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">103</text>
+        <rect x="930" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1020" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">104</text><text x="1020" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">dep-a</text>
+        <rect x="1140" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="1230" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">105</text>
+        <path d="M300 520q0 14 14 14H796q14 0 14 14q0 -14 14 -14H1306q14 0 14 -14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="810" y="582" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">dep-b: 5 confirmations</text>
+        <g class="in"><rect x="930" y="215" width="180" height="100" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1020" y="275" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">104'</text></g>
+        <g class="in"><rect x="1140" y="215" width="180" height="100" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1230" y="275" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">105'</text></g>
+        <g class="in"><rect x="1350" y="215" width="180" height="100" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1440" y="275" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">106'</text></g>
+        <path d="M816.6 392.5V275.5H920.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <g class="in"><text x="90" y="278" font-size="26" fill="#f6ad55">a longer branch wins →</text></g>
+        </svg>
+    - id: reorg-4
+      contentType: html
+      name: "Finality 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">FINALITY</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1217.4" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Confirmation တစ်ခုက done မဟုတ်ဘူး</text>
+        <rect x="90" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="180" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100</text>
+        <rect x="300" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="390" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">101</text><text x="390" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">dep-b</text>
+        <rect x="510" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="600" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">102</text>
+        <rect x="720" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="810" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">103</text>
+        <rect x="930" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1020" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">104</text><text x="1020" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">dep-a</text>
+        <rect x="1140" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="1230" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">105</text>
+        <rect x="930" y="215" width="180" height="100" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1020" y="275" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">104'</text>
+        <rect x="1140" y="215" width="180" height="100" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1230" y="275" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">105'</text>
+        <rect x="1350" y="215" width="180" height="100" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1440" y="275" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">106'</text>
+        <path d="M816.6 392.5V275.5H920.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <text x="90" y="278" font-size="26" fill="#f6ad55">a longer branch wins →</text>
+        <g class="in"><circle cx="1104" cy="406" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="1090.2" y="392.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        <g class="in"><circle cx="1314" cy="406" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="1300.2" y="392.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        <g class="in"><rect x="90" y="700" width="550.8" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="90" y="700" width="550.8" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="365.4" y="734.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">dep-a → back to the mempool, or gone</text></g>
+        </svg>
+    - id: reorg-5
+      contentType: html
+      name: "Finality 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">FINALITY</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1217.4" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Confirmation တစ်ခုက done မဟုတ်ဘူး</text>
+        <rect x="90" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="180" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100</text>
+        <rect x="300" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="390" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">101</text><text x="390" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">dep-b</text>
+        <rect x="510" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="600" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">102</text>
+        <rect x="720" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="810" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">103</text>
+        <rect x="930" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1020" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">104</text><text x="1020" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">dep-a</text>
+        <rect x="1140" y="400" width="180" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="1230" y="460" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">105</text>
+        <rect x="930" y="215" width="180" height="100" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1020" y="275" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">104'</text>
+        <rect x="1140" y="215" width="180" height="100" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1230" y="275" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">105'</text>
+        <rect x="1350" y="215" width="180" height="100" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1440" y="275" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">106'</text>
+        <path d="M816.6 392.5V275.5H920.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <text x="90" y="278" font-size="26" fill="#f6ad55">a longer branch wins →</text>
+        <circle cx="1104" cy="406" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="1090.2" y="392.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <circle cx="1314" cy="406" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="1300.2" y="392.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="90" y="700" width="550.8" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="90" y="700" width="550.8" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="365.4" y="734.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">dep-a → back to the mempool, or gone</text>
+        <g class="in"><rect x="90" y="790" width="991.6" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="90" y="790" width="991.6" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="585.8" y="824.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">Ethereum Classic, Aug 2020: reorgs of 3,693 · 4,000+ · 7,000+ blocks</text></g>
+        </svg>
+    - id: sign-1
+      contentType: html
+      name: "Multisig is not magic 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">MULTISIG IS NOT MAGIC</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Signer တွေက screen ပြတာကို sign လုပ်တယ်</text>
+        <g class="in"><text x="100" y="330" font-size="96" fill="#fc8181" font-weight="800">5 of 9</text><text x="100" y="368" font-size="26" fill="#8a94a8">Ronin, 2022: validator keys taken</text></g>
+        <g class="in"><text x="100" y="450" font-size="26" fill="#8a94a8">≈ $600M out · 4 of those 5 keys run by Sky Mavis</text></g>
+        </svg>
+    - id: sign-2
+      contentType: html
+      name: "Multisig is not magic 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">MULTISIG IS NOT MAGIC</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Signer တွေက screen ပြတာကို sign လုပ်တယ်</text>
+        <text x="100" y="330" font-size="96" fill="#fc8181" font-weight="800">5 of 9</text><text x="100" y="368" font-size="26" fill="#8a94a8">Ronin, 2022: validator keys taken</text>
+        <text x="100" y="450" font-size="26" fill="#8a94a8">≈ $600M out · 4 of those 5 keys run by Sky Mavis</text>
+        <g class="in"><text x="840" y="330" font-size="96" fill="#fc8181" font-weight="800">≈ $1.5B</text><text x="840" y="368" font-size="26" fill="#8a94a8">Bybit, 2025: multisig cold wallet</text></g>
+        <g class="in"><text x="840" y="450" font-size="26" fill="#8a94a8">signers saw a masked interface</text></g>
+        </svg>
+    - id: sign-3
+      contentType: html
+      name: "Multisig is not magic 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-eye" viewBox="0 0 48 48"><path d="M4 24c5-9 12-13 20-13s15 4 20 13c-5 9-12 13-20 13S9 33 4 24z"/><circle cx="24" cy="24" r="6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">MULTISIG IS NOT MAGIC</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Signer တွေက screen ပြတာကို sign လုပ်တယ်</text>
+        <text x="100" y="330" font-size="96" fill="#fc8181" font-weight="800">5 of 9</text><text x="100" y="368" font-size="26" fill="#8a94a8">Ronin, 2022: validator keys taken</text>
+        <text x="100" y="450" font-size="26" fill="#8a94a8">≈ $600M out · 4 of those 5 keys run by Sky Mavis</text>
+        <text x="840" y="330" font-size="96" fill="#fc8181" font-weight="800">≈ $1.5B</text><text x="840" y="368" font-size="26" fill="#8a94a8">Bybit, 2025: multisig cold wallet</text>
+        <text x="840" y="450" font-size="26" fill="#8a94a8">signers saw a masked interface</text>
+        <g class="in"><rect x="100" y="560" width="680" height="110" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-key" x="122" y="583" width="64" height="64" style="color:#b794f6"/><text x="480" y="605.5" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600">threshold = keys an attacker needs</text><text x="480" y="645.9" font-size="24" text-anchor="middle" fill="#8a94a8">keys on separate people and systems</text></g>
+        <g class="in"><rect x="840" y="560" width="680" height="110" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-eye" x="862" y="583" width="64" height="64" style="color:#b794f6"/><text x="1220" y="605.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">verify what is signed</text><text x="1220" y="646.6" font-size="24" text-anchor="middle" fill="#8a94a8">decode it on a second device</text></g>
+        <g class="in"><rect x="100" y="740" width="785.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="100" y="740" width="785.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="492.6" y="774.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">allow-list: withdrawals only to pre-approved addresses</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9535
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "in 110000 -> pay 100000 + change 8500 + fee 1500\nbalance ours: 28800 in 3 unspent outputs\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "in 110000 -> pay 100000 + change 8500 + fee 1500\nbalance ours: 28800 in 3 unspent outputs\ntip: 105\ndep-a 80000: 2 confirmations\ndep-b 50000: 5 confirmations\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "in 110000 -> pay 100000 + change 8500 + fee 1500\nbalance ours: 28800 in 3 unspent outputs\ntip: 105\ndep-a 80000: 2 confirmations\ndep-b 50000: 5 confirmations\nreorg from block 104, new tip: 106\nK=1 credited [dep-a dep-b] -> dep-a 80000 not on chain\nK=3 credited [dep-b] -> all on chain\n"
+
+scenes:
+  - id: hook
+    chapter: Key ကိုင်ထားသူက ငွေကို ရွှေ့နိုင်တယ်
+    narration: >-
+      [[mark:show-keys]] ledger ထဲက row တစ်ခု မှားရင် correction entry နဲ့ ပြင်လို့ ရပါတယ်။ chain ပေါ်ကို
+      ပို့လိုက်တဲ့ ငွေကတော့ chain က confirm လုပ်ပြီးတာနဲ့ ပြန်ယူလို့ မရတော့ပါဘူး။ [[mark:pt-priv]] ပို့ခွင့်ကို
+      ဆုံးဖြတ်တာက private key ပါ၊ spend လုပ်တိုင်း sign လုပ်ဖို့ လိုတဲ့ လျှို့ဝှက်ချက်ပါ။ [[mark:pt-addr]] အဲဒီကနေ
+      public key ကို၊ public key ကနေ ငွေလက်ခံမယ့် address ကို တွက်ထုတ်ပါတယ်။ [[mark:keys-2]] seed phrase က key အားလုံးကို ပြန်ဆောက်နိုင်တဲ့ backup
+      ဖြစ်လို့ seed phrase ရတဲ့သူဟာ ငွေရတဲ့သူပါပဲ။ [[mark:pt-cust]] custody ဆိုတာ key ကို ဘယ်သူ ထိန်းထားလဲ ဆိုတဲ့
+      မေးခွန်းပါ။ user ကိုယ်တိုင် ထိန်းရင် self-custody၊ platform က ထိန်းရင် custodial ပါ။ custodial platform မှာ user ရဲ့ balance က liability ဖြစ်ပြီး၊ အဲဒါကို ကာမိရမယ့် asset က ကိုယ့် key တွေနဲ့ ထိန်းထားတဲ့ ငွေပါ။ [[mark:keys-3]] key တွေကို နေရာ ခွဲထားရတာ ဒါကြောင့်ပါ။ hot wallet က online မှာ ရှိလို့
+      withdrawal ကို ချက်ချင်း sign လုပ်နိုင်ပေမဲ့ attack ခံရနိုင်ပါတယ်။ cold wallet က offline ဖြစ်လို့ ပိုလုံခြုံပေမဲ့
+      သုံးဖို့ အချိန်ယူရပါတယ်။ [[mark:pt-multi]] multisig နဲ့ MPC ကတော့ key တစ်ခုတည်း၊ device တစ်ခုတည်းနဲ့ ငွေ
+      မရွှေ့နိုင်အောင် key အများ ဒါမှမဟုတ် key အပိုင်းအစ အများ လိုအောင် လုပ်ထားတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Custody & crypto (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#custody-crypto",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: A crypto withdrawal (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+    actions:
+      - {
+          id: show-keys,
+          type: slide.show,
+          at: { mark: show-keys, offsetMs: -700 },
+          slideId: keys-1,
+        }
+      - { id: pt-priv, type: slide.point, at: { mark: pt-priv }, target: { x: 0.175, y: 0.426 } }
+      - { id: pt-addr, type: slide.point, at: { mark: pt-addr }, target: { x: 0.825, y: 0.426 } }
+      - { id: keys-2, type: slide.show, at: { mark: keys-2 }, slideId: keys-2 }
+      - {
+          id: pt-seed,
+          type: slide.point,
+          at: { afterAction: keys-2 },
+          target: { x: 0.175, y: 0.648 },
+        }
+      - { id: pt-cust, type: slide.point, at: { mark: pt-cust }, target: { x: 0.825, y: 0.648 } }
+      - { id: keys-3, type: slide.show, at: { mark: keys-3 }, slideId: keys-3 }
+      - {
+          id: pt-hot,
+          type: slide.point,
+          at: { afterAction: keys-3 },
+          target: { x: 0.175, y: 0.898 },
+        }
+      - { id: pt-multi, type: slide.point, at: { mark: pt-multi }, target: { x: 0.825, y: 0.898 } }
+
+  - id: utxo
+    chapter: Balance field မရှိတဲ့ chain
+    narration: >-
+      [[mark:close-keys]] ဘာကို ရွှေ့တာလဲ ဆိုတာကတော့ chain ရဲ့
+      accounting model ပေါ် မူတည်ပါတယ်။ [[mark:open-utxo]] Bitcoin စတိုင် UTXO model ကို အရင် ကြည့်ရအောင်။
+      [[mark:sel-unspent]] ဒီ model မှာ balance ဆိုတဲ့ field ဘယ်နေရာမှာမှ မရှိပါဘူး။ chain မှာ ရှိတာက မသုံးရသေးတဲ့
+      output တွေပဲ ဖြစ်ပြီး၊ output တစ်ခုစီက address တစ်ခုကို ချိတ်ထားတဲ့ ငွေပမာဏ တစ်ခုပါ။ [[mark:sel-whole]] output
+      ကို အပိုင်းလိုက် သုံးလို့ မရဘဲ တစ်ခုလုံး သုံးရပါတယ်၊ ဒီ program မှာ output အသစ်တွေ မယူသွားတဲ့ ငွေက fee
+      ဖြစ်ပါတယ်။ [[mark:open-main]] main က ခုနစ်သောင်းနဲ့ လေးသောင်း output နှစ်ခုကို သုံးပြီး merchant ကို တစ်သိန်း
+      ပေးပါတယ်။ [[mark:sel-change]] ရှစ်ထောင့်ငါးရာကို change အဖြစ် ကိုယ့်ဆီ ပြန်ပို့ပါတယ်။ fee ကို ဘယ်နေရာမှာမှ မရေးထားပါဘူး။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Custody & crypto: UTXO vs account model (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#custody-crypto",
+        }
+    actions:
+      - { id: close-keys, type: slide.close, at: { mark: close-keys } }
+      - { id: open-utxo, type: workspace.openFile, at: { mark: open-utxo }, path: utxo.go }
+      - id: sel-unspent
+        type: editor.select
+        at: { mark: sel-unspent }
+        target: { file: utxo.go, text: "var unspent = []Output{", occurrence: 1 }
+      - id: sel-whole
+        type: editor.select
+        at: { mark: sel-whole }
+        target: { file: utxo.go, text: "return in, in - out, nil", occurrence: 1 }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: main.go }
+      - id: sel-change
+        type: editor.select
+        at: { mark: sel-change }
+        target: { file: main.go, text: '{"b2", "ours", 8_500}, // change', occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "fee 1500",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-fee]] output နှစ်ခုက တစ်သိန်း ရှစ်ထောင့်ငါးရာပဲ ယူလို့ ကျန်တဲ့ တစ်ထောင့်ငါးရာက fee ဖြစ်သွားပါတယ်။
+      change ကို ထည့်ဖို့ မေ့ခဲ့ရင် ရှစ်ထောင့်ငါးရာပါ fee ထဲ ပါသွားပြီး error တစ်ခုမှ မတက်ပါဘူး။ [[mark:pt-bal]]
+      balance ကတော့ ကိုယ့် address က unspent output သုံးခုကို ပေါင်းမှ ရတဲ့ derived တန်ဖိုးပါ။ [[mark:dock-1]]
+      ledger ဘက်မှာ သတိထားရမှာက change ပါ။ ကိုယ့် address ဆီ ဝင်လာသမျှကို user deposit လို့ credit လုပ်တဲ့
+      scanner က change ကိုပါ ငွေအသစ်လို့ မှတ်ပြီး မရှိတဲ့ ငွေကို ဖန်တီးလိုက်ပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Custody & crypto (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#custody-crypto",
+        }
+    actions:
+      - id: pt-fee
+        type: console.point
+        at: { mark: pt-fee }
+        target: { text: "fee 1500", occurrence: 1 }
+      - id: pt-bal
+        type: console.point
+        at: { mark: pt-bal }
+        target: { text: "balance ours: 28800", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: models
+    chapter: UTXO နဲ့ account model
+    narration: >-
+      [[mark:show-models]] တူညီတဲ့ payment ကို model နှစ်ခုနဲ့ ယှဉ်ကြည့်ရအောင်။ [[mark:pt-tx]] UTXO ဘက်မှာ ခုနက payment ပါ၊ coin နှစ်ခု ဝင်ပြီး နှစ်ခု ထွက်ပါတယ်။ [[mark:models-2]] Ethereum စတိုင်
+      account model မှာတော့ address တစ်ခုချင်းမှာ running balance ရှိပြီး payment က တစ်ဖက်ကို နုတ်၊ တစ်ဖက်ကို
+      ပေါင်းတာပါ။ change မရှိဘဲ gas လို့ ခေါ်တဲ့ fee ကလည်း balance ထဲကပဲ ထွက်ပါတယ်။ [[mark:pt-acct]] ဒါကြောင့် UTXO chain မှာ ကိုယ်ပိုင် output တစ်ခုချင်းကို ခြေရာခံရပြီး၊ account chain မှာ address balance ကို
+      တိုက်ရပါတယ်။ [[mark:models-3]] coin ဆိုတာ BTC၊ ETH လို chain ရဲ့ ကိုယ်ပိုင်
+      asset ဖြစ်ပြီး၊ token က chain ပေါ်မှာ ထပ်ထုတ်ထားတဲ့ ERC-20 လို asset ပါ။ ledger မှာ နှစ်ခုကို မရောဘဲ currency
+      တစ်ခုစီလို ထားရပါတယ်။ [[mark:pt-dust]] dust ဆိုတာ ရွှေ့ဖို့ fee က တန်ဖိုးထက် များနေတဲ့ ပမာဏပါ၊ ခုနက သုံးရာပဲ
+      ရှိတဲ့ output လိုမျိုး balance ထဲ ပါပေမဲ့ ရွှေ့ရင် အရှုံးပေါ်တဲ့ ငွေပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Custody & crypto (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#custody-crypto",
+        }
+    actions:
+      - {
+          id: show-models,
+          type: slide.show,
+          at: { mark: show-models, offsetMs: -700 },
+          slideId: models-1,
+        }
+      - { id: pt-tx, type: slide.point, at: { mark: pt-tx }, target: { x: 0.284, y: 0.576 } }
+      - { id: models-2, type: slide.show, at: { mark: models-2 }, slideId: models-2 }
+      - {
+          id: pt-ha,
+          type: slide.point,
+          at: { afterAction: models-2 },
+          target: { x: 0.619, y: 0.276 },
+        }
+      - { id: pt-acct, type: slide.point, at: { mark: pt-acct }, target: { x: 0.763, y: 0.584 } }
+      - { id: pt-tok, type: slide.point, at: { mark: models-3 }, target: { x: 0.209, y: 0.864 } }
+      - { id: pt-dust, type: slide.point, at: { mark: pt-dust }, target: { x: 0.597, y: 0.864 } }
+
+  - id: confirm
+    chapter: Confirmation ကို ရေတွက်ခြင်း
+    narration: >-
+      [[mark:close-models]] ဒီတစ်ခါ ငွေဝင်တဲ့ဘက်ကို ကြည့်ရအောင်။ user ပို့လိုက်တဲ့ transaction က ပထမ mempool ထဲမှာ
+      စောင့်ပါတယ်၊ mempool ဆိုတာ block ထဲ မဝင်ရသေးတဲ့ transaction တွေ စုနေတဲ့ နေရာပါ။ network fee က block ထဲ
+      ရောက်ဖို့ ပေးရတဲ့ ငွေပါ။ [[mark:open-chain]] deposit နှစ်ခု ရောက်နေတဲ့ chain ကို ကြည့်ရအောင်။
+      [[mark:sel-chain]] block ခြောက်ခု ရှိပြီး deposit နှစ်ခုက block မတူတာတွေထဲမှာ ပါပါတယ်။ [[mark:sel-conf]]
+      transaction ပါတဲ့ block အပေါ်မှာ block တစ်ခု ဆင့်တိုင်း confirmation တစ်ခု တိုးပါတယ်။ ဒီ function က အဲဒီ
+      block ကိုယ်တိုင်ကနေ tip လို့ ခေါ်တဲ့ နောက်ဆုံး block အထိ ရေတွက်လို့ block ထဲ ဝင်တာနဲ့ တစ်ခု ရပါတယ်။ [[mark:open-main2]] main ထဲမှာ deposit
+      တစ်ခုချင်းရဲ့ confirmation ကို ထုတ်ကြည့်ပါမယ်။ [[mark:type-conf]] ပိုစောတဲ့ block ထဲမှာ ပါတဲ့ deposit က
+      confirmation ပိုများရပါမယ်။ ဘယ် block ထဲမှာမှ မရှိတဲ့ transaction ဆိုရင်တော့ သုည ရပါမယ်။ [[mark:run-2]] run
+      လိုက်ရအောင်။ [[mark:pt-a]] block ၁၀၄ ထဲက dep-a မှာ confirmation နှစ်ခု ရှိပါတယ်။ [[mark:pt-b]] block ၁၀၁
+      ထဲက dep-b မှာတော့ ငါးခု ရှိပါတယ်။ [[mark:dock-2]] မေးခွန်းက ဘယ်နှခု ရှိမှ user ရဲ့ balance ထဲ credit
+      လုပ်မလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Custody & crypto: confirmation, finality, mempool (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#custody-crypto",
+        }
+      - { title: "Bitcoin Wiki — Confirmation", url: "https://en.bitcoin.it/wiki/Confirmation" }
+    actions:
+      - { id: close-models, type: slide.close, at: { mark: close-models } }
+      - { id: open-chain, type: workspace.openFile, at: { mark: open-chain }, path: chain.go }
+      - id: sel-chain
+        type: editor.select
+        at: { mark: sel-chain }
+        target: { file: chain.go, text: "var chain = []Block{", occurrence: 1 }
+      - id: sel-conf
+        type: editor.select
+        at: { mark: sel-conf }
+        target: { file: chain.go, text: "return tip() - b.Height + 1", occurrence: 1 }
+      - { id: open-main2, type: workspace.openFile, at: { mark: open-main2 }, path: main.go }
+      - id: type-conf
+        type: editor.type
+        at: { mark: type-conf }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Printf(\"balance ours: %d in %d unspent outputs\\n\", total, n)\n",
+            occurrence: 1,
+          }
+        text: "\n\tfmt.Println(\"tip:\", tip())\n\tfor _, d := range deposits {\n\t\tfmt.Printf(\"%s %d: %d confirmations\\n\", d.ID, d.Amount, confirmations(d.ID))\n\t}\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "dep-b 50000: 5 confirmations",
+          timeoutMs: 8000,
+        }
+      - id: pt-a
+        type: console.point
+        at: { mark: pt-a }
+        target: { text: "dep-a 80000: 2 confirmations", occurrence: 1 }
+      - id: pt-b
+        type: console.point
+        at: { mark: pt-b }
+        target: { text: "dep-b 50000: 5 confirmations", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: reorg
+    chapter: Reorg နဲ့ finality
+    narration: >-
+      [[mark:show-reorg]] chain ရဲ့ လက်ရှိ အခြေအနေက ဒါပါ။ [[mark:reorg-2]] dep-b ကနေ tip အထိ block ငါးခု၊ dep-a
+      အတွက် နှစ်ခု ရှိပါတယ်။ [[mark:reorg-3]] ဒါပေမဲ့ node မြင်နေတဲ့ chain က နောက်ဆုံး မဟုတ်သေးပါဘူး။ block ၁၀၃
+      ကနေ ခွဲထွက်တဲ့ ပြိုင်ဘက် branch က အနိုင်ရသွားရင် chain ကို ပြန်စီပါတယ်၊ ဒါကို reorg လို့ ခေါ်ပါတယ်။
+      [[mark:reorg-4]] block ၁၀၄ နဲ့ ၁၀၅ ပျောက်သွားပြီး dep-a က branch အသစ်ထဲမှာ မပါပါဘူး။ mempool ထဲ ပြန်ရောက်ပြီး
+      နောက်မှ ဝင်ချင် ဝင်မယ်၊ လုံးဝ မဝင်တော့တာလည်း ဖြစ်နိုင်ပါတယ်။ finality ဆိုတာ ပြန်မပြောင်းနိုင်တော့တဲ့ အချိန်ဖြစ်ပြီး၊
+      confirmation များလေ finality ပိုရလေပါ။ [[mark:reorg-5]] ဒါ သီအိုရီ မဟုတ်ပါဘူး။ ၂၀၁၉ ဇန်နဝါရီမှာ Coinbase က Ethereum Classic ပေါ်မှာ coin
+      တစ်ခုကို နှစ်ခါ သုံးတဲ့ double spend ပါတဲ့ reorg တွေကို တွေ့ခဲ့ပါတယ်။ [[mark:pt-etc]] ၂၀၂၀ ဩဂုတ်လမှာတော့
+      block ခုနစ်ထောင်ကျော် နက်တဲ့ reorg အထိ ဖြစ်ခဲ့ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Custody & crypto: reorg, finality (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#custody-crypto",
+        }
+      - {
+          title: "Coinbase — Deep Chain Reorganization Detected on Ethereum Classic (ETC), January 2019",
+          url: "https://medium.com/the-coinbase-blog/ethereum-classic-etc-is-currently-being-51-attacked-33be13ce32de",
+        }
+      - {
+          title: "The Block — Ethereum Classic was hit with another 51% attack, for the third time in a month (Aug 2020)",
+          url: "https://www.theblock.co/news/ecosystems/2020-08-31-ethereum-classic-etc-third-51-attack-76431",
+        }
+    actions:
+      - {
+          id: show-reorg,
+          type: slide.show,
+          at: { mark: show-reorg, offsetMs: -700 },
+          slideId: reorg-1,
+        }
+      - {
+          id: pt-chain,
+          type: slide.point,
+          at: { afterAction: show-reorg },
+          target: { x: 0.506, y: 0.564 },
+        }
+      - { id: reorg-2, type: slide.show, at: { mark: reorg-2 }, slideId: reorg-2 }
+      - {
+          id: pt-cb,
+          type: slide.point,
+          at: { afterAction: reorg-2 },
+          target: { x: 0.506, y: 0.66 },
+        }
+      - { id: reorg-3, type: slide.show, at: { mark: reorg-3 }, slideId: reorg-3 }
+      - {
+          id: pt-fork,
+          type: slide.point,
+          at: { afterAction: reorg-3 },
+          target: { x: 0.9, y: 0.359 },
+        }
+      - { id: reorg-4, type: slide.show, at: { mark: reorg-4 }, slideId: reorg-4 }
+      - {
+          id: pt-pool,
+          type: slide.point,
+          at: { afterAction: reorg-4 },
+          target: { x: 0.222, y: 0.842 },
+        }
+      - { id: reorg-5, type: slide.show, at: { mark: reorg-5 }, slideId: reorg-5 }
+      - { id: pt-etc, type: slide.point, at: { mark: pt-etc }, target: { x: 0.36, y: 0.942 } }
+
+  - id: credit
+    chapter: K confirmations စောင့်ခြင်း
+    narration: >-
+      [[mark:close-reorg]] ဒီ reorg ကို code နဲ့ ဖြစ်ကြည့်ရအောင်။ [[mark:type-k]] reorg မတိုင်ခင် credit rule နှစ်ခုကို
+      run ပါမယ်။ တစ်ခုက confirmation တစ်ခုနဲ့တင် credit လုပ်ပြီး၊ နောက်တစ်ခုက K ခု စောင့်ပါတယ်၊ K က သုံးပါ။ ပြီးရင်
+      block ၁၀၄ ကနေ reorg လုပ်ပြီး credit လုပ်ထားတာတွေ chain ပေါ်မှာ ရှိသေးလား စစ်ပါမယ်။ ဘယ် rule က ပြဿနာ
+      ဖြစ်မလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-k1]] confirmation တစ်ခုနဲ့ credit လုပ်တဲ့ rule က deposit နှစ်ခုလုံးကို credit လုပ်ခဲ့ပြီး dep-a
+      ရှစ်သောင်းက chain ပေါ်မှာ မရှိတော့ပါဘူး။ ledger ထဲမှာပဲ ရှိတဲ့ ဒီငွေကို user က ထုတ်သွားရင် platform ရဲ့ အရှုံးပါ။ [[mark:pt-k3]] K သုံးခု စောင့်တဲ့ rule ကတော့ dep-b ကိုပဲ credit လုပ်ခဲ့လို့ ဘာမှ မပျက်ပါဘူး၊ ဒီ reorg က block
+      နှစ်ခုပဲ နက်လို့ပါ။ [[mark:dock-3]] စောင့်တာမှာ ကုန်ကျစရိတ် ရှိပါတယ်။ Bitcoin block က ပျမ်းမျှ
+      ဆယ်မိနစ် တစ်ခါ ထွက်ပြီး၊ ပမာဏကြီးရင် confirmation ခြောက်ခုကို အနည်းဆုံးလို့ Bitcoin ရဲ့ လမ်းညွှန်က
+      ဆိုထားလို့ ပျမ်းမျှ တစ်နာရီလောက် စောင့်ရပါတယ်။ [[mark:wait-eth]] proof-of-stake Ethereum မှာတော့ block
+      တစ်ခု finalize ဖြစ်ဖို့ ဆယ့်ငါးမိနစ်လောက် ကြာပါတယ်။ [[mark:sel-k]] ခြောက်ခု ဆိုတာ protocol စည်းမျဉ်း မဟုတ်ပါဘူး။ K က
+      user စောင့်ရတဲ့ အချိန်နဲ့ reorg risk ကို ချိန်ပြီး chain နဲ့ ပမာဏ အလိုက် ကိုယ်တိုင် ရွေးရတဲ့ risk
+      ဆုံးဖြတ်ချက်ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: wait for finality, then post (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+      - {
+          title: "bitcoin.org — Some things you need to know (confirmations)",
+          url: "https://bitcoin.org/en/you-need-to-know",
+        }
+      - {
+          title: "ethereum.org — Single slot finality",
+          url: "https://ethereum.org/roadmap/single-slot-finality/",
+        }
+    actions:
+      - { id: close-reorg, type: slide.close, at: { mark: close-reorg } }
+      - id: type-k
+        type: editor.type
+        at: { mark: type-k }
+        target: { file: main.go, after: "confirmations(d.ID))\n\t}\n", occurrence: 1 }
+        text: "\n\tconst K = 3\n\tearly, patient := credit(1), credit(K)\n\treorg(104, 3)\n\tfmt.Println(\"reorg from block 104, new tip:\", tip())\n\tfmt.Println(\"K=1 credited\", early, \"->\", offChain(early))\n\tfmt.Printf(\"K=%d credited %v -> %s\\n\", K, patient, offChain(patient))\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "dep-a 80000 not on chain",
+          timeoutMs: 8000,
+        }
+      - id: pt-k1
+        type: console.point
+        at: { mark: pt-k1 }
+        target: { text: "K=1 credited", occurrence: 1 }
+      - id: pt-k3
+        type: console.point
+        at: { mark: pt-k3 }
+        target: { text: "K=3 credited", occurrence: 1 }
+      - id: sel-k
+        type: editor.select
+        at: { mark: sel-k }
+        target: { file: main.go, text: "const K = 3", occurrence: 1 }
+      - {
+          id: expect-file-k,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "early, patient := credit(1), credit(K)",
+        }
+
+  - id: sign
+    chapter: Multisig က magic မဟုတ်ဘူး
+    narration: >-
+      [[mark:show-sign]] ငွေထွက်တဲ့ဘက်မှာလည်း multisig ကို အလိုလို မယုံရပါဘူး။ [[mark:pt-ronin]] ၂၀၂၂ မတ်လမှာ attacker တွေက Ronin bridge ရဲ့ validator key ကိုးခုထဲက ငါးခုကို
+      ထိန်းချုပ်ပြီး၊ ETH နဲ့ USDC ဒေါ်လာ သန်း ခြောက်ရာလောက်ကို ထုတ်ယူသွားခဲ့ပါတယ်။ [[mark:pt-rsub]] အဲဒီ ငါးခုထဲက လေးခုကို Sky
+      Mavis တစ်ခုတည်းက run ထားပါတယ်။ key တွေ တစ်နေရာတည်းမှာ စုနေရင် threshold က နာမည်သက်သက်ပါ။
+      [[mark:sign-2]] lesson ၂၇ က Bybit ရဲ့ multisig cold wallet ကိုလည်း ပြန်စဉ်းစားကြည့်ပါ၊ ဒေါ်လာ ဘီလီယံ
+      တစ်ဒသမ ငါး လောက် ခိုးခံခဲ့ရတာပါ။ [[mark:pt-bsub]] key တွေ ဘယ်လောက်ပဲ ခွဲထားထား၊ signer တွေက ဖုံးကွယ်ထားတဲ့
+      interface ပြတာကိုပဲ sign လုပ်ခဲ့ကြတာပါ။ [[mark:sign-3]] ဒါကြောင့် key တွေကို လူနဲ့ system မတူတာတွေဆီ
+      ခွဲထားရပါတယ်။ sign လုပ်မယ့် transaction ကို နောက်ထပ် device တစ်ခုမှာ decode လုပ်ပြီး စစ်ရပါတယ်။ [[mark:pt-allow]]
+      withdrawal ကိုလည်း ကြိုတင် အတည်ပြုထားတဲ့ address တွေဆီပဲ ခွင့်ပြုတဲ့ allow-list နဲ့ ကန့်သတ်ထားရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Custody & crypto: multisig, MPC, allow-listing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#custody-crypto",
+        }
+      - {
+          title: "The Record — More than $625 million stolen in DeFi hack of Ronin Network",
+          url: "https://therecord.media/more-than-625-million-stolen-in-defi-hack-of-ronin-network",
+        }
+      - {
+          title: "FBI / IC3 — North Korea Responsible for $1.5 Billion Bybit Hack (26 Feb 2025)",
+          url: "https://www.ic3.gov/PSA/2025/PSA250226",
+        }
+    actions:
+      - {
+          id: show-sign,
+          type: slide.show,
+          at: { mark: show-sign, offsetMs: -700 },
+          slideId: sign-1,
+        }
+      - { id: pt-ronin, type: slide.point, at: { mark: pt-ronin }, target: { x: 0.1, y: 0.422 } }
+      - { id: pt-rsub, type: slide.point, at: { mark: pt-rsub }, target: { x: 0.1, y: 0.513 } }
+      - { id: sign-2, type: slide.show, at: { mark: sign-2 }, slideId: sign-2 }
+      - {
+          id: pt-bybit,
+          type: slide.point,
+          at: { afterAction: sign-2 },
+          target: { x: 0.563, y: 0.422 },
+        }
+      - { id: pt-bsub, type: slide.point, at: { mark: pt-bsub }, target: { x: 0.563, y: 0.513 } }
+      - { id: sign-3, type: slide.show, at: { mark: sign-3 }, slideId: sign-3 }
+      - {
+          id: pt-r1,
+          type: slide.point,
+          at: { afterAction: sign-3 },
+          target: { x: 0.275, y: 0.753 },
+        }
+      - { id: pt-allow, type: slide.point, at: { mark: pt-allow }, target: { x: 0.302, y: 0.887 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Crypto platform interview တွေမှာ deposit ကို balance ထဲ ဘယ်အချိန်မှာ credit လုပ်မလဲ လို့
+      မေးလေ့ရှိပါတယ်။ confirmation ခြောက်ခု လို့ ဂဏန်းတစ်ခုတည်း ဖြေရင် မလုံလောက်ပါဘူး။ [[mark:iv-a]] ပထမ၊ မြင်ရတာနဲ့
+      final ဖြစ်တာ မတူပါဘူး၊ reorg က မကြာသေးတဲ့ block တွေကို ဖျက်နိုင်ပါတယ်။ [[mark:iv-b]] ဒုတိယ၊ K ကို chain နဲ့
+      ပမာဏ အလိုက် ရွေးပြီး user စောင့်ရတဲ့ အချိန်နဲ့ risk ကို ချိန်ပါတယ်။ [[mark:iv-c]] တတိယ၊ ကိုယ့် address ဆီ
+      ဝင်တာ တိုင်း deposit မဟုတ်ပါဘူး၊ change နဲ့ ကိုယ့် wallet အချင်းချင်း ရွှေ့တာကို ခွဲထုတ်ရပါတယ်။ [[mark:iv-d]]
+      ပြီးရင် ကိုယ် ဘာလုပ်မလဲ ပြောပါ။ deposit ကို pending အဖြစ် ချက်ချင်း ပြပြီး K ရောက်မှ credit လုပ်မယ်၊ ပြီးမှ
+      reorg ဖြစ်ရင် linked reversal entry နဲ့ ပြင်ပြီး alert ပေးမယ်၊ node နဲ့ ledger ကို နေ့တိုင်း reconcile လုပ်မယ်
+      ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Custody & crypto (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#custody-crypto",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] K ကို နှစ် လို့ ပြောင်းပြီး run ကြည့်ပါ။
+      dep-a ပါ credit ဖြစ်သွားပြီး reorg နောက်မှာ chain ပေါ်မှာ မရှိတော့ပါဘူး။  [[mark:recap]] ပြန်ချုပ်ရရင်၊ crypto မှာ ငွေကို
+      ပိုင်တာက key ကို ထိန်းထားတာဖြစ်ပြီး၊ chain ပေါ်က deposit က လုံလောက်အောင် final ဖြစ်မှသာ ledger ထဲက ငွေ
+      ဖြစ်ပါတယ်။ နောက် lesson မှာတော့ ငွေ ဘယ်သူ့ဆီက လာပြီး ဘယ်သူ့ဆီ သွားလဲ ဆိုတာကို platform က သိထားရမယ့်
+      compliance နဲ့၊ အဲဒီအတွက် engineer တွေ ဘာ ဆောက်ရလဲ ဆိုတာကို ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Custody & crypto (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#custody-crypto",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "const K = 3", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
