@@ -142,6 +142,7 @@ const PLAYGROUND_DETECTION_ORDER = [
   "zig",
   "haskell",
   "asm",
+  "python",
   "kite",
 ] as const satisfies readonly PlaygroundSourceLanguage[];
 

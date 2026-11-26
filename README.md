@@ -23,14 +23,14 @@ which turns a written lesson script into a narrated, recorded lesson.
 Every lesson is a real multi-file workspace, edited in Monaco: files and folders in the sidebar,
 binary assets (images, video, audio, fonts, PDF, Wasm) by drag-and-drop or upload, and `.zip`
 import and export.
-There are 18 lesson types, chosen from the **Starter Template** menu (the gear in the editor
+There are 19 lesson types, chosen from the **Starter Template** menu (the gear in the editor
 header). Each runs in one of three places:
 
 | Runs on                                                       | Lesson types                                                                                                                                                                 |
 | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | webnode — Node.js in the browser, with preview and a terminal | HTML / CSS, React (TanStack Start), Vue, Solid, Svelte, HTMX + Express, Alpine AJAX + Express, Express + TypeScript, JavaScript / Node.js, TypeScript, and Kite + Vite (web) |
 | The Worker's playground proxies, with no sign-in needed       | Go (play.golang.org), Kotlin (api.kotlinlang.org), Rust (play.rust-lang.org), Zig (zig-play.dev), and Haskell (play.haskell.org)                                             |
-| The page itself, with no service                              | Kite, on a Wasm build of `kitec`; x86-64 Assembly, on a first-party NASM-syntax assembler and x86-64 Linux machine in `src/core/x86`                                         |
+| The page itself, with no service                              | Kite, on a Wasm build of `kitec`; x86-64 Assembly, on a first-party NASM-syntax assembler and x86-64 Linux machine in `src/core/x86`; Python, on CPython 3.14 built to Wasm  |
 
 - The runtime dock under the editor holds the runner, the preview's console, terminal tabs
   (xterm.js over the runtime's shell), and the coding agent. Playground and in-page lessons get
@@ -38,6 +38,9 @@ header). Each runs in one of three places:
 - The preview panel shows the running app. Its **API** mode is a built-in HTTP client that sends
   requests from inside the preview frame (same origin, so no CORS), with a response viewer and a
   request history.
+- A Python lesson runs on Pyodide (CPython built to WebAssembly) in a worker of the page, served
+  from the app's own origin: the standard library only, a new interpreter for every run, no
+  keyboard input, and a stop at 10 seconds or 256 KiB of output.
 - Monaco carries first-party grammars for Zig, Haskell, Kite, and x86-64 assembly.
 - In the code editor, Tab types a tab. Escape, then Tab (or Shift+Tab), moves focus out of it;
   Tab indents again the next time the editor is entered.
@@ -155,15 +158,15 @@ header). Each runs in one of three places:
   and COEP headers on every response) and a desktop browser: use a desktop Chromium browser
   (Chrome, Edge, Brave); Firefox and Safari are not verified. On mobile the runtime does not
   start, but recorded previews still replay.
-- Playground and in-page lessons (Go, Kotlin, Rust, Zig, Haskell, Kite, and assembly) do not use
-  it.
+- Playground and in-page lessons (Go, Kotlin, Rust, Zig, Haskell, Kite, assembly, and Python) do
+  not use it.
 
 ## Tech Stack
 
 - App: React 19 with the React Compiler, React Router 8, TanStack Query, Tailwind CSS 4
 - Editor and state: Monaco Editor, XState 5, `@xstate/store-react`
 - Runtimes: webnode (`src/core/webnode`), xterm.js, a Wasm build of `kitec`, a first-party x86-64
-  assembler and emulator
+  assembler and emulator, Pyodide (CPython for WebAssembly, MPL-2.0, served unmodified)
 - Recording: rrweb for the preview; a Rust diff-match-patch codec compiled to WASM; MessagePack
   and fflate in the SCR3 container; MediaRecorder, with WebCodecs for Ogg/Opus
 - Slides and whiteboard: marked, Google Slides SVG import, Excalidraw

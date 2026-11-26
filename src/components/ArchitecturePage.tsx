@@ -197,10 +197,10 @@ const clientItems: DiagramItem[] = [
   },
   {
     title: "in-page runners",
-    lines: ["Kite on a Wasm build of kitec,", "x86-64 assembler + machine (TS)"],
+    lines: ["Kite (Wasm kitec), x86-64 asm", "(TS), Python (Wasm CPython)"],
     noteTitle: "In-page runners",
     detail:
-      "Kite compiles on a Wasm build of kitec, and assembly runs on a first-party NASM-syntax assembler and x86-64 Linux machine; neither calls a service.",
+      "Kite compiles on a Wasm build of kitec, assembly runs on a first-party NASM-syntax assembler and x86-64 Linux machine, and Python runs on CPython built to WebAssembly (Pyodide) in a worker; none calls a service.",
   },
   {
     title: "sandboxed iframes",

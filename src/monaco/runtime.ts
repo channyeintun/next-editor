@@ -43,6 +43,9 @@ import "monaco-editor/languages/definitions/go/register";
 import "monaco-editor/languages/definitions/kotlin/register";
 // Rust: same story, for the Rust Playground lesson type.
 import "monaco-editor/languages/definitions/rust/register";
+// Python: grammar only, for the Python lesson type — the code runs on the
+// in-page interpreter (runtime/pythonPlayground), not in Monaco.
+import "monaco-editor/languages/definitions/python/register";
 // Zig, Haskell, Kite and x86-64 assembly have no Monaco grammar to import —
 // languages/definitions/ carries none of the four, and its only assembly mode is
 // `mips` — so monaco/zigLanguage.ts, monaco/haskellLanguage.ts,

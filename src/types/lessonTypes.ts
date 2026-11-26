@@ -21,6 +21,7 @@ export const WORKSPACE_LESSON_TYPE_LABELS: Record<WorkspaceLessonType, string> =
   "express-ts": "Express + TypeScript",
   javascript: "JavaScript / Node.js",
   typescript: "TypeScript",
+  python: "Python",
   go: "Go",
   kotlin: "Kotlin",
   rust: "Rust",
@@ -49,8 +50,9 @@ export function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonT
  * program, and the Wasm build of it runs here, so it needs no proxy and no
  * service. `asm` needs no service either, for a different reason: its
  * assembler and its x86-64 machine are first-party TypeScript in
- * `src/core/x86`, so a run never leaves the page. Everything else keeps the
- * Node.js runtime. Derived from `lessonType` — never persisted as a
+ * `src/core/x86`, so a run never leaves the page. `python` is the third of
+ * that kind: its interpreter is CPython built to WebAssembly (Pyodide), run in
+ * a worker of the page. Everything else keeps the Node.js runtime. Derived from `lessonType` — never persisted as a
  * second field (see docs/go-lessons-selective-runtime-plan.md §6).
  */
 export type WorkspaceExecutionKind =
@@ -61,7 +63,8 @@ export type WorkspaceExecutionKind =
   | "zig-playground"
   | "haskell-playground"
   | "kite-playground"
-  | "asm-playground";
+  | "asm-playground"
+  | "python-playground";
 
 /**
  * Every browser-runtime lesson type is served by its own dev server inside the
@@ -69,8 +72,10 @@ export type WorkspaceExecutionKind =
  * run a Vite dev server, while htmx-express, alpine-express, and express-ts run
  * an Express server. The language-level javascript and typescript lessons run
  * their entry script with Node (exit-and-rerun), but keep the full Node
- * runtime — they may install packages or start servers. Go, Kotlin, Rust, Zig, and Haskell are deliberately excluded because they
- * use the selective Playground execution paths.
+ * runtime — they may install packages or start servers. Go, Kotlin, Rust, Zig,
+ * and Haskell are deliberately excluded because they use the selective
+ * Playground execution paths, and Kite, assembly, and Python because they run
+ * in the page.
  *
  * A `Record` keyed by the union, like the labels above: a new lesson type that
  * has not chosen its backend fails the typecheck instead of falling through to
@@ -87,6 +92,7 @@ const EXECUTION_KIND_BY_LESSON_TYPE: Record<WorkspaceLessonType, WorkspaceExecut
   "express-ts": "node-runtime",
   javascript: "node-runtime",
   typescript: "node-runtime",
+  python: "python-playground",
   go: "go-playground",
   kotlin: "kotlin-playground",
   rust: "rust-playground",

@@ -129,6 +129,14 @@ describe("detectImportedLessonType", () => {
         "README.md": textFile("README.md", "# Kite"),
       }),
     ).toBe("kite");
+    // Python runs in the page too, and its archives carry data files beside
+    // the scripts; only the scripts say what the lesson is.
+    expect(
+      detectImportedLessonType({
+        "main.py": textFile("main.py", "print('hi')\n"),
+        "scores.csv": textFile("scores.csv", "Ada,92\n"),
+      }),
+    ).toBe("python");
   });
 
   it("detects playground lessons from sources without a canonical entry", () => {
@@ -143,6 +151,7 @@ describe("detectImportedLessonType", () => {
     expect(detectImportedLessonType({ "util.zig": textFile("util.zig", "") })).toBe("zig");
     expect(detectImportedLessonType({ "Lib.hs": textFile("Lib.hs", "") })).toBe("haskell");
     expect(detectImportedLessonType({ "helpers.kite": textFile("helpers.kite", "") })).toBe("kite");
+    expect(detectImportedLessonType({ "report.py": textFile("report.py", "") })).toBe("python");
     // The assembler accepts three extensions, so the probe has to try them all:
     // a single-extension check would hand an archive of `.s` files to Vite.
     expect(detectImportedLessonType({ "boot.s": textFile("boot.s", "") })).toBe("asm");
@@ -277,6 +286,21 @@ describe("importWorkspaceProjectFromZip", () => {
 
     expect(project.lessonType).toBe("kite");
     expect(project.entryFilePath).toBe("main.kite");
+  });
+
+  it("imports a Python lesson zip as a python workspace entered at main.py", async () => {
+    // The data file and the helper sort ahead of main.py; the rule opens the script.
+    const project = await importWorkspaceProjectFromZip(
+      createZipFile("python-lesson.zip", [
+        { path: "data.csv", content: "Ada,92\n" },
+        { path: "helpers.py", content: "def half(n): return n / 2\n" },
+        { path: "main.py", content: "print('hi')\n" },
+      ]),
+    );
+
+    expect(project.lessonType).toBe("python");
+    expect(project.entryFilePath).toBe("main.py");
+    expect(project.files["main.py"].language).toBe("python");
   });
 
   it("imports an assembly zip of .s files entered at the first source", async () => {

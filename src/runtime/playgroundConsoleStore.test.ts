@@ -20,6 +20,10 @@ import {
   kotlinRunStartedConsoleLines,
 } from "./kotlinPlayground/console";
 import {
+  PYTHON_CONSOLE_TAG_PATTERN,
+  pythonRunStartedConsoleLines,
+} from "./pythonPlayground/console";
+import {
   RUST_CONSOLE_TAG_PATTERN,
   rustFormatStartedConsoleLines,
   rustRunStartedConsoleLines,
@@ -180,6 +184,7 @@ describe("runner console tag patterns", () => {
     ZIG_CONSOLE_TAG_PATTERN,
     HASKELL_CONSOLE_TAG_PATTERN,
     ASM_CONSOLE_TAG_PATTERN,
+    PYTHON_CONSOLE_TAG_PATTERN,
   ];
 
   // Every Run and Format opens with its language's started lines, which the
@@ -196,6 +201,7 @@ describe("runner console tag patterns", () => {
     ["zig fmt", zigFormatStartedConsoleLines(), ZIG_CONSOLE_TAG_PATTERN],
     ["runghc", haskellRunStartedConsoleLines(), HASKELL_CONSOLE_TAG_PATTERN],
     ["nasm", asmRunStartedConsoleLines(), ASM_CONSOLE_TAG_PATTERN],
+    ["python", pythonRunStartedConsoleLines([]), PYTHON_CONSOLE_TAG_PATTERN],
   ])("colours every line of a %s start", (_label, startedLines, pattern) => {
     expect(startedLines.length).toBeGreaterThan(0);
     const uncoloured = startedLines.filter((line) => !pattern.test(line));
@@ -207,6 +213,7 @@ describe("runner console tag patterns", () => {
     ["a Go slice", "[1 2 3]"],
     ["a Kotlin or Rust list", "[1, 2, 3]"],
     ["a Haskell list of lists", "[[1,2],[3]]"],
+    ["a Python list of strings", "['python-run', 'error']"],
     ["a bracketed message the program printed itself", "[error: bad input]"],
   ])("leaves %s undecorated", (_label, line) => {
     const matched = TAG_PATTERNS.filter((pattern) => pattern.test(line));

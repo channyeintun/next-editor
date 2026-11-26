@@ -82,6 +82,12 @@ const PLAYGROUND_STACK_EXPECTATIONS: Record<
     expectedRunner: "Assembly Runner panel",
     expectedSpecific: "getpid (39)",
   },
+  "python-playground": {
+    entryFilePath: "main.py",
+    expectedStack: "Supported stack: Python 3.14 only",
+    expectedRunner: "Python Runner panel",
+    expectedSpecific: "input() raises EOFError",
+  },
 };
 
 /**

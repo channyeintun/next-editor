@@ -5,6 +5,7 @@ import { HASKELL_PLAYGROUND } from "./haskellPlayground/runner";
 import { KITE_PLAYGROUND } from "./kitePlayground/runner";
 import { KOTLIN_PLAYGROUND } from "./kotlinPlayground/runner";
 import type { PlaygroundLanguage } from "./playgroundLanguage";
+import { PYTHON_PLAYGROUND } from "./pythonPlayground/runner";
 import { RUST_PLAYGROUND } from "./rustPlayground/runner";
 import { ZIG_PLAYGROUND } from "./zigPlayground/runner";
 
@@ -38,4 +39,5 @@ export const PLAYGROUND_LANGUAGES: Record<
   "haskell-playground": HASKELL_PLAYGROUND,
   "kite-playground": KITE_PLAYGROUND,
   "asm-playground": ASM_PLAYGROUND,
+  "python-playground": PYTHON_PLAYGROUND,
 };

@@ -72,6 +72,7 @@ describe("PLAYGROUND_SOURCE_RULES", () => {
       haskell: { entryPath: "Main.hs", extensions: [".hs"] },
       asm: { entryPath: "main.asm", extensions: [".asm", ".s", ".nasm"] },
       kite: { entryPath: "main.kite", extensions: [".kite"] },
+      python: { entryPath: "main.py", extensions: [".py"] },
     });
   });
 

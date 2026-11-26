@@ -5,6 +5,7 @@ import GoPlaygroundRunnerPanel from "../GoPlaygroundRunnerPanel";
 import HaskellPlaygroundRunnerPanel from "../HaskellPlaygroundRunnerPanel";
 import KitePlaygroundRunnerPanel from "../KitePlaygroundRunnerPanel";
 import KotlinPlaygroundRunnerPanel from "../KotlinPlaygroundRunnerPanel";
+import PythonPlaygroundRunnerPanel from "../PythonPlaygroundRunnerPanel";
 import RustPlaygroundRunnerPanel from "../RustPlaygroundRunnerPanel";
 import TerminalPanel from "../TerminalPanel";
 import ZigPlaygroundRunnerPanel from "../ZigPlaygroundRunnerPanel";
@@ -31,6 +32,7 @@ const RUNNER_PANELS: Record<Exclude<WorkspaceExecutionKind, "node-runtime">, Com
   "haskell-playground": HaskellPlaygroundRunnerPanel,
   "kite-playground": KitePlaygroundRunnerPanel,
   "asm-playground": AsmPlaygroundRunnerPanel,
+  "python-playground": PythonPlaygroundRunnerPanel,
 };
 
 /**

@@ -20,8 +20,8 @@ import { makeCapturePreviewTool } from "./capturePreview";
 // The third entry scopes each tool to an execution kind: file tools are available
 // everywhere, while shell/runtime/preview observation only exists where the
 // Node.js runtime does. Every Playground lesson runs its code on an explicit
-// Run — remotely for Go, Kotlin, Rust, Zig and Haskell, in-page for Kite and
-// assembly — so each of them gets the same file-tools-only profile.
+// Run — remotely for Go, Kotlin, Rust, Zig and Haskell, in-page for Kite,
+// assembly and Python — so each of them gets the same file-tools-only profile.
 const CODING_TOOL_DEFINITIONS = [
   ["read", makeReadTool, "all"],
   ["ls", makeLsTool, "all"],

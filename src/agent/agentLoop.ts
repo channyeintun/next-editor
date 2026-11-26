@@ -122,7 +122,7 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
     signal,
     requestConfirmation: gatedConfirmation,
   };
-  // Playground lessons (Go, Kotlin, Rust, Zig, Haskell, Kite, assembly) have no
+  // Playground lessons (Go, Kotlin, Rust, Zig, Haskell, Kite, assembly, Python) have no
   // Node.js runtime, so their agent runs with file tools only — no bash and
   // no runtime/preview observation.
   const executionKind = executionKindForLessonType(project.lessonType);

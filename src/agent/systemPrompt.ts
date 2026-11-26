@@ -6,6 +6,7 @@ import { GO_AGENT_STACK } from "../runtime/goPlayground/agentStack";
 import { HASKELL_AGENT_STACK } from "../runtime/haskellPlayground/agentStack";
 import { KITE_AGENT_STACK } from "../runtime/kitePlayground/agentStack";
 import { KOTLIN_AGENT_STACK } from "../runtime/kotlinPlayground/agentStack";
+import { PYTHON_AGENT_STACK } from "../runtime/pythonPlayground/agentStack";
 import { RUST_AGENT_STACK } from "../runtime/rustPlayground/agentStack";
 import { ZIG_AGENT_STACK } from "../runtime/zigPlayground/agentStack";
 
@@ -113,6 +114,7 @@ const PLAYGROUND_AGENT_STACKS: Record<
   "haskell-playground": HASKELL_AGENT_STACK,
   "kite-playground": KITE_AGENT_STACK,
   "asm-playground": ASM_AGENT_STACK,
+  "python-playground": PYTHON_AGENT_STACK,
 };
 
 function buildSupportedStack(project: WorkspaceProject): string {

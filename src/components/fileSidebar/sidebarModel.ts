@@ -72,6 +72,7 @@ const FILE_TEMPLATES: Record<string, string> = {
   javascript: "export function main() {\n  return null;\n}\n",
   json: "{}\n",
   markdown: "# New file\n",
+  python: 'print("Hello, Python!")\n',
   typescript: "export function main(): null {\n  return null;\n}\n",
 };
 

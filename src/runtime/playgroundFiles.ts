@@ -10,7 +10,7 @@ export type { PlaygroundFile };
 /** The lesson types whose sources a playground runner collects. */
 export type PlaygroundSourceLanguage = Extract<
   WorkspaceLessonType,
-  "go" | "rust" | "kotlin" | "zig" | "haskell" | "asm" | "kite"
+  "go" | "rust" | "kotlin" | "zig" | "haskell" | "asm" | "kite" | "python"
 >;
 
 /** The file a language's run starts from, and every extension its sources may carry. */
@@ -42,6 +42,10 @@ export const PLAYGROUND_SOURCE_RULES: Readonly<
   // would then happily assemble.
   asm: { entryPath: "main.asm", extensions: [".asm", ".s", ".nasm"] },
   kite: { entryPath: "main.kite", extensions: [".kite"] },
+  // The scripts only. A Python run is also handed the workspace's other text
+  // files, for the program to read (pythonPlayground/files.ts), but a `.csv`
+  // beside a script does not make an archive a Python lesson.
+  python: { entryPath: "main.py", extensions: [".py"] },
 };
 
 /**

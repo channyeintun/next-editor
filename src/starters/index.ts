@@ -30,6 +30,7 @@ const STARTER_LOADERS: Record<WorkspaceLessonType, () => Promise<() => Workspace
     import("./javascript").then((module) => module.createStarterJavascriptWorkspace),
   typescript: () =>
     import("./typescript").then((module) => module.createStarterTypescriptWorkspace),
+  python: () => import("./python").then((module) => module.createStarterPythonWorkspace),
   go: () => import("./go").then((module) => module.createStarterGoWorkspace),
   kotlin: () => import("./kotlin").then((module) => module.createStarterKotlinWorkspace),
   rust: () => import("./rust").then((module) => module.createStarterRustWorkspace),

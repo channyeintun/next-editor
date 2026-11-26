@@ -16,6 +16,7 @@ vi.mock("../ZigPlaygroundRunnerPanel", () => ({ default: () => <p>zig-playground
 vi.mock("../HaskellPlaygroundRunnerPanel", () => ({ default: () => <p>haskell-playground</p> }));
 vi.mock("../KitePlaygroundRunnerPanel", () => ({ default: () => <p>kite-playground</p> }));
 vi.mock("../AsmPlaygroundRunnerPanel", () => ({ default: () => <p>asm-playground</p> }));
+vi.mock("../PythonPlaygroundRunnerPanel", () => ({ default: () => <p>python-playground</p> }));
 
 import RuntimeDock from "./RuntimeDock";
 
@@ -49,6 +50,7 @@ describe("RuntimeDock", () => {
     ["go", "go-playground"],
     ["kite", "kite-playground"],
     ["asm", "asm-playground"],
+    ["python", "python-playground"],
   ] as const)("docks %s with the %s", async (lessonType, panel) => {
     render(<RuntimeDock lessonType={lessonType} />);
     expect(await screen.findByText(panel)).toBeInTheDocument();

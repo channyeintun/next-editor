@@ -14,6 +14,7 @@ import { normalizeProject } from "../stores/workspaceProjectSupport";
 import { createStarterGoWorkspace } from "../starters/go";
 import { createStarterKotlinWorkspace } from "../starters/kotlin";
 import { createStarterKiteWorkspace } from "../starters/kite";
+import { createStarterPythonWorkspace } from "../starters/python";
 import { createStarterRustWorkspace } from "../starters/rust";
 import { createStarterZigWorkspace } from "../starters/zig";
 import { createStarterHaskellWorkspace } from "../starters/haskell";
@@ -32,6 +33,7 @@ const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKin
   "express-ts": "node-runtime",
   javascript: "node-runtime",
   typescript: "node-runtime",
+  python: "python-playground",
   go: "go-playground",
   kotlin: "kotlin-playground",
   rust: "rust-playground",
@@ -265,6 +267,29 @@ describe("kite workspace model", () => {
   it("executes in the page rather than through a playground proxy", () => {
     expect(executionKindForLessonType("kite")).toBe("kite-playground");
     expect(lessonRunsInNodeRuntime("kite")).toBe(false);
+  });
+});
+
+describe("python workspace model", () => {
+  it("maps .py files to Monaco's python language id", () => {
+    expect(inferLanguageFromPath("main.py")).toBe("python");
+    expect(inferLanguageFromPath("shapes/circle.py")).toBe("python");
+  });
+
+  it("round-trips a python starter through project normalization without falling back", () => {
+    const normalized = normalizeProject(createStarterPythonWorkspace());
+
+    expect(normalized.lessonType).toBe("python");
+    expect(normalized.entryFilePath).toBe("main.py");
+    expect(normalized.files["main.py"].content).toContain("def main()");
+    expect(normalized.files["scores.csv"].language).toBe("plaintext");
+  });
+
+  it("executes in the page, with no terminal and no preview", () => {
+    expect(executionKindForLessonType("python")).toBe("python-playground");
+    expect(lessonRunsInNodeRuntime("python")).toBe(false);
+    expect(lessonSupportsTerminal("python")).toBe(false);
+    expect(lessonSupportsPreview("python")).toBe(false);
   });
 });
 

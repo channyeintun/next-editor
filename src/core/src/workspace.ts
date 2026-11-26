@@ -95,6 +95,7 @@ export type WorkspaceLessonType =
   | "express-ts"
   | "javascript"
   | "typescript"
+  | "python"
   | "go"
   | "kotlin"
   | "rust"

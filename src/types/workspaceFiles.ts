@@ -78,6 +78,10 @@ export function inferLanguageFromPath(path: string): string {
     return "kite";
   }
 
+  if (normalizedPath.endsWith(".py")) {
+    return "python";
+  }
+
   if (normalizedPath.endsWith(".css")) {
     return "css";
   }
