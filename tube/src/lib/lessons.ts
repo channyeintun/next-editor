@@ -1,64 +1,68 @@
-import type { Lesson } from "../types";
+import type { GalleryItem, Lesson } from "../types";
 import lessonsData from "../../data/lessons.json";
 import {
-  lessonsPageIndex,
-  toLessonsPage,
-  type LessonsPage,
-  type RawLessonsPage,
-} from "../../../infra/lessons/lessonsPages";
+  galleryItemKey,
+  galleryPageIndex,
+  toGalleryPage,
+  type GalleryPage,
+  type RawGalleryPage,
+} from "../../../infra/lessons/galleryPages";
 import { findCatalogItem, getCatalogJson } from "./catalogRequest";
 
-export type { LessonsPage } from "../../../infra/lessons/lessonsPages";
+export type { GalleryPage } from "../../../infra/lessons/galleryPages";
 
 const SEED_LESSONS = lessonsData.lessons as Lesson[];
 
-// The Worker always answers /api/lessons* with JSON. A host without it (a
-// static preview of the build) would answer with the SPA's index.html instead,
-// which is read as an empty last page, so the gallery shows just the seed.
-// Plain `bun run dev` is different: Vite proxies /api/lessons to the Worker on
-// :8787 (vite.config.ts), so without `dev:worker` page 0 fails with a 502 and
-// the gallery shows its error and a retry button.
-async function fetchD1Page(index: number): Promise<RawLessonsPage> {
-  const page = await getCatalogJson<RawLessonsPage>(`/api/lessons?page=${index}`);
-  return page ?? { lessons: [], nextPage: null };
+// The Worker always answers /api/gallery and /api/lessons* with JSON. A host
+// without it (a static preview of the build) would answer with the SPA's
+// index.html instead, which is read as an empty last page, so the gallery shows
+// just the seed. Plain `bun run dev` is different: Vite proxies both to the
+// Worker on :8787 (vite.config.ts), so without `dev:worker` page 0 fails with a
+// 502 and the gallery shows its error and a retry button.
+async function fetchD1Page(index: number): Promise<RawGalleryPage> {
+  const page = await getCatalogJson<RawGalleryPage>(`/api/gallery?page=${index}`);
+  return page ?? { items: [], nextPage: null };
 }
 
-// Pages through user-published D1 lessons, newest first, shaped by the rule
-// the /learn edge render shares (toLessonsPage): the bundled seed rides on the
-// last page.
-export async function fetchLessonsPage(cursor: string): Promise<LessonsPage> {
-  return toLessonsPage(await fetchD1Page(lessonsPageIndex(cursor)), SEED_LESSONS);
+// Pages through the gallery's cards, newest first: a playlist in place of the
+// lessons it holds, and each published lesson in no playlist on its own. Shaped
+// by the rule the /learn edge render shares (toGalleryPage): the bundled seed
+// rides on the last page.
+export async function fetchGalleryPage(cursor: string): Promise<GalleryPage> {
+  return toGalleryPage(await fetchD1Page(galleryPageIndex(cursor)), SEED_LESSONS);
 }
 
 /**
- * Flatten the loaded pages into the list the grid renders, keeping the first
- * occurrence of each slug.
+ * Flatten the loaded pages into the cards the grid renders, keeping the first
+ * occurrence of each (a lesson by its slug, a playlist by its own).
  *
- * The ordering fix in listPublishedLessons (a total order, so tied
- * `published_at` values cannot straddle a page boundary) removes the cause
- * this was written for. It stays because OFFSET paging is racy for a reason
- * no ORDER BY can fix: pages are fetched as separate requests, minutes apart,
- * as the reader scrolls. If a lesson is published between two of those
- * fetches, every later row shifts down one and the boundary row is genuinely
- * returned twice.
+ * The ordering in listGalleryCards (a total order, so tied rows cannot
+ * straddle a page boundary) removes one cause of a repeat. This stays because
+ * OFFSET paging is racy for a reason no ORDER BY can fix: pages are fetched as
+ * separate requests, minutes apart, as the reader scrolls. If a lesson is
+ * published between two of those fetches, every later row shifts down one and
+ * the boundary row is genuinely returned twice. A playlist moves up to the
+ * front the same way when a lesson of it is published.
  *
  * It also covers the D1→seed seam on the last page, where a slug present in
  * both catalogs would otherwise be rendered twice.
  *
  * Deduping is the right response rather than a cosmetic patch: React keys the
- * cards by slug, so a repeat is a duplicate key, not just a repeated picture.
+ * cards by these keys, so a repeat is a duplicate key, not just a repeated
+ * picture.
  */
-export function flattenLessonPages(pages: readonly LessonsPage[] | undefined): Lesson[] {
+export function flattenGalleryPages(pages: readonly GalleryPage[] | undefined): GalleryItem[] {
   const seen = new Set<string>();
-  const lessons: Lesson[] = [];
+  const items: GalleryItem[] = [];
   for (const page of pages ?? []) {
-    for (const lesson of page.lessons) {
-      if (seen.has(lesson.slug)) continue;
-      seen.add(lesson.slug);
-      lessons.push(lesson);
+    for (const item of page.items) {
+      const key = galleryItemKey(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push(item);
     }
   }
-  return lessons;
+  return items;
 }
 
 // One request per lesson for the deep-linkable detail route — no catalog scan.

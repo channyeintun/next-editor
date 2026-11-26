@@ -9,8 +9,10 @@ import { containsLikePattern, ownerCondition, type AuthorRef } from "./queries";
 import { isUniqueViolation } from "./uniqueViolation";
 
 // The outer playlist row's currently-published members: what every public
-// view of a playlist counts, shows and covers itself with.
-const PUBLISHED_MEMBERS = `FROM playlist_lessons
+// view of a playlist counts, shows and covers itself with. Exported, with the
+// count and the cover built on it, for the gallery's cards (galleryQueries.ts),
+// which show a playlist by the same rules.
+export const PUBLISHED_MEMBERS = `FROM playlist_lessons
   JOIN lessons ON lessons.id = playlist_lessons.lesson_id
   WHERE playlist_lessons.playlist_id = playlists.id AND lessons.status = 'published'`;
 
@@ -19,7 +21,7 @@ const PUBLISHED_MEMBERS = `FROM playlist_lessons
 // playlist's own cover image in the My Library card grid. Kept as one
 // constant (not copy-pasted) since every PlaylistRowWithCount producer below
 // must produce the exact same shape.
-const FIRST_LESSON_THUMBNAIL_SUBQUERY = `(
+export const FIRST_LESSON_THUMBNAIL_SUBQUERY = `(
   SELECT lessons.thumbnail ${PUBLISHED_MEMBERS}
   ORDER BY playlist_lessons.position ASC
   LIMIT 1
@@ -27,7 +29,7 @@ const FIRST_LESSON_THUMBNAIL_SUBQUERY = `(
 
 // The public views' lesson_count, and their rule that a playlist with no
 // currently-published member is not shown at all (never an empty/all-draft card).
-const PUBLISHED_LESSON_COUNT_SUBQUERY = `(SELECT COUNT(*) ${PUBLISHED_MEMBERS}) AS lesson_count`;
+export const PUBLISHED_LESSON_COUNT_SUBQUERY = `(SELECT COUNT(*) ${PUBLISHED_MEMBERS}) AS lesson_count`;
 const HAS_PUBLISHED_MEMBER = `EXISTS (SELECT 1 ${PUBLISHED_MEMBERS})`;
 
 // PlaylistRowWithCount's lesson_count for the owner's own views: every member,

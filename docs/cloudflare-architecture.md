@@ -179,12 +179,18 @@ comments already call out):
 | Source                                  | Path                                              | Backed by                             | D1 hit? | Cache    |
 | --------------------------------------- | ------------------------------------------------- | ------------------------------------- | ------- | -------- |
 | **Seed** (curated, e.g. `introduction`) | `/lessons/page-*.json`, `/lessons/by-slug/*.json` | Static assets (unchanged vite plugin) | No      | Edge/CDN |
-| **Dynamic** (user, published)           | `/api/lessons?page=`, `/api/lessons/:slug`        | D1 via Worker                         | Yes     | None     |
+| **Dynamic** (user, published)           | `/api/gallery?page=`, `/api/lessons/:slug`        | D1 via Worker                         | Yes     | None     |
 
-- **Gallery** (`fetchLessonsPage`): page through D1 newest first (`d1:<n>`
-  cursors) and append the bundled seed to the last D1 page, so the introduction
-  appears only once the infinite scroll reaches the oldest lessons. An empty
-  catalog's single page is that last page, so the seed still shows there.
+- **Gallery** (`fetchGalleryPage`): page through D1's cards newest first
+  (`d1:<n>` cursors) and append the bundled seed to the last D1 page, so the
+  introduction appears only once the infinite scroll reaches the oldest cards.
+  An empty catalog's single page is that last page, so the seed still shows
+  there. A card is a playlist or a lesson: a playlist stands in for the lessons
+  it holds, at the place of its newest published one, and a published lesson in
+  no playlist is its own card (`listGalleryCards` in
+  `infra/db/galleryQueries.ts`). `/api/lessons?page=` still lists every
+  published lesson, playlist members included; `scripts/recordings-check` walks
+  it.
 - **Detail** (`findLessonBySlug`): try the seed `by-slug` shard; on 404 fall
   back to `/api/lessons/:slug`. Returns `null` on a real miss (unchanged
   contract), so `LessonDetailRoute` still distinguishes not-found from error.
@@ -231,10 +237,11 @@ repeating the lookup, and any edge failure degrades to the untouched SPA shell.
 
 The gallery gets the same treatment (`infra/worker/ssr/learnGallery.ts`):
 `GET /learn` reads page 0 from D1 while it fetches the shell, dehydrates it as
-the gallery's infinite query (with each lesson under its detail key, as the
-client's own fetch would prime it), and preloads the first row's thumbnails,
+the gallery's infinite query (with each lesson card's lesson under its detail
+key, as the client's own fetch would prime it), and preloads the first row's
+thumbnails (a playlist card's cover included),
 each gated by the media query that puts its card in that row. Both sides build
-the page with one rule (`infra/lessons/lessonsPages.ts`: the `d1:<n>` cursor,
+the page with one rule (`infra/lessons/galleryPages.ts`: the `d1:<n>` cursor,
 the seed on the last page), so the hydrated page is exactly what the client
 would have fetched, and neither the route loader nor the grid fetches page 0
 again. A failed read serves the plain shell, and the client fetches page 0 as

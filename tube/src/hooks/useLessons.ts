@@ -5,12 +5,13 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { FIRST_LESSONS_PAGE } from "../../../infra/lessons/lessonsPages";
+import { FIRST_GALLERY_PAGE, galleryLessons } from "../../../infra/lessons/galleryPages";
 import { lessonKeys, primeLessonDetails } from "../../../infra/lessons/queryKeys";
-import { fetchLessonsPage, findLessonBySlug } from "../lib/lessons";
+import { fetchGalleryPage, findLessonBySlug } from "../lib/lessons";
 
-// Paginated lesson gallery: D1-backed user-published lessons newest first, with
-// the bundled seed appended to the last page (see lib/lessons.ts). Overrides the queryClient-wide
+// Paginated lesson gallery: D1-backed cards newest first — a playlist in place
+// of the lessons it holds, each other published lesson on its own — with the
+// bundled seed appended to the last page (see lib/lessons.ts). Overrides the queryClient-wide
 // staleTime: Infinity default (tuned for the build-static seed alone) with a
 // finite one here, since the D1 portion is live data other users publish to —
 // without this, a tab left open would never see newly published lessons.
@@ -24,11 +25,11 @@ export function lessonsInfiniteQueryOptions(queryClient: QueryClient) {
   return infiniteQueryOptions({
     queryKey: lessonKeys.infinite,
     queryFn: async ({ pageParam }) => {
-      const page = await fetchLessonsPage(pageParam);
-      primeLessonDetails(queryClient, page.lessons);
+      const page = await fetchGalleryPage(pageParam);
+      primeLessonDetails(queryClient, galleryLessons(page.items));
       return page;
     },
-    initialPageParam: FIRST_LESSONS_PAGE,
+    initialPageParam: FIRST_GALLERY_PAGE,
     getNextPageParam: (lastPage) => lastPage.nextPage,
     staleTime: 60_000,
   });

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { LessonsPage } from "../../lessons/lessonsPages";
+import type { GalleryPage } from "../../lessons/galleryPages";
 import type { Env } from "../env";
 import app from "../index";
 import { readGalleryPage } from "../lessonCatalog";
@@ -9,7 +9,7 @@ import { serveLearnGalleryDocument } from "./learnGalleryRoute";
 
 vi.mock("../lessonCatalog", () => ({
   findPublishedLessonBySlug: vi.fn<() => Promise<null>>(),
-  readGalleryPage: vi.fn<(env: Env, page: number) => Promise<LessonsPage>>(),
+  readGalleryPage: vi.fn<(env: Env, page: number) => Promise<GalleryPage>>(),
 }));
 
 const INDEX_HTML = readFileSync(
@@ -17,14 +17,17 @@ const INDEX_HTML = readFileSync(
   "utf8",
 );
 
-const PAGE: LessonsPage = {
-  lessons: [
+const PAGE: GalleryPage = {
+  items: [
     {
-      slug: "rust-ownership",
-      title: "Ownership & Borrowing",
-      description: "Move semantics and borrows.",
-      thumbnail: "media/lessons/abc/abc-thumbnail-1791222405295.webp",
-      ne: "media/lessons/abc/abc.ne",
+      kind: "lesson",
+      lesson: {
+        slug: "rust-ownership",
+        title: "Ownership & Borrowing",
+        description: "Move semantics and borrows.",
+        thumbnail: "media/lessons/abc/abc-thumbnail-1791222405295.webp",
+        ne: "media/lessons/abc/abc.ne",
+      },
     },
   ],
   nextPage: "d1:1",

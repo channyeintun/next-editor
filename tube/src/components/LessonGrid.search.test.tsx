@@ -21,7 +21,14 @@ vi.mock("@next-editor/infra", async () => {
 });
 vi.mock("../hooks/useLessons", () => ({
   useLessonsInfinite: () => ({
-    data: { pages: [{ lessons: [{ slug: "intro", title: "Gallery intro" }], nextPage: null }] },
+    data: {
+      pages: [
+        {
+          items: [{ kind: "lesson", lesson: { slug: "intro", title: "Gallery intro" } }],
+          nextPage: null,
+        },
+      ],
+    },
     error: null,
     isPending: false,
     isError: false,

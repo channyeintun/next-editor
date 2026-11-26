@@ -1,13 +1,14 @@
 import seedManifest from "../../tube/data/lessons.json";
 import type { Lesson } from "../lessons/types";
 import {
-  LESSONS_PAGE_SIZE,
-  toLessonsPage,
-  type LessonsPage,
-  type RawLessonsPage,
-} from "../lessons/lessonsPages";
+  GALLERY_PAGE_SIZE,
+  toGalleryPage,
+  type GalleryPage,
+  type RawGalleryPage,
+} from "../lessons/galleryPages";
+import { listGalleryCards } from "../db/galleryQueries";
 import { getPublishedLessonBySlug, listPublishedLessons } from "../db/queries";
-import { lessonRowToLesson } from "../db/types";
+import { galleryCardRowToItem, lessonRowToLesson } from "../db/types";
 import type { Env } from "./env";
 
 const SEED_LESSONS = seedManifest.lessons as Lesson[];
@@ -28,9 +29,30 @@ export async function findPublishedLessonBySlug(env: Env, slug: string): Promise
   return row ? lessonRowToLesson(row) : null;
 }
 
+/** Lessons per page of GET /api/lessons. */
+const LESSONS_PAGE_SIZE = 12;
+
+/** GET /api/lessons?page=n's body. */
+export interface RawLessonsPage {
+  lessons: Lesson[];
+  /** The next page's number, or null on the last one. */
+  nextPage: number | null;
+}
+
 /**
- * One page of user-published lessons, newest first, read from D1 on every
- * call (a publish shows up at once): GET /api/lessons?page=n's body.
+ * `?page=` of the paged catalog reads (GET /api/lessons, GET /api/gallery):
+ * absent is page 0; anything but a whole number from 0 up is null.
+ */
+export function catalogPageParam(raw: string | undefined): number | null {
+  const page = raw ? Number(raw) : 0;
+  return Number.isInteger(page) && page >= 0 ? page : null;
+}
+
+/**
+ * One page of every user-published lesson, newest first, playlist members
+ * included: GET /api/lessons?page=n's body. The gallery does not read it (it
+ * shows cards, see readGalleryCards); scripts/recordings-check walks it.
+ * Read from D1 on every call, so a publish shows up at once.
  */
 export async function readPublishedLessonsPage(env: Env, page: number): Promise<RawLessonsPage> {
   const { rows, nextPage } = await listPublishedLessons(env.DB, page, LESSONS_PAGE_SIZE);
@@ -38,9 +60,19 @@ export async function readPublishedLessonsPage(env: Env, page: number): Promise<
 }
 
 /**
- * The gallery's page as its client caches it (tube's fetchLessonsPage builds
+ * One page of the gallery's cards, newest first — a playlist in place of the
+ * lessons it holds — read from D1 on every call: GET /api/gallery?page=n's
+ * body.
+ */
+export async function readGalleryCards(env: Env, page: number): Promise<RawGalleryPage> {
+  const { rows, nextPage } = await listGalleryCards(env.DB, page, GALLERY_PAGE_SIZE);
+  return { items: rows.map(galleryCardRowToItem), nextPage };
+}
+
+/**
+ * The gallery's page as its client caches it (tube's fetchGalleryPage builds
  * the same from the JSON above): for the /learn edge render.
  */
-export async function readGalleryPage(env: Env, page: number): Promise<LessonsPage> {
-  return toLessonsPage(await readPublishedLessonsPage(env, page), SEED_LESSONS);
+export async function readGalleryPage(env: Env, page: number): Promise<GalleryPage> {
+  return toGalleryPage(await readGalleryCards(env, page), SEED_LESSONS);
 }

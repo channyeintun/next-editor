@@ -2,14 +2,17 @@ import { useLayoutEffect, useState } from "react";
 import { useWindowVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { observeFirstRowThumbnails } from "../lib/firstRowThumbnails";
-import type { Lesson } from "../types";
+import { galleryItemKey } from "../../../infra/lessons/galleryPages";
+import type { GalleryItem } from "../types";
 import LessonCard from "./LessonCard";
+import PlaylistSummaryCard from "./PlaylistSummaryCard";
 import LessonCardSkeleton from "@app/components/LessonCardSkeleton";
 
 /**
  * The gallery's rows, virtualized against the page scroll, so the navbar and
  * footer stay in normal flow (no nested scrollbar) and only on-screen cards are
- * mounted. A null slot is a skeleton for a card still being fetched.
+ * mounted. A card is a lesson or a playlist; a null slot is a skeleton for a
+ * card still being fetched.
  *
  * Not compiled: `useWindowVirtualizer()` returns one mutable instance whose
  * methods read the scroll position, which React Compiler cannot memoize safely
@@ -21,7 +24,7 @@ export default function LessonRows({
   rows,
   columns,
 }: {
-  rows: (Lesson | null)[][];
+  rows: (GalleryItem | null)[][];
   columns: number;
 }) {
   "use no memo";
@@ -72,11 +75,21 @@ export default function LessonRows({
               className="grid gap-5 pb-5"
               style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
             >
-              {rows[vi.index].map((lesson, idx) =>
-                lesson ? (
-                  <LessonCard key={lesson.slug} lesson={lesson} priority={vi.index === 0} />
-                ) : (
+              {rows[vi.index].map((item, idx) =>
+                !item ? (
                   <LessonCardSkeleton key={`skel-${idx}`} />
+                ) : item.kind === "lesson" ? (
+                  <LessonCard
+                    key={galleryItemKey(item)}
+                    lesson={item.lesson}
+                    priority={vi.index === 0}
+                  />
+                ) : (
+                  <PlaylistSummaryCard
+                    key={galleryItemKey(item)}
+                    playlist={item.playlist}
+                    priority={vi.index === 0}
+                  />
                 ),
               )}
             </div>

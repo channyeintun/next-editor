@@ -1,6 +1,6 @@
 import { apiClient } from "../apiClient";
-import type { AuthorSummary, PlaylistSummary } from "../../db/types";
-import type { Lesson } from "../../lessons/types";
+import type { AuthorSummary } from "../../db/types";
+import type { Lesson, PlaylistSummary } from "../../lessons/types";
 
 /** One page of GET /api/search. Authors and playlists come on page 0 only. */
 export interface SearchPage {

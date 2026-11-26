@@ -51,7 +51,8 @@ export {
   useRemoveLessonFromPlaylist,
   useSavePlaylistOrder,
 } from "./playlists/usePlaylists";
-export type { OwnedPlaylist, OwnedPlaylistWithMembership, PlaylistSummary } from "../db/types";
+export type { OwnedPlaylist, OwnedPlaylistWithMembership } from "../db/types";
+export type { PlaylistSummary } from "../lessons/types";
 export type { AddLessonsOutcome } from "./playlists/playlistsApi";
 export { THUMBNAIL_ACCEPT } from "./upload/thumbnailConstraints";
 export { prepareThumbnail } from "./upload/prepareThumbnail";

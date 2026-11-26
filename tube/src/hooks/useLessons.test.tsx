@@ -4,13 +4,13 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { lessonDetailQueryKey } from "@app/shared/serverQueryState";
 import { dehydrateGalleryFirstPage } from "../../../infra/worker/ssr/learnGallery";
-import type { Lesson } from "../types";
+import type { GalleryItem, Lesson } from "../types";
 
-const fetchLessonsPage = vi.fn<(cursor: string) => Promise<unknown>>();
+const fetchGalleryPage = vi.fn<(cursor: string) => Promise<unknown>>();
 const findLessonBySlug = vi.fn<(slug: string) => Promise<Lesson | null>>();
 
 vi.mock("../lib/lessons", () => ({
-  fetchLessonsPage: (cursor: string) => fetchLessonsPage(cursor),
+  fetchGalleryPage: (cursor: string) => fetchGalleryPage(cursor),
   findLessonBySlug: (slug: string) => findLessonBySlug(slug),
 }));
 
@@ -26,6 +26,17 @@ function lesson(slug: string): Lesson {
   };
 }
 
+/** A gallery page's cards: a playlist's, then one for each of these lessons. */
+function cards(...shown: Lesson[]): GalleryItem[] {
+  return [
+    {
+      kind: "playlist",
+      playlist: { slug: "rust", title: "Rust", description: "", lessonCount: 3, thumbnail: null },
+    },
+    ...shown.map((each): GalleryItem => ({ kind: "lesson", lesson: each })),
+  ];
+}
+
 function wrapper(queryClient: QueryClient) {
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -39,28 +50,28 @@ afterEach(() => {
 describe("lesson gallery", () => {
   it("loads the newest d1 page first, not the bundled seed", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    fetchLessonsPage.mockResolvedValue({ lessons: [lesson("newest")], nextPage: "d1:1" });
+    fetchGalleryPage.mockResolvedValue({ items: cards(lesson("newest")), nextPage: "d1:1" });
 
     const gallery = renderHook(() => useLessonsInfinite(), { wrapper: wrapper(queryClient) });
     await waitFor(() => expect(gallery.result.current.isSuccess).toBe(true));
 
-    expect(fetchLessonsPage).toHaveBeenCalledTimes(1);
-    expect(fetchLessonsPage).toHaveBeenCalledWith("d1:0");
+    expect(fetchGalleryPage).toHaveBeenCalledTimes(1);
+    expect(fetchGalleryPage).toHaveBeenCalledWith("d1:0");
   });
 
   it("adopts the page 0 the route loader prefetched instead of fetching again", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     let resolvePage!: (page: unknown) => void;
-    fetchLessonsPage.mockReturnValue(new Promise((resolve) => (resolvePage = resolve)));
+    fetchGalleryPage.mockReturnValue(new Promise((resolve) => (resolvePage = resolve)));
 
     // The loader starts the request; the grid mounts while it is in flight.
     void queryClient.prefetchInfiniteQuery(lessonsInfiniteQueryOptions(queryClient));
     const gallery = renderHook(() => useLessonsInfinite(), { wrapper: wrapper(queryClient) });
-    resolvePage({ lessons: [lesson("newest")], nextPage: "d1:1" });
+    resolvePage({ items: cards(lesson("newest")), nextPage: "d1:1" });
     await waitFor(() => expect(gallery.result.current.isSuccess).toBe(true));
 
-    expect(fetchLessonsPage).toHaveBeenCalledTimes(1);
-    expect(gallery.result.current.data?.pages[0].lessons).toEqual([lesson("newest")]);
+    expect(fetchGalleryPage).toHaveBeenCalledTimes(1);
+    expect(gallery.result.current.data?.pages[0].items).toEqual(cards(lesson("newest")));
     // Primed like a fetch the grid made itself.
     expect(queryClient.getQueryData(lessonDetailQueryKey("newest"))).toEqual(lesson("newest"));
   });
@@ -69,7 +80,7 @@ describe("lesson gallery", () => {
 describe("lesson gallery on a direct visit", () => {
   it("reads page 0 from the state the edge dehydrated, without fetching it", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const page = { lessons: [lesson("newest")], nextPage: "d1:1" };
+    const page = { items: cards(lesson("newest")), nextPage: "d1:1" };
     // What hydrateServerQueryState() adopts from the /learn document.
     hydrate(queryClient, JSON.parse(JSON.stringify(dehydrateGalleryFirstPage(page))));
 
@@ -80,7 +91,7 @@ describe("lesson gallery on a direct visit", () => {
     expect(gallery.result.current.isSuccess).toBe(true);
     expect(gallery.result.current.data?.pages).toEqual([page]);
     expect(gallery.result.current.hasNextPage).toBe(true);
-    expect(fetchLessonsPage).not.toHaveBeenCalled();
+    expect(fetchGalleryPage).not.toHaveBeenCalled();
     // A card click resolves from cache, as after a fetch of its own.
     const detail = renderHook(() => useLesson("newest"), { wrapper: wrapper(queryClient) });
     expect(detail.result.current.data).toEqual(lesson("newest"));
@@ -91,7 +102,7 @@ describe("lesson gallery on a direct visit", () => {
 describe("lesson detail cache seeding", () => {
   it("serves a detail query from the gallery page that already carried it", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    fetchLessonsPage.mockResolvedValue({ lessons: [lesson("a"), lesson("b")], nextPage: null });
+    fetchGalleryPage.mockResolvedValue({ items: cards(lesson("a"), lesson("b")), nextPage: null });
 
     const gallery = renderHook(() => useLessonsInfinite(), { wrapper: wrapper(queryClient) });
     await waitFor(() => expect(gallery.result.current.isSuccess).toBe(true));

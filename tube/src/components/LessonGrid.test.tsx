@@ -26,6 +26,11 @@ vi.mock("../hooks/useWarmLessonRoute", () => ({ useWarmLessonRoute: () => {} }))
 vi.mock("./LessonCard", () => ({
   default: ({ lesson }: { lesson: { title: string } }) => <p>{lesson.title}</p>,
 }));
+vi.mock("./PlaylistSummaryCard", () => ({
+  default: ({ playlist, priority }: { playlist: { title: string }; priority?: boolean }) => (
+    <p data-priority={priority}>Playlist: {playlist.title}</p>
+  ),
+}));
 const firstRow = vi.hoisted(() => ({
   observe: vi.fn<(row: HTMLElement | null) => void>(),
   settleWithout: vi.fn<() => void>(),
@@ -56,6 +61,25 @@ vi.mock("@tanstack/react-virtual", async (importOriginal) => {
 const { default: LessonGrid } = await import("./LessonGrid");
 
 const noMatch = { authors: [], playlists: [], lessons: [], lessonTotal: 0, pageCount: 1 };
+
+/** A gallery card for a lesson in no playlist. */
+function lessonCard(title: string) {
+  return { kind: "lesson", lesson: { slug: title.toLowerCase(), title } };
+}
+
+/** A gallery card for a playlist, shown in place of the lessons it holds. */
+function playlistCard(title: string) {
+  return {
+    kind: "playlist",
+    playlist: {
+      slug: title.toLowerCase(),
+      title,
+      description: "",
+      lessonCount: 3,
+      thumbnail: null,
+    },
+  };
+}
 
 function galleryState(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -245,7 +269,7 @@ describe("LessonGrid status messages", () => {
     gallery = galleryState({
       isFetchingNextPage: true,
       hasNextPage: true,
-      data: { pages: [{ lessons: [{ slug: "intro", title: "Intro" }], nextPage: "d1:1" }] },
+      data: { pages: [{ items: [lessonCard("Intro")], nextPage: "d1:1" }] },
     });
     render(<LessonGrid />, { wrapper: MemoryRouter });
 
@@ -257,7 +281,7 @@ describe("LessonGrid status messages", () => {
       isFetchNextPageError: true,
       isError: true,
       error: new Error("Network down"),
-      data: { pages: [{ lessons: [{ slug: "intro", title: "Intro" }], nextPage: "d1:1" }] },
+      data: { pages: [{ items: [lessonCard("Intro")], nextPage: "d1:1" }] },
     });
     render(<LessonGrid />, { wrapper: MemoryRouter });
 
@@ -287,7 +311,7 @@ describe("LessonGrid clear search", () => {
 });
 
 describe("LessonGrid search on Enter", () => {
-  const introPage = { pages: [{ lessons: [{ slug: "intro", title: "Intro" }], nextPage: null }] };
+  const introPage = { pages: [{ items: [lessonCard("Intro")], nextPage: null }] };
   const found = { isPending: false, isError: false, data: noMatch };
 
   it("does not search while the reader types, only when they press Enter", () => {
@@ -371,6 +395,46 @@ describe("LessonGrid search on Enter", () => {
   });
 });
 
+describe("LessonGrid cards", () => {
+  it("shows a playlist as one card among the lessons that are in no playlist", () => {
+    gallery = galleryState({
+      data: {
+        pages: [
+          {
+            items: [playlistCard("Rust"), lessonCard("Kite"), playlistCard("CSS")],
+            nextPage: null,
+          },
+        ],
+      },
+    });
+    render(<LessonGrid />, { wrapper: MemoryRouter });
+
+    // One column here, so one card a row: the cards in page order.
+    expect(screen.getAllByText(/Rust|Kite|CSS/).map((card) => card.textContent)).toEqual([
+      "Playlist: Rust",
+      "Kite",
+      "Playlist: CSS",
+    ]);
+    // In the first row, a playlist's cover loads at once, like a lesson's thumbnail.
+    expect(screen.getByText("Playlist: Rust")).toHaveAttribute("data-priority", "true");
+  });
+
+  it("shows a card once when two pages both carry it", () => {
+    gallery = galleryState({
+      data: {
+        pages: [
+          { items: [playlistCard("Rust"), lessonCard("Kite")], nextPage: "d1:1" },
+          { items: [lessonCard("Kite"), playlistCard("Rust")], nextPage: null },
+        ],
+      },
+    });
+    render(<LessonGrid />, { wrapper: MemoryRouter });
+
+    expect(screen.getAllByText("Playlist: Rust")).toHaveLength(1);
+    expect(screen.getAllByText("Kite")).toHaveLength(1);
+  });
+});
+
 describe("LessonGrid virtual list offset", () => {
   it("measures the list's distance from the page top once page 0 lands after mount", () => {
     vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockReturnValue(240);
@@ -378,7 +442,7 @@ describe("LessonGrid virtual list offset", () => {
     const view = render(<LessonGrid />, { wrapper: MemoryRouter });
 
     gallery = galleryState({
-      data: { pages: [{ lessons: [{ slug: "intro", title: "Intro" }], nextPage: null }] },
+      data: { pages: [{ items: [lessonCard("Intro")], nextPage: null }] },
     });
     scrollMargins.length = 0;
     view.rerender(<LessonGrid />);
@@ -392,7 +456,7 @@ describe("LessonGrid scroll restoration", () => {
   it("comes back to a history entry at the offset and the row heights it was left with", () => {
     vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(264);
     gallery = galleryState({
-      data: { pages: [{ lessons: [{ slug: "intro", title: "Intro" }], nextPage: null }] },
+      data: { pages: [{ items: [lessonCard("Intro")], nextPage: null }] },
     });
     // The same history entry twice: left for a lesson, then come back to.
     const entry = [{ pathname: "/learn", key: "left-for-a-lesson" }];
@@ -423,7 +487,7 @@ describe("LessonGrid scroll restoration", () => {
 });
 
 describe("LessonGrid first-row thumbnails", () => {
-  const introPage = { pages: [{ lessons: [{ slug: "intro", title: "Intro" }], nextPage: null }] };
+  const introPage = { pages: [{ items: [lessonCard("Intro")], nextPage: null }] };
 
   it("waits on the first row's thumbnails once page 0 has lessons", () => {
     gallery = galleryState({ isPending: true });
@@ -439,7 +503,7 @@ describe("LessonGrid first-row thumbnails", () => {
   });
 
   it.each([
-    ["page 0 is empty", { data: { pages: [{ lessons: [], nextPage: null }] } }],
+    ["page 0 is empty", { data: { pages: [{ items: [], nextPage: null }] } }],
     ["page 0 failed", { isError: true, error: new Error("Request failed") }],
   ])("has nothing to wait for when %s", (_case, state) => {
     gallery = galleryState(state);

@@ -37,7 +37,7 @@ describe("hydrateServerQueryState", () => {
   });
 
   it("adopts the gallery's first page and its lessons the edge already read", () => {
-    const page = { lessons: [LESSON], nextPage: "d1:1" };
+    const page = { items: [{ kind: "lesson" as const, lesson: LESSON }], nextPage: "d1:1" };
     const rendered = injectGalleryDocument(SHELL, page);
     document.head.innerHTML = /<head>([\s\S]*)<\/head>/.exec(rendered)![1];
 

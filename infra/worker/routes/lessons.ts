@@ -24,7 +24,11 @@ import { lessonRowToOwnedLesson } from "../../db/types";
 import { requireUser } from "../auth/requireUser";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 import { metadataTextError } from "../../lessons/metadataLimits";
-import { findPublishedLessonBySlug, readPublishedLessonsPage } from "../lessonCatalog";
+import {
+  catalogPageParam,
+  findPublishedLessonBySlug,
+  readPublishedLessonsPage,
+} from "../lessonCatalog";
 import { isNewLessonId, LESSON_ID_PATTERN } from "../lessonIds";
 import { isLessonMediaFilename } from "../lessonMediaFiles";
 import { chargeUserWriteBudget } from "../rateLimit";
@@ -103,14 +107,13 @@ async function deleteLessonMedia(bucket: R2Bucket, lessonId: string): Promise<vo
 export const lessonsRoute = new Hono<{ Bindings: Env }>();
 
 lessonsRoute.get("/", async (c) => {
-  const pageParam = c.req.query("page");
-  const page = pageParam ? Number(pageParam) : 0;
-  if (!Number.isInteger(page) || page < 0) {
+  const page = catalogPageParam(c.req.query("page"));
+  if (page === null) {
     return c.json({ error: "invalid page" }, 400);
   }
 
   // Read from D1 on every request, like the other public catalog reads (see
-  // cache.ts), so a publish or unpublish shows up in the gallery immediately.
+  // cache.ts), so a publish or unpublish shows up immediately.
   return c.json(await readPublishedLessonsPage(c.env, page));
 });
 

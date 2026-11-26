@@ -3,6 +3,7 @@ import type { MiddlewareHandler } from "hono";
 import { csrf } from "hono/csrf";
 import { mount } from "hono/mount";
 import type { Env } from "./env";
+import { galleryRoute } from "./routes/gallery";
 import { lessonsRoute } from "./routes/lessons";
 import { playlistsRoute } from "./routes/playlists";
 import { authorsRoute } from "./routes/authors";
@@ -115,6 +116,7 @@ app.use("/api/*", csrf());
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
 app.route("/api/lessons", lessonsRoute);
+app.route("/api/gallery", galleryRoute);
 app.route("/api/playlists", playlistsRoute);
 app.route("/api/authors", authorsRoute);
 app.route("/api/search", searchRoute);

@@ -4,11 +4,11 @@ import { useSearch } from "@next-editor/infra";
 import { useLessonsInfinite } from "../hooks/useLessons";
 import { useWarmLessonRoute } from "../hooks/useWarmLessonRoute";
 import { GALLERY_COLUMN_QUERIES } from "../lib/galleryColumns";
-import { flattenLessonPages } from "../lib/lessons";
+import { flattenGalleryPages } from "../lib/lessons";
 import { busyFadeClass } from "../lib/busyFade";
 import { settleWithoutFirstRow, whenFirstRowThumbnailsSettled } from "../lib/firstRowThumbnails";
 import { searchQueryFrom, withSearchQuery } from "../lib/searchQuery";
-import type { Lesson } from "../types";
+import type { GalleryItem } from "../types";
 import LessonRows from "./LessonRows";
 import LessonCardSkeleton from "@app/components/LessonCardSkeleton";
 import SearchBar from "./SearchBar";
@@ -124,17 +124,19 @@ export default function LessonGrid() {
   );
   const columns = useColumns();
 
-  const lessons = flattenLessonPages(data?.pages);
+  // The gallery's cards: a playlist in place of the lessons it holds, and each
+  // lesson in no playlist on its own.
+  const cards = flattenGalleryPages(data?.pages);
   // The first row's thumbnails are what the page waits for (its LCP); when the
   // gallery has no such row to show, there is nothing to wait for.
-  const waitsForFirstRow = !showResults && (isPending || lessons.length > 0);
+  const waitsForFirstRow = !showResults && (isPending || cards.length > 0);
   useEffect(() => {
     if (!waitsForFirstRow) settleWithoutFirstRow();
   }, [waitsForFirstRow]);
   const skeletonsToAppend = isFetchingNextPage
-    ? (columns - (lessons.length % columns)) % columns || columns
+    ? (columns - (cards.length % columns)) % columns || columns
     : 0;
-  const items: (Lesson | null)[] = [...lessons, ...Array<null>(skeletonsToAppend).fill(null)];
+  const items: (GalleryItem | null)[] = [...cards, ...Array<null>(skeletonsToAppend).fill(null)];
   const rows = chunk(items, columns);
 
   // A card click opens the lesson route, which the gallery deliberately does
@@ -198,7 +200,7 @@ export default function LessonGrid() {
   // a failed gallery page 0 never replaces search results. The field keeps its
   // child slot (after the status) in every branch, so a query being typed, or a
   // search still loading, keeps its field and focus.
-  if (isError && lessons.length === 0 && !showResults) {
+  if (isError && cards.length === 0 && !showResults) {
     return (
       <div>
         {status}
@@ -251,7 +253,7 @@ export default function LessonGrid() {
   return (
     <div>
       {status}
-      {(lessons.length > 0 || isPending || submittedQuery) && searchBar}
+      {(cards.length > 0 || isPending || submittedQuery) && searchBar}
 
       {/* Inert while dimmed: what is about to be replaced is not to be reached. */}
       <div aria-busy={isSearching} inert={isSearching} className={busyFadeClass(isSearching)}>
@@ -264,7 +266,7 @@ export default function LessonGrid() {
               <LessonCardSkeleton key={i} />
             ))}
           </div>
-        ) : lessons.length === 0 ? (
+        ) : cards.length === 0 ? (
           <div className="flex justify-center py-20 text-slate-300">No lessons yet.</div>
         ) : (
           <>

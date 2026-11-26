@@ -1,4 +1,4 @@
-import type { Lesson, Playlist } from "../lessons/types";
+import type { GalleryItem, Lesson, Playlist, PlaylistSummary } from "../lessons/types";
 
 export interface UserRow {
   id: string;
@@ -208,29 +208,62 @@ export function playlistRowToOwnedPlaylist(row: PlaylistRowWithCount): OwnedPlay
   };
 }
 
-/**
- * Public playlist card shape for the author profile — like OwnedPlaylist but
- * without the owner-only `id`/`updatedAt` (the public profile only links by
- * slug and has no manage actions). `lessonCount` here is the published-member
- * count (see publishedPlaylistsByOwnerStatement), matching what the public playlist
- * page actually shows.
- */
-export interface PlaylistSummary {
-  slug: string;
-  title: string;
-  description: string;
-  lessonCount: number;
-  /** Cover image — the first published member's thumbnail, or null. */
-  thumbnail: string | null;
-}
+/** The columns a public playlist card is built from. */
+type PlaylistCardColumns = Pick<
+  PlaylistRowWithCount,
+  "slug" | "title" | "description" | "lesson_count" | "first_lesson_thumbnail"
+>;
 
-export function playlistRowToPlaylistSummary(row: PlaylistRowWithCount): PlaylistSummary {
+/**
+ * The public playlist card (author profile, search, gallery). Its rows count
+ * published members only (PUBLISHED_LESSON_COUNT_SUBQUERY in
+ * playlistQueries.ts), matching what the public playlist page shows.
+ */
+export function playlistRowToPlaylistSummary(row: PlaylistCardColumns): PlaylistSummary {
   return {
     slug: row.slug,
     title: row.title,
     description: row.description ?? "",
     lessonCount: row.lesson_count,
     thumbnail: row.first_lesson_thumbnail,
+  };
+}
+
+/**
+ * listGalleryCards's row shape: one card of the public gallery. A lesson card
+ * is the lesson's own row. A playlist card carries the playlist's columns
+ * under playlist_* names, beside its published-member count and cover, and
+ * every lesson column is null.
+ */
+export type GalleryCardRow =
+  | ({ kind: "lesson" } & LessonRow)
+  | {
+      kind: "playlist";
+      playlist_slug: string;
+      playlist_title: string;
+      playlist_description: string | null;
+      lesson_count: number;
+      first_lesson_thumbnail: string | null;
+      playlist_author: string | null;
+      playlist_author_username: string;
+    };
+
+export function galleryCardRowToItem(row: GalleryCardRow): GalleryItem {
+  if (row.kind === "lesson") return { kind: "lesson", lesson: lessonRowToLesson(row) };
+  return {
+    kind: "playlist",
+    playlist: {
+      ...playlistRowToPlaylistSummary({
+        slug: row.playlist_slug,
+        title: row.playlist_title,
+        description: row.playlist_description,
+        lesson_count: row.lesson_count,
+        first_lesson_thumbnail: row.first_lesson_thumbnail,
+      }),
+      // As search shows an author: the display name, or the username without one.
+      author: row.playlist_author || row.playlist_author_username,
+      authorUrl: `/learn/@${row.playlist_author_username}`,
+    },
   };
 }
 

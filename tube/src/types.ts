@@ -1,1 +1,1 @@
-export type { Lesson, Playlist } from "../../infra/lessons/types";
+export type { GalleryItem, Lesson, Playlist } from "../../infra/lessons/types";

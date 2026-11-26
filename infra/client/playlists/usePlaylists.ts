@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { playlistKeys } from "../../lessons/queryKeys";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { lessonKeys, playlistKeys } from "../../lessons/queryKeys";
 import {
   addLessonToPlaylist,
   addLessonsToPlaylist,
@@ -58,15 +58,28 @@ export function usePlaylistLessons(playlistId: string | undefined) {
 // QueryClient; lessons/queryKeys.ts keeps every one of them under that
 // prefix. A narrowly-scoped invalidation would need threading the
 // slug/lessonId through every mutation; invalidating the whole prefix is
-// simpler and cheap at this scale. TData is preserved (not widened to
-// unknown) so callers like useCreatePlaylist can chain off the created row.
+// simpler and cheap at this scale.
+//
+// The public gallery goes stale with them: a playlist is one of its cards, in
+// place of the lessons it holds, so adding or removing a member, a rename, a
+// new first lesson (the cover) or a delete changes what the gallery shows.
+function invalidatePlaylistDerivedQueries(queryClient: QueryClient) {
+  return Promise.all(
+    [playlistKeys.all, lessonKeys.infinite].map((queryKey) =>
+      queryClient.invalidateQueries({ queryKey }),
+    ),
+  );
+}
+
+// TData is preserved (not widened to unknown) so callers like
+// useCreatePlaylist can chain off the created row.
 function useMyPlaylistsMutation<TVariables, TData>(
   mutationFn: (variables: TVariables) => Promise<TData>,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: playlistKeys.all }),
+    onSuccess: () => invalidatePlaylistDerivedQueries(queryClient),
   });
 }
 
@@ -113,6 +126,6 @@ export function useSavePlaylistOrder() {
   const queryClient = useQueryClient();
   return (playlistId: string, lessonIds: string[]) =>
     savePlaylistOrder(playlistId, lessonIds).finally(() =>
-      queryClient.invalidateQueries({ queryKey: playlistKeys.all }),
+      invalidatePlaylistDerivedQueries(queryClient),
     );
 }

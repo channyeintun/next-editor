@@ -14,7 +14,8 @@ export const lessonKeys = {
   /** The prefix every lesson key below starts with: invalidating it reaches the
    *  public gallery and every lesson's detail as well as the owner's list. */
   all: ["lessons"] as const,
-  /** The public gallery's pages (tube's useLessonsInfinite). */
+  /** The public gallery's pages of cards (tube's useLessonsInfinite): lessons,
+   *  and playlists in place of the lessons they hold. */
   infinite: ["lessons", "infinite"] as const,
   /** The signed-in owner's lessons, drafts included (My Library). */
   mine: ["lessons", "mine"] as const,

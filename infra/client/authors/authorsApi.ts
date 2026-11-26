@@ -1,6 +1,6 @@
 import { apiClient, isNotFoundError } from "../apiClient";
-import type { AuthorSummary, PlaylistSummary } from "../../db/types";
-import type { Lesson } from "../../lessons/types";
+import type { AuthorSummary } from "../../db/types";
+import type { Lesson, PlaylistSummary } from "../../lessons/types";
 
 export interface AuthorProfile {
   user: AuthorSummary;

@@ -396,6 +396,7 @@ export default ({ mode }: { mode: string }) => {
       proxy: {
         "/api/health": "http://localhost:8787",
         "/api/lessons": "http://localhost:8787",
+        "/api/gallery": "http://localhost:8787",
         // Public catalog reads: playlists, author profiles and search.
         "/api/playlists": "http://localhost:8787",
         "/api/authors": "http://localhost:8787",

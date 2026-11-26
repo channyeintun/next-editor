@@ -12,10 +12,10 @@ const playlist: PlaylistSummary = {
   thumbnail: null,
 };
 
-function renderCard(overrides: Partial<PlaylistSummary> = {}) {
-  render(
+function renderCard(overrides: Partial<PlaylistSummary> = {}, priority?: boolean) {
+  return render(
     <MemoryRouter>
-      <PlaylistSummaryCard playlist={{ ...playlist, ...overrides }} />
+      <PlaylistSummaryCard playlist={{ ...playlist, ...overrides }} priority={priority} />
     </MemoryRouter>,
   );
 }
@@ -43,5 +43,35 @@ describe("PlaylistSummaryCard", () => {
     renderCard({ lessonCount: 1 });
 
     expect(screen.getByRole("link")).toHaveAccessibleName("Rust from zero, 1 lesson");
+  });
+
+  it("names the author and spells the count out in the gallery, where cards are of many authors", () => {
+    const view = renderCard({ author: "Hla Hla", authorUrl: "/learn/@hla" });
+
+    const author = screen.getByRole("link", { name: "Hla Hla" });
+    expect(author).toHaveAttribute("href", "/learn/@hla");
+    expect(view.container).toHaveTextContent("Hla Hla · 3 lessons");
+    // The title link already reads the count out, so the visible one is not read again.
+    expect(screen.getByText("· 3 lessons")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getAllByRole("link")).toHaveLength(2);
+  });
+
+  it("shows no author line where the page is one author's", () => {
+    const view = renderCard();
+
+    expect(view.container.querySelector("p")).toBeNull();
+  });
+
+  it("loads the cover at once, at high priority, in the gallery's first row", () => {
+    const cover = "media/lessons/first/first-thumbnail-1.webp";
+    const lazy = renderCard({ thumbnail: cover });
+    expect(lazy.container.querySelector("img")).toHaveAttribute("loading", "lazy");
+    lazy.unmount();
+
+    const eager = renderCard({ thumbnail: cover }, true);
+    const image = eager.container.querySelector("img");
+    expect(image).toHaveAttribute("loading", "eager");
+    expect(image).toHaveAttribute("fetchpriority", "high");
+    expect(image).toHaveAttribute("src", `/${cover}`);
   });
 });

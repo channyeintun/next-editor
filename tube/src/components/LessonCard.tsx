@@ -3,6 +3,7 @@ import { Play } from "lucide-react";
 import LangText from "@app/components/LangText";
 import type { Lesson } from "../types";
 import { lessonHref, resolveThumb } from "../lib/links";
+import CardAuthor from "./CardAuthor";
 import ThumbnailTile from "./ThumbnailTile";
 
 // "2026-06-28" → "Jun 28, 2026". Parsed as a local date (not UTC) to avoid an
@@ -78,19 +79,7 @@ export default function LessonCard({
           // slate-300 on the #11141c page is 12.4:1 (WCAG AAA); slate-400 renders
           // as #90a1b9, 6.9997:1, just under the 7:1 AAA floor.
           <p className="mt-1 text-xs text-slate-300">
-            {lesson.author &&
-              (lesson.authorUrl ? (
-                <Link
-                  to={lesson.authorUrl}
-                  className="rounded outline-none hover:text-white hover:underline focus-visible:text-white focus-visible:underline"
-                >
-                  <LangText text={lesson.author} />
-                </Link>
-              ) : (
-                <span>
-                  <LangText text={lesson.author} />
-                </span>
-              ))}
+            {lesson.author && <CardAuthor name={lesson.author} url={lesson.authorUrl} />}
             {lesson.author && published && " · "}
             {published && <span>{published}</span>}
           </p>
