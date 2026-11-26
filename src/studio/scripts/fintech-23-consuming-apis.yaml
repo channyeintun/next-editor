@@ -850,7 +850,7 @@ scenes:
       ဖြေပါ။ [[mark:iv-a]] ပထမ၊ boundary မှာ ကိုယ် သုံးမယ့် field တွေကိုပဲ စစ်ပြီး မှားနေရင် fail loudly
       လုပ်မယ်၊ ကျန်တာကို မစစ်လို့ provider ရဲ့ contract ပြောင်းတာ ကိုယ့် outage မဖြစ်ဘူး ဆိုတာပါ။
       [[mark:iv-b]] ဒုတိယ၊ timeout နဲ့ retry ကို idempotency key နဲ့ တွဲထားပြီး၊ timeout ကို failure
-      မဟုတ်ဘဲ unknown အဖြစ် ထားကာ status ကို query လုပ်ပြီး ဖြေရှင်းမယ် ဆိုတာပါ။ [[mark:iv-c]] တတိယ၊
+      မဟုတ်ဘဲ unknown အဖြစ် ထားပြီး status ကို query လုပ်ပြီး ဖြေရှင်းမယ် ဆိုတာပါ။ [[mark:iv-c]] တတိယ၊
       request နဲ့ response တိုင်းကို raw အတိုင်း query လုပ်လို့ရအောင် သိမ်းမယ် ဆိုတာပါ။ [[mark:iv-d]]
       ပြီးရင် ကိုယ် ဘာလုပ်မလဲ ဆက်ပြောပါ။ provider တစ်ခုစီကို adapter တစ်ခုနဲ့ ခွဲထားမယ်၊ critical
       ဖြစ်တဲ့ အပိုင်းမှာ source နှစ်ခုနဲ့ တိုက်စစ်မယ်၊ production မှာ ပမာဏ သေးသေးနဲ့ canary လုပ်မယ်
