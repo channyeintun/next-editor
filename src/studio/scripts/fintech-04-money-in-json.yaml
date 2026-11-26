@@ -1,0 +1,783 @@
+# Fintech Engineering, lesson 04: money at the JSON boundary (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Precision handling" (the last paragraph, serialization)
+# and "Testing" (round-trip testing) (CC BY 4.0, Voytek Pitula).
+# Start state: main.go decodes {"amount": 9007199254740993, "currency": "EUR"} into a
+# map[string]any and prints the amount; money.go holds the kit's Money, format and parseMinor,
+# plus Money.UnmarshalJSON for {"amount":"12.34","currency":"EUR"}.
+# Edits, all insert-only, in main.go:
+#   1. decode the same bytes into a struct with an int64 field   -> run-2: ...993, exact in Go
+#   2. Money.MarshalJSON: the amount as a decimal string           (no run)
+#   3. a round trip: encode, decode, compare                       -> run-3: the wire bytes, true
+# Figures: edge (int64 → JSON → a JavaScript double), limit (2^53 − 1 on a ruler), wire (four
+# real API shapes), iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-04-money-in-json
+  title: "Fintech Engineering 04: JSON ထဲက ငွေပမာဏ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"encoding/json"
+        	"fmt"
+        )
+
+        // body is what arrives from another service: an amount in minor units, as a bare JSON number.
+        var body = []byte(`{"amount": 9007199254740993, "currency": "EUR"}`)
+
+        func must(err error) {
+        	if err != nil {
+        		panic(err)
+        	}
+        }
+
+        func main() {
+        	fmt.Println("json:", string(body))
+
+        	var generic map[string]any
+        	must(json.Unmarshal(body, &generic))
+        	fmt.Printf("map[string]any: %.0f (%T)\n", generic["amount"], generic["amount"])
+        }
+      money.go: |
+        package main
+
+        import (
+        	"encoding/json"
+        	"fmt"
+        	"strings"
+        )
+
+        // exponent is the number of decimal places of each currency this system accepts (ISO 4217).
+        var exponent = map[string]int{"EUR": 2, "USD": 2, "JPY": 0, "BHD": 3}
+
+        // Money is an amount counted in the currency's minor units. It is never a float.
+        type Money struct {
+        	Amount   int64
+        	Currency string
+        }
+
+        // UnmarshalJSON reads {"amount":"12.34","currency":"EUR"} back into minor units.
+        func (m *Money) UnmarshalJSON(b []byte) error {
+        	var w struct{ Amount, Currency string }
+        	if err := json.Unmarshal(b, &w); err != nil {
+        		return err
+        	}
+        	exp, ok := exponent[w.Currency]
+        	if !ok {
+        		return fmt.Errorf("unknown currency %q", w.Currency)
+        	}
+        	n, err := parseMinor(w.Amount, exp)
+        	if err != nil {
+        		return err
+        	}
+        	*m = Money{n, w.Currency}
+        	return nil
+        }
+
+        // format prints minor units with exp decimal places: format(1234, 2) is "12.34".
+        func format(minor int64, exp int) string {
+        	sign := ""
+        	if minor < 0 {
+        		sign, minor = "-", -minor
+        	}
+        	digits := fmt.Sprintf("%0*d", exp+1, minor)
+        	if exp == 0 {
+        		return sign + digits
+        	}
+        	return sign + digits[:len(digits)-exp] + "." + digits[len(digits)-exp:]
+        }
+
+        // parseMinor reads a decimal string such as "12.34" into minor units without using a float.
+        func parseMinor(s string, exp int) (int64, error) {
+        	whole, frac, _ := strings.Cut(s, ".")
+        	if len(frac) > exp {
+        		return 0, fmt.Errorf("%q has more than %d decimal places", s, exp)
+        	}
+        	frac += strings.Repeat("0", exp-len(frac))
+        	var n int64
+        	for _, c := range whole + frac {
+        		if c < '0' || c > '9' {
+        			return 0, fmt.Errorf("%q is not a decimal number", s)
+        		}
+        		n = n*10 + int64(c-'0')
+        	}
+        	return n, nil
+        }
+  slides:
+    - id: edge-1
+      contentType: html
+      name: "Serialization boundary 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">SERIALIZATION BOUNDARY</text>
+        <text x="80" y="150" font-size="47" fill="#e9edf5" font-weight="700">ငွေက service ထဲမှာ မပျောက်ဘူး၊ ကြားထဲမှာ ပျောက်တယ်</text>
+        <g class="in"><rect x="60" y="250" width="360" height="170" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="60" y="250" width="360" height="170" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-server" x="82" y="303" width="64" height="64" style="color:#4fd1c5"/><text x="280" y="323.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger service</text><text x="280" y="367.7" font-size="24" text-anchor="middle" fill="#8a94a8">int64 · အတိအကျ</text></g>
+        <g class="in"><rect x="550" y="262" width="500" height="199" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="574" y="296" font-size="22" fill="#8a94a8" font-weight="700" class="mono">on the wire</text><path d="M550 308H1050" stroke="#2a3345" stroke-width="2"/><g><text x="574" y="354.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><rect x="558" y="368.4" width="484" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="574" y="393.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 9007199254740993</text></g><g><text x="574" y="432.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g></g>
+        <path d="M429.8 337L536.3 358.7" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <g class="in"><text x="60" y="580" font-size="84" fill="#4fd1c5" font-weight="800" class="mono">…993</text><text x="60" y="626" font-size="26" fill="#8a94a8">ကိုယ် ပို့လိုက်တဲ့ amount</text></g>
+        </svg>
+    - id: edge-2
+      contentType: html
+      name: "Serialization boundary 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">SERIALIZATION BOUNDARY</text>
+        <text x="80" y="150" font-size="47" fill="#e9edf5" font-weight="700">ငွေက service ထဲမှာ မပျောက်ဘူး၊ ကြားထဲမှာ ပျောက်တယ်</text>
+        <rect x="60" y="250" width="360" height="170" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="60" y="250" width="360" height="170" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-server" x="82" y="303" width="64" height="64" style="color:#4fd1c5"/><text x="280" y="323.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger service</text><text x="280" y="367.7" font-size="24" text-anchor="middle" fill="#8a94a8">int64 · အတိအကျ</text>
+        <rect x="550" y="262" width="500" height="199" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="574" y="296" font-size="22" fill="#8a94a8" font-weight="700" class="mono">on the wire</text><path d="M550 308H1050" stroke="#2a3345" stroke-width="2"/><g><text x="574" y="354.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><rect x="558" y="368.4" width="484" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="574" y="393.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 9007199254740993</text></g><g><text x="574" y="432.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g>
+        <path d="M429.8 337L536.3 358.7" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <g class="in"><rect x="1180" y="250" width="360" height="170" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="1202" y="303" width="64" height="64" style="color:#6cb2f5"/><text x="1400" y="323.9" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600">JavaScript client</text><text x="1400" y="362.7" font-size="24" text-anchor="middle" fill="#8a94a8">Number = double</text></g>
+        <path d="M1059.8 359.5L1166.3 337.8" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <text x="60" y="580" font-size="84" fill="#4fd1c5" font-weight="800" class="mono">…993</text><text x="60" y="626" font-size="26" fill="#8a94a8">ကိုယ် ပို့လိုက်တဲ့ amount</text>
+        <g class="in"><text x="1180" y="580" font-size="84" fill="#fc8181" font-weight="800" class="mono">…992</text><text x="1180" y="626" font-size="26" fill="#8a94a8">JSON.parse ပြီးတဲ့နောက်</text></g>
+        <g class="in"><circle cx="1534" cy="256" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="1520.2" y="242.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        </svg>
+    - id: edge-3
+      contentType: html
+      name: "Serialization boundary 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">SERIALIZATION BOUNDARY</text>
+        <text x="80" y="150" font-size="47" fill="#e9edf5" font-weight="700">ငွေက service ထဲမှာ မပျောက်ဘူး၊ ကြားထဲမှာ ပျောက်တယ်</text>
+        <rect x="60" y="250" width="360" height="170" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="60" y="250" width="360" height="170" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-server" x="82" y="303" width="64" height="64" style="color:#4fd1c5"/><text x="280" y="323.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger service</text><text x="280" y="367.7" font-size="24" text-anchor="middle" fill="#8a94a8">int64 · အတိအကျ</text>
+        <rect x="550" y="262" width="500" height="199" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="574" y="296" font-size="22" fill="#8a94a8" font-weight="700" class="mono">on the wire</text><path d="M550 308H1050" stroke="#2a3345" stroke-width="2"/><g><text x="574" y="354.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><rect x="558" y="368.4" width="484" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="574" y="393.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 9007199254740993</text></g><g><text x="574" y="432.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g>
+        <path d="M429.8 337L536.3 358.7" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <rect x="1180" y="250" width="360" height="170" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="1202" y="303" width="64" height="64" style="color:#6cb2f5"/><text x="1400" y="323.9" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600">JavaScript client</text><text x="1400" y="362.7" font-size="24" text-anchor="middle" fill="#8a94a8">Number = double</text>
+        <path d="M1059.8 359.5L1166.3 337.8" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <text x="60" y="580" font-size="84" fill="#4fd1c5" font-weight="800" class="mono">…993</text><text x="60" y="626" font-size="26" fill="#8a94a8">ကိုယ် ပို့လိုက်တဲ့ amount</text>
+        <text x="1180" y="580" font-size="84" fill="#fc8181" font-weight="800" class="mono">…992</text><text x="1180" y="626" font-size="26" fill="#8a94a8">JSON.parse ပြီးတဲ့နောက်</text>
+        <circle cx="1534" cy="256" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="1520.2" y="242.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <g class="in"><rect x="363.7" y="740" width="872.7" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="363.7" y="740" width="872.7" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="800" y="774.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">error မတက်ဘူး — ပို့တဲ့ဘက်ရော ဖတ်တဲ့ဘက်ရော spec အတိုင်းပဲ</text></g>
+        </svg>
+    - id: edge-4
+      contentType: html
+      name: "Serialization boundary 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">SERIALIZATION BOUNDARY</text>
+        <text x="80" y="150" font-size="47" fill="#e9edf5" font-weight="700">ငွေက service ထဲမှာ မပျောက်ဘူး၊ ကြားထဲမှာ ပျောက်တယ်</text>
+        <rect x="60" y="250" width="360" height="170" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="60" y="250" width="360" height="170" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-server" x="82" y="303" width="64" height="64" style="color:#4fd1c5"/><text x="280" y="323.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger service</text><text x="280" y="367.7" font-size="24" text-anchor="middle" fill="#8a94a8">int64 · အတိအကျ</text>
+        <rect x="550" y="262" width="500" height="199" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="574" y="296" font-size="22" fill="#8a94a8" font-weight="700" class="mono">on the wire</text><path d="M550 308H1050" stroke="#2a3345" stroke-width="2"/><g><text x="574" y="354.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><rect x="558" y="368.4" width="484" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="574" y="393.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 9007199254740993</text></g><g><text x="574" y="432.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g>
+        <path d="M429.8 337L536.3 358.7" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <rect x="1180" y="250" width="360" height="170" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="1202" y="303" width="64" height="64" style="color:#6cb2f5"/><text x="1400" y="323.9" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600">JavaScript client</text><text x="1400" y="362.7" font-size="24" text-anchor="middle" fill="#8a94a8">Number = double</text>
+        <path d="M1059.8 359.5L1166.3 337.8" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <text x="60" y="580" font-size="84" fill="#4fd1c5" font-weight="800" class="mono">…993</text><text x="60" y="626" font-size="26" fill="#8a94a8">ကိုယ် ပို့လိုက်တဲ့ amount</text>
+        <text x="1180" y="580" font-size="84" fill="#fc8181" font-weight="800" class="mono">…992</text><text x="1180" y="626" font-size="26" fill="#8a94a8">JSON.parse ပြီးတဲ့နောက်</text>
+        <circle cx="1534" cy="256" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="1520.2" y="242.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="363.7" y="740" width="872.7" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="363.7" y="740" width="872.7" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="800" y="774.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">error မတက်ဘူး — ပို့တဲ့ဘက်ရော ဖတ်တဲ့ဘက်ရော spec အတိုင်းပဲ</text>
+        <g class="in"><rect x="550" y="480" width="500" height="121" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="574" y="514" font-size="22" fill="#8a94a8" font-weight="700" class="mono">middle service · decode → re-encode</text><path d="M550 526H1050" stroke="#2a3345" stroke-width="2"/><g><rect x="558" y="547.4" width="484" height="39" rx="8" fill="#fc8181" opacity="0.16"/><text x="574" y="572.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">"amount": 9007199254740992</text></g></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">API response ထဲမှာ ငွေပမာဏကို ဘယ်လို ပို့မလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">API response ထဲမှာ ငွေပမာဏကို ဘယ်လို ပို့မလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">bare JSON number က parser အများစုမှာ double ဖြစ်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">2^53 − 1 ကျော်ရင် တစ်ဖက်မှာ error မတက်ဘဲ ပြောင်းသွားတယ်</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">API response ထဲမှာ ငွေပမာဏကို ဘယ်လို ပို့မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">bare JSON number က parser အများစုမှာ double ဖြစ်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">2^53 − 1 ကျော်ရင် တစ်ဖက်မှာ error မတက်ဘဲ ပြောင်းသွားတယ်</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6c453"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">string "12.34" ဒါမှမဟုတ် 2^53 အောက်က minor unit integer</text><text x="188" y="443" font-size="26" fill="#8a94a8">crypto ပမာဏ (wei) ကို string နဲ့ပဲ ပို့</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">API response ထဲမှာ ငွေပမာဏကို ဘယ်လို ပို့မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">bare JSON number က parser အများစုမှာ double ဖြစ်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">2^53 − 1 ကျော်ရင် တစ်ဖက်မှာ error မတက်ဘဲ ပြောင်းသွားတယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#f6c453"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">string "12.34" ဒါမှမဟုတ် 2^53 အောက်က minor unit integer</text><text x="188" y="443" font-size="26" fill="#8a94a8">crypto ပမာဏ (wei) ကို string နဲ့ပဲ ပို့</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">currency ကို ဘေးမှာ အမြဲ ထည့်၊ exponent ကို contract ထဲ ရေး</text><text x="188" y="575" font-size="26" fill="#8a94a8">integer ဆိုရင် နှစ်ဖက်လုံး exponent တူရမယ်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">API response ထဲမှာ ငွေပမာဏကို ဘယ်လို ပို့မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">bare JSON number က parser အများစုမှာ double ဖြစ်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">2^53 − 1 ကျော်ရင် တစ်ဖက်မှာ error မတက်ဘဲ ပြောင်းသွားတယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#f6c453"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">string "12.34" ဒါမှမဟုတ် 2^53 အောက်က minor unit integer</text><text x="188" y="443" font-size="26" fill="#8a94a8">crypto ပမာဏ (wei) ကို string နဲ့ပဲ ပို့</text></g><g><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">currency ကို ဘေးမှာ အမြဲ ထည့်၊ exponent ကို contract ထဲ ရေး</text><text x="188" y="575" font-size="26" fill="#8a94a8">integer ဆိုရင် နှစ်ဖက်လုံး exponent တူရမယ်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">Money type မှာ ကိုယ်ပိုင် Marshal/Unmarshal + round-trip test</text><text x="188" y="707" font-size="26" fill="#8a94a8">encode → decode → မူလ တန်ဖိုးနဲ့ ညီရမယ်</text></g>
+        </svg>
+    - id: limit-1
+      contentType: html
+      name: "RFC 8259 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RFC 8259</text>
+        <text x="80" y="150" font-size="49" fill="#e9edf5" font-weight="700">JSON number က 2^53 − 1 အထိပဲ နေရာတိုင်းမှာ တူတယ်</text>
+        <g class="in"><text x="100" y="330" font-size="72" fill="#4fd1c5" font-weight="800" class="mono">9,007,199,254,740,991</text><text x="100" y="376" font-size="26" fill="#8a94a8">2^53 − 1 — ဒီအတွင်းက integer ကိုပဲ parser တိုင်း အတူတူ ဖတ်မယ်</text></g>
+        </svg>
+    - id: limit-2
+      contentType: html
+      name: "RFC 8259 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RFC 8259</text>
+        <text x="80" y="150" font-size="49" fill="#e9edf5" font-weight="700">JSON number က 2^53 − 1 အထိပဲ နေရာတိုင်းမှာ တူတယ်</text>
+        <text x="100" y="330" font-size="72" fill="#4fd1c5" font-weight="800" class="mono">9,007,199,254,740,991</text><text x="100" y="376" font-size="26" fill="#8a94a8">2^53 − 1 — ဒီအတွင်းက integer ကိုပဲ parser တိုင်း အတူတူ ဖတ်မယ်</text>
+        <g class="in"><path d="M120 640H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M120 622H1208" stroke="#68d391" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="664" y="606" font-size="24" text-anchor="middle" fill="#68d391" font-weight="600">integer minor units — number နဲ့ ပို့လို့ ရ</text></g><g><circle cx="664" cy="640" r="10" fill="#68d391"/><path d="M664 640V686" stroke="#68d391" stroke-width="2.5"/><text x="664" y="722" font-size="28" text-anchor="middle" fill="#68d391" font-weight="700" class="mono">10^8</text><text x="664" y="760" font-size="23" text-anchor="middle" fill="#8a94a8">ယူရို 1M ကို cent နဲ့</text></g><g><circle cx="1208" cy="640" r="10" fill="#4fd1c5"/><path d="M1208 640V686" stroke="#4fd1c5" stroke-width="2.5"/><text x="1208" y="722" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">2^53</text><text x="1208" y="760" font-size="23" text-anchor="middle" fill="#8a94a8">safe ဖြစ်တဲ့ နယ်နိမိတ်</text></g></g>
+        <g class="in"><text x="1480" y="770" font-size="23" text-anchor="end" fill="#8a94a8">log scale</text></g>
+        </svg>
+    - id: limit-3
+      contentType: html
+      name: "RFC 8259 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RFC 8259</text>
+        <text x="80" y="150" font-size="49" fill="#e9edf5" font-weight="700">JSON number က 2^53 − 1 အထိပဲ နေရာတိုင်းမှာ တူတယ်</text>
+        <text x="100" y="330" font-size="72" fill="#4fd1c5" font-weight="800" class="mono">9,007,199,254,740,991</text><text x="100" y="376" font-size="26" fill="#8a94a8">2^53 − 1 — ဒီအတွင်းက integer ကိုပဲ parser တိုင်း အတူတူ ဖတ်မယ်</text>
+        <path d="M120 640H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M120 622H1208" stroke="#68d391" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="664" y="606" font-size="24" text-anchor="middle" fill="#68d391" font-weight="600">integer minor units — number နဲ့ ပို့လို့ ရ</text></g><g class="in"><path d="M1208 622H1480" stroke="#fc8181" stroke-width="12" stroke-linecap="round" opacity="0.85"/></g><g><circle cx="664" cy="640" r="10" fill="#68d391"/><path d="M664 640V686" stroke="#68d391" stroke-width="2.5"/><text x="664" y="722" font-size="28" text-anchor="middle" fill="#68d391" font-weight="700" class="mono">10^8</text><text x="664" y="760" font-size="23" text-anchor="middle" fill="#8a94a8">ယူရို 1M ကို cent နဲ့</text></g><g><circle cx="1208" cy="640" r="10" fill="#4fd1c5"/><path d="M1208 640V686" stroke="#4fd1c5" stroke-width="2.5"/><text x="1208" y="722" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">2^53</text><text x="1208" y="760" font-size="23" text-anchor="middle" fill="#8a94a8">safe ဖြစ်တဲ့ နယ်နိမိတ်</text></g><g class="in"><circle cx="1344" cy="640" r="10" fill="#fc8181"/><path d="M1344 640V594" stroke="#fc8181" stroke-width="2.5"/><text x="1344" y="546" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">10^18</text><text x="1344" y="578" font-size="23" text-anchor="middle" fill="#8a94a8">1 ETH (wei) → string</text></g>
+        <text x="1480" y="770" font-size="23" text-anchor="end" fill="#8a94a8">log scale</text>
+        </svg>
+    - id: wire-1
+      contentType: html
+      name: "Real APIs 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REAL APIS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">တကယ့် API တွေ ငွေကို ဘယ်လို ပို့လဲ</text>
+        <g class="in"><rect x="100" y="215" width="680" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">Stripe · integer, minor units</text><path d="M100 261H780" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><rect x="108" y="321.4" width="664" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 1234,</text></g><g><text x="124" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "currency": "…"</text></g><g><text x="124" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g></g>
+        </svg>
+    - id: wire-2
+      contentType: html
+      name: "Real APIs 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REAL APIS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">တကယ့် API တွေ ငွေကို ဘယ်လို ပို့လဲ</text>
+        <rect x="100" y="215" width="680" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">Stripe · integer, minor units</text><path d="M100 261H780" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><rect x="108" y="321.4" width="664" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 1234,</text></g><g><text x="124" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "currency": "…"</text></g><g><text x="124" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g>
+        <g class="in"><rect x="820" y="215" width="680" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="844" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">PayPal Orders v2 · string</text><path d="M820 261H1500" stroke="#2a3345" stroke-width="2"/><g><text x="844" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">"amount": {</text></g><g><text x="844" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "currency_code": "EUR",</text></g><g><rect x="828" y="360.4" width="664" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="844" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "value": "12.34"</text></g><g><text x="844" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g></g>
+        </svg>
+    - id: wire-3
+      contentType: html
+      name: "Real APIs 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REAL APIS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">တကယ့် API တွေ ငွေကို ဘယ်လို ပို့လဲ</text>
+        <rect x="100" y="215" width="680" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">Stripe · integer, minor units</text><path d="M100 261H780" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><rect x="108" y="321.4" width="664" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 1234,</text></g><g><text x="124" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "currency": "…"</text></g><g><text x="124" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g>
+        <rect x="820" y="215" width="680" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="844" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">PayPal Orders v2 · string</text><path d="M820 261H1500" stroke="#2a3345" stroke-width="2"/><g><text x="844" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">"amount": {</text></g><g><text x="844" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "currency_code": "EUR",</text></g><g><rect x="828" y="360.4" width="664" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="844" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "value": "12.34"</text></g><g><text x="844" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g>
+        <g class="in"><rect x="100" y="520" width="680" height="199" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="554" font-size="22" fill="#8a94a8" font-weight="700" class="mono">google.type.Money · units + nanos</text><path d="M100 566H780" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="612.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">currency_code: "EUR"</text></g><g><rect x="108" y="626.4" width="664" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="651.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">units: 12</text></g><g><rect x="108" y="665.4" width="664" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="690.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">nanos: 340000000</text></g></g>
+        </svg>
+    - id: wire-4
+      contentType: html
+      name: "Real APIs 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REAL APIS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">တကယ့် API တွေ ငွေကို ဘယ်လို ပို့လဲ</text>
+        <rect x="100" y="215" width="680" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">Stripe · integer, minor units</text><path d="M100 261H780" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><rect x="108" y="321.4" width="664" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "amount": 1234,</text></g><g><text x="124" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "currency": "…"</text></g><g><text x="124" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g>
+        <rect x="820" y="215" width="680" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="844" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">PayPal Orders v2 · string</text><path d="M820 261H1500" stroke="#2a3345" stroke-width="2"/><g><text x="844" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">"amount": {</text></g><g><text x="844" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "currency_code": "EUR",</text></g><g><rect x="828" y="360.4" width="664" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="844" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "value": "12.34"</text></g><g><text x="844" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g>
+        <rect x="100" y="520" width="680" height="199" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="554" font-size="22" fill="#8a94a8" font-weight="700" class="mono">google.type.Money · units + nanos</text><path d="M100 566H780" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="612.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">currency_code: "EUR"</text></g><g><rect x="108" y="626.4" width="664" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="651.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">units: 12</text></g><g><rect x="108" y="665.4" width="664" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="690.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">nanos: 340000000</text></g>
+        <g class="in"><rect x="820" y="520" width="680" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="844" y="554" font-size="22" fill="#8a94a8" font-weight="700" class="mono">X API · ID, not money</text><path d="M820 566H1500" stroke="#2a3345" stroke-width="2"/><g><text x="844" y="612.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">{</text></g><g><rect x="828" y="626.4" width="664" height="39" rx="8" fill="#fc8181" opacity="0.16"/><text x="844" y="651.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "id": 1234567890123456789,</text></g><g><rect x="828" y="665.4" width="664" height="39" rx="8" fill="#68d391" opacity="0.16"/><text x="844" y="690.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  "id_str": "1234567890123456789"</text></g><g><text x="844" y="729.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g></g>
+        <g class="in"><rect x="441.9" y="800" width="716.2" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="441.9" y="800" width="716.2" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="800" y="834.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">ဘယ်ပုံစံ ရွေးရွေး currency ကို amount ဘေးမှာ ထည့်</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9504
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "json: {\"amount\": 9007199254740993, \"currency\": \"EUR\"}\nmap[string]any: 9007199254740992 (float64)\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "json: {\"amount\": 9007199254740993, \"currency\": \"EUR\"}\nmap[string]any: 9007199254740992 (float64)\nstruct int64:   9007199254740993\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "json: {\"amount\": 9007199254740993, \"currency\": \"EUR\"}\nmap[string]any: 9007199254740992 (float64)\nstruct int64:   9007199254740993\nwire: {\"amount\":\"90071992547409.93\",\"currency\":\"EUR\"}\nround trip: true\n"
+
+scenes:
+  - id: hook
+    chapter: Boundary မှာ ပျောက်တဲ့ ငွေ
+    narration: >-
+      ledger ထဲမှာ ငွေပမာဏကို ကိန်းပြည့်နဲ့ အတိအကျ သိမ်းထားပေမဲ့၊ အဲဒီ ပမာဏက service တစ်ခုကနေ
+      တစ်ခုကို JSON နဲ့ ဖြတ်သွားရပါတယ်။ ကိုယ့် code ဂရုစိုက်ထားသလောက် boundary က ဂရုမစိုက်ပါဘူး။
+      [[mark:sel-body]] ဒီ JSON မှာ amount ကို ဂဏန်း သက်သက် number အဖြစ် ပို့ထားပြီး၊ တန်ဖိုးက
+      နှစ်ရဲ့ ၅၃ ထပ်ထက် တစ် ပိုတဲ့ ကိန်းပြည့်ပါ။ [[mark:sel-generic]] အဲဒါကို type မကြေညာထားတဲ့
+      generic map ထဲ decode လုပ်ပြီး ပြန်ထုတ်ပြပါမယ်။ script တွေ၊ log pipeline တွေ၊ type မသိတဲ့
+      service တွေ JSON ကို ဖတ်တဲ့ ပုံစံအတိုင်းပါ။ run မလုပ်ခင် ဘာထွက်မလဲ ခန့်မှန်းကြည့်ပါ။
+      [[mark:run-1]] run လိုက်ရအောင်။ [[mark:pt-map]] နောက်ဆုံး digit က သုံး မဟုတ်ဘဲ နှစ်
+      ဖြစ်သွားပြီး type က float ဖြစ်နေပါတယ်။ error မတက်ဘဲ ဆင့် တစ်ခု ပျောက်သွားတာပါ။ handbook
+      ပြောသလို parser အများစုက ဒီလို bare JSON number ကို double အဖြစ် ဖတ်လို့ပါ။ [[mark:dock-1]]
+      ဆိုလိုတာက ကိုယ့်ဘက်မှာ ဂရုတစိုက် သိမ်းထားတာ boundary ရောက်တာနဲ့ အလကား ဖြစ်သွားနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+      - {
+          title: "Go standard library — encoding/json, Unmarshal",
+          url: "https://pkg.go.dev/encoding/json#Unmarshal",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-body
+        type: editor.select
+        at: { mark: sel-body }
+        target:
+          {
+            file: main.go,
+            text: 'var body = []byte(`{"amount": 9007199254740993, "currency": "EUR"}`)',
+            occurrence: 1,
+          }
+      - id: sel-generic
+        type: editor.select
+        at: { mark: sel-generic }
+        target:
+          {
+            file: main.go,
+            text: "\tvar generic map[string]any\n\tmust(json.Unmarshal(body, &generic))",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "map[string]any: 9007199254740992 (float64)",
+          timeoutMs: 8000,
+        }
+      - id: pt-map
+        type: console.point
+        at: { mark: pt-map }
+        target: { text: "map[string]any:", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: struct
+    narration: >-
+      [[mark:type-struct]] ဒီတစ်ခါ ၆၄ bit ကိန်းပြည့် field ပါတဲ့ struct ထဲကို decode လုပ်ပါမယ်။ type
+      ကို ကြိုသိထားရင် Go က number ကို float မဖြတ်ဘဲ ကိန်းပြည့်အဖြစ် တိုက်ရိုက် ဖတ်ပါတယ်။ bytes
+      တွေကတော့ အရင်အတိုင်းပါပဲ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-struct]] နောက်ဆုံး digit
+      က သုံး အမှန် ပြန်ဖြစ်ပါတယ်။ Go ဘက်မှာ ပြဿနာ ပြေလည်သွားပြီလို့ ထင်ရပါတယ်။ [[mark:dock-2]]
+      ဒါပေမဲ့ ဒီ JSON ကို ဖတ်မှာက ကိုယ့် Go code တစ်ခုတည်း မဟုတ်ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+      - {
+          title: "Go standard library — encoding/json, Unmarshal",
+          url: "https://pkg.go.dev/encoding/json#Unmarshal",
+        }
+    actions:
+      - id: type-struct
+        type: editor.type
+        at: { mark: type-struct }
+        target:
+          { file: main.go, after: "generic[\"amount\"], generic[\"amount\"])\n", occurrence: 1 }
+        text: "\n\tvar s struct{ Amount int64 }\n\tmust(json.Unmarshal(body, &s))\n\tfmt.Println(\"struct int64:  \", s.Amount)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "struct int64:   9007199254740993",
+          timeoutMs: 8000,
+        }
+      - id: pt-struct
+        type: console.point
+        at: { mark: pt-struct }
+        target: { text: "struct int64:", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: edge
+    chapter: ဖတ်တဲ့ဘက်ကို မထိန်းနိုင်ဘူး
+    narration: >-
+      [[mark:show-edge]] ကိုယ့် ledger service က ၆၄ bit ကိန်းပြည့်ကို အတိအကျ encode လုပ်ပါတယ်။ [[mark:pt-bytes]]
+      wire ပေါ်မှာ သွားတာက ဂဏန်း စာလုံးတွေပဲ ဖြစ်ပြီး type မပါပါဘူး၊ ဘယ်လို ဖတ်မလဲ ဆိုတာ ဖတ်တဲ့ဘက်က
+      ဆုံးဖြတ်ပါတယ်။ [[mark:edge-2]] JavaScript ရဲ့ JSON parser က number တိုင်းကို double အဖြစ် ဖတ်ပါတယ်။ double မှာ ကိန်းပြည့်တိုင်းကို
+      တစ်လုံးမကျန် မှတ်နိုင်တာ နှစ်ရဲ့ ၅၃ ထပ်အထိပဲ ဖြစ်လို့၊ အဲဒီ ကျော်ရင် ဘေးချင်းကပ် ကိန်းပြည့်တွေ တန်ဖိုး တစ်ခုတည်း ဖြစ်သွားပါတယ်။ [[mark:pt-wrong]] ဒါကြောင့် ဒီ
+      client က ခုနက map လိုပဲ နှစ် နဲ့ ဆုံးတဲ့ တန်ဖိုး ရပါတယ်။ [[mark:edge-3]] ပို့တဲ့ဘက်ရော
+      ဖတ်တဲ့ဘက်ရော spec အတိုင်း လုပ်တာ ဖြစ်လို့ ဘယ်ဘက်မှာမှ error မပေါ်ပါဘူး။ ကိုယ့် struct မှန်နေတာက
+      user ရဲ့ app မှာ ပြတဲ့ balance မှန်တယ်လို့ အာမခံ မပေးပါဘူး။
+      [[mark:edge-4]] ပိုဆိုးတာက ကြားထဲက service တစ်ခုက generic type ထဲ decode လုပ်ပြီး ပြန် encode လုပ်တဲ့
+      အခါပါ။ အဲဒီ service က နှစ် နဲ့ ဆုံးတဲ့ တန်ဖိုးကို JSON ထဲ ပြန်ရေးလိုက်လို့၊ နောက်က service တိုင်းက
+      မှားနေတဲ့ ပမာဏကို မှန်တယ်လို့ ယူသွားပါတယ်။ [[mark:usenum]] Go မှာဆိုရင် decoder ရဲ့ UseNumber option က number ကို မူလ စာလုံးတွေအတိုင်း ထိန်းထားပေးပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+      - {
+          title: "MDN — Number.MAX_SAFE_INTEGER",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER",
+        }
+      - {
+          title: "Go standard library — encoding/json, Decoder.UseNumber",
+          url: "https://pkg.go.dev/encoding/json#Decoder.UseNumber",
+        }
+    actions:
+      - {
+          id: show-edge,
+          type: slide.show,
+          at: { mark: show-edge, offsetMs: -700 },
+          slideId: edge-1,
+        }
+      - {
+          id: pt-svc,
+          type: slide.point,
+          at: { afterAction: show-edge },
+          target: { x: 0.15, y: 0.476 },
+        }
+      - { id: pt-bytes, type: slide.point, at: { mark: pt-bytes }, target: { x: 0.409, y: 0.45 } }
+      - { id: edge-2, type: slide.show, at: { mark: edge-2 }, slideId: edge-2 }
+      - { id: pt-js, type: slide.point, at: { afterAction: edge-2 }, target: { x: 0.85, y: 0.476 } }
+      - { id: pt-wrong, type: slide.point, at: { mark: pt-wrong }, target: { x: 0.769, y: 0.709 } }
+      - { id: edge-3, type: slide.show, at: { mark: edge-3 }, slideId: edge-3 }
+      - {
+          id: pt-gap,
+          type: slide.point,
+          at: { afterAction: edge-3 },
+          target: { x: 0.494, y: 0.887 },
+        }
+      - { id: edge-4, type: slide.show, at: { mark: edge-4 }, slideId: edge-4 }
+      - {
+          id: pt-relay,
+          type: slide.point,
+          at: { afterAction: edge-4 },
+          target: { x: 0.409, y: 0.649 },
+        }
+
+  - id: limit
+    narration: >-
+      [[mark:show-limit]] JSON ရဲ့ RFC က number တွေရဲ့ precision ကို မသတ်မှတ်ပါဘူး။ ဒါပေမဲ့ နှစ်ရဲ့ ၅၃
+      ထပ် အနုတ် တစ် အတွင်းက ကိန်းပြည့်တွေကိုပဲ နေရာတိုင်းမှာ အတူတူ ဖတ်မယ်လို့ စိတ်ချနိုင်တယ် လို့
+      သတိပေးထားပါတယ်။ [[mark:limit-2]] fiat ငွေပမာဏကို minor unit နဲ့ ရေတွက်ရင် ဒီ နယ်နိမိတ်က အလွန်
+      ကျယ်ပါတယ်။ [[mark:pt-fiat]] ယူရို တစ်သန်းကို ဆင့်နဲ့ ရေတွက်တာတောင် ဂဏန်း ကိုးလုံးပဲ ရှိပါတယ်။
+      [[mark:limit-3]] ether တစ်ခုကို wei နဲ့ ရေတွက်ရင်တော့ float မှာ တွေ့ခဲ့သလိုပဲ ဒီ နယ်နိမိတ်ကို ကျော်သွားပါပြီ။
+      [[mark:pt-wei]] ဒါကြောင့် crypto ပမာဏတွေက JSON number နဲ့ ပို့ရင် ဒီ နယ်နိမိတ်ကို အလွယ်တကူ ကျော်လို့ string နဲ့ ပို့တာ အလုံခြုံဆုံးပါ။
+    sources:
+      - {
+          title: "RFC 8259 — The JSON Data Interchange Format, Section 6: Numbers",
+          url: "https://www.rfc-editor.org/rfc/rfc8259.html#section-6",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+    actions:
+      - {
+          id: show-limit,
+          type: slide.show,
+          at: { mark: show-limit, offsetMs: -700 },
+          slideId: limit-1,
+        }
+      - {
+          id: pt-max,
+          type: slide.point,
+          at: { afterAction: show-limit },
+          target: { x: 0.1, y: 0.431 },
+        }
+      - { id: limit-2, type: slide.show, at: { mark: limit-2 }, slideId: limit-2 }
+      - {
+          id: pt-safe,
+          type: slide.point,
+          at: { afterAction: limit-2 },
+          target: { x: 0.736, y: 0.858 },
+        }
+      - { id: pt-fiat, type: slide.point, at: { mark: pt-fiat }, target: { x: 0.396, y: 0.858 } }
+      - { id: limit-3, type: slide.show, at: { mark: limit-3 }, slideId: limit-3 }
+      - { id: pt-wei, type: slide.point, at: { mark: pt-wei }, target: { x: 0.821, y: 0.656 } }
+
+  - id: roundtrip
+    chapter: String နဲ့ ပို့ပြီး round trip စစ်
+    narration: >-
+      [[mark:close-limit]] ဒါဆို wire format ကို ကိုယ်တိုင် ဆုံးဖြတ်ရအောင်။ [[mark:type-marshal]] Money
+      ကို JSON ပြောင်းတဲ့အခါ amount ကို ဒသမ ပါတဲ့ string အဖြစ်၊ currency ကို ဘေးမှာ ထည့်ပြီး ပို့ပါမယ်။
+      string ကို ဘယ် parser ကမှ double အဖြစ် မပြောင်းပါဘူး၊ ဒသမ အမှတ်လည်း ပါပြီးသား ဖြစ်လို့ ဖတ်တဲ့ဘက်က
+      exponent ကို ခန့်မှန်းစရာ မလိုပါဘူး။ decode ဘက်ကိုတော့ money ဖိုင်ထဲမှာ ရေးထားပြီးပါပြီ။
+      [[mark:type-rt]] ပြီးရင် round trip test တစ်ခု ရေးပါမယ်။ ခုနက ပြဿနာ ဖြစ်ခဲ့တဲ့ ပမာဏကိုပဲ encode
+      လုပ်၊ decode ပြန်လုပ်ပြီး မူလ တန်ဖိုးနဲ့ ညီသလား စစ်တာပါ။ မညီရင် boundary မှာ တစ်ခုခု ပျောက်နေတာပါ။
+      [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-wire]] wire ပေါ်မှာ amount က ဒသမ ပါတဲ့ string ဖြစ်ပြီး
+      currency က ဘေးမှာ ပါပါတယ်။ [[mark:pt-rt]] round trip က true ပါ၊ ဆင့် တစ်ခုမှ မပျောက်ပါဘူး။
+      handbook က ဒီ test ကို boundary မှာ precision ပျောက်တာနဲ့ serialization bug တွေကို မြန်မြန်
+      ဖမ်းနိုင်တဲ့ နည်းလို့ ဆိုပါတယ်။ [[mark:dock-3]] ဒီ test က အလိုအလျောက် generate လုပ်ထားတဲ့ ပမာဏ
+      ထောင်ချီနဲ့ run မှ တကယ် အသုံးဝင်ပါတယ်။ ဥပမာ ဒီ code ကိုပဲ အနုတ် ပမာဏ တစ်ခုနဲ့ စမ်းရင် encode က အနုတ် လက္ခဏာ ပါတဲ့ string ထုတ်ပေမဲ့ decode က လက်မခံလို့ round trip ပျက်ပါတယ်။ သတိထားရမှာက ကိုယ့် decoder
+      တစ်ခုတည်းနဲ့ round trip လုပ်ရုံ မဟုတ်ဘဲ၊ client သုံးတဲ့ parser နဲ့လည်း စစ်ရပါမယ်။ ဒါက boundary မှာ
+      No lost data ကို ကာကွယ်တာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - {
+          title: "Go standard library — encoding/json, Marshaler",
+          url: "https://pkg.go.dev/encoding/json#Marshaler",
+        }
+    actions:
+      - { id: close-limit, type: slide.close, at: { mark: close-limit } }
+      - id: type-marshal
+        type: editor.type
+        at: { mark: type-marshal }
+        target: { file: main.go, after: "\t\tpanic(err)\n\t}\n}\n", occurrence: 1 }
+        text: "\nfunc (m Money) MarshalJSON() ([]byte, error) {\n\treturn json.Marshal(map[string]string{\n\t\t\"amount\":   format(m.Amount, exponent[m.Currency]),\n\t\t\"currency\": m.Currency,\n\t})\n}\n"
+        cadence: line-by-line
+      - id: type-rt
+        type: editor.type
+        at: { mark: type-rt }
+        target:
+          { file: main.go, after: "\tfmt.Println(\"struct int64:  \", s.Amount)\n", occurrence: 1 }
+        text: "\n\tsent := Money{Amount: 9007199254740993, Currency: \"EUR\"}\n\twire, err := json.Marshal(sent)\n\tmust(err)\n\tvar back Money\n\tmust(json.Unmarshal(wire, &back))\n\tfmt.Println(\"wire:\", string(wire))\n\tfmt.Println(\"round trip:\", back == sent)\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "round trip: true",
+          timeoutMs: 8000,
+        }
+      - id: pt-wire
+        type: console.point
+        at: { mark: pt-wire }
+        target: { text: "wire:", occurrence: 1 }
+      - id: pt-rt
+        type: console.point
+        at: { mark: pt-rt }
+        target: { text: "round trip:", occurrence: 1 }
+      - {
+          id: expect-file-marshal,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "func (m Money) MarshalJSON() ([]byte, error) {",
+        }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: wire
+    chapter: တကယ့် API တွေ ဘာလုပ်လဲ
+    narration: >-
+      [[mark:show-wire]] ဒီနေရာမှာ စိတ်ဝင်စားစရာ ဖြစ်လာပါတယ်၊ တကယ့် API တွေက တစ်ခုစီ မတူတဲ့ ရွေးချယ်မှု
+      လုပ်ထားပါတယ်။ [[mark:pt-stripe]] Stripe က amount ကို currency ရဲ့ အသေးဆုံး unit နဲ့ ကိန်းပြည့်အဖြစ်
+      ပို့ပါတယ်။ ရိုးရှင်းပေမဲ့ နှစ်ဖက်လုံး exponent ကို တူတူ သိမှ အလုပ်ဖြစ်ပြီး၊ အရင် lesson က ISK လို
+      ကွာဟချက်တွေကို သယ်လာပါတယ်။ [[mark:wire-2]] PayPal ရဲ့ Orders API က currency code နဲ့ value ကို
+      object တစ်ခုထဲ ထည့်ပြီး value ကို string နဲ့ ပို့ပါတယ်။ [[mark:wire-3]] Google ရဲ့ Money type
+      ကတော့ ကိန်းပြည့် အပိုင်းကို units၊ ဒသမ အပိုင်းကို nanos ဆိုပြီး ကိန်းပြည့် နှစ်ခု ခွဲသိမ်းလို့၊ float
+      မပါဘဲ ဒသမ ကိုးလုံးအထိ ကိုင်နိုင်ပါတယ်။ [[mark:wire-4]] X ရဲ့ API က ငွေ မဟုတ်ပေမဲ့ ပြဿနာ
+      အတူတူကို ကြုံခဲ့ပါတယ်။ ID တွေက ၆၄ bit ကိန်းပြည့် ဖြစ်ပြီး JavaScript က bit ၅၃ လုံးပဲ အတိအကျ
+      ကိုင်နိုင်လို့၊ API version အဟောင်းမှာ number နဲ့ string နှစ်မျိုးလုံး ပြန်ပို့ပြီး version အသစ်မှာ
+      string ကို default လုပ်ထားပါတယ်။ [[mark:pt-rule]] ဘယ်ပုံစံ ရွေးရွေး currency ကို amount ဘေးမှာ
+      ထည့်ရပြီး၊ ရွေးထားတဲ့ ပုံစံကို API contract ထဲမှာ ရှင်းရှင်း ရေးထားရပါမယ်။
+    sources:
+      - {
+          title: "Stripe API — Create a PaymentIntent (amount)",
+          url: "https://docs.stripe.com/api/payment_intents/create",
+        }
+      - {
+          title: "PayPal Orders v2 — amount_with_breakdown",
+          url: "https://developer.paypal.com/api/orders/v2/definitions/amount_with_breakdown",
+        }
+      - {
+          title: "googleapis — google/type/money.proto",
+          url: "https://github.com/googleapis/googleapis/blob/master/google/type/money.proto",
+        }
+    actions:
+      - {
+          id: show-wire,
+          type: slide.show,
+          at: { mark: show-wire, offsetMs: -700 },
+          slideId: wire-1,
+        }
+      - {
+          id: pt-wtitle,
+          type: slide.point,
+          at: { afterAction: show-wire },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - {
+          id: pt-stripe,
+          type: slide.point,
+          at: { mark: pt-stripe },
+          target: { x: 0.119, y: 0.398 },
+        }
+      - { id: wire-2, type: slide.show, at: { mark: wire-2 }, slideId: wire-2 }
+      - {
+          id: pt-paypal,
+          type: slide.point,
+          at: { afterAction: wire-2 },
+          target: { x: 0.572, y: 0.441 },
+        }
+      - { id: wire-3, type: slide.show, at: { mark: wire-3 }, slideId: wire-3 }
+      - {
+          id: pt-google,
+          type: slide.point,
+          at: { afterAction: wire-3 },
+          target: { x: 0.1, y: 0.737 },
+        }
+      - { id: wire-4, type: slide.show, at: { mark: wire-4 }, slideId: wire-4 }
+      - { id: pt-x, type: slide.point, at: { afterAction: wire-4 }, target: { x: 0.578, y: 0.78 } }
+      - { id: pt-rule, type: slide.point, at: { mark: pt-rule }, target: { x: 0.494, y: 0.953 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ API response ထဲမှာ ငွေပမာဏကို ဘယ်လို ပို့မလဲ လို့
+      မေးတတ်ပါတယ်။ string နဲ့ ပို့မယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး၊ ဘာကြောင့်လဲ ဆိုတာပါ ပြောရပါမယ်။
+      [[mark:iv-a]] ပထမ၊ bare JSON number ကို parser အများစုက double အဖြစ် ဖတ်လို့၊ နှစ်ရဲ့ ၅၃ ထပ်
+      ကျော်တဲ့ ပမာဏက တစ်ဖက်မှာ error မတက်ဘဲ ပြောင်းသွားပါတယ်။ [[mark:iv-b]] ဒုတိယ၊ လုံခြုံတဲ့ ပုံစံ
+      နှစ်မျိုး ရှိပါတယ်၊ ဒသမ ပါတဲ့ string နဲ့ အဲဒီ နယ်နိမိတ် အောက်က minor unit ကိန်းပြည့်ပါ။ wei လို ကြီးတဲ့
+      crypto ပမာဏကိုတော့ string နဲ့ပဲ ပို့ပါ။ [[mark:iv-c]] တတိယ၊ currency ကို ဘေးမှာ အမြဲ ထည့်ပြီး၊
+      ကိန်းပြည့်နဲ့ ပို့ရင် exponent ကို နှစ်ဖက်လုံး သဘောတူထားရပါမယ်။ [[mark:iv-d]] ပြီးရင် ကိုယ်
+      ဘာလုပ်မလဲ ပြောပါ။ Money type မှာ ကိုယ်ပိုင် encode နဲ့ decode ကို ရေးပြီး၊ boundary တိုင်းမှာ round
+      trip test ထားမယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ဒီ ပမာဏရဲ့ နောက်ဆုံး digit
+      ကို သုံးကနေ တစ် ပြောင်းပြီး run ကြည့်ပါ။ အဲဒါက နှစ်ရဲ့ ၅၃ ထပ် အနုတ် တစ် အတိအကျ ဖြစ်လို့ generic
+      map ကလည်း မှန်မှန် ဖတ်ပါလိမ့်မယ်။ နယ်နိမိတ်က ဘယ်မှာလဲ ဆိုတာ ကိုယ်တိုင် မြင်ရပါမယ်။ [[mark:recap]]
+      ပြန်ချုပ်ရရင်၊ ကိုယ့်ဘက်မှာ ငွေပမာဏကို အတိအကျ သိမ်းထားရုံနဲ့ မလုံလောက်ပါဘူး။ wire ပေါ်မှာလည်း
+      string ဒါမှမဟုတ် လုံခြုံတဲ့ ကိန်းပြည့်အဖြစ် currency နဲ့ တွဲပို့ပြီး၊ round trip နဲ့ စစ်ရပါမယ်။ နောက်
+      lesson မှာတော့ အတိအကျ မခွဲနိုင်တဲ့ နေရာကို ကြည့်ပါမယ်၊ ယူရို တစ်ရာကို သုံးပုံ ခွဲရင် ဆင့် တစ်ခု
+      ဘယ်ရောက်သွားလဲ ဆိုတဲ့ rounding ပါ။
+    sources:
+      - {
+          title: "RFC 8259 — The JSON Data Interchange Format, Section 6: Numbers",
+          url: "https://www.rfc-editor.org/rfc/rfc8259.html#section-6",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: '9007199254740993, "currency"', occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
