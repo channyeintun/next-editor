@@ -1,0 +1,863 @@
+# Fintech Engineering, lesson 12: audits and audit trails (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Audits and audit trails" (CC BY 4.0, Voytek Pitula).
+# Start state: main.go checks a withdrawal with nested ifs and prints only "blocked";
+# audit.go holds the decision-table engine (Row, Table, Decide, Record, replay).
+# Edits, all insert-only:
+#   1. the risk rules as a versioned decision table, Decide and print the record -> run-2 (what/when/who/why)
+#   2. a version → table map and replay(rec)                                      -> run-3 same decision: true
+# Figures: asks (four audit questions; state vs history), cases (Wirecard 2020, FTX 2022–23),
+# record (what / when / who / why of a config change; what needs a trail), decision (nested if vs
+# decision table vs stored decision; step 4 = what breaks replay, shown again after run 3), iv.
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-12-audit-trail
+  title: "Fintech Engineering 12: Audit trail"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      audit.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        	"time"
+        )
+
+        // Withdrawal is what the risk check sees.
+        type Withdrawal struct {
+        	ID        string
+        	User      string
+        	Amount    int64 // cents
+        	KYCLevel  int
+        	NewDevice bool
+        }
+
+        // Row is one rule of a decision table. It fires when every condition it sets holds.
+        type Row struct {
+        	Rule      string
+        	MaxKYC    int   // KYCLevel <= MaxKYC (0: any level)
+        	MinAmount int64 // Amount >= MinAmount
+        	NewDevice bool  // only on a new device (false: any device)
+        }
+
+        // Table is a versioned decision table: a withdrawal is blocked when any row fires.
+        type Table struct {
+        	Version string
+        	Rows    []Row
+        }
+
+        // Record is one audit record: what, when, who, why, with the inputs and the rule version.
+        type Record struct {
+        	What    string
+        	When    time.Time
+        	Who     string
+        	Fired   []string
+        	Version string
+        	Input   Withdrawal
+        }
+
+        func (r Row) fires(w Withdrawal) bool {
+        	return (r.MaxKYC == 0 || w.KYCLevel <= r.MaxKYC) && w.Amount >= r.MinAmount &&
+        		(!r.NewDevice || w.NewDevice)
+        }
+
+        // Decide evaluates every row and records which ones fired, on which inputs.
+        func (t Table) Decide(w Withdrawal, when time.Time) Record {
+        	rec := Record{When: when, Who: w.User, Version: t.Version, Input: w}
+        	for _, row := range t.Rows {
+        		if row.fires(w) {
+        			rec.Fired = append(rec.Fired, row.Rule)
+        		}
+        	}
+        	rec.What = fmt.Sprintf("%s withdrawal %s %s", w.ID, cents(w.Amount), outcome(rec.Fired))
+        	return rec
+        }
+
+        // replay evaluates the stored inputs again with the stored rule version.
+        func replay(rec Record, tables map[string]Table) bool {
+        	again := tables[rec.Version].Decide(rec.Input, rec.When)
+        	return again.What == rec.What && strings.Join(again.Fired, ",") == strings.Join(rec.Fired, ",")
+        }
+
+        func outcome(fired []string) string {
+        	if len(fired) > 0 {
+        		return "blocked"
+        	}
+        	return "allowed"
+        }
+
+        func (r Record) String() string {
+        	in := r.Input
+        	return fmt.Sprintf("what: %s\nwhen: %s\nwho:  %s\nwhy:  %s fired %v on amount=%s kyc=%d new=%t\n",
+        		r.What, r.When.Format("2006-01-02 15:04 MST"), r.Who, r.Version, r.Fired,
+        		cents(in.Amount), in.KYCLevel, in.NewDevice)
+        }
+
+        func at(month time.Month, day, hour, minute int) time.Time {
+        	return time.Date(2026, month, day, hour, minute, 0, 0, time.UTC)
+        }
+
+        func cents(n int64) string {
+        	return fmt.Sprintf("%d.%02d", n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // check is the risk rule as it is often written: correct, and silent about why.
+        func check(w Withdrawal) string {
+        	if w.KYCLevel < 2 {
+        		if w.Amount > 100000 {
+        			return "blocked"
+        		}
+        	}
+        	if w.NewDevice && w.Amount > 50000 {
+        		return "blocked"
+        	}
+        	return "allowed"
+        }
+
+        func main() {
+        	w := Withdrawal{ID: "wd-311", User: "user:1042", Amount: 80000, KYCLevel: 2, NewDevice: true}
+        	fmt.Println("decision:", check(w))
+        }
+  slides:
+    - id: asks-1
+      contentType: html
+      name: "Audit 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-wallet" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="29" rx="4"/><path d="M43 21H33a4.500 4.500 0 0 0 0 9h10"/></symbol><symbol id="i-chart" viewBox="0 0 48 48"><path d="M7 7v34h34M15 35V25M23 35V15M31 35V21M39 35V11"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">AUDIT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Audit က မေးတဲ့ မေးခွန်း လေးခု</text>
+        <g class="in"><rect x="100" y="215" width="680" height="160" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-wallet" x="122" y="263" width="64" height="64" style="color:#f6c453"/><text x="480" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">user funds ≠ company funds</text><text x="480" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">ရောမထား၊ company expense အတွက် မသုံး</text></g>
+        <g class="in"><rect x="820" y="215" width="680" height="160" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-chart" x="842" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="1200" y="285.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">revenue ကို ရှင်းပြနိုင်</text><text x="1200" y="331.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဘယ် transaction တွေကနေ လာလဲ</text></g>
+        </svg>
+    - id: asks-2
+      contentType: html
+      name: "Audit 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-wallet" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="29" rx="4"/><path d="M43 21H33a4.500 4.500 0 0 0 0 9h10"/></symbol><symbol id="i-chart" viewBox="0 0 48 48"><path d="M7 7v34h34M15 35V25M23 35V15M31 35V21M39 35V11"/></symbol><symbol id="i-scale" viewBox="0 0 48 48"><path d="M24 6v36M13 42h22M8 14h32"/><path d="M8 14 3 27a6 6 0 0 0 10 0zM40 14l-5 13a6 6 0 0 0 10 0z"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">AUDIT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Audit က မေးတဲ့ မေးခွန်း လေးခု</text>
+        <rect x="100" y="215" width="680" height="160" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-wallet" x="122" y="263" width="64" height="64" style="color:#f6c453"/><text x="480" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">user funds ≠ company funds</text><text x="480" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">ရောမထား၊ company expense အတွက် မသုံး</text>
+        <rect x="820" y="215" width="680" height="160" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-chart" x="842" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="1200" y="285.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">revenue ကို ရှင်းပြနိုင်</text><text x="1200" y="331.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဘယ် transaction တွေကနေ လာလဲ</text>
+        <g class="in"><rect x="100" y="415" width="680" height="160" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-scale" x="122" y="463" width="64" height="64" style="color:#68d391"/><text x="480" y="483.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">reported = reality</text><text x="480" y="527.7" font-size="24" text-anchor="middle" fill="#8a94a8">assets ≥ user တွေကို ပေးစရာ</text></g>
+        <g class="in"><rect x="820" y="415" width="680" height="160" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-lock" x="842" y="463" width="64" height="64" style="color:#b794f6"/><text x="1200" y="485.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">funds ကို ဘယ်သူ ထိနိုင်လဲ</text><text x="1200" y="531.7" font-size="24" text-anchor="middle" fill="#8a94a8">access ဘယ်လို ရလဲ</text></g>
+        </svg>
+    - id: asks-3
+      contentType: html
+      name: "Audit 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-wallet" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="29" rx="4"/><path d="M43 21H33a4.500 4.500 0 0 0 0 9h10"/></symbol><symbol id="i-chart" viewBox="0 0 48 48"><path d="M7 7v34h34M15 35V25M23 35V15M31 35V21M39 35V11"/></symbol><symbol id="i-scale" viewBox="0 0 48 48"><path d="M24 6v36M13 42h22M8 14h32"/><path d="M8 14 3 27a6 6 0 0 0 10 0zM40 14l-5 13a6 6 0 0 0 10 0z"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">AUDIT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Audit က မေးတဲ့ မေးခွန်း လေးခု</text>
+        <rect x="100" y="215" width="680" height="160" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-wallet" x="122" y="263" width="64" height="64" style="color:#f6c453"/><text x="480" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">user funds ≠ company funds</text><text x="480" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">ရောမထား၊ company expense အတွက် မသုံး</text>
+        <rect x="820" y="215" width="680" height="160" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-chart" x="842" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="1200" y="285.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">revenue ကို ရှင်းပြနိုင်</text><text x="1200" y="331.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဘယ် transaction တွေကနေ လာလဲ</text>
+        <rect x="100" y="415" width="680" height="160" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-scale" x="122" y="463" width="64" height="64" style="color:#68d391"/><text x="480" y="483.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">reported = reality</text><text x="480" y="527.7" font-size="24" text-anchor="middle" fill="#8a94a8">assets ≥ user တွေကို ပေးစရာ</text>
+        <rect x="820" y="415" width="680" height="160" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-lock" x="842" y="463" width="64" height="64" style="color:#b794f6"/><text x="1200" y="485.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">funds ကို ဘယ်သူ ထိနိုင်လဲ</text><text x="1200" y="531.7" font-size="24" text-anchor="middle" fill="#8a94a8">access ဘယ်လို ရလဲ</text>
+        <g class="in"><rect x="100" y="650" width="560" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-db" x="122" y="683" width="64" height="64" style="color:#fc8181"/><text x="420" y="703.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">current state</text><text x="420" y="747.7" font-size="24" text-anchor="middle" fill="#8a94a8">balance တွေပဲ</text></g>
+        <g class="in"><circle cx="654" cy="656" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="640.2" y="642.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        <g class="in"><rect x="940" y="650" width="560" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><rect x="940" y="650" width="560" height="130" rx="18" fill="#68d391" opacity="0.13"/><use href="#i-ledger" x="962" y="683" width="64" height="64" style="color:#68d391"/><text x="1260" y="703.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">full history</text><text x="1260" y="747.7" font-size="24" text-anchor="middle" fill="#8a94a8">state ဘယ်လို ဖြစ်လာလဲ</text></g>
+        <g class="in"><circle cx="1494" cy="656" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="1480.2" y="642.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/></g>
+        <path d="M670 715L926 715" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="798" y="698.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">audit trail</text>
+        </svg>
+    - id: cases-1
+      contentType: html
+      name: "Real cases 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">REAL CASES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">စာရင်းက audit ရဲ့ မေးခွန်းကို မဖြေနိုင်ခဲ့ဘူး</text>
+        <g class="in"><text x="100" y="245" font-size="32" fill="#e9edf5" font-weight="700">Wirecard · 2020</text></g>
+        <g class="in"><text x="100" y="345" font-size="76" fill="#f6c453" font-weight="800" class="mono">€1.9 bn</text><text x="100" y="391" font-size="26" fill="#8a94a8">trust account ထဲက cash — auditor က confirm မလုပ်နိုင်</text></g>
+        <g class="in"><rect x="100" y="470" width="660" height="274" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="505" font-size="22" fill="#8a94a8" font-weight="700">date</text><text x="274.3" y="505" font-size="22" fill="#8a94a8" font-weight="700"></text><path d="M100 522H760" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="569" font-size="28" fill="#9aa5b8" class="mono">18 Jun</text><text x="274.3" y="569" font-size="24" fill="#e9edf5">EY က 2019 accounts ကို sign off မလုပ်</text></g><g><path d="M116 596H744" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="643" font-size="28" fill="#9aa5b8" class="mono">22 Jun</text><text x="274.3" y="643" font-size="27" fill="#e9edf5">balance တွေ မရှိနိုင်ခြေ များတယ်</text></g><g><path d="M116 670H744" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="717" font-size="28" fill="#9aa5b8" class="mono">25 Jun</text><text x="274.3" y="717" font-size="28" fill="#e9edf5">insolvency filing</text></g></g>
+        </svg>
+    - id: cases-2
+      contentType: html
+      name: "Real cases 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">REAL CASES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">စာရင်းက audit ရဲ့ မေးခွန်းကို မဖြေနိုင်ခဲ့ဘူး</text>
+        <text x="100" y="245" font-size="32" fill="#e9edf5" font-weight="700">Wirecard · 2020</text>
+        <text x="100" y="345" font-size="76" fill="#f6c453" font-weight="800" class="mono">€1.9 bn</text><text x="100" y="391" font-size="26" fill="#8a94a8">trust account ထဲက cash — auditor က confirm မလုပ်နိုင်</text>
+        <rect x="100" y="470" width="660" height="274" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="505" font-size="22" fill="#8a94a8" font-weight="700">date</text><text x="274.3" y="505" font-size="22" fill="#8a94a8" font-weight="700"></text><path d="M100 522H760" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="569" font-size="28" fill="#9aa5b8" class="mono">18 Jun</text><text x="274.3" y="569" font-size="24" fill="#e9edf5">EY က 2019 accounts ကို sign off မလုပ်</text></g><g><path d="M116 596H744" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="643" font-size="28" fill="#9aa5b8" class="mono">22 Jun</text><text x="274.3" y="643" font-size="27" fill="#e9edf5">balance တွေ မရှိနိုင်ခြေ များတယ်</text></g><g><path d="M116 670H744" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="717" font-size="28" fill="#9aa5b8" class="mono">25 Jun</text><text x="274.3" y="717" font-size="28" fill="#e9edf5">insolvency filing</text></g>
+        <g class="in"><path d="M800 230L800 800" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/></g>
+        <g class="in"><text x="840" y="245" font-size="32" fill="#e9edf5" font-weight="700">FTX · 2022–2023</text></g>
+        <g class="in"><text x="840" y="345" font-size="76" fill="#fc8181" font-weight="800" class="mono">7 / 7</text><text x="840" y="391" font-size="26" fill="#8a94a8">counts — founder ကို jury က အပြစ်ရှိတယ်</text></g>
+        <g class="in"><rect x="840" y="470" width="660" height="274" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="862" y="505" font-size="22" fill="#8a94a8" font-weight="700">date</text><text x="1050.6" y="505" font-size="22" fill="#8a94a8" font-weight="700"></text><path d="M840 522H1500" stroke="#2a3345" stroke-width="2"/><g><text x="862" y="569" font-size="25" fill="#9aa5b8" class="mono">11 Nov 22</text><text x="1050.6" y="569" font-size="28" fill="#e9edf5">Chapter 11 filing</text></g><g><path d="M856 596H1484" stroke="#2a3345" stroke-width="1.5"/><text x="862" y="643" font-size="25" fill="#9aa5b8" class="mono">13 Dec 22</text><text x="1050.6" y="643" font-size="22" fill="#e9edf5">SEC charges: funds diversion (alleged)</text></g><g><path d="M856 670H1484" stroke="#2a3345" stroke-width="1.5"/><text x="862" y="717" font-size="25" fill="#9aa5b8" class="mono">02 Nov 23</text><text x="1050.6" y="717" font-size="28" fill="#e9edf5">jury: counts 7 ခုလုံး guilty</text></g></g>
+        </svg>
+    - id: decision-1
+      contentType: html
+      name: "Decision table 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">DECISION TABLE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">blocked က အဖြေပဲ၊ ဘာကြောင့်လဲ မပါဘူး</text>
+        <g class="in"><rect x="100" y="215" width="520" height="355" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">nested if</text><path d="M100 261H620" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">if kyc &lt; 2 {</text></g><g><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  if amount &gt; 1000 { blocked }</text></g><g><text x="124" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g><g><text x="124" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">if newDevice &amp;&amp; amount &gt; 500 {</text></g><g><text x="124" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  blocked</text></g><g><text x="124" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g><g><text x="124" y="541.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">→ "blocked"</text></g></g>
+        <g class="in"><circle cx="614" cy="221" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="600.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        </svg>
+    - id: decision-2
+      contentType: html
+      name: "Decision table 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">DECISION TABLE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">blocked က အဖြေပဲ၊ ဘာကြောင့်လဲ မပါဘူး</text>
+        <rect x="100" y="215" width="520" height="355" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">nested if</text><path d="M100 261H620" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">if kyc &lt; 2 {</text></g><g><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  if amount &gt; 1000 { blocked }</text></g><g><text x="124" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g><g><text x="124" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">if newDevice &amp;&amp; amount &gt; 500 {</text></g><g><text x="124" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  blocked</text></g><g><text x="124" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g><g><text x="124" y="541.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">→ "blocked"</text></g>
+        <circle cx="614" cy="221" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="600.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <g class="in"><rect x="660" y="215" width="840" height="192" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="682" y="250" font-size="22" fill="#8a94a8" font-weight="700">risk-v7</text><text x="1037.3" y="250" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">kyc ≤</text><text x="1264.4" y="250" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount ≥</text><text x="1336.3" y="250" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">new</text><text x="1443.1" y="250" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">fired</text><path d="M660 267H1500" stroke="#2a3345" stroke-width="2"/><g><text x="682" y="312" font-size="25" fill="#e9edf5" class="mono">low-kyc-over-1000</text><text x="1037.3" y="312" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">1</text><text x="1264.4" y="312" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1000.01</text><text x="1336.3" y="312" font-size="28" text-anchor="middle" fill="#e9edf5">–</text><text x="1443.1" y="312" font-size="28" text-anchor="middle" fill="#9aa5b8">–</text></g><g><rect x="666" y="342" width="828" height="60" rx="10" fill="#68d391" opacity="0.14"/><path d="M676 337H1484" stroke="#2a3345" stroke-width="1.5"/><text x="682" y="382" font-size="22" fill="#e9edf5" class="mono">new-device-over-500</text><text x="1037.3" y="382" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">any</text><text x="1264.4" y="382" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">500.01</text><text x="1336.3" y="382" font-size="28" text-anchor="middle" fill="#e9edf5">yes</text><text x="1443.1" y="382" font-size="28" text-anchor="middle" fill="#68d391">✓</text></g></g>
+        </svg>
+    - id: decision-3
+      contentType: html
+      name: "Decision table 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">DECISION TABLE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">blocked က အဖြေပဲ၊ ဘာကြောင့်လဲ မပါဘူး</text>
+        <rect x="100" y="215" width="520" height="355" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">nested if</text><path d="M100 261H620" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">if kyc &lt; 2 {</text></g><g><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  if amount &gt; 1000 { blocked }</text></g><g><text x="124" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g><g><text x="124" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">if newDevice &amp;&amp; amount &gt; 500 {</text></g><g><text x="124" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  blocked</text></g><g><text x="124" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g><g><text x="124" y="541.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">→ "blocked"</text></g>
+        <circle cx="614" cy="221" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="600.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="660" y="215" width="840" height="192" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="682" y="250" font-size="22" fill="#8a94a8" font-weight="700">risk-v7</text><text x="1037.3" y="250" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">kyc ≤</text><text x="1264.4" y="250" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount ≥</text><text x="1336.3" y="250" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">new</text><text x="1443.1" y="250" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">fired</text><path d="M660 267H1500" stroke="#2a3345" stroke-width="2"/><g><text x="682" y="312" font-size="25" fill="#e9edf5" class="mono">low-kyc-over-1000</text><text x="1037.3" y="312" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">1</text><text x="1264.4" y="312" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1000.01</text><text x="1336.3" y="312" font-size="28" text-anchor="middle" fill="#e9edf5">–</text><text x="1443.1" y="312" font-size="28" text-anchor="middle" fill="#9aa5b8">–</text></g><g><rect x="666" y="342" width="828" height="60" rx="10" fill="#68d391" opacity="0.14"/><path d="M676 337H1484" stroke="#2a3345" stroke-width="1.5"/><text x="682" y="382" font-size="22" fill="#e9edf5" class="mono">new-device-over-500</text><text x="1037.3" y="382" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">any</text><text x="1264.4" y="382" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">500.01</text><text x="1336.3" y="382" font-size="28" text-anchor="middle" fill="#e9edf5">yes</text><text x="1443.1" y="382" font-size="28" text-anchor="middle" fill="#68d391">✓</text></g>
+        <g class="in"><rect x="660" y="440" width="840" height="199" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="684" y="474" font-size="22" fill="#8a94a8" font-weight="700" class="mono">decision record</text><path d="M660 486H1500" stroke="#2a3345" stroke-width="2"/><g><text x="684" y="532.1" font-size="26" class="mono" xml:space="preserve" fill="#f6c453">inputs  amount=800.00 kyc=2 new=true</text></g><g><text x="684" y="571.1" font-size="26" class="mono" xml:space="preserve" fill="#b794f6">rules   risk-v7</text></g><g><text x="684" y="610.1" font-size="26" class="mono" xml:space="preserve" fill="#68d391">fired   [new-device-over-500] → blocked</text></g></g>
+        </svg>
+    - id: decision-4
+      contentType: html
+      name: "Decision table 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">DECISION TABLE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">blocked က အဖြေပဲ၊ ဘာကြောင့်လဲ မပါဘူး</text>
+        <rect x="100" y="215" width="520" height="355" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">nested if</text><path d="M100 261H620" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">if kyc &lt; 2 {</text></g><g><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  if amount &gt; 1000 { blocked }</text></g><g><text x="124" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g><g><text x="124" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">if newDevice &amp;&amp; amount &gt; 500 {</text></g><g><text x="124" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  blocked</text></g><g><text x="124" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">}</text></g><g><text x="124" y="541.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">→ "blocked"</text></g>
+        <circle cx="614" cy="221" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="600.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="660" y="215" width="840" height="192" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="682" y="250" font-size="22" fill="#8a94a8" font-weight="700">risk-v7</text><text x="1037.3" y="250" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">kyc ≤</text><text x="1264.4" y="250" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount ≥</text><text x="1336.3" y="250" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">new</text><text x="1443.1" y="250" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">fired</text><path d="M660 267H1500" stroke="#2a3345" stroke-width="2"/><g><text x="682" y="312" font-size="25" fill="#e9edf5" class="mono">low-kyc-over-1000</text><text x="1037.3" y="312" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">1</text><text x="1264.4" y="312" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1000.01</text><text x="1336.3" y="312" font-size="28" text-anchor="middle" fill="#e9edf5">–</text><text x="1443.1" y="312" font-size="28" text-anchor="middle" fill="#9aa5b8">–</text></g><g><rect x="666" y="342" width="828" height="60" rx="10" fill="#68d391" opacity="0.14"/><path d="M676 337H1484" stroke="#2a3345" stroke-width="1.5"/><text x="682" y="382" font-size="22" fill="#e9edf5" class="mono">new-device-over-500</text><text x="1037.3" y="382" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">any</text><text x="1264.4" y="382" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">500.01</text><text x="1336.3" y="382" font-size="28" text-anchor="middle" fill="#e9edf5">yes</text><text x="1443.1" y="382" font-size="28" text-anchor="middle" fill="#68d391">✓</text></g>
+        <rect x="660" y="440" width="840" height="199" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="684" y="474" font-size="22" fill="#8a94a8" font-weight="700" class="mono">decision record</text><path d="M660 486H1500" stroke="#2a3345" stroke-width="2"/><g><text x="684" y="532.1" font-size="26" class="mono" xml:space="preserve" fill="#f6c453">inputs  amount=800.00 kyc=2 new=true</text></g><g><text x="684" y="571.1" font-size="26" class="mono" xml:space="preserve" fill="#b794f6">rules   risk-v7</text></g><g><text x="684" y="610.1" font-size="26" class="mono" xml:space="preserve" fill="#68d391">fired   [new-device-over-500] → blocked</text></g>
+        <g class="in"><text x="100" y="662" font-size="26" fill="#8a94a8">replay မပျက်အောင်</text></g>
+        <g class="in"><rect x="100" y="690" width="539.9" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="100" y="690" width="539.9" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="369.9" y="724.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">inputs as seen then — re-fetch မလုပ်</text></g>
+        <g class="in"><rect x="760" y="690" width="582.6" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="760" y="690" width="582.6" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="1051.3" y="724.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">version အသစ် — rule ကို တိုက်ရိုက် မပြင်</text></g>
+        <g class="in"><rect x="100" y="775" width="496.3" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="100" y="775" width="496.3" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="348.2" y="809.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">rule ထဲမှာ clock / live call မထား</text></g>
+        <g class="in"><rect x="760" y="775" width="338.7" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="760" y="775" width="338.7" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="929.3" y="809.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">allowed ကိုလည်း မှတ်</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Audit trail ထဲမှာ ဘာတွေ ပါရမလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Audit trail ထဲမှာ ဘာတွေ ပါရမလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Change တိုင်းအတွက် what · when · who · why</text><text x="188" y="311" font-size="26" fill="#8a94a8">ငွေ၊ manual intervention၊ config၊ permission အားလုံး</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Audit trail ထဲမှာ ဘာတွေ ပါရမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Change တိုင်းအတွက် what · when · who · why</text><text x="188" y="311" font-size="26" fill="#8a94a8">ငွေ၊ manual intervention၊ config၊ permission အားလုံး</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">State မဟုတ်ဘဲ full history — audit က ဘယ်လို ဖြစ်လာလဲ မေးတယ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">funds ခွဲထားလား၊ revenue ရှင်းပြနိုင်လား၊ assets ≥ liabilities လား</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Audit trail ထဲမှာ ဘာတွေ ပါရမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Change တိုင်းအတွက် what · when · who · why</text><text x="188" y="311" font-size="26" fill="#8a94a8">ငွေ၊ manual intervention၊ config၊ permission အားလုံး</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">State မဟုတ်ဘဲ full history — audit က ဘယ်လို ဖြစ်လာလဲ မေးတယ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">funds ခွဲထားလား၊ revenue ရှင်းပြနိုင်လား၊ assets ≥ liabilities လား</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Decision မှာ outcome တင် မလုံ — fired rules · inputs · version</text><text x="188" y="575" font-size="26" fill="#8a94a8">blocked လို့ပဲ သိမ်းရင် ဘယ်လို ရလာလဲ မဖြေနိုင်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Audit trail ထဲမှာ ဘာတွေ ပါရမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Change တိုင်းအတွက် what · when · who · why</text><text x="188" y="311" font-size="26" fill="#8a94a8">ငွေ၊ manual intervention၊ config၊ permission အားလုံး</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">State မဟုတ်ဘဲ full history — audit က ဘယ်လို ဖြစ်လာလဲ မေးတယ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">funds ခွဲထားလား၊ revenue ရှင်းပြနိုင်လား၊ assets ≥ liabilities လား</text></g><g><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Decision မှာ outcome တင် မလုံ — fired rules · inputs · version</text><text x="188" y="575" font-size="26" fill="#8a94a8">blocked လို့ပဲ သိမ်းရင် ဘယ်လို ရလာလဲ မဖြေနိုင်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">versioned decision table + record တိုင်း replay လုပ်နိုင်အောင်</text><text x="188" y="707" font-size="26" fill="#8a94a8">allowed ရော blocked ပါ မှတ်၊ inputs ကို အဲဒီအချိန်က အတိုင်း သိမ်း</text></g>
+        </svg>
+    - id: record-1
+      contentType: html
+      name: "Audit record 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">AUDIT RECORD</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Change တစ်ခုကို နှစ်ပေါင်းများစွာ ရှင်းပြနိုင်အောင်</text>
+        <g class="in"><rect x="100" y="380" width="900" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="414" font-size="22" fill="#8a94a8" font-weight="700" class="mono">audit record</text><path d="M100 426H1000" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="472.1" font-size="26" class="mono" xml:space="preserve" fill="#f6c453">what: "fee schedule card-eu: 2.90% → 3.10%"</text></g></g>
+        <g class="in"><rect x="100" y="220" width="900" height="121" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="254" font-size="22" fill="#8a94a8" font-weight="700" class="mono">fees table — state only</text><path d="M100 266H1000" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="312.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">card-eu   3.10%   updated_at 2026-02-27</text></g></g>
+        <g class="in"><circle cx="994" cy="226" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="980.2" y="212.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        <g class="in"><rect x="1060" y="220" width="440" height="104" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1280" y="260.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">what</text><text x="1280" y="304.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဘာ ပြောင်းလဲ</text></g>
+        </svg>
+    - id: record-2
+      contentType: html
+      name: "Audit record 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">AUDIT RECORD</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Change တစ်ခုကို နှစ်ပေါင်းများစွာ ရှင်းပြနိုင်အောင်</text>
+        <rect x="100" y="380" width="900" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="414" font-size="22" fill="#8a94a8" font-weight="700" class="mono">audit record</text><path d="M100 426H1000" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="472.1" font-size="26" class="mono" xml:space="preserve" fill="#f6c453">what: "fee schedule card-eu: 2.90% → 3.10%"</text></g><g class="in"><text x="124" y="511.1" font-size="26" class="mono" xml:space="preserve" fill="#4fd1c5">when: value 2026-03-01  booked 2026-02-27 16:40</text></g>
+        <rect x="100" y="220" width="900" height="121" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="254" font-size="22" fill="#8a94a8" font-weight="700" class="mono">fees table — state only</text><path d="M100 266H1000" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="312.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">card-eu   3.10%   updated_at 2026-02-27</text></g>
+        <circle cx="994" cy="226" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="980.2" y="212.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="1060" y="220" width="440" height="104" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1280" y="260.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">what</text><text x="1280" y="304.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဘာ ပြောင်းလဲ</text>
+        <g class="in"><rect x="1060" y="340" width="440" height="104" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1280" y="382.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">when</text><text x="1280" y="423.6" font-size="24" text-anchor="middle" fill="#8a94a8">value · booking</text></g>
+        </svg>
+    - id: record-3
+      contentType: html
+      name: "Audit record 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">AUDIT RECORD</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Change တစ်ခုကို နှစ်ပေါင်းများစွာ ရှင်းပြနိုင်အောင်</text>
+        <rect x="100" y="380" width="900" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="414" font-size="22" fill="#8a94a8" font-weight="700" class="mono">audit record</text><path d="M100 426H1000" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="472.1" font-size="26" class="mono" xml:space="preserve" fill="#f6c453">what: "fee schedule card-eu: 2.90% → 3.10%"</text></g><g><text x="124" y="511.1" font-size="26" class="mono" xml:space="preserve" fill="#4fd1c5">when: value 2026-03-01  booked 2026-02-27 16:40</text></g><g class="in"><text x="124" y="550.1" font-size="26" class="mono" xml:space="preserve" fill="#b794f6">who:  operator:ops-17  (approved by ops-04)</text></g><g class="in"><text x="124" y="589.1" font-size="26" class="mono" xml:space="preserve" fill="#68d391">why:  change request CR-2291 → PSP price change</text></g>
+        <rect x="100" y="220" width="900" height="121" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="254" font-size="22" fill="#8a94a8" font-weight="700" class="mono">fees table — state only</text><path d="M100 266H1000" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="312.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">card-eu   3.10%   updated_at 2026-02-27</text></g>
+        <circle cx="994" cy="226" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="980.2" y="212.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="1060" y="220" width="440" height="104" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1280" y="260.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">what</text><text x="1280" y="304.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဘာ ပြောင်းလဲ</text>
+        <rect x="1060" y="340" width="440" height="104" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1280" y="382.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">when</text><text x="1280" y="423.6" font-size="24" text-anchor="middle" fill="#8a94a8">value · booking</text>
+        <g class="in"><rect x="1060" y="460" width="440" height="104" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="1280" y="502.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">who / what</text><text x="1280" y="543.6" font-size="24" text-anchor="middle" fill="#8a94a8">user · operator · job</text></g>
+        <g class="in"><rect x="1060" y="580" width="440" height="104" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="1280" y="622.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">why</text><text x="1280" y="663.6" font-size="24" text-anchor="middle" fill="#8a94a8">order · instruction · incident</text></g>
+        </svg>
+    - id: record-4
+      contentType: html
+      name: "Audit record 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">AUDIT RECORD</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Change တစ်ခုကို နှစ်ပေါင်းများစွာ ရှင်းပြနိုင်အောင်</text>
+        <rect x="100" y="380" width="900" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="414" font-size="22" fill="#8a94a8" font-weight="700" class="mono">audit record</text><path d="M100 426H1000" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="472.1" font-size="26" class="mono" xml:space="preserve" fill="#f6c453">what: "fee schedule card-eu: 2.90% → 3.10%"</text></g><g><text x="124" y="511.1" font-size="26" class="mono" xml:space="preserve" fill="#4fd1c5">when: value 2026-03-01  booked 2026-02-27 16:40</text></g><g><text x="124" y="550.1" font-size="26" class="mono" xml:space="preserve" fill="#b794f6">who:  operator:ops-17  (approved by ops-04)</text></g><g><text x="124" y="589.1" font-size="26" class="mono" xml:space="preserve" fill="#68d391">why:  change request CR-2291 → PSP price change</text></g>
+        <rect x="100" y="220" width="900" height="121" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="254" font-size="22" fill="#8a94a8" font-weight="700" class="mono">fees table — state only</text><path d="M100 266H1000" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="312.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">card-eu   3.10%   updated_at 2026-02-27</text></g>
+        <circle cx="994" cy="226" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="980.2" y="212.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="1060" y="220" width="440" height="104" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1280" y="260.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">what</text><text x="1280" y="304.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဘာ ပြောင်းလဲ</text>
+        <rect x="1060" y="340" width="440" height="104" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1280" y="382.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">when</text><text x="1280" y="423.6" font-size="24" text-anchor="middle" fill="#8a94a8">value · booking</text>
+        <rect x="1060" y="460" width="440" height="104" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="1280" y="502.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">who / what</text><text x="1280" y="543.6" font-size="24" text-anchor="middle" fill="#8a94a8">user · operator · job</text>
+        <rect x="1060" y="580" width="440" height="104" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="1280" y="622.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">why</text><text x="1280" y="663.6" font-size="24" text-anchor="middle" fill="#8a94a8">order · instruction · incident</text>
+        <g class="in"><text x="100" y="735" font-size="26" fill="#8a94a8">trail လိုတာ ငွေ အရွေ့တင် မဟုတ်ဘူး</text></g>
+        <g class="in"><rect x="100" y="770" width="287.4" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="100" y="770" width="287.4" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="243.7" y="804.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">money movements</text></g>
+        <g class="in"><rect x="410" y="770" width="315.7" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="410" y="770" width="315.7" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="567.9" y="804.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">manual interventions</text></g>
+        <g class="in"><rect x="760" y="770" width="403.7" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="760" y="770" width="403.7" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="961.9" y="804.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">config: fees · limits · rates</text></g>
+        <g class="in"><rect x="1190" y="770" width="199.9" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="1190" y="770" width="199.9" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="1290" y="804.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">permissions</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9512
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "decision: blocked\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "decision: blocked\nwhat: wd-311 withdrawal 800.00 blocked\nwhen: 2026-03-02 10:15 UTC\nwho:  user:1042\nwhy:  risk-v7 fired [new-device-over-500] on amount=800.00 kyc=2 new=true\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "decision: blocked\nwhat: wd-311 withdrawal 800.00 blocked\nwhen: 2026-03-02 10:15 UTC\nwho:  user:1042\nwhy:  risk-v7 fired [new-device-over-500] on amount=800.00 kyc=2 new=true\nsame decision: true\n"
+
+scenes:
+  - id: hook
+    chapter: Blocked လို့ပဲ သိမ်းရင်
+    narration: >-
+      ငွေ system တစ်ခုက withdrawal တစ်ခုကို ပိတ်လိုက်တိုင်း ဒါမှမဟုတ် ခွင့်ပြုလိုက်တိုင်း၊ အဲဒီ
+      ဆုံးဖြတ်ချက်ကို နှစ်ပေါင်းများစွာ ကြာမှ ရှင်းပြခိုင်းခံရနိုင်ပါတယ်။ [[mark:sel-check]] ဒီ function က
+      withdrawal ကို စစ်တဲ့ risk rule ပါ။ KYC ဆိုတာ user ရဲ့ identity ကို ဘယ်အဆင့်ထိ စစ်ပြီးပြီလဲ
+      ဆိုတာပါ၊ အဲဒီ level နိမ့်ပြီး ပမာဏ ကြီးရင် ပိတ်ပါတယ်။ device အသစ်ကနေ ယူရို ၅၀၀ ကျော် ထုတ်ရင်လည်း
+      ပိတ်ပါတယ်။ code အနေနဲ့ မှားတာ မရှိပါဘူး။ [[mark:sel-w]] user တစ်ယောက်က device အသစ်ကနေ ယူရို
+      ရှစ်ရာ ထုတ်ချင်တယ်၊ KYC level က နှစ် ဆိုပါစို့။ ဒီ program က ဘာကြောင့် ပိတ်လဲ ဆိုတာပါ
+      ပြောပြနိုင်မလား ခန့်မှန်းကြည့်ပါ။ [[mark:run-1]] run လိုက်ရအောင်။ [[mark:pt-blocked]] blocked
+      ဆိုတဲ့ စကားလုံး တစ်လုံးပဲ ထွက်ပါတယ်။ rule နှစ်ခုထဲက ဘယ်ဟာကြောင့်လဲ၊ ဘယ် input တွေကို ကြည့်ပြီး
+      ဆုံးဖြတ်ခဲ့လဲ၊ အဲဒီတုန်းက rule ရဲ့ ဘယ် version လဲ ဆိုတာ ဘာမှ မပါပါဘူး။ [[mark:dock-1]] နောက်လမှာ
+      limit ကို ပြောင်းလိုက်ရင် ဒီ ဆုံးဖြတ်ချက် ဘယ်လို ရလာခဲ့လဲ ဆိုတာ ဘယ်သူမှ ပြန်ပြောလို့ မရတော့ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-check
+        type: editor.select
+        at: { mark: sel-check }
+        target:
+          {
+            file: main.go,
+            text: "\tif w.KYCLevel < 2 {\n\t\tif w.Amount > 100000 {\n\t\t\treturn \"blocked\"\n\t\t}\n\t}\n\tif w.NewDevice && w.Amount > 50000 {\n\t\treturn \"blocked\"\n\t}",
+            occurrence: 1,
+          }
+      - id: sel-w
+        type: editor.select
+        at: { mark: sel-w }
+        target:
+          { file: main.go, text: "Amount: 80000, KYCLevel: 2, NewDevice: true", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "decision: blocked",
+          timeoutMs: 8000,
+        }
+      - id: pt-blocked
+        type: console.point
+        at: { mark: pt-blocked }
+        target: { text: "decision: blocked", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: asks
+    chapter: Audit က ဘာမေးလဲ
+    narration: >-
+      [[mark:show-asks]] ငွေ system တွေက auditor နဲ့ regulator ရဲ့ စစ်ဆေးမှု အမျိုးမျိုးကို ခံရပါတယ်။
+      [[mark:pt-q1]] ပထမ မေးခွန်းက user တွေရဲ့ ငွေကို company ငွေနဲ့ ရောမထားဘူးလား၊ company
+      expense အတွက် မသုံးဘူးလား ဆိုတာပါ။ [[mark:pt-q2]] ဒုတိယက revenue တိုင်းကို ရှင်းပြနိုင်လား၊ လ
+      တစ်လရဲ့ fee revenue ကို ဘယ် transaction တွေက ဖြစ်စေလဲ ညွှန်ပြနိုင်လား ဆိုတာပါ။ [[mark:asks-2]]
+      တတိယက user တွေ၊ အခွန်ရုံးလို ပြင်ပကို ပြောထားတာ အမှန်နဲ့ ကိုက်လား၊ ဥပမာ user တွေကို ပေးစရာ
+      ရှိသလောက် asset တကယ် ရှိလား ဆိုတာပါ။ [[mark:pt-q4]] စတုတ္ထက funds ကို ဘယ်သူ ဘယ်လို
+      ထိနိုင်လဲ ဆိုတာပါ။ [[mark:asks-3]] ဒီ မေးခွန်းတွေကို လက်ရှိ balance တွေကနေ ဖြေလို့ မရပါဘူး။ state
+      ဘယ်လို ဖြစ်လာခဲ့လဲ ဆိုတဲ့ history အပြည့်အစုံ လိုပါတယ်။ [[mark:pt-hist]] အဲဒါကို audit trail လို့
+      ခေါ်ပါတယ်။ balance၊ report၊ ဆုံးဖြတ်ချက် တစ်ခုခုကို ရှင်းပြနိုင်၊ ပြန်ထုတ်နိုင်လောက်အောင် ဖြစ်ခဲ့သမျှကို
+      အသေးစိတ် မှတ်ထားတဲ့ မှတ်တမ်းပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - {
+          id: show-asks,
+          type: slide.show,
+          at: { mark: show-asks, offsetMs: -700 },
+          slideId: asks-1,
+        }
+      - { id: pt-q1, type: slide.point, at: { mark: pt-q1 }, target: { x: 0.275, y: 0.426 } }
+      - { id: pt-q2, type: slide.point, at: { mark: pt-q2 }, target: { x: 0.725, y: 0.426 } }
+      - { id: asks-2, type: slide.show, at: { mark: asks-2 }, slideId: asks-2 }
+      - {
+          id: pt-q3,
+          type: slide.point,
+          at: { afterAction: asks-2 },
+          target: { x: 0.275, y: 0.648 },
+        }
+      - { id: pt-q4, type: slide.point, at: { mark: pt-q4 }, target: { x: 0.725, y: 0.648 } }
+      - { id: asks-3, type: slide.show, at: { mark: asks-3 }, slideId: asks-3 }
+      - {
+          id: pt-state,
+          type: slide.point,
+          at: { afterAction: asks-3 },
+          target: { x: 0.238, y: 0.876 },
+        }
+      - { id: pt-hist, type: slide.point, at: { mark: pt-hist }, target: { x: 0.763, y: 0.876 } }
+
+  - id: cases
+    chapter: စာရင်းက မဖြေနိုင်ခဲ့တဲ့ အခါ
+    narration: >-
+      [[mark:show-cases]] ဒီ မေးခွန်းတွေကို မဖြေနိုင်ခဲ့တဲ့ တကယ့် အဖြစ် နှစ်ခု ရှိပါတယ်။ [[mark:pt-wnum]]
+      ၂၀၂၀ ဇွန် ၁၈ ရက်မှာ Wirecard ရဲ့ auditor EY က ၂၀၁၉ accounts ကို sign off မလုပ်ပေးခဲ့ပါဘူး။ trust
+      account တွေထဲမှာ ရှိတယ်လို့ ဆိုထားတဲ့ cash ယူရို ဘီလီယံ တစ်ဒသမ ကိုး တကယ် ရှိကြောင်း confirm
+      မလုပ်နိုင်လို့ပါ။ [[mark:pt-wt]] ဇွန် ၂၂ ရက်မှာ Wirecard ကိုယ်တိုင်က အဲဒီ balance တွေ မရှိနိုင်ခြေ
+      များတယ်လို့ ပြောပြီး၊ ဇွန် ၂၅ ရက်မှာ insolvency filing လုပ်ခဲ့ပါတယ်။ ဒါက တတိယ မေးခွန်းပါ၊ ပြောထားတဲ့
+      asset တကယ် ရှိလား ဆိုတာပါ။ [[mark:cases-2]] ဒုတိယက ledger အပိုင်းမှာ တွေ့ခဲ့ပြီးတဲ့ FTX ပါ၊
+      ဒီတစ်ခါ audit ရဲ့ ပထမ မေးခွန်း၊ ဆိုလိုတာက user ငွေကို သီးခြား ထားခဲ့လား ဆိုတဲ့ မေးခွန်းနဲ့ ကြည့်ပါ။
+      [[mark:pt-ft]] customer ငွေတွေကို ဆက်စပ် trading ကုမ္ပဏီ တစ်ခုဆီ ထုတ်မပြောဘဲ လွှဲသုံးခဲ့တယ်လို့ SEC
+      က စွပ်စွဲခဲ့ပြီး၊ founder ကို jury က ပြစ်မှု ခုနစ်ခုလုံးမှာ အပြစ်ရှိတယ်လို့ ဆုံးဖြတ်ခဲ့ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+      - {
+          title: "Reuters via ABS-CBN — Missing $2.1 billion likely 'do not exist,' says Wirecard (22 Jun 2020)",
+          url: "https://news.abs-cbn.com/business/06/22/20/missing-21-billion-likely-do-not-exist-says-wirecard",
+        }
+      - {
+          title: "SEC press release 2022-219 (13 Dec 2022)",
+          url: "https://www.sec.gov/news/press-release/2022-219",
+        }
+    actions:
+      - {
+          id: show-cases,
+          type: slide.show,
+          at: { mark: show-cases, offsetMs: -700 },
+          slideId: cases-1,
+        }
+      - { id: pt-wnum, type: slide.point, at: { mark: pt-wnum }, target: { x: 0.1, y: 0.448 } }
+      - { id: pt-wt, type: slide.point, at: { mark: pt-wt }, target: { x: 0.112, y: 0.738 } }
+      - { id: cases-2, type: slide.show, at: { mark: cases-2 }, slideId: cases-2 }
+      - {
+          id: pt-f1,
+          type: slide.point,
+          at: { afterAction: cases-2 },
+          target: { x: 0.575, y: 0.656 },
+        }
+      - { id: pt-ft, type: slide.point, at: { mark: pt-ft }, target: { x: 0.575, y: 0.738 } }
+
+  - id: record
+    chapter: Audit record တစ်ခုမှာ ဘာပါလဲ
+    narration: >-
+      [[mark:show-record]] record တစ်ခုမှာ ဘာပါရမလဲ ဆိုတာ config ပြောင်းတာ တစ်ခုနဲ့ ကြည့်ရအောင်။
+      [[mark:pt-row]] fee table ထဲမှာ card fee က သုံးဒသမ တစ် ရာခိုင်နှုန်း လို့ပဲ ရှိရင် ဘယ်လောက်ကနေ
+      ပြောင်းခဲ့လဲ၊ ဘယ်သူ ပြောင်းလဲ၊ ဘာကြောင့်လဲ ဆိုတာ မသိရပါဘူး။ [[mark:pt-what]] ပထမက what ပါ၊
+      ဘာ ပြောင်းလဲ ဆိုတာနဲ့ အဟောင်း တန်ဖိုး၊ အသစ် တန်ဖိုး နှစ်ခုလုံး ပါပါတယ်။ [[mark:record-2]] ဒုတိယက
+      when ပါ။ ခုနက lesson က value time နဲ့ booking time နှစ်ခုလုံး ဒီမှာ ပါပါတယ်။ [[mark:record-3]]
+      တတိယက who ပါ၊ user လား၊ operator လား၊ automated job လား ဆိုတာပါ။ [[mark:pt-why]] နောက်ဆုံးက
+      why ပါ။ change request၊ order၊ incident စတဲ့ ဒီ change ကို ဖြစ်စေတဲ့ အရာကို reference နဲ့
+      ချိတ်ထားတာပါ။ [[mark:record-4]] ငွေ အရွေ့တွေအတွက်ပဲ trail လိုတာ မဟုတ်ပါဘူး။ balance ကို လက်နဲ့
+      ပြင်တဲ့ manual intervention၊ fee၊ limit၊ rate source လို configuration ပြောင်းတာ၊ permission
+      ပြောင်းတာ အားလုံး trail လိုပါတယ်။ [[mark:pt-lost]] ဒါက No lost data ဆိုတဲ့ မူပါ၊ ဆိုလိုတာက ငွေနဲ့
+      ပတ်သက်ပြီး ဖြစ်ခဲ့သမျှ မပျောက်ရဘူး၊ ဘာကြောင့်လဲဆိုတော့ လက်ရှိ state တစ်ခုတည်းက audit ရဲ့
+      မေးခွန်းကို မဖြေနိုင်လို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - {
+          id: show-record,
+          type: slide.show,
+          at: { mark: show-record, offsetMs: -700 },
+          slideId: record-1,
+        }
+      - { id: pt-row, type: slide.point, at: { mark: pt-row }, target: { x: 0.128, y: 0.36 } }
+      - { id: pt-what, type: slide.point, at: { mark: pt-what }, target: { x: 0.128, y: 0.538 } }
+      - { id: record-2, type: slide.show, at: { mark: record-2 }, slideId: record-2 }
+      - {
+          id: pt-when,
+          type: slide.point,
+          at: { afterAction: record-2 },
+          target: { x: 0.128, y: 0.581 },
+        }
+      - { id: record-3, type: slide.show, at: { mark: record-3 }, slideId: record-3 }
+      - {
+          id: pt-who,
+          type: slide.point,
+          at: { afterAction: record-3 },
+          target: { x: 0.128, y: 0.625 },
+        }
+      - { id: pt-why, type: slide.point, at: { mark: pt-why }, target: { x: 0.128, y: 0.668 } }
+      - { id: record-4, type: slide.show, at: { mark: record-4 }, slideId: record-4 }
+      - {
+          id: pt-kinds,
+          type: slide.point,
+          at: { afterAction: record-4 },
+          target: { x: 0.349, y: 0.92 },
+        }
+      - { id: pt-lost, type: slide.point, at: { mark: pt-lost }, target: { x: 0.885, y: 0.12 } }
+
+  - id: table
+    chapter: Decision table
+    narration: >-
+      [[mark:close-record]] why က ဆုံးဖြတ်ချက် တစ်ခုရဲ့ ရလဒ် ဖြစ်တာ များပါတယ်၊ ခုနက risk check
+      လိုမျိုးပါ။ [[mark:type-table]] ဒီတစ်ခါ rule တွေကို if တွေထဲမှာ ဝှက်မထားဘဲ decision table အနေနဲ့ data
+      အဖြစ် ရေးပါမယ်။ table မှာ version နာမည် ရှိပြီး row တစ်ခုက rule တစ်ခုပါ၊ condition အားလုံး မှန်ရင်
+      အဲဒီ row က fire ဖြစ်ပါတယ်။ Decide က row တိုင်းကို စစ်ပြီး fire ဖြစ်တဲ့ rule တွေ၊ input တွေ၊ version
+      နဲ့ အချိန်ကို record တစ်ခုထဲ ထည့်ပေးပါတယ်။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-what2]] what
+      မှာ withdrawal ရဲ့ id၊ ပမာဏနဲ့ ရလဒ် ပါပါတယ်။ [[mark:pt-who2]] when က ဆုံးဖြတ်ခဲ့တဲ့ အချိန်ဖြစ်ပြီး၊
+      who က request ကို စခဲ့တဲ့ user ပါ။ [[mark:pt-why2]] why မှာ rule version၊ fire ဖြစ်တဲ့ rule နဲ့
+      ဆုံးဖြတ်ခဲ့တဲ့ input တွေ ပါပါတယ်။ device အသစ်ကနေ ယူရို ၅၀၀ ကျော် ထုတ်တဲ့ rule က fire ဖြစ်ပြီး၊
+      KYC rule ကတော့ မဖြစ်ပါဘူး။ [[mark:dock-2]] blocked ဆိုတဲ့ အဖြေ တစ်ခုတည်းအစား၊ အဲဒီ အဖြေ ဘယ်လို
+      ရလာလဲ ဆိုတာကိုပါ သိမ်းလိုက်တာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - { id: close-record, type: slide.close, at: { mark: close-record } }
+      - id: type-table
+        type: editor.type
+        at: { mark: type-table }
+        target: { file: main.go, after: "\tfmt.Println(\"decision:\", check(w))\n", occurrence: 1 }
+        text: "\n\triskV7 := Table{Version: \"risk-v7\", Rows: []Row{\n\t\t{Rule: \"low-kyc-over-1000\", MaxKYC: 1, MinAmount: 100001},\n\t\t{Rule: \"new-device-over-500\", NewDevice: true, MinAmount: 50001},\n\t}}\n\trec := riskV7.Decide(w, at(3, 2, 10, 15))\n\tfmt.Print(rec)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "fired [new-device-over-500]",
+          timeoutMs: 8000,
+        }
+      - id: pt-what2
+        type: console.point
+        at: { mark: pt-what2 }
+        target: { text: "what: wd-311", occurrence: 1 }
+      - id: pt-who2
+        type: console.point
+        at: { mark: pt-who2 }
+        target: { text: "who:", occurrence: 1 }
+      - id: pt-why2
+        type: console.point
+        at: { mark: pt-why2 }
+        target: { text: "why:", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+      - {
+          id: expect-file-table,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: '{Rule: "new-device-over-500", NewDevice: true, MinAmount: 50001},',
+        }
+
+  - id: replay
+    chapter: Rule ကို data အဖြစ် ထားရင်
+    narration: >-
+      [[mark:show-decision]] nested if နဲ့ ရေးထားရင် ရလဒ်ပဲ ထွက်လာပြီး၊ ဘယ် လမ်းကြောင်းကနေ
+      ရောက်လာလဲ ဆိုတာ code ထဲမှာပဲ ကျန်ခဲ့ပါတယ်။ [[mark:decision-2]] decision table မှာတော့ rule
+      တိုင်းက ကိုယ်ပိုင် နာမည်နဲ့ row တစ်ခုစီ ဖြစ်လို့ ဘယ် row fire ဖြစ်လဲ ထုတ်ပြနိုင်ပါတယ်။ rule တွေက
+      data ဖြစ်လို့ version ခွဲ သိမ်းနိုင်ပြီး review လည်း လုပ်နိုင်ပါတယ်။ DMN လို standard၊ Drools လို rules
+      engine တွေက ဒီ အယူအဆကို အကြီးစား လုပ်ပေးတာပါ။ [[mark:decision-3]] ဆိုတော့ record ထဲမှာ ရလဒ်တင်
+      မဟုတ်ဘဲ input၊ rule version၊ fire ဖြစ်တဲ့ rule သုံးခုလုံး ပါသွားပါတယ်။ ဒီ သုံးခု ရှိရင် ဆုံးဖြတ်ချက်ကို
+      နောက်တစ်ခါ ပြန် run ကြည့်လို့ ရပါတယ်။ [[mark:close-decision]] replay လုပ်ကြည့်ရအောင်။
+      [[mark:type-replay]] version နာမည်ကနေ table ကို ရှာတဲ့ map တစ်ခု ထားပါတယ်။ replay က record ထဲမှာ
+      သိမ်းထားတဲ့ input တွေကို သိမ်းထားတဲ့ version နဲ့ ပြန် စစ်ပြီး၊ ရလဒ်နဲ့ fire ဖြစ်တဲ့ rule တွေ မူလ record
+      နဲ့ တူလား ဆိုတာ ပြန်ပေးပါတယ်။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-same]] ဆုံးဖြတ်ချက်
+      အတူတူပဲ ထွက်ပါတယ်။ auditor က ဒီ withdrawal ကို ဘာလို့ ပိတ်လဲ မေးရင် record ကို ပြပြီး ပြန် run
+      ပြလို့ ရပါပြီ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - {
+          id: show-decision,
+          type: slide.show,
+          at: { mark: show-decision, offsetMs: -700 },
+          slideId: decision-1,
+        }
+      - {
+          id: pt-ifs,
+          type: slide.point,
+          at: { afterAction: show-decision },
+          target: { x: 0.104, y: 0.615 },
+        }
+      - { id: decision-2, type: slide.show, at: { mark: decision-2 }, slideId: decision-2 }
+      - {
+          id: pt-dt,
+          type: slide.point,
+          at: { afterAction: decision-2 },
+          target: { x: 0.476, y: 0.446 },
+        }
+      - { id: decision-3, type: slide.show, at: { mark: decision-3 }, slideId: decision-3 }
+      - {
+          id: pt-stored,
+          type: slide.point,
+          at: { afterAction: decision-3 },
+          target: { x: 0.675, y: 0.719 },
+        }
+      - { id: close-decision, type: slide.close, at: { mark: close-decision } }
+      - id: type-replay
+        type: editor.type
+        at: { mark: type-replay }
+        target: { file: main.go, after: "\tfmt.Print(rec)\n", occurrence: 1 }
+        text: "\n\ttables := map[string]Table{riskV7.Version: riskV7}\n\tfmt.Println(\"same decision:\", replay(rec, tables))\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "same decision: true",
+          timeoutMs: 8000,
+        }
+      - id: pt-same
+        type: console.point
+        at: { mark: pt-same }
+        target: { text: "same decision: true", occurrence: 1 }
+
+  - id: pitfalls
+    chapter: Replay ကို ဘာက ပျက်စေလဲ
+    narration: >-
+      [[mark:show-pitfalls]] ဒီနေရာကစပြီး စိတ်ဝင်စားစရာ ကောင်းလာပါတယ်။ replay မှန်ဖို့ စည်းကမ်း
+      လေးခု ရှိပါတယ်။ [[mark:pt-p1]] ပထမ၊ input တွေကို ဆုံးဖြတ်တဲ့ အချိန်က မြင်ခဲ့တဲ့ အတိုင်း record ထဲ
+      သိမ်းရပါမယ်။ replay လုပ်တဲ့အခါ user ရဲ့ KYC level ကို database ကနေ ပြန်ဖတ်ရင် ဒီနေ့ တန်ဖိုးကို
+      ရမှာဖြစ်ပြီး အဲဒီတုန်းက တန်ဖိုး မဟုတ်တော့ပါဘူး။ [[mark:pt-p2]] ဒုတိယ၊ rule ကို ပြင်ချင်ရင် row ကို
+      တိုက်ရိုက် မပြင်ဘဲ version အသစ် ထုတ်ပြီး version အဟောင်းကိုလည်း ဆက် သိမ်းထားရပါမယ်။ table
+      ပြောင်းတာ ကိုယ်တိုင်ကလည်း ဘယ်သူ၊ ဘာကြောင့် ပြောင်းလဲ ဆိုတဲ့ audit record တစ်ခုပါ။ [[mark:pt-p3]]
+      တတိယ၊ rule ထဲမှာ လက်ရှိ အချိန်ကို ဖတ်တာ၊ provider ဆီ live call ခေါ်တာ မထားရပါဘူး။ sanctions list
+      လို ပြင်ပ data လိုရင် အဲဒီ list ရဲ့ version ကို input အဖြစ် record ထဲ ထည့်ရပါမယ်။ [[mark:pt-p4]]
+      စတုတ္ထ၊ ပိတ်တဲ့ ဆုံးဖြတ်ချက်တင် မဟုတ်ဘဲ ခွင့်ပြုတဲ့ ဆုံးဖြတ်ချက်ကိုလည်း မှတ်ရပါမယ်။ ငွေ ထွက်သွားတဲ့
+      withdrawal ကို ဘာလို့ ခွင့်ပြုခဲ့လဲ ဆိုတာလည်း မေးခံရနိုင်လို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - {
+          id: show-pitfalls,
+          type: slide.show,
+          at: { mark: show-pitfalls, offsetMs: -700 },
+          slideId: decision-4,
+        }
+      - { id: pt-p1, type: slide.point, at: { mark: pt-p1 }, target: { x: 0.225, y: 0.831 } }
+      - { id: pt-p2, type: slide.point, at: { mark: pt-p2 }, target: { x: 0.651, y: 0.831 } }
+      - { id: pt-p3, type: slide.point, at: { mark: pt-p3 }, target: { x: 0.211, y: 0.926 } }
+      - { id: pt-p4, type: slide.point, at: { mark: pt-p4 }, target: { x: 0.575, y: 0.926 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ audit trail ထဲမှာ ဘာတွေ ပါရမလဲ၊ blocked လို့ပဲ သိမ်းရင်
+      ဘာလို့ မရလဲ ဆိုတာ မေးတတ်ပါတယ်။ log တွေ သိမ်းထားပါတယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး၊ အချက်
+      သုံးချက်နဲ့ ဖြေပါ။ [[mark:iv-a]] ပထမ၊ change တိုင်းမှာ what၊ when၊ who၊ why လေးခု ပါရပြီး၊ ငွေ
+      အရွေ့တင် မဟုတ်ဘဲ manual intervention၊ config နဲ့ permission ပြောင်းတာတွေပါ ပါရမယ်။ [[mark:iv-b]]
+      ဒုတိယ၊ audit က မေးတာ state မဟုတ်ဘဲ state ဘယ်လို ဖြစ်လာလဲ မေးတာပါ၊ user funds ခွဲထားလား၊ revenue
+      ကို transaction အထိ ရှင်းပြနိုင်လား၊ asset က ပေးစရာထက် မနည်းဘူးလား ဆိုတာတွေပါ။ [[mark:iv-c]]
+      တတိယ၊ ဆုံးဖြတ်ချက်မှာ ရလဒ်တင် မလုံပါဘူး၊ fire ဖြစ်တဲ့ rule၊ input နဲ့ rule version မပါရင် ဘယ်လို
+      ရလာလဲ ဖြေလို့ မရပါဘူး။ [[mark:iv-d]] ပြီးရင် ကိုယ် ဘာလုပ်မလဲ ဆက်ပြောပါ။ rule တွေကို versioned
+      decision table အဖြစ် ထားပြီး၊ ခွင့်ပြုတာရော ပိတ်တာပါ record တိုင်းကို replay လုပ်နိုင်အောင် input
+      တွေကို အဲဒီ အချိန်က အတိုင်း သိမ်းမယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] withdrawal ရဲ့ ပမာဏကို
+      ယူရို လေးရာ လို့ ပြောင်းပြီး run ကြည့်ပါ။ ဆုံးဖြတ်ချက်က allowed ဖြစ်သွားပြီး၊ record ရဲ့ why မှာ
+      fire ဖြစ်တဲ့ rule စာရင်းက အလွတ်ဖြစ်နေပြီး input တွေကတော့ ပါလာပါလိမ့်မယ်။ replay ကလည်း true
+      ပါပဲ။ [[mark:try-why]] ခွင့်ပြုတဲ့ ဆုံးဖြတ်ချက်ကိုလည်း ပိတ်တာနဲ့ အတူတူ ရှင်းပြနိုင်တာပါ။ [[mark:recap]]
+      ပြန်ချုပ်ရရင်၊ blocked ဆိုတာ အဖြေပဲ ဖြစ်ပြီး audit က မေးတာက အဲဒီ အဖြေ ဘယ်လို ရလာလဲ ဆိုတာပါ။
+      နောက် lesson မှာတော့ trail ကို state ဘေးမှာ log အဖြစ် ထားမယ့်အစား event တွေကိုပဲ သိမ်းပြီး state
+      ကို event ကနေ တွက်ယူတဲ့ event sourcing ကို ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "Amount: 80000", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
