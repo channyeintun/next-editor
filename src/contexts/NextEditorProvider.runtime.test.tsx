@@ -173,9 +173,19 @@ function workspaceSnapshot({
   };
 }
 
+/**
+ * A lesson of `snapshots`, one every 100 ms, as a recording holds them: a workspace
+ * event and, at the same moment, the editor frame of the file it has open.
+ *
+ * The frames matter. A pause puts the text of the frame at the playhead into the open
+ * file (adoptPlaybackWorkspaceAtPause), so a recording whose only frame is its first
+ * says the code went back to the start at every pause: the pause re-runs the first
+ * code, and a STOP after it finds nothing new to run. That used to be hidden by this
+ * file's fake container, which holds no files, so the runtime's reverse sync empties
+ * the workspace 150 ms after a boot, and a pause that came after it adopted nothing.
+ * Whether it came after was the machine's speed.
+ */
 function lessonRecording(id: string, snapshots: WorkspaceRecordingSnapshot[]): Recording {
-  const [first] = snapshots;
-  const activeFile = first?.project.files[first.activeFilePath];
   return {
     version: 4,
     id,
@@ -183,9 +193,10 @@ function lessonRecording(id: string, snapshots: WorkspaceRecordingSnapshot[]): R
     createdAt: 1,
     duration: 1000,
     keyframeInterval: 120,
-    frames: [
-      {
-        timestamp: 0,
+    frames: snapshots.map((snapshot, index) => {
+      const activeFile = snapshot.project.files[snapshot.activeFilePath];
+      return {
+        timestamp: index * 100,
         isKeyframe: true,
         state: {
           content: activeFile && isWorkspaceTextFile(activeFile) ? activeFile.content : "",
@@ -203,8 +214,8 @@ function lessonRecording(id: string, snapshots: WorkspaceRecordingSnapshot[]): R
           viewState: null,
           mouseCursor: { x: 0, y: 0, visible: false },
         },
-      },
-    ],
+      };
+    }),
     workspaceEvents: snapshots.map((snapshot, index) => ({ timestamp: index * 100, snapshot })),
   };
 }
