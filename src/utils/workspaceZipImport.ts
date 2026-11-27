@@ -131,9 +131,10 @@ function htmlReferences(files: Record<string, WorkspaceFile>, needle: string): b
  * Playground lesson shapes carry no package.json manifest: their sources are
  * compiled by the language's playground proxy, or — for assembly and Kite — by
  * the first-party assembler/compiler in the page. Ordered so the canonical
- * entry file decides first when an archive mixes languages. Kite is last, and
- * only reached when there is no package.json: a kite-web archive carries one
- * and is decided by the manifest branch.
+ * entry file decides first when an archive mixes languages. Kite is only
+ * reached when there is no package.json: a kite-web archive carries one and is
+ * decided by the manifest branch. Python is last: a `.py` file is the helper
+ * script of many projects in another language, so their own sources decide.
  */
 const PLAYGROUND_DETECTION_ORDER = [
   "go",
@@ -142,8 +143,8 @@ const PLAYGROUND_DETECTION_ORDER = [
   "zig",
   "haskell",
   "asm",
-  "python",
   "kite",
+  "python",
 ] as const satisfies readonly PlaygroundSourceLanguage[];
 
 /**
@@ -168,7 +169,17 @@ function detectPlaygroundLessonType(
     }
   }
 
+  // A script beside a page is that site's helper (`serve.py`), not a lesson:
+  // without `main.py`, an archive with a page stays the site it was.
+  const hasPage = Object.values(files).some(
+    (file) => isWorkspaceTextFile(file) && /\.html?$/i.test(file.path),
+  );
+
   for (const rule of PLAYGROUND_LESSON_RULES) {
+    if (rule.lessonType === "python" && hasPage) {
+      continue;
+    }
+
     const hasSource = Object.values(files).some(
       (file) =>
         isWorkspaceTextFile(file) &&

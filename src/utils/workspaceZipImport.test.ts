@@ -173,6 +173,31 @@ describe("detectImportedLessonType", () => {
     ).toBe("kotlin");
   });
 
+  it("does not let a helper script turn another project into a Python lesson", () => {
+    // A site that carries a script to serve it is still a site.
+    expect(
+      detectImportedLessonType({
+        "index.html": textFile("index.html", "<h1>Site</h1>\n"),
+        "style.css": textFile("style.css", ""),
+        "serve.py": textFile("serve.py", "import http.server\n"),
+      }),
+    ).toBe("html-css");
+    // Another language's sources decide before a script does.
+    expect(
+      detectImportedLessonType({
+        "helpers.kite": textFile("helpers.kite", ""),
+        "build.py": textFile("build.py", ""),
+      }),
+    ).toBe("kite");
+    // `main.py` says it is a Python lesson, pages or not.
+    expect(
+      detectImportedLessonType({
+        "main.py": textFile("main.py", 'print("ok")\n'),
+        "report.html": textFile("report.html", ""),
+      }),
+    ).toBe("python");
+  });
+
   it("keeps manifest detection ahead of playground sources", () => {
     expect(
       detectImportedLessonType({
