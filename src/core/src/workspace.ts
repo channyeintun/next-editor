@@ -161,9 +161,16 @@ export function areWorkspaceAssetDescriptorsEqual(
 }
 
 /**
- * The strict rule: one file's metadata, content (asset descriptors field by
- * field) and encoding; a missing encoding means "utf-8". Container sync uses the
- * lenient assetId-only workspaceFileContentsEqual in the runtime instead.
+ * The strict rule: one file's path and name, content (asset descriptors field
+ * by field) and encoding; a missing encoding means "utf-8". Container sync uses
+ * the lenient assetId-only workspaceFileContentsEqual in the runtime instead.
+ *
+ * `language` is not compared. A file's language is worked out from its path
+ * each time a workspace is loaded, but a recording keeps the language its files
+ * had when it was made. So when a file type gains a language (`.py` was
+ * "plaintext" before Python lessons), a recorded file would never again equal
+ * the same file in the workspace, and replay would take every snapshot of that
+ * lesson for a change.
  */
 export function areWorkspaceFilesEqual(left: WorkspaceFile, right: WorkspaceFile): boolean {
   if (left === right) {
@@ -180,7 +187,6 @@ export function areWorkspaceFilesEqual(left: WorkspaceFile, right: WorkspaceFile
   return (
     left.path === right.path &&
     left.name === right.name &&
-    left.language === right.language &&
     contentEqual &&
     (left.encoding ?? "utf-8") === (right.encoding ?? "utf-8")
   );
