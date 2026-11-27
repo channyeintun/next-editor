@@ -14,6 +14,7 @@
 // standard library and the lesson's own files.
 
 import type { PlaygroundFile } from "../playgroundContract";
+import { fetchPythonBinary } from "./interpreterBinary";
 import type { PythonPlaygroundRunResult } from "./types";
 
 /**
@@ -269,6 +270,9 @@ export async function bootPythonInterpreter({
   // A dynamic import, so the loader is fetched by a page that runs Python and
   // by no other.
   const { loadPyodide } = await import("pyodide");
+  // In a page the WebAssembly file comes over the network, and the loader
+  // never settles when it does not arrive: fetched first, a failure is one.
+  if (indexURL) await fetchPythonBinary(indexURL);
 
   /** The running program's terminal, its output, and the lines it has read. */
   let terminal: PythonRunTerminal | undefined;

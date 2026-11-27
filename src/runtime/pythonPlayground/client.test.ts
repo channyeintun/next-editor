@@ -244,6 +244,23 @@ describe("PythonPlaygroundClient", () => {
     await expect(client.run({ files: [MAIN] })).resolves.toEqual(OK);
   });
 
+  // The interpreter started ahead of a run can fail to start as well: offline
+  // when the last run ended. It must not be handed to every Run from then on.
+  it("drops an interpreter started ahead that could not start", async () => {
+    const broken = fakeEngine({ load: () => Promise.reject(new Error("offline")) });
+    const { client, made } = clientWith(fakeEngine(), broken);
+
+    await client.run({ files: [MAIN] });
+    const error = await serviceErrorOf(client.run({ files: [MAIN] }));
+
+    expect(error.kind).toBe("unavailable");
+    expect(broken.run).not.toHaveBeenCalled();
+    expect(broken.terminate).toHaveBeenCalledTimes(1);
+    // The Run after that starts an interpreter of its own.
+    await expect(client.run({ files: [MAIN] })).resolves.toEqual(OK);
+    expect(made[2].run).toHaveBeenCalledTimes(1);
+  });
+
   it("tells an interpreter that died under a program as the program's error", async () => {
     const dying = fakeEngine({ run: () => Promise.reject(new Error("worker stopped")) });
     const { client, made } = clientWith(dying);
