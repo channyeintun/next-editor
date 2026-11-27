@@ -397,7 +397,9 @@ and cannot use:
 - **The standard library, and nothing else.** There is no `pip`, so `numpy`,
   `pandas`, `requests` and every other package fail with
   `ModuleNotFoundError`. `sqlite3`, `json`, `csv`, `dataclasses`, `asyncio` and
-  the rest of the standard library are there.
+  the rest of the standard library are there, except the few modules that need
+  a window, a terminal or the operating system: `turtle`, `tkinter`, `curses`,
+  `readline`, `dbm`, `pwd`, `grp`, `resource`, `syslog` and `venv` are not.
 - **`input()` reads the lines the fixture pins.** In the editor a learner
   types them in the runner; a lesson has no keyboard, so the result of a
   program that calls `input()` carries `stdin`, the lines it read, in order.

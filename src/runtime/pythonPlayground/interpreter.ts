@@ -74,12 +74,37 @@ def exit_status(code):
     return 1
 
 
+def quiet_import_notes():
+    # Pyodide adds a note of its own to a ModuleNotFoundError that passes
+    # through JavaScript, as one raised inside asyncio.run does: install the
+    # package with micropip, or the module was removed from Pyodide's
+    # distribution. A lesson can install nothing and has not heard of Pyodide,
+    # so its tables are emptied and it finds nothing to say; the runner's own
+    # hint says what is true here. If a later Pyodide moves them, the notes
+    # come back and interpreter.test.ts says so.
+    try:
+        from _pyodide import _importhook
+    except ImportError:
+        return
+    _importhook.REPODATA_PACKAGES_IMPORT_TO_PACKAGE_NAME = {}
+    _importhook.STDLIBS = frozenset()
+
+
+quiet_import_notes()
+
+
 def explain(error):
     # The two failures that are this runner's doing, not the program's.
     if type(error) is EOFError:
         return {"kind": "end-of-input"}
     if isinstance(error, ModuleNotFoundError) and error.name:
-        return {"kind": "no-module", "name": error.name}
+        # A module Python names as its own and this build does not carry is
+        # told apart from a package: the program asked for nothing unusual.
+        return {
+            "kind": "no-module",
+            "name": error.name,
+            "standard": error.name in sys.stdlib_module_names,
+        }
     return None
 
 
@@ -118,7 +143,7 @@ def finish_program():
 /** What `run_program` answers with. */
 interface DriverAnswer {
   status: number;
-  hint: { kind: "end-of-input" } | { kind: "no-module"; name: string } | null;
+  hint: { kind: "end-of-input" } | { kind: "no-module"; name: string; standard: boolean } | null;
 }
 
 /**
@@ -142,10 +167,12 @@ function hintText(hint: DriverAnswer["hint"], endOfInput: EndOfInput | null): st
     return endOfInput ? endOfInputHint(endOfInput) : undefined;
   }
   if (hint?.kind === "no-module") {
-    return (
-      `'${hint.name}' is not here: a program can import Python's standard library and this ` +
-      "lesson's own .py files, and no package can be installed"
-    );
+    return hint.standard
+      ? `'${hint.name}' is not here: it is part of Python's standard library, but Python in ` +
+          "the browser leaves out the few modules that need a window, a terminal or the " +
+          "operating system"
+      : `'${hint.name}' is not here: a program can import Python's standard library and this ` +
+          "lesson's own .py files, and no package can be installed";
   }
   return undefined;
 }

@@ -255,8 +255,46 @@ describe("the Python interpreter", () => {
   it("names a module that is not in the lesson", async () => {
     const result = await run("import numpy\n");
     expect(result.output).toContain("ModuleNotFoundError: No module named 'numpy'");
-    expect(result.hint).toContain("'numpy' is not here");
+    expect(result.hint).toBe(
+      "'numpy' is not here: a program can import Python's standard library and this lesson's " +
+        "own .py files, and no package can be installed",
+    );
   });
+
+  // Pyodide leaves a few modules out of its standard library. "A program can
+  // import the standard library" would be false about exactly these.
+  it.each(["turtle", "tkinter", "curses", "readline", "dbm"])(
+    "says that %s is a standard library module this build leaves out",
+    async (name) => {
+      const result = await run(`import ${name}\n`);
+      expect(result.output).toContain(`ModuleNotFoundError: No module named '${name}'`);
+      expect(result.hint).toBe(
+        `'${name}' is not here: it is part of Python's standard library, but Python in the ` +
+          "browser leaves out the few modules that need a window, a terminal or the operating " +
+          "system",
+      );
+    },
+  );
+
+  // An exception that passes through JavaScript on its way up — one raised
+  // inside asyncio.run does — is where Pyodide adds a note of its own: install
+  // the package with micropip, or the module was removed from Pyodide.
+  it.each(["numpy", "turtle"])(
+    "prints none of Pyodide's own advice about %s, whatever path the error took",
+    async (name) => {
+      const result = await run(
+        `import asyncio\nasync def main():\n    import ${name}\nasyncio.run(main())\n`,
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.output).toContain(`ModuleNotFoundError: No module named '${name}'`);
+      expect(result.output).not.toMatch(/pyodide\.org|micropip|loadPackage|Pyodide distribution/);
+      // Python's last line is the error itself: nothing is added under it.
+      expect(result.output.trimEnd().split("\n").at(-1)).toBe(
+        `ModuleNotFoundError: No module named '${name}'`,
+      );
+      expect(result.hint).toContain(`'${name}' is not here`);
+    },
+  );
 
   it("has the standard library, sqlite3 and asyncio included", async () => {
     const result = await run(

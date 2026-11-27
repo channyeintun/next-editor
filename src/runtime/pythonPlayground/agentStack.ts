@@ -12,7 +12,9 @@ export const PYTHON_AGENT_STACK: PlaygroundAgentStack = {
     "A run is `python main.py` in a new interpreter each time, with every text file of " +
     "the workspace beside it: other .py files import as modules, and data files open by " +
     "their workspace path. There is no pip and no package index, so keep every solution " +
-    "to the standard library — numpy, pandas, requests and the like cannot be imported. " +
+    "to the standard library — numpy, pandas, requests and the like cannot be imported, " +
+    "and neither can the few standard modules that need a window, a terminal or the " +
+    "operating system (turtle, tkinter, curses, readline, dbm). " +
     "input() waits for a line the user types in the Python Runner panel, which shows a " +
     "field under the console while the program waits; you cannot type it for them. " +
     "There are no threads, processes, sockets or network access, and no preview " +

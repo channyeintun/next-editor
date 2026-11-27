@@ -95,8 +95,10 @@ Linus,75
 3. Every run starts a new interpreter, so nothing is left over from the run
    before. Files a program writes are gone when it exits; they do not appear
    in the workspace.
-4. The whole standard library is here, and nothing else: there is no \`pip\`,
-   so packages such as \`numpy\` or \`requests\` cannot be imported.
+4. The standard library is here, and nothing else: there is no \`pip\`, so
+   packages such as \`numpy\` or \`requests\` cannot be imported. A few of its
+   modules need a window or a terminal that a browser does not have, and are
+   left out: \`turtle\`, \`tkinter\`, \`curses\` and \`readline\` among them.
 5. \`input()\` waits for you. When a program asks for a line, a field opens
    under the console: type the line, press Enter, and the program goes on.
    Ctrl+D on an empty line ends the input, as in a terminal. Press **Run**
