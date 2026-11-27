@@ -115,6 +115,22 @@ describe("areWorkspaceFilesEqual", () => {
     expect(areWorkspaceFilesEqual(implicit, explicit)).toBe(true);
   });
 
+  // A recording made before `.py` had a language holds it as "plaintext"; the
+  // workspace that replays it works the language out again, as "python".
+  it("takes a file for the same file whatever language it was recorded with", () => {
+    const recorded = textFile("server.py", "print(1)\n");
+    const loaded: WorkspaceFile = { ...recorded, language: "python" };
+
+    expect(areWorkspaceFilesEqual(recorded, loaded)).toBe(true);
+    expect(
+      areWorkspaceProjectsEqual(
+        project({ "server.py": recorded }),
+        project({ "server.py": loaded }),
+      ),
+    ).toBe(true);
+    expect(areWorkspaceFilesEqual(recorded, { ...loaded, content: "print(2)\n" })).toBe(false);
+  });
+
   it("compares asset files by descriptor id, MIME type and size", () => {
     const asset: WorkspaceFile = {
       path: "logo.png",
