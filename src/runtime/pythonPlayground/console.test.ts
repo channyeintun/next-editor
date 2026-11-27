@@ -124,4 +124,14 @@ describe("pythonRunServiceErrorToConsoleLines", () => {
       "[python-run error] Python could not be loaded — your code is unchanged, try again shortly",
     ]);
   });
+
+  // In a page opened before a deploy the worker's script is gone for good.
+  it("tells a learner to reload a page too old to start Python, never to try again", () => {
+    const lines = pythonRunServiceErrorToConsoleLines("outdated", "script is gone");
+    expect(lines).toEqual([
+      "[python-run error] This page is older than the app's latest version, so Python cannot start — save your work, then reload the page",
+    ]);
+    expect(lines[0]).not.toMatch(/try again/);
+    expect(PYTHON_CONSOLE_TAG_PATTERN.test(lines[0])).toBe(true);
+  });
 });

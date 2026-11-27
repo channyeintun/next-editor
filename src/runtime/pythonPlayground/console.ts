@@ -11,7 +11,7 @@ import type { PythonPlaygroundRunResult } from "./types";
  * implementation-neutral shape recordings capture and playback replays — no
  * detail of how the interpreter is hosted leaks into the recorded lines.
  *
- * The service-error table is two entries rather than five because a Python
+ * The service-error table is three entries rather than five because a Python
  * lesson has no service to be throttled by, switched off at, or cut off from.
  */
 
@@ -62,6 +62,9 @@ const SERVICE_ERROR_LINES: Record<Exclude<PythonPlaygroundServiceErrorKind, "abo
   "invalid-source": "[python-run error] This program can't run in a Python lesson",
   unavailable:
     "[python-run error] Python could not be loaded — your code is unchanged, try again shortly",
+  // Trying again cannot work here, so the line must not say to.
+  outdated:
+    "[python-run error] This page is older than the app's latest version, so Python cannot start — save your work, then reload the page",
 };
 
 export function pythonRunServiceErrorToConsoleLines(

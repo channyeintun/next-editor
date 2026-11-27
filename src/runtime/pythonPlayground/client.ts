@@ -1,6 +1,7 @@
 import { wrap } from "comlink";
 import { PLAYGROUND_SOURCE_RULES } from "../playgroundFiles";
 import type { PlaygroundRunTerminal } from "../playgroundLanguage";
+import { explainWorkerStartFailure } from "../playgroundWorker";
 import { findPythonRunEntry } from "./files";
 import { PYTHON_MAX_RUN_MS, PYTHON_STOPPED_DETAIL, PYTHON_TIME_LIMIT_DETAIL } from "./interpreter";
 import { createPythonOperations, type PythonOperations } from "./operations";
@@ -22,10 +23,15 @@ import {
  * As with Kite and assembly, the kinds a proxied client carries for a service
  * are missing, because there is none: a Python lesson cannot be rate-limited,
  * disabled or timed out by one. What is left is a workspace with no script to
- * start from, an interpreter that would not load, and a run a newer one
- * superseded.
+ * start from, an interpreter that would not load, a page too old to start one
+ * (its worker's script is gone from the server since a deploy: trying again
+ * cannot work, a reload does), and a run a newer one superseded.
  */
-export type PythonPlaygroundServiceErrorKind = "invalid-source" | "unavailable" | "aborted";
+export type PythonPlaygroundServiceErrorKind =
+  | "invalid-source"
+  | "unavailable"
+  | "outdated"
+  | "aborted";
 
 export class PythonPlaygroundServiceError extends Error {
   readonly kind: PythonPlaygroundServiceErrorKind;
@@ -80,12 +86,23 @@ export interface PythonEngine extends PythonOperations {
 class PythonEngineFailedError extends Error {}
 
 /**
+ * The engine never started, and never will from this page: its worker's script
+ * is no longer on the server. Exported so tests can make a fake engine fail
+ * this way.
+ */
+export class PythonEngineOutdatedError extends Error {}
+
+/**
  * An interpreter in a module worker of its own, or null where one cannot start.
  *
  * Comlink settles a call only on a reply message, so a worker whose module
  * fails after construction would leave every call pending forever. Each call
  * is raced against the worker's own death instead, the arrangement the Kite
  * client uses.
+ *
+ * A worker that dies before it has answered anything never ran its script:
+ * the script could not be loaded. Why is asked of the app's server
+ * (playgroundWorker.ts), since the two reasons call for different advice.
  */
 function workerPythonEngine(): PythonEngine | null {
   let worker: Worker;
@@ -103,13 +120,23 @@ function workerPythonEngine(): PythonEngine | null {
     fail = reject;
   });
   failed.catch(() => {});
+  /** The worker has answered a call, so its script loaded and ran. */
+  let answered = false;
   const onFailure = (event: Event) => {
     worker.terminate();
-    fail(
-      new PythonEngineFailedError(
-        event instanceof ErrorEvent && event.message
-          ? event.message
-          : "the interpreter worker stopped",
+    const message =
+      event instanceof ErrorEvent && event.message
+        ? event.message
+        : "the interpreter worker stopped";
+    if (answered) {
+      fail(new PythonEngineFailedError(message));
+      return;
+    }
+    void explainWorkerStartFailure().then((why) =>
+      fail(
+        why === "outdated"
+          ? new PythonEngineOutdatedError("the interpreter worker's script is gone")
+          : new PythonEngineFailedError(message),
       ),
     );
   };
@@ -117,11 +144,18 @@ function workerPythonEngine(): PythonEngine | null {
   worker.addEventListener("messageerror", onFailure);
 
   const api = wrap<PythonOperations>(worker);
+  /** A call to the worker: its answer, or the worker's death, whichever is first. */
+  const ask = <Answer>(call: Promise<Answer>): Promise<Answer> => {
+    const noteAnswer = () => {
+      answered = true;
+    };
+    call.then(noteAnswer, noteAnswer);
+    return Promise.race([call, failed]);
+  };
   return {
     offThread: true,
-    load: () => Promise.race([api.load(), failed]),
-    run: (files, entryPath, terminalMemory) =>
-      Promise.race([api.run(files, entryPath, terminalMemory), failed]),
+    load: () => ask(api.load()),
+    run: (files, entryPath, terminalMemory) => ask(api.run(files, entryPath, terminalMemory)),
     terminate: () => worker.terminate(),
   };
 }
@@ -146,6 +180,16 @@ function unavailableError(cause: unknown): PythonPlaygroundServiceError {
     "unavailable",
     `Python could not be loaded (${cause instanceof Error ? cause.message : String(cause)})`,
   );
+}
+
+/** Why an interpreter did not start, as the error a Run reports. */
+function startError(cause: unknown): PythonPlaygroundServiceError {
+  return cause instanceof PythonEngineOutdatedError
+    ? new PythonPlaygroundServiceError(
+        "outdated",
+        "Python cannot start in a page opened before the app was last updated",
+      )
+    : unavailableError(cause);
 }
 
 /**
@@ -387,7 +431,7 @@ export class PythonPlaygroundClient {
         ]);
       },
       (cause: unknown) => {
-        throw unavailableError(cause);
+        throw startError(cause);
       },
     );
     // Superseded, the race is already settled and nobody reads `work` again.

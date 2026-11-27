@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
+  PythonEngineOutdatedError,
   PythonPlaygroundClient,
   PythonPlaygroundServiceError,
   pickPythonRunEntry,
@@ -242,6 +243,25 @@ describe("PythonPlaygroundClient", () => {
     expect(made).toHaveLength(1);
     // The next Run tries again, on an interpreter of its own.
     await expect(client.run({ files: [MAIN] })).resolves.toEqual(OK);
+  });
+
+  // After a deploy the worker's script has a new name, and a page opened
+  // before it asks for the old one: no later Run from that page can start.
+  it("reports a page too old to start an interpreter as that, not as one to try again", async () => {
+    const gone = () => Promise.reject(new PythonEngineOutdatedError("script is gone"));
+    const first = fakeEngine({ load: gone });
+    const second = fakeEngine({ load: gone });
+    const { client, made } = clientWith(first, second);
+
+    const error = await serviceErrorOf(client.run({ files: [MAIN] }));
+
+    expect(error.kind).toBe("outdated");
+    expect(first.run).not.toHaveBeenCalled();
+    expect(first.terminate).toHaveBeenCalledTimes(1);
+    expect(made).toHaveLength(1);
+    // The next Run asks again, with a worker of its own, and is told the same.
+    expect((await serviceErrorOf(client.run({ files: [MAIN] }))).kind).toBe("outdated");
+    expect(second.terminate).toHaveBeenCalledTimes(1);
   });
 
   // The interpreter started ahead of a run can fail to start as well: offline
