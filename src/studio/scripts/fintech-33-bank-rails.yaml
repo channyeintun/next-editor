@@ -1,0 +1,878 @@
+# Fintech Engineering, lesson 33: bank rails, accounts and settlement (Burmese).
+#
+# Source: Fintech Engineering Handbook, Appendix A "Payments, rails & cards" and "Transactions,
+# timing & settlement" (CC BY 4.0, Voytek Pitula). Facts: A12, B12, B13, B14, B25.
+# Start state: main.go checks three IBANs (two published examples, one with two digits swapped);
+# clearing.go holds Payment, gross and net.
+# Edits, all insert-only (main.go):
+#   1. six gross payments between three banks            -> run-2 gross: 6 payments, 500.00
+#   2. the net position of each bank and what really moves -> run-3 net moved: 60.00
+# Figures: rails (a table of rails), corr (correspondent banking: nostro / vostro, the Swift
+# message, three sets of books), net (gross arrows, positions, two net transfers), fbo (omnibus /
+# FBO account, sweep, pass-through conditions), iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-33-bank-rails
+  title: "Fintech Engineering 33: Bank rail နဲ့ settlement"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      clearing.go: |
+        package main
+
+        // Payment is one obligation between two banks inside the same clearing cycle.
+        type Payment struct {
+        	From, To string
+        	Amount   int64 // cents
+        }
+
+        // gross is what moves when every payment is settled on its own.
+        func gross(ps []Payment) int64 {
+        	var sum int64
+        	for _, p := range ps {
+        		sum += p.Amount
+        	}
+        	return sum
+        }
+
+        // net turns many payments into one position per bank: negative pays, positive receives.
+        func net(ps []Payment) map[string]int64 {
+        	pos := map[string]int64{}
+        	for _, p := range ps {
+        		pos[p.From] -= p.Amount
+        		pos[p.To] += p.Amount
+        	}
+        	return pos
+        }
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // validIBAN is the ISO 13616 check: move the first four characters to the end, turn each
+        // letter into two digits (A = 10 … Z = 35), and the whole number mod 97 must be 1.
+        func validIBAN(iban string) bool {
+        	s := strings.ReplaceAll(iban, " ", "")
+        	if len(s) < 5 {
+        		return false
+        	}
+        	rem := 0
+        	for _, c := range s[4:] + s[:4] {
+        		switch {
+        		case c >= '0' && c <= '9':
+        			rem = (rem*10 + int(c-'0')) % 97
+        		case c >= 'A' && c <= 'Z':
+        			rem = (rem*100 + int(c-'A'+10)) % 97
+        		default:
+        			return false
+        		}
+        	}
+        	return rem == 1
+        }
+
+        func main() {
+        	for _, iban := range []string{
+        		"GB82 WEST 1234 5698 7654 32", // published example
+        		"DE89 3704 0044 0532 0130 00", // published example
+        		"GB82 WEST 1234 5698 7654 23", // the last two digits swapped
+        	} {
+        		fmt.Println(iban, "valid:", validIBAN(iban))
+        	}
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+  slides:
+    - id: corr-1
+      contentType: html
+      name: "Correspondent banking 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">CORRESPONDENT BANKING</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်တွေက ငွေ မပို့ဘူး၊ account ပြင်တယ်</text>
+        <g class="in"><circle cx="100" cy="300" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="70.6" y="270.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="100" y="398" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Originator</text><text x="100" y="436" font-size="23" text-anchor="middle" fill="#8a94a8">ပို့သူ</text></g>
+        <g class="in"><rect x="215" y="240" width="310" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="237" y="268" width="64" height="64" style="color:#4fd1c5"/><text x="410" y="310" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank A</text></g>
+        <g class="in"><rect x="1075" y="240" width="310" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="1097" y="268" width="64" height="64" style="color:#4fd1c5"/><text x="1270" y="310" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank B</text></g>
+        <g class="in"><circle cx="1500" cy="300" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="1470.6" y="270.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="1500" y="398" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Beneficiary</text><text x="1500" y="436" font-size="23" text-anchor="middle" fill="#8a94a8">လက်ခံသူ</text></g>
+        <path d="M535 300L798 300" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" class="dr"/><path d="M785 287l26 26M811 287l-26 26" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="666.5" y="283.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">A နဲ့ B ကြား account မရှိ</text>
+        </svg>
+    - id: corr-2
+      contentType: html
+      name: "Correspondent banking 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">CORRESPONDENT BANKING</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်တွေက ငွေ မပို့ဘူး၊ account ပြင်တယ်</text>
+        <circle cx="100" cy="300" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="70.6" y="270.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="100" y="398" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Originator</text><text x="100" y="436" font-size="23" text-anchor="middle" fill="#8a94a8">ပို့သူ</text>
+        <rect x="215" y="240" width="310" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="237" y="268" width="64" height="64" style="color:#4fd1c5"/><text x="410" y="310" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank A</text>
+        <rect x="1075" y="240" width="310" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="1097" y="268" width="64" height="64" style="color:#4fd1c5"/><text x="1270" y="310" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank B</text>
+        <circle cx="1500" cy="300" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="1470.6" y="270.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="1500" y="398" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Beneficiary</text><text x="1500" y="436" font-size="23" text-anchor="middle" fill="#8a94a8">လက်ခံသူ</text>
+        <g class="in"><rect x="645" y="240" width="310" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-bank" x="667" y="268" width="64" height="64" style="color:#b794f6"/><text x="840" y="307.8" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600">Correspondent</text></g>
+        <g class="in"><rect x="215" y="430" width="310" height="90" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5" stroke-dasharray="10 8"/><text x="370" y="466.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">nostro at C</text><text x="370" y="506.3" font-size="23" text-anchor="middle" fill="#8a94a8">our money at their bank</text></g>
+        <g class="in"><rect x="645" y="430" width="310" height="90" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5" stroke-dasharray="10 8"/><text x="800" y="465.2" font-size="30" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">vostro: Bank A</text><text x="800" y="505.3" font-size="24" text-anchor="middle" fill="#8a94a8">their money at ours</text></g>
+        <g class="in"><rect x="645" y="545" width="310" height="90" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5" stroke-dasharray="10 8"/><text x="800" y="599.4" font-size="30" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">vostro: Bank B</text></g>
+        <g class="in"><rect x="1075" y="430" width="310" height="90" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5" stroke-dasharray="10 8"/><text x="1230" y="485" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">nostro at C</text></g>
+        </svg>
+    - id: corr-3
+      contentType: html
+      name: "Correspondent banking 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">CORRESPONDENT BANKING</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်တွေက ငွေ မပို့ဘူး၊ account ပြင်တယ်</text>
+        <circle cx="100" cy="300" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="70.6" y="270.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="100" y="398" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Originator</text><text x="100" y="436" font-size="23" text-anchor="middle" fill="#8a94a8">ပို့သူ</text>
+        <rect x="215" y="240" width="310" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="237" y="268" width="64" height="64" style="color:#4fd1c5"/><text x="410" y="310" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank A</text>
+        <rect x="1075" y="240" width="310" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="1097" y="268" width="64" height="64" style="color:#4fd1c5"/><text x="1270" y="310" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank B</text>
+        <circle cx="1500" cy="300" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="1470.6" y="270.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="1500" y="398" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Beneficiary</text><text x="1500" y="436" font-size="23" text-anchor="middle" fill="#8a94a8">လက်ခံသူ</text>
+        <rect x="645" y="240" width="310" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-bank" x="667" y="268" width="64" height="64" style="color:#b794f6"/><text x="840" y="307.8" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600">Correspondent</text>
+        <rect x="215" y="430" width="310" height="90" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5" stroke-dasharray="10 8"/><text x="370" y="466.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">nostro at C</text><text x="370" y="506.3" font-size="23" text-anchor="middle" fill="#8a94a8">our money at their bank</text>
+        <rect x="645" y="430" width="310" height="90" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5" stroke-dasharray="10 8"/><text x="800" y="465.2" font-size="30" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">vostro: Bank A</text><text x="800" y="505.3" font-size="24" text-anchor="middle" fill="#8a94a8">their money at ours</text>
+        <rect x="645" y="545" width="310" height="90" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5" stroke-dasharray="10 8"/><text x="800" y="599.4" font-size="30" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">vostro: Bank B</text>
+        <rect x="1075" y="430" width="310" height="90" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5" stroke-dasharray="10 8"/><text x="1230" y="485" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">nostro at C</text>
+        <path d="M535 300L631 300" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="583" y="283.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">Swift</text>
+        <path d="M965 300L1061 300" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1013" y="283.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">Swift</text>
+        <g class="in"><rect x="357.9" y="700" width="884.1" height="50" rx="25" fill="#6cb2f5" opacity="0.16"/><rect x="357.9" y="700" width="884.1" height="50" rx="25" fill="none" stroke="#6cb2f5" stroke-width="2"/><text x="800" y="734.1" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="700">Swift = message · no assets held · no clearing · no settlement</text></g>
+        <g class="in"><rect x="308.6" y="780" width="982.7" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="308.6" y="780" width="982.7" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="800" y="814.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">cross-border on Swift: ISO 20022 · 97% of instructions, 24 Nov 2025</text></g>
+        </svg>
+    - id: corr-4
+      contentType: html
+      name: "Correspondent banking 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">CORRESPONDENT BANKING</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်တွေက ငွေ မပို့ဘူး၊ account ပြင်တယ်</text>
+        <circle cx="100" cy="300" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="70.6" y="270.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="100" y="398" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Originator</text><text x="100" y="436" font-size="23" text-anchor="middle" fill="#8a94a8">ပို့သူ</text>
+        <rect x="215" y="240" width="310" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="237" y="268" width="64" height="64" style="color:#4fd1c5"/><text x="410" y="310" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank A</text>
+        <rect x="1075" y="240" width="310" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="1097" y="268" width="64" height="64" style="color:#4fd1c5"/><text x="1270" y="310" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank B</text>
+        <circle cx="1500" cy="300" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="1470.6" y="270.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="1500" y="398" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Beneficiary</text><text x="1500" y="436" font-size="23" text-anchor="middle" fill="#8a94a8">လက်ခံသူ</text>
+        <rect x="645" y="240" width="310" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-bank" x="667" y="268" width="64" height="64" style="color:#b794f6"/><text x="840" y="307.8" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600">Correspondent</text>
+        <path d="M535 300L631 300" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="583" y="283.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">Swift</text>
+        <path d="M965 300L1061 300" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1013" y="283.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">Swift</text>
+        <g class="in"><rect x="175" y="420" width="390" height="176" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="197" y="455" font-size="22" fill="#8a94a8" font-weight="700">Bank A's books</text><text x="543" y="455" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700"></text><path d="M175 472H565" stroke="#2a3345" stroke-width="2"/><g><text x="197" y="513" font-size="28" fill="#e9edf5" class="mono">originator</text><text x="543" y="513" font-size="25" text-anchor="end" fill="#fc8181" class="mono">-100.00</text></g><g><path d="M191 534H549" stroke="#2a3345" stroke-width="1.5"/><text x="197" y="575" font-size="27" fill="#e9edf5" class="mono">nostro at C</text><text x="543" y="575" font-size="25" text-anchor="end" fill="#fc8181" class="mono">-100.00</text></g></g>
+        <g class="in"><rect x="605" y="420" width="390" height="176" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="627" y="455" font-size="22" fill="#8a94a8" font-weight="700">C's books</text><text x="973" y="455" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700"></text><path d="M605 472H995" stroke="#2a3345" stroke-width="2"/><g><text x="627" y="513" font-size="28" fill="#e9edf5" class="mono">Bank A</text><text x="973" y="513" font-size="25" text-anchor="end" fill="#fc8181" class="mono">-100.00</text></g><g><path d="M621 534H979" stroke="#2a3345" stroke-width="1.5"/><text x="627" y="575" font-size="28" fill="#e9edf5" class="mono">Bank B</text><text x="973" y="575" font-size="25" text-anchor="end" fill="#68d391" class="mono">+100.00</text></g></g>
+        <g class="in"><rect x="1035" y="420" width="390" height="176" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="1057" y="455" font-size="22" fill="#8a94a8" font-weight="700">Bank B's books</text><text x="1403" y="455" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700"></text><path d="M1035 472H1425" stroke="#2a3345" stroke-width="2"/><g><text x="1057" y="513" font-size="27" fill="#e9edf5" class="mono">nostro at C</text><text x="1403" y="513" font-size="25" text-anchor="end" fill="#68d391" class="mono">+100.00</text></g><g><path d="M1051 534H1409" stroke="#2a3345" stroke-width="1.5"/><text x="1057" y="575" font-size="27" fill="#e9edf5" class="mono">beneficiary</text><text x="1403" y="575" font-size="25" text-anchor="end" fill="#68d391" class="mono">+100.00</text></g></g>
+        <g class="in"><rect x="462.7" y="700" width="674.6" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="462.7" y="700" width="674.6" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="800" y="734.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">ငွေ ဘယ်မှ မသွားဘူး — ledger 3 ခု ပြောင်းတယ်</text></g>
+        <g class="in"><rect x="495.4" y="780" width="609.2" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="495.4" y="780" width="609.2" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="800" y="814.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">float: in both systems at once, or in neither</text></g>
+        </svg>
+    - id: fbo-1
+      contentType: html
+      name: "Omnibus / FBO account 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">OMNIBUS / FBO ACCOUNT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်က account တစ်ခုပဲ မြင်တယ်</text>
+        <g class="in"><rect x="100" y="230" width="600" height="114" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="265" font-size="22" fill="#8a94a8" font-weight="700">partner bank's books</text><text x="678" y="265" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700"></text><path d="M100 282H700" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="323" font-size="22" fill="#e9edf5">FBO account (for benefit of users)</text><text x="678" y="323" font-size="28" text-anchor="end" fill="#f6c453" font-weight="700" class="mono">300.00</text></g></g>
+        <g class="in"><rect x="900" y="230" width="600" height="300" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="922" y="265" font-size="22" fill="#8a94a8" font-weight="700">our ledger</text><text x="1478" y="265" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700"></text><path d="M900 282H1500" stroke="#2a3345" stroke-width="2"/><g><text x="922" y="323" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="1478" y="323" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">120.00</text></g><g><path d="M916 344H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="385" font-size="28" fill="#e9edf5" class="mono">liability:user:2077</text><text x="1478" y="385" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M916 406H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="447" font-size="28" fill="#e9edf5" class="mono">liability:user:3301</text><text x="1478" y="447" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">80.00</text></g><g><rect x="906" y="473" width="588" height="52" rx="10" fill="#f6c453" opacity="0.14"/><path d="M916 468H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="509" font-size="28" fill="#e9edf5" class="mono">total</text><text x="1478" y="509" font-size="28" text-anchor="end" fill="#f6c453" font-weight="700" class="mono">300.00</text></g></g>
+        <path d="M712 287L888 287" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" marker-start="url(#ah-gray)" class="dr"/><text x="800" y="270.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">must match</text>
+        <g class="in"><rect x="100" y="800" width="689.8" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="100" y="800" width="689.8" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="444.9" y="834.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">omnibus: pooled, per-user balances in our ledger</text></g>
+        </svg>
+    - id: fbo-2
+      contentType: html
+      name: "Omnibus / FBO account 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">OMNIBUS / FBO ACCOUNT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်က account တစ်ခုပဲ မြင်တယ်</text>
+        <rect x="100" y="230" width="600" height="114" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="265" font-size="22" fill="#8a94a8" font-weight="700">partner bank's books</text><text x="678" y="265" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700"></text><path d="M100 282H700" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="323" font-size="22" fill="#e9edf5">FBO account (for benefit of users)</text><text x="678" y="323" font-size="28" text-anchor="end" fill="#f6c453" font-weight="700" class="mono">300.00</text></g>
+        <rect x="900" y="230" width="600" height="300" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="922" y="265" font-size="22" fill="#8a94a8" font-weight="700">our ledger</text><text x="1478" y="265" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700"></text><path d="M900 282H1500" stroke="#2a3345" stroke-width="2"/><g><text x="922" y="323" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="1478" y="323" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">120.00</text></g><g><path d="M916 344H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="385" font-size="28" fill="#e9edf5" class="mono">liability:user:2077</text><text x="1478" y="385" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M916 406H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="447" font-size="28" fill="#e9edf5" class="mono">liability:user:3301</text><text x="1478" y="447" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">80.00</text></g><g><rect x="906" y="473" width="588" height="52" rx="10" fill="#f6c453" opacity="0.14"/><path d="M916 468H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="509" font-size="28" fill="#e9edf5" class="mono">total</text><text x="1478" y="509" font-size="28" text-anchor="end" fill="#f6c453" font-weight="700" class="mono">300.00</text></g>
+        <path d="M712 287L888 287" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" marker-start="url(#ah-gray)"/><text x="800" y="270.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">must match</text>
+        <rect x="100" y="800" width="689.8" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="100" y="800" width="689.8" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="444.9" y="834.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">omnibus: pooled, per-user balances in our ledger</text>
+        <g class="in"><rect x="100" y="560" width="600" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5" stroke-dasharray="10 8"/><text x="400" y="600.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">interest-bearing account</text><text x="400" y="641.6" font-size="24" text-anchor="middle" fill="#8a94a8">still users' money: ledger total = both</text></g>
+        <path d="M400 354L400 546" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="538" y="457.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600">sweep (scheduled)</text>
+        </svg>
+    - id: fbo-3
+      contentType: html
+      name: "Omnibus / FBO account 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">OMNIBUS / FBO ACCOUNT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်က account တစ်ခုပဲ မြင်တယ်</text>
+        <rect x="100" y="230" width="600" height="114" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="265" font-size="22" fill="#8a94a8" font-weight="700">partner bank's books</text><text x="678" y="265" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700"></text><path d="M100 282H700" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="323" font-size="22" fill="#e9edf5">FBO account (for benefit of users)</text><text x="678" y="323" font-size="28" text-anchor="end" fill="#f6c453" font-weight="700" class="mono">300.00</text></g>
+        <rect x="900" y="230" width="600" height="300" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="922" y="265" font-size="22" fill="#8a94a8" font-weight="700">our ledger</text><text x="1478" y="265" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700"></text><path d="M900 282H1500" stroke="#2a3345" stroke-width="2"/><g><text x="922" y="323" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="1478" y="323" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">120.00</text></g><g><path d="M916 344H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="385" font-size="28" fill="#e9edf5" class="mono">liability:user:2077</text><text x="1478" y="385" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">100.00</text></g><g><path d="M916 406H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="447" font-size="28" fill="#e9edf5" class="mono">liability:user:3301</text><text x="1478" y="447" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">80.00</text></g><g><rect x="906" y="473" width="588" height="52" rx="10" fill="#f6c453" opacity="0.14"/><path d="M916 468H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="509" font-size="28" fill="#e9edf5" class="mono">total</text><text x="1478" y="509" font-size="28" text-anchor="end" fill="#f6c453" font-weight="700" class="mono">300.00</text></g>
+        <path d="M712 287L888 287" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" marker-start="url(#ah-gray)"/><text x="800" y="270.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">must match</text>
+        <rect x="100" y="800" width="689.8" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="100" y="800" width="689.8" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="444.9" y="834.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">omnibus: pooled, per-user balances in our ledger</text>
+        <rect x="100" y="560" width="600" height="100" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5" stroke-dasharray="10 8"/><text x="400" y="600.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">interest-bearing account</text><text x="400" y="641.6" font-size="24" text-anchor="middle" fill="#8a94a8">still users' money: ledger total = both</text>
+        <path d="M400 354L400 546" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><text x="538" y="457.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600">sweep (scheduled)</text>
+        <g class="in"><g><circle cx="928" cy="624" r="25" fill="#b794f6"/><text x="928" y="634" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="978" y="636" font-size="34" fill="#e9edf5" font-weight="600">funds belong to the users</text></g><g><circle cx="928" cy="708" r="25" fill="#b794f6"/><text x="928" y="718" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="978" y="720" font-size="31" fill="#e9edf5" font-weight="600">bank records: custodial account</text></g><g><circle cx="928" cy="792" r="25" fill="#b794f6"/><text x="928" y="802" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="978" y="804" font-size="34" fill="#e9edf5" font-weight="600">records identify each owner</text></g></g>
+        <g class="in"><text x="900" y="570" font-size="23" fill="#8a94a8">FDIC pass-through: all three</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်ကြား ငွေလွှဲရင် တကယ် ဘာဖြစ်လဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်ကြား ငွေလွှဲရင် တကယ် ဘာဖြစ်လဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="33" fill="#e9edf5" font-weight="600">ငွေ မသွားဘူး — ဘဏ်တွေ အချင်းချင်း ကိုင်ထားတဲ့ account တွေ ပြောင်းတယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">nostro / vostro · correspondent တစ်ဆင့်ချင်းက ledger entry</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်ကြား ငွေလွှဲရင် တကယ် ဘာဖြစ်လဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="33" fill="#e9edf5" font-weight="600">ငွေ မသွားဘူး — ဘဏ်တွေ အချင်းချင်း ကိုင်ထားတဲ့ account တွေ ပြောင်းတယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">nostro / vostro · correspondent တစ်ဆင့်ချင်းက ledger entry</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#6cb2f5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Message ≠ money — Swift က instruction ပဲ</text><text x="188" y="443" font-size="26" fill="#8a94a8">clearing က သဘောတူ၊ settlement က ရွှေ့ · cut-off · netting</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်ကြား ငွေလွှဲရင် တကယ် ဘာဖြစ်လဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="33" fill="#e9edf5" font-weight="600">ငွေ မသွားဘူး — ဘဏ်တွေ အချင်းချင်း ကိုင်ထားတဲ့ account တွေ ပြောင်းတယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">nostro / vostro · correspondent တစ်ဆင့်ချင်းက ledger entry</text></g><g><circle cx="138" cy="381" r="25" fill="#6cb2f5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Message ≠ money — Swift က instruction ပဲ</text><text x="188" y="443" font-size="26" fill="#8a94a8">clearing က သဘောတူ၊ settlement က ရွှေ့ · cut-off · netting</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">လမ်းခုလတ်က ငွေ (float) ကို model လုပ်</text><text x="188" y="575" font-size="26" fill="#8a94a8">IBAN check က typo ပဲ ဖမ်းတယ်၊ account ရှိမရှိ မသိဘူး</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဘဏ်ကြား ငွေလွှဲရင် တကယ် ဘာဖြစ်လဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="33" fill="#e9edf5" font-weight="600">ငွေ မသွားဘူး — ဘဏ်တွေ အချင်းချင်း ကိုင်ထားတဲ့ account တွေ ပြောင်းတယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">nostro / vostro · correspondent တစ်ဆင့်ချင်းက ledger entry</text></g><g><circle cx="138" cy="381" r="25" fill="#6cb2f5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Message ≠ money — Swift က instruction ပဲ</text><text x="188" y="443" font-size="26" fill="#8a94a8">clearing က သဘောတူ၊ settlement က ရွှေ့ · cut-off · netting</text></g><g><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">လမ်းခုလတ်က ငွေ (float) ကို model လုပ်</text><text x="188" y="575" font-size="26" fill="#8a94a8">IBAN check က typo ပဲ ဖမ်းတယ်၊ account ရှိမရှိ မသိဘူး</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">in-transit account + bank statement နဲ့ reconcile</text><text x="188" y="707" font-size="26" fill="#8a94a8">FBO total = user balance တွေ ပေါင်းလဒ်၊ နေ့တိုင်း</text></g>
+        </svg>
+    - id: net-1
+      contentType: html
+      name: "Netting 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">NETTING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Payment 6 ခု၊ transfer 2 ခု</text>
+        <g class="in"><rect x="160" y="250" width="280" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="182" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="340" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank A</text></g>
+        <g class="in"><rect x="1160" y="250" width="280" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="1182" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="1340" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank B</text></g>
+        <g class="in"><rect x="660" y="620" width="280" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="682" y="643" width="64" height="64" style="color:#4fd1c5"/><text x="840" y="685" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank C</text></g>
+        <path d="M450 305Q798 255 1146 305" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="798" y="247.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">120.00</text>
+        <path d="M1150 305Q802 355 454 305" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="802" y="377.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">100.00</text>
+        <path d="M445.1 313.6Q497.4 518.9 652.8 663" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="448.2" y="521.4" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">80.00</text>
+        <path d="M654.9 666.4Q602.6 461.1 447.2 317" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="651.8" y="474.2" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">50.00</text>
+        <path d="M1154.9 313.6Q999.4 457.6 947.2 663" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="950.2" y="470.7" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">90.00</text>
+        <path d="M945.1 666.4Q1100.6 522.4 1152.8 317" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="1149.8" y="524.9" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">60.00</text>
+        <g class="in"><rect x="100" y="800" width="556.9" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="100" y="800" width="556.9" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="378.4" y="834.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">gross: 6 payments · 500.00 moves</text></g>
+        </svg>
+    - id: net-2
+      contentType: html
+      name: "Netting 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">NETTING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Payment 6 ခု၊ transfer 2 ခု</text>
+        <rect x="160" y="250" width="280" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="182" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="340" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank A</text>
+        <rect x="1160" y="250" width="280" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="1182" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="1340" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank B</text>
+        <rect x="660" y="620" width="280" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="682" y="643" width="64" height="64" style="color:#4fd1c5"/><text x="840" y="685" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank C</text>
+        <rect x="100" y="800" width="556.9" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="100" y="800" width="556.9" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="378.4" y="834.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">gross: 6 payments · 500.00 moves</text>
+        <g class="in"><rect x="233.2" y="400" width="133.7" height="50" rx="25" fill="#fc8181" opacity="1"/><text x="300" y="434.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">-50.00</text></g>
+        <g class="in"><rect x="1233.2" y="400" width="133.7" height="50" rx="25" fill="#fc8181" opacity="1"/><text x="1300" y="434.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">-10.00</text></g>
+        <g class="in"><rect x="733.2" y="770" width="133.7" height="50" rx="25" fill="#68d391" opacity="1"/><text x="800" y="804.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">+60.00</text></g>
+        <g class="in"><text x="800" y="330" font-size="26" text-anchor="middle" fill="#8a94a8" class="mono">-50 - 10 + 60 = 0</text></g>
+        </svg>
+    - id: net-3
+      contentType: html
+      name: "Netting 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">NETTING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Payment 6 ခု၊ transfer 2 ခု</text>
+        <rect x="160" y="250" width="280" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="182" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="340" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank A</text>
+        <rect x="1160" y="250" width="280" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="1182" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="1340" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank B</text>
+        <rect x="660" y="620" width="280" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-bank" x="682" y="643" width="64" height="64" style="color:#4fd1c5"/><text x="840" y="685" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank C</text>
+        <rect x="100" y="800" width="556.9" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="100" y="800" width="556.9" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="378.4" y="834.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">gross: 6 payments · 500.00 moves</text>
+        <rect x="233.2" y="400" width="133.7" height="50" rx="25" fill="#fc8181" opacity="1"/><text x="300" y="434.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">-50.00</text>
+        <rect x="1233.2" y="400" width="133.7" height="50" rx="25" fill="#fc8181" opacity="1"/><text x="1300" y="434.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">-10.00</text>
+        <rect x="733.2" y="770" width="133.7" height="50" rx="25" fill="#68d391" opacity="1"/><text x="800" y="804.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">+60.00</text>
+        <text x="800" y="330" font-size="26" text-anchor="middle" fill="#8a94a8" class="mono">-50 - 10 + 60 = 0</text>
+        <path d="M445.1 313.6L652.8 663" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M445.1 313.6L652.8 663')"/><text x="612.1" y="496.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">50.00</text>
+        <path d="M1154.9 313.6L947.2 663" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M1154.9 313.6L947.2 663')"/><text x="1114.2" y="496.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">10.00</text>
+        <g class="in"><rect x="975.7" y="800" width="524.3" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="975.7" y="800" width="524.3" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="1237.8" y="834.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700" class="mono">net: 2 transfers · 60.00 moves</text></g>
+        </svg>
+    - id: rails-1
+      contentType: html
+      name: "Payment rails 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">PAYMENT RAILS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Rail တိုင်းမှာ ကိုယ့် speed၊ hours၊ reach ရှိတယ်</text>
+        <g class="in"><rect x="100" y="210" width="1400" height="472" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">rail</text><text x="527.3" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာ ရွှေ့လဲ</text><text x="932.5" y="245" font-size="22" fill="#8a94a8" font-weight="700">timing</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="314" font-size="28" fill="#b794f6" class="mono">card networks</text><text x="527.3" y="314" font-size="28" fill="#e9edf5">card payments</text><text x="932.5" y="314" font-size="28" fill="#e9edf5">auth: seconds · settlement: days</text></g></g>
+        </svg>
+    - id: rails-2
+      contentType: html
+      name: "Payment rails 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">PAYMENT RAILS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Rail တိုင်းမှာ ကိုယ့် speed၊ hours၊ reach ရှိတယ်</text>
+        <rect x="100" y="210" width="1400" height="472" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">rail</text><text x="527.3" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာ ရွှေ့လဲ</text><text x="932.5" y="245" font-size="22" fill="#8a94a8" font-weight="700">timing</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="314" font-size="28" fill="#b794f6" class="mono">card networks</text><text x="527.3" y="314" font-size="28" fill="#e9edf5">card payments</text><text x="932.5" y="314" font-size="28" fill="#e9edf5">auth: seconds · settlement: days</text></g><g class="in"><path d="M116 346H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="398" font-size="28" fill="#68d391" class="mono">SEPA Instant</text><text x="527.3" y="398" font-size="28" fill="#e9edf5">euro credit transfers</text><text x="932.5" y="398" font-size="28" fill="#68d391">≤ 10 s · 24/7/365</text></g><g class="in"><path d="M116 430H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="482" font-size="24" fill="#4fd1c5" class="mono">ACH · FPS · CHAPS · wire</text><text x="527.3" y="482" font-size="28" fill="#e9edf5">bank transfers</text><text x="932.5" y="482" font-size="28" fill="#e9edf5">own hours · cut-offs · limits</text></g><g class="in"><path d="M116 514H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="566" font-size="28" fill="#f6c453" class="mono">blockchain</text><text x="527.3" y="566" font-size="28" fill="#e9edf5">on-chain assets</text><text x="932.5" y="566" font-size="28" fill="#e9edf5">confirmations (lesson 35)</text></g>
+        </svg>
+    - id: rails-3
+      contentType: html
+      name: "Payment rails 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">PAYMENT RAILS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Rail တိုင်းမှာ ကိုယ့် speed၊ hours၊ reach ရှိတယ်</text>
+        <rect x="100" y="210" width="1400" height="472" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="245" font-size="22" fill="#8a94a8" font-weight="700">rail</text><text x="527.3" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာ ရွှေ့လဲ</text><text x="932.5" y="245" font-size="22" fill="#8a94a8" font-weight="700">timing</text><path d="M100 262H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="314" font-size="28" fill="#b794f6" class="mono">card networks</text><text x="527.3" y="314" font-size="28" fill="#e9edf5">card payments</text><text x="932.5" y="314" font-size="28" fill="#e9edf5">auth: seconds · settlement: days</text></g><g><path d="M116 346H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="398" font-size="28" fill="#68d391" class="mono">SEPA Instant</text><text x="527.3" y="398" font-size="28" fill="#e9edf5">euro credit transfers</text><text x="932.5" y="398" font-size="28" fill="#68d391">≤ 10 s · 24/7/365</text></g><g><path d="M116 430H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="482" font-size="24" fill="#4fd1c5" class="mono">ACH · FPS · CHAPS · wire</text><text x="527.3" y="482" font-size="28" fill="#e9edf5">bank transfers</text><text x="932.5" y="482" font-size="28" fill="#e9edf5">own hours · cut-offs · limits</text></g><g><path d="M116 514H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="566" font-size="28" fill="#f6c453" class="mono">blockchain</text><text x="527.3" y="566" font-size="28" fill="#e9edf5">on-chain assets</text><text x="932.5" y="566" font-size="28" fill="#e9edf5">confirmations (lesson 35)</text></g><g class="in"><rect x="106" y="603" width="1388" height="74" rx="10" fill="#fc8181" opacity="0.14"/><path d="M116 598H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="650" font-size="28" fill="#fc8181" class="mono">Swift</text><text x="527.3" y="650" font-size="28" fill="#e9edf5">messages between banks</text><text x="932.5" y="650" font-size="28" fill="#fc8181">instruction ≠ money</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9533
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "GB82 WEST 1234 5698 7654 32 valid: true\nDE89 3704 0044 0532 0130 00 valid: true\nGB82 WEST 1234 5698 7654 23 valid: false\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "GB82 WEST 1234 5698 7654 32 valid: true\nDE89 3704 0044 0532 0130 00 valid: true\nGB82 WEST 1234 5698 7654 23 valid: false\ngross: 6 payments, 500.00\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "GB82 WEST 1234 5698 7654 32 valid: true\nDE89 3704 0044 0532 0130 00 valid: true\nGB82 WEST 1234 5698 7654 23 valid: false\ngross: 6 payments, 500.00\nA: -50.00\nB: -10.00\nC: 60.00\nnet moved: 60.00\n"
+
+scenes:
+  - id: hook
+    chapter: IBAN ကို စစ်တာ
+    narration: >-
+      ဘဏ် account တစ်ခုဆီ ငွေ ထုတ်ပေးတဲ့ flow မှာ ပထမဆုံး မှားနိုင်တာက user ရိုက်ထည့်တဲ့ account နံပါတ်ပါ။
+       IBAN ဆိုတာ ISO standard တစ်ခုက သတ်မှတ်ထားတဲ့ international
+      bank account number ဖြစ်ပြီး၊ ရိုက်မှားတာကို ဖမ်းဖို့ check digit ပါပါတယ်။ [[mark:sel-check]] စစ်တဲ့
+      နည်းက ရှေ့ဆုံး စာလုံး လေးလုံးကို နောက်ဆုံးကို ရွှေ့ပြီး၊ စာလုံး တစ်လုံးချင်းကို ဂဏန်း နှစ်လုံး
+      ပြောင်းပြီး၊ ရလာတဲ့ ဂဏန်းကြီးကို ၉၇ နဲ့ စားတာပါ။ [[mark:sel-mod]] အကြွင်း တစ် ဖြစ်မှ valid ပါ။
+      [[mark:sel-list]] ပထမ နှစ်ခုက ထုတ်ဝေထားတဲ့ ဥပမာ IBAN တွေပါ၊ တကယ့် account တွေ မဟုတ်ပါဘူး။ တတိယ
+      တစ်ခုက ပထမ တစ်ခုရဲ့ နောက်ဆုံး ဂဏန်း နှစ်လုံးကို နေရာလဲထားတာပါ။ ဒီ အမှားကို check က ဖမ်းမိမလား
+      ခန့်မှန်းကြည့်ပါ။ [[mark:run-1]] run လိုက်ရအောင်။ [[mark:pt-true]] ဥပမာ နှစ်ခုက valid ဖြစ်ပြီး check
+      ကို ဖြတ်ပါတယ်။ [[mark:pt-false]] နေရာလဲထားတဲ့ တစ်ခုကိုတော့ false လို့ ဖမ်းမိပါတယ်။ [[mark:dock-1]]
+      သတိထားရမှာက valid ဆိုတာ account တကယ် ရှိတယ် လို့ မဆိုလိုပါဘူး။ 
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Payments, rails & cards (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#payments-rails-cards",
+        }
+      - {
+          title: "Experian Bank Wizard — IBAN formats (DE89 3704 0044 0532 0130 00)",
+          url: "https://identityandfraud.uk.experian.com/documentation/bank-wizard-api-guide-j12f/subsystems/default/country_details/iban_formats.htm",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-check
+        type: editor.select
+        at: { mark: sel-check }
+        target: { file: main.go, text: "for _, c := range s[4:] + s[:4] {", occurrence: 1 }
+      - id: sel-mod
+        type: editor.select
+        at: { mark: sel-mod }
+        target: { file: main.go, text: "return rem == 1", occurrence: 1 }
+      - id: sel-list
+        type: editor.select
+        at: { mark: sel-list }
+        target:
+          {
+            file: main.go,
+            text: '"GB82 WEST 1234 5698 7654 23", // the last two digits swapped',
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "7654 23 valid: false",
+          timeoutMs: 8000,
+        }
+      - id: pt-true
+        type: console.point
+        at: { mark: pt-true }
+        target: { text: "DE89 3704 0044 0532 0130 00 valid: true", occurrence: 1 }
+      - id: pt-false
+        type: console.point
+        at: { mark: pt-false }
+        target: { text: "GB82 WEST 1234 5698 7654 23 valid: false", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: rails
+    chapter: Payment rail
+    narration: >-
+      [[mark:show-rails]] IBAN မှန်ပြီဆိုရင် ငွေက rail တစ်ခုပေါ်ကနေ သွားပါတယ်။ rail ဆိုတာ payment သွားတဲ့
+      network ပါ၊ rail တစ်ခုချင်းမှာ ကိုယ့် speed၊ cost၊ ဖွင့်ချိန်နဲ့ ရောက်နိုင်တဲ့ နေရာ ရှိပါတယ်။
+      [[mark:pt-cards]] card network ကို lesson ၃၂ မှာ မြင်ခဲ့ပြီးပါပြီ၊ authorization က စက္ကန့်ပိုင်း၊
+      settlement က ရက်ပိုင်းပါ။ [[mark:rails-2]] SEPA Instant ကတော့ euro credit transfer ကို
+      တစ်နှစ်ပတ်လုံး နေ့ရော ညရော ဖွင့်ထားပြီး၊ ငွေကို ဆယ်စက္ကန့်အတွင်း လက်ခံသူ သုံးလို့ရအောင် ပေးပါတယ်။
+      [[mark:pt-bank]] ACH၊ FPS၊ CHAPS နဲ့ wire လို ဘဏ် rail တွေမှာ ဖွင့်ချိန်၊ lesson ၁၁ က cut-off နဲ့ limit ကိုယ်စီ ရှိပါတယ်။ [[mark:rails-3]] Swift ကတော့ ကွာပါတယ်။ ဘဏ်တွေကြား standard message တွေကို
+      သယ်ပေးပေမဲ့၊ Swift ကိုယ်တိုင် asset မကိုင်ပါဘူး၊ clear လည်း မလုပ်၊ settle လည်း မလုပ်ပါဘူး။
+
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Payments, rails & cards (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#payments-rails-cards",
+        }
+      - {
+          title: "ECB — Instant payments",
+          url: "https://www.ecb.europa.eu/paym/retail/instant_payments/html/index.en.html",
+        }
+      - {
+          title: "Swift — Fighting illegal financial activities (what Swift does and does not do)",
+          url: "https://www.swift.com/about-us/legal/compliance-0/fighting-illegal-financial-activities",
+        }
+    actions:
+      - {
+          id: show-rails,
+          type: slide.show,
+          at: { mark: show-rails, offsetMs: -700 },
+          slideId: rails-1,
+        }
+      - { id: pt-cards, type: slide.point, at: { mark: pt-cards }, target: { x: 0.138, y: 0.378 } }
+      - { id: rails-2, type: slide.show, at: { mark: rails-2 }, slideId: rails-2 }
+      - {
+          id: pt-sepa,
+          type: slide.point,
+          at: { afterAction: rails-2 },
+          target: { x: 0.138, y: 0.471 },
+        }
+      - { id: pt-bank, type: slide.point, at: { mark: pt-bank }, target: { x: 0.138, y: 0.564 } }
+      - { id: rails-3, type: slide.show, at: { mark: rails-3 }, slideId: rails-3 }
+      - {
+          id: pt-swift,
+          type: slide.point,
+          at: { afterAction: rails-3 },
+          target: { x: 0.138, y: 0.751 },
+        }
+
+  - id: corr
+    chapter: Nostro နဲ့ vostro
+    narration: >-
+      [[mark:show-corr]] Swift က ငွေ မရွှေ့ရင် ငွေက ဘယ်လို ရွှေ့လဲ။ Bank A ရဲ့ customer တစ်ယောက်က Bank B
+      မှာ ရှိတဲ့ account ကို ယူရို ၁၀၀ လွှဲတယ် ဆိုပါစို့။ ပို့သူကို originator၊ လက်ခံသူကို beneficiary
+      လို့ ခေါ်ပါတယ်။ [[mark:pt-none]] Bank A နဲ့ Bank B ကြားမှာ account မရှိရင် နှစ်ခုကြား တိုက်ရိုက်
+      လွှဲလို့ မရပါဘူး။ [[mark:corr-2]] ဒါကြောင့် settlement system တစ်ခုကို ဖြတ်ရပါတယ်၊ ဒါမှမဟုတ် ဒီ ဥပမာလို နှစ်ဘက်လုံး account
+      ဖွင့်ထားတဲ့ correspondent ဘဏ်ကို ဖြတ်ရပါတယ်။ cross-border ဆိုရင် correspondent တစ်ခုထက် ပိုပြီး ဖြတ်နိုင်ပါတယ်။ [[mark:pt-nostro]]
+      Bank A ဘက်က ကြည့်ရင် correspondent မှာ ထားတဲ့ ကိုယ့်ငွေကို nostro လို့ ခေါ်ပါတယ်၊ ကိုယ့်ငွေ၊
+      သူများဘဏ်မှာ ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ [[mark:pt-vostro]] correspondent ဘက်ကတော့ အဲဒီ account ကို vostro
+      လို့ ခေါ်ပါတယ်၊ သူများငွေ၊ ကိုယ့်ဘဏ်မှာ ပါ။ account တစ်ခုတည်းကို ဘက်နှစ်ဘက်က နာမည် နှစ်မျိုးနဲ့
+      ခေါ်တာပါ။ [[mark:corr-3]] Bank A က correspondent ကို Swift message ပို့ပြီး၊ correspondent က Bank B
+      ကို ဆက်ပို့ပါတယ်။ [[mark:pt-iso]] Swift ပေါ်က cross-border payment message တွေက ISO 20022 format ကို
+      ပြောင်းနေပြီး၊ ၂၀၂၅ နိုဝင်ဘာ ၂၄ ရက်မှာ payment instruction ရဲ့ ၉၇ ရာခိုင်နှုန်းက အဲဒီ format နဲ့
+      ရောက်ပါတယ်။ format ဘာပဲဖြစ်ဖြစ် message က instruction ပဲ ဖြစ်ပြီး ငွေ မဟုတ်ပါဘူး။ [[mark:corr-4]] ငွေ ရွှေ့တာက ဘဏ်
+      တစ်ခုချင်းရဲ့ ledger ထဲမှာပါ။ Bank A က originator ရဲ့ account ကို နုတ်ပြီး nostro ကိုလည်း နုတ်ပါတယ်။
+      [[mark:pt-tc]] correspondent က Bank A ရဲ့ account ကနေ နုတ်ပြီး Bank B ရဲ့ account ကို ထည့်ပါတယ်၊
+      Bank B ကလည်း nostro နဲ့ beneficiary ကို ထည့်ပါတယ်။ [[mark:pt-nothing]] ဘဏ်တွေကြား ဘာမှ မသွားပါဘူး၊
+      ledger သုံးခု ပြောင်းသွားတာပါ။ [[mark:pt-float]] ဒီ ပြောင်းတာတွေ အချိန်တစ်ပြိုင်တည်း မဖြစ်လို့ lesson ၁၁ က float ပေါ်လာပါတယ်၊ လမ်းခုလတ်မှာ ငွေက
+      system နှစ်ခုလုံးမှာ ရှိသလို ဒါမှမဟုတ် ဘယ်မှာမှ မရှိသလို ဖြစ်တာပါ။ [[mark:pt-intransit]] ဒါကြောင့် ကိုယ့် ledger မှာ ထွက်သွားပြီး မရောက်သေးတဲ့
+      ငွေကို in-transit account နဲ့ ထားပြီး၊ message ရောက်တာ၊ API က success ပြန်တာကို မယုံဘဲ bank
+      statement နဲ့ reconcile လုပ်မှ settled လို့ မှတ်ရပါတယ်။ [[mark:pt-trust]] ဒါက No trust ပါ၊
+      ဘယ်သူ့ကိုမှ၊ ကိုယ့် component ကိုတောင် အလိုလို မယုံရဘူး ဆိုတဲ့ မူပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Payments, rails & cards (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#payments-rails-cards",
+        }
+      - {
+          title: "Swift — Fighting illegal financial activities (what Swift does and does not do)",
+          url: "https://www.swift.com/about-us/legal/compliance-0/fighting-illegal-financial-activities",
+        }
+      - {
+          title: "Swift — Global financial community completes switch to ISO 20022 (25 Nov 2025)",
+          url: "https://www.swift.com/news-events/press-releases/global-financial-community-completes-switch-iso-20022-paving-way-new-levels-cross-border-payment-speed-and-innovation-around-world",
+        }
+    actions:
+      - {
+          id: show-corr,
+          type: slide.show,
+          at: { mark: show-corr, offsetMs: -700 },
+          slideId: corr-1,
+        }
+      - { id: pt-none, type: slide.point, at: { mark: pt-none }, target: { x: 0.392, y: 0.329 } }
+      - { id: corr-2, type: slide.show, at: { mark: corr-2 }, slideId: corr-2 }
+      - { id: pt-c, type: slide.point, at: { afterAction: corr-2 }, target: { x: 0.5, y: 0.409 } }
+      - {
+          id: pt-nostro,
+          type: slide.point,
+          at: { mark: pt-nostro },
+          target: { x: 0.231, y: 0.587 },
+        }
+      - { id: pt-vostro, type: slide.point, at: { mark: pt-vostro }, target: { x: 0.5, y: 0.587 } }
+      - { id: corr-3, type: slide.show, at: { mark: corr-3 }, slideId: corr-3 }
+      - {
+          id: pt-msg,
+          type: slide.point,
+          at: { afterAction: corr-3 },
+          target: { x: 0.494, y: 0.842 },
+        }
+      - { id: pt-iso, type: slide.point, at: { mark: pt-iso }, target: { x: 0.494, y: 0.931 } }
+      - { id: corr-4, type: slide.show, at: { mark: corr-4 }, slideId: corr-4 }
+      - {
+          id: pt-ta,
+          type: slide.point,
+          at: { afterAction: corr-4 },
+          target: { x: 0.231, y: 0.671 },
+        }
+      - { id: pt-tc, type: slide.point, at: { mark: pt-tc }, target: { x: 0.5, y: 0.671 } }
+      - {
+          id: pt-nothing,
+          type: slide.point,
+          at: { mark: pt-nothing },
+          target: { x: 0.494, y: 0.842 },
+        }
+      - { id: pt-float, type: slide.point, at: { mark: pt-float }, target: { x: 0.494, y: 0.931 } }
+      - {
+          id: pt-intransit,
+          type: slide.point,
+          at: { mark: pt-intransit },
+          target: { x: 0.231, y: 0.671 },
+        }
+      - { id: pt-trust, type: slide.point, at: { mark: pt-trust }, target: { x: 0.125, y: 0.184 } }
+
+  - id: gross
+    chapter: Gross နဲ့ net
+    narration: >-
+      [[mark:close-corr]] ဘဏ်တွေကြား payment တွေက တစ်နေ့ကို အများကြီး ရှိပါတယ်။ [[mark:type-pay]] clearing
+      cycle တစ်ခုအတွင်း ဘဏ် သုံးခုကြား payment ခြောက်ခု ရှိတယ် ဆိုပါစို့။ A က B ကို ပေးရသလို B ကလည်း A ကို
+      ပေးရပါတယ်။  payment တစ်ခုချင်းကို သီးသန့် settle လုပ်ရင် ဘယ်လောက် ရွှေ့ရမလဲ ကြည့်ရအောင်။
+      [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-gross]] ယူရို ငါးရာ ရွှေ့ရပါတယ်၊ ဒါကို gross settlement
+      လို့ ခေါ်ပါတယ်။ [[mark:dock-2]] payment တိုင်းအတွက် ငွေ ကြိုရှိနေရလို့ liquidity၊ ဆိုလိုတာက
+      ချက်ချင်း ပေးလို့ရတဲ့ ငွေ အများကြီး လိုပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Transactions, timing & settlement (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#transactions-timing-settlement",
+        }
+    actions:
+      - { id: close-corr, type: slide.close, at: { mark: close-corr } }
+      - id: type-pay
+        type: editor.type
+        at: { mark: type-pay }
+        target:
+          {
+            file: main.go,
+            after: "\t\tfmt.Println(iban, \"valid:\", validIBAN(iban))\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\n\tpayments := []Payment{\n\t\t{\"A\", \"B\", 12000}, {\"B\", \"A\", 10000}, {\"A\", \"C\", 8000},\n\t\t{\"C\", \"A\", 5000}, {\"B\", \"C\", 9000}, {\"C\", \"B\", 6000},\n\t}\n\tfmt.Println(\"gross:\", len(payments), \"payments,\", cents(gross(payments)))\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "gross: 6 payments, 500.00",
+          timeoutMs: 8000,
+        }
+      - id: pt-gross
+        type: console.point
+        at: { mark: pt-gross }
+        target: { text: "gross: 6 payments, 500.00", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: netting
+    narration: >-
+      [[mark:show-net]] ဒါပေမဲ့ ဒီ payment တွေက အပြန်အလှန် ဖြစ်နေပါတယ်။ [[mark:net-2]] payment တွေကို
+      cut-off အထိ စုပြီး ဘဏ် တစ်ခုချင်း ပေးရမှာနဲ့ ရမှာကို ပေါင်းနုတ်လိုက်ရင် ဘဏ် တစ်ခုကို position
+      တစ်ခုပဲ ကျန်ပါတယ်။ A က ယူရို ငါးဆယ်၊ B က ယူရို ဆယ် ပေးရပြီး၊ C က ယူရို ခြောက်ဆယ် ရပါတယ်။
+      [[mark:pt-sum]] position အားလုံး ပေါင်းရင် သုည ဖြစ်ရပါတယ်၊ ငွေ ပေါ်လာတာ ပျောက်သွားတာ မရှိရလို့ပါ။
+      [[mark:net-3]] settle လုပ်ရတာ transfer နှစ်ခုနဲ့ ယူရို ခြောက်ဆယ်ပဲ ဖြစ်သွားပါတယ်။ lesson ၂၆ မှာ ကြားခဲ့တဲ့ netting ဆိုတာ ဒါပါ၊ obligation အများကြီးကို net transfer အနည်းငယ်အဖြစ် ချုံ့တာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Transactions, timing & settlement (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#transactions-timing-settlement",
+        }
+    actions:
+      - { id: show-net, type: slide.show, at: { mark: show-net, offsetMs: -700 }, slideId: net-1 }
+      - {
+          id: pt-net-gross,
+          type: slide.point,
+          at: { afterAction: show-net },
+          target: { x: 0.23, y: 0.953 },
+        }
+      - { id: net-2, type: slide.show, at: { mark: net-2 }, slideId: net-2 }
+      - { id: pt-pa, type: slide.point, at: { afterAction: net-2 }, target: { x: 0.181, y: 0.509 } }
+      - { id: pt-sum, type: slide.point, at: { mark: pt-sum }, target: { x: 0.454, y: 0.38 } }
+      - { id: net-3, type: slide.show, at: { mark: net-3 }, slideId: net-3 }
+      - {
+          id: pt-netc,
+          type: slide.point,
+          at: { afterAction: net-3 },
+          target: { x: 0.767, y: 0.953 },
+        }
+
+  - id: net-code
+    narration: >-
+      [[mark:close-net]] code နဲ့ တွက်ကြည့်ရအောင်။ [[mark:open-clr]] net function က payment တွေကို ဘဏ်
+      တစ်ခုချင်းရဲ့ position အဖြစ် ပြောင်းပါတယ်။ [[mark:sel-net]] payment တစ်ခုချင်းအတွက် ပေးသူရဲ့
+      position ကနေ နုတ်ပြီး လက်ခံသူရဲ့ position ကို ထည့်တာပါ၊ ledger မှာ debit နဲ့ credit ညီရသလိုပါပဲ။
+      [[mark:back-main]] main ထဲမှာ အဲဒါကို သုံးပါမယ်။ [[mark:type-print]] ဘဏ် တစ်ခုချင်းရဲ့ position ကို
+      ထုတ်ပြပြီး၊ ရရမယ့် ဘက်တွေကို ပေါင်းတာက တကယ် ရွှေ့ရမယ့် ပမာဏပါ။ position အားလုံး ပေါင်းရင် သုည
+      ဖြစ်လို့ ပေးရမယ့် ဘက်တွေကို ပေါင်းလည်း အတူတူပါပဲ။  [[mark:run-3]] run လိုက်ရအောင်။
+      [[mark:pt-a]] A က အနုတ် ငါးဆယ်၊ B က အနုတ် ဆယ်၊ C က ခြောက်ဆယ် ပါ။ [[mark:pt-moved]] တကယ် ရွှေ့ရတာ
+      ယူရို ခြောက်ဆယ်ပဲ ဖြစ်ပြီး၊ gross ရဲ့ ဆယ်ပုံ တစ်ပုံ ကျော်ကျော်ပဲ ရှိပါတယ်။ [[mark:dock-3]] ဒါကြောင့်
+      netting လုပ်တဲ့ rail တွေမှာ ဘဏ်တွေက liquidity နည်းနည်းနဲ့ payment အများကြီးကို settle လုပ်နိုင်တာပါ။
+      ဒါပေမဲ့ net position က settlement ဖြစ်မှ ငွေ ဖြစ်တာပါ၊ အဲဒီအထိ obligation ပဲ ရှိပါသေးတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Transactions, timing & settlement (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#transactions-timing-settlement",
+        }
+    actions:
+      - { id: close-net, type: slide.close, at: { mark: close-net } }
+      - { id: open-clearing, type: workspace.openFile, at: { mark: open-clr }, path: clearing.go }
+      - id: sel-net
+        type: editor.select
+        at: { mark: sel-net }
+        target:
+          {
+            file: clearing.go,
+            text: "\t\tpos[p.From] -= p.Amount\n\t\tpos[p.To] += p.Amount",
+            occurrence: 1,
+          }
+      - { id: open-main-2, type: workspace.openFile, at: { mark: back-main }, path: main.go }
+      - id: type-print
+        type: editor.type
+        at: { mark: type-print }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"gross:\", len(payments), \"payments,\", cents(gross(payments)))\n",
+            occurrence: 1,
+          }
+        text: "\n\tpos, moved := net(payments), int64(0)\n\tfor _, bank := range []string{\"A\", \"B\", \"C\"} {\n\t\tfmt.Println(bank+\":\", cents(pos[bank]))\n\t\tmoved += max(pos[bank], 0)\n\t}\n\tfmt.Println(\"net moved:\", cents(moved))\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "net moved: 60.00",
+          timeoutMs: 8000,
+        }
+      - id: pt-a
+        type: console.point
+        at: { mark: pt-a }
+        target: { text: "A: -50.00", occurrence: 1 }
+      - id: pt-moved
+        type: console.point
+        at: { mark: pt-moved }
+        target: { text: "net moved: 60.00", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+      - {
+          id: expect-file-moved,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "moved += max(pos[bank], 0)",
+        }
+
+  - id: fbo
+    chapter: Omnibus နဲ့ FBO account
+    narration: >-
+      [[mark:show-fbo]] fintech တစ်ခုရဲ့ user ငွေတွေက ဘဏ်မှာ ဘယ်လို ရှိလဲ။ user တစ်ယောက်ချင်း account
+      မဖွင့်ဘဲ partner ဘဏ်မှာ account တစ်ခုထဲ စုထားတာ များပါတယ်။ [[mark:pt-bankrow]] ဒါက lesson ၁၀ က omnibus account ပါ၊ lesson ၂၆ က FBO account လို user တွေကိုယ်စား ကုမ္ပဏီက ကိုင်ထားပြီး၊
+      user တစ်ယောက်ချင်းရဲ့ balance ကို ကိုယ့် ledger ထဲမှာ ခွဲမှတ်ပါတယ်။ commingling မဟုတ်ဘဲ တရားဝင် စုထားတာပါ။ [[mark:pt-total]] ဘဏ်က ယူရို သုံးရာ
+      ဆိုတဲ့ ဂဏန်း တစ်ခုပဲ မြင်ပါတယ်။ ဘယ် user က ဘယ်လောက် ပိုင်လဲ ဆိုတာ ကိုယ့် ledger ကပဲ သိလို့၊ ledger
+      ရဲ့ စုစုပေါင်းနဲ့ ဘဏ် balance ကို နေ့တိုင်း reconcile လုပ်ရပါတယ်။ [[mark:fbo-2]] sweep ဆိုတာ balance
+      ကို schedule နဲ့ တခြား account ကို အလိုအလျောက် ရွှေ့တာပါ၊ ဥပမာ အတိုး ရတဲ့ account ကို။
+      ရွှေ့ပြီးတာတောင် user တစ်ယောက်ချင်းရဲ့ ငွေ ဘယ်မှာ ရှိလဲ ledger က ပြောနိုင်ရပါမယ်။ [[mark:fbo-3]] ဒီ
+      ledger က ကိုယ့် အတွက်တင် မဟုတ်ပါဘူး။ အမေရိကမှာ FDIC insured ဘဏ် ပြိုသွားရင် FBO account ထဲက ငွေကို
+      user တစ်ယောက်ချင်းဆီ insurance ရောက်ဖို့ အချက် သုံးချက် ပြည့်ရပါတယ်။ [[mark:pt-pass]] ငွေက user တွေ
+      ပိုင်ရမယ်၊ ဘဏ်ရဲ့ မှတ်တမ်းမှာ custodial account လို့ ပြရမယ်၊ ပိုင်ရှင် တစ်ယောက်ချင်းနဲ့ ပမာဏကို
+      မှတ်တမ်းကနေ သိနိုင်ရမယ်။ မပြည့်ရင် ကုမ္ပဏီရဲ့ ကိုယ်ပိုင် deposit အဖြစ်ပဲ တွက်ပါတယ်။ ဆိုလိုတာက ဘဏ် ပြိုရင် user တစ်ယောက်ချင်းရဲ့ insurance အတွက် သက်သေက ကိုယ့် ledger ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Payments, rails & cards (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#payments-rails-cards",
+        }
+      - {
+          title: "FDIC — Pass-through Deposit Insurance Coverage",
+          url: "https://www.fdic.gov/resources/deposit-insurance/diguidebankers/pass-through/index.html",
+        }
+    actions:
+      - { id: show-fbo, type: slide.show, at: { mark: show-fbo, offsetMs: -700 }, slideId: fbo-1 }
+      - {
+          id: pt-bankrow,
+          type: slide.point,
+          at: { mark: pt-bankrow },
+          target: { x: 0.108, y: 0.376 },
+        }
+      - { id: pt-total, type: slide.point, at: { mark: pt-total }, target: { x: 0.608, y: 0.582 } }
+      - { id: fbo-2, type: slide.show, at: { mark: fbo-2 }, slideId: fbo-2 }
+      - {
+          id: pt-sweep,
+          type: slide.point,
+          at: { afterAction: fbo-2 },
+          target: { x: 0.25, y: 0.742 },
+        }
+      - { id: fbo-3, type: slide.show, at: { mark: fbo-3 }, slideId: fbo-3 }
+      - { id: pt-pass, type: slide.point, at: { mark: pt-pass }, target: { x: 0.631, y: 0.72 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] interview မှာ ဘဏ်တစ်ခုကနေ တစ်ခုကို ငွေလွှဲရင် တကယ် ဘာဖြစ်သွားတာလဲ လို့ မေးတတ်ပါတယ်။
+      [[mark:iv-a]] ပထမ၊ ငွေက ဘဏ်တွေကြား မသွားပါဘူး။ ဘဏ်တွေ အချင်းချင်း ကိုင်ထားတဲ့ nostro၊ vostro account
+      တွေ ဒါမှမဟုတ် settlement system ထဲက account တွေကို ပြောင်းတာပါ၊ correspondent တစ်ဆင့်ချင်းက ledger
+      entry တစ်ခုပါ။ [[mark:iv-b]] ဒုတိယ၊ message နဲ့ ငွေကို ခွဲပြောပါ။ Swift က instruction ပဲ သယ်ပြီး၊
+      clearing က သဘောတူတာ၊ settlement က ရွှေ့တာပါ၊ cut-off နဲ့ netting က ရွှေ့တဲ့ အချိန်နဲ့ ပမာဏကို
+      ပြောင်းပါတယ်။ [[mark:iv-c]] တတိယ၊ လမ်းခုလတ်က ငွေ၊ float ကို model လုပ်ရပါမယ်။ IBAN check က
+      ရိုက်မှားတာကိုပဲ ဖမ်းပြီး account ရှိမရှိ မပြောပါဘူး။ [[mark:iv-d]] ပြီးရင် ကိုယ် ဘယ်လို လုပ်မလဲ
+      ပြောပါ။ ထွက်သွားတဲ့ ငွေကို in-transit account မှာ ထားမယ်၊ bank statement ရောက်မှ settled လို့
+      မှတ်မယ်၊ FBO balance ကို user balance တွေ ပေါင်းလဒ်နဲ့ နေ့တိုင်း reconcile လုပ်မယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Payments, rails & cards (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#payments-rails-cards",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] တတိယ IBAN ကို ကိုယ့်ဘာသာ
+      စိတ်ကူးထားတဲ့ IBAN တစ်ခုနဲ့ အစားထိုးပြီး run ကြည့်ပါ။ false ထွက်ဖို့ များပါတယ်၊ ကျပန်း ဂဏန်းတွေမှာ
+      ၉၇ ခုမှာ တစ်ခုလောက်ပဲ check ကို ဖြတ်လို့ပါ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ ဘဏ်တွေက ငွေကို ပို့တာ
+      မဟုတ်ဘဲ တစ်ခုဆီမှာ တစ်ခု ကိုင်ထားတဲ့ account တွေကို ပြင်တာပါ၊ message က instruction ပဲ ဖြစ်ပါတယ်။
+      ငွေ တကယ် ရောက်ပြီလား ဆိုတာကို ကိုယ့် ledger နဲ့ bank statement တိုက်မှ သိရပါတယ်။ နောက် lesson
+      မှာတော့ trading ကို ကြည့်ပါမယ်၊ buy order နဲ့ sell order တွေ order book ထဲမှာ ဘယ်လို ကိုက်လဲ
+      ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Payments, rails & cards (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#payments-rails-cards",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: '"GB82 WEST 1234 5698 7654 23"', occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

@@ -1,0 +1,836 @@
+# Fintech Engineering, lesson 11: value, booking and settlement time (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Value time vs booking time vs settlement time" and
+# Appendix A "Transactions, timing & settlement" (CC BY 4.0, Voytek Pitula).
+# Start state: main.go holds three captured card payments with a value and a booking time;
+# report.go sums January by a chosen time. Run 1 prints January by value and by booking.
+# Edits, all insert-only:
+#   1. settleDate: T+x counted in business days (end of main.go)
+#   2. two lines in main: when tx-2 settles, January by settlement  -> run-2: Mon 02 Feb, 50.00
+#   3. a forward-dated standing order and January again             -> run-3: 230.00 / 210.00
+# Figures: three (the three times of one card payment), tplus (T+2 across a weekend, cut-off,
+# calendar, real settlement cycles), month (backdated and forward-dated across the month
+# boundary), close (a late entry after the report was sent; the as-of query), iv.
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-11-three-times
+  title: "Fintech Engineering 11: Value၊ booking၊ settlement အချိန်"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"time"
+        )
+
+        // Tx is a card payment captured by the PSP, with the two times we always know.
+        type Tx struct {
+        	ID      string
+        	Amount  int64     // cents
+        	Value   time.Time // when the payment happened
+        	Booking time.Time // when our system recorded it
+        }
+
+        var txs = []Tx{
+        	{"tx-1", 5000, at(1, 26, 10, 0), at(1, 26, 10, 0)},
+        	{"tx-2", 10000, at(1, 29, 15, 0), at(1, 29, 15, 0)},
+        	{"tx-3", 8000, at(1, 31, 23, 58), at(2, 1, 0, 4)},
+        }
+
+        func main() {
+        	fmt.Println("jan by value:     ", jan(byValue))
+        	fmt.Println("jan by booking:   ", jan(byBooking))
+        }
+      report.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"time"
+        )
+
+        // at builds a UTC time in 2026: at(1, 31, 23, 58) is 31 January, 23:58.
+        func at(month time.Month, day, hour, minute int) time.Time {
+        	return time.Date(2026, month, day, hour, minute, 0, 0, time.UTC)
+        }
+
+        func byValue(t Tx) time.Time   { return t.Value }
+        func byBooking(t Tx) time.Time { return t.Booking }
+
+        // jan sums the payments whose chosen time falls in January 2026.
+        func jan(when func(Tx) time.Time) string {
+        	var sum int64
+        	for _, t := range txs {
+        		if w := when(t); w.Year() == 2026 && w.Month() == time.January {
+        			sum += t.Amount
+        		}
+        	}
+        	return cents(sum)
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+  slides:
+    - id: close-1
+      contentType: html
+      name: "Closing a period 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">CLOSING A PERIOD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Report ပို့ပြီးမှ ရောက်လာတဲ့ entry</text>
+        <g class="in"><rect x="100" y="220" width="560" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="100" y="220" width="560" height="150" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-doc" x="122" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="420" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">January report · 230.00</text><text x="420" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">02 Feb မှာ ပို့ပြီး · by value</text></g>
+        </svg>
+    - id: close-2
+      contentType: html
+      name: "Closing a period 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">CLOSING A PERIOD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Report ပို့ပြီးမှ ရောက်လာတဲ့ entry</text>
+        <rect x="100" y="220" width="560" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="100" y="220" width="560" height="150" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-doc" x="122" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="420" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">January report · 230.00</text><text x="420" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">02 Feb မှာ ပို့ပြီး · by value</text>
+        <g class="in"><rect x="940" y="220" width="560" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-warn" x="962" y="263" width="64" height="64" style="color:#fc8181"/><text x="1260" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">late entry · 40.00</text><text x="1260" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8">value 30 Jan · booking 05 Feb</text></g>
+        <path d="M930 295L674 295" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/><text x="802" y="274.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">by value → 270.00</text>
+        <g class="in"><circle cx="106" cy="226" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="92.2" y="212.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        </svg>
+    - id: close-3
+      contentType: html
+      name: "Closing a period 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">CLOSING A PERIOD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Report ပို့ပြီးမှ ရောက်လာတဲ့ entry</text>
+        <rect x="100" y="220" width="560" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="100" y="220" width="560" height="150" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-doc" x="122" y="263" width="64" height="64" style="color:#4fd1c5"/><text x="420" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">January report · 230.00</text><text x="420" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">02 Feb မှာ ပို့ပြီး · by value</text>
+        <rect x="940" y="220" width="560" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-warn" x="962" y="263" width="64" height="64" style="color:#fc8181"/><text x="1260" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">late entry · 40.00</text><text x="1260" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8">value 30 Jan · booking 05 Feb</text>
+        <path d="M930 295L674 295" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/><text x="802" y="274.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">by value → 270.00</text>
+        <circle cx="106" cy="226" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="92.2" y="212.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <g class="in"><rect x="100" y="450" width="900" height="277" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="484" font-size="22" fill="#8a94a8" font-weight="700" class="mono">as-of query: report ကို ပို့တဲ့နေ့က အတိုင်း ပြန်ထုတ်</text><path d="M100 496H1000" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="542.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">SELECT sum(amount) FROM payments</text></g><g><text x="124" y="581.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">WHERE value_time &gt;= '2026-01-01'</text></g><g><text x="124" y="620.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  AND value_time &lt;  '2026-02-01'</text></g><g><rect x="108" y="634.4" width="884" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="659.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  AND booking_time &lt;= '2026-02-02 09:00'</text></g><g><text x="124" y="698.1" font-size="26" class="mono" xml:space="preserve" fill="#68d391">-- 230.00</text></g></g>
+        <g class="in"><rect x="1050" y="450" width="450" height="250" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-lock" x="1243" y="490.6" width="64" height="64" style="color:#68d391"/><text x="1275" y="603.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">period ပိတ်ပြီးရင်</text><text x="1275" y="649.7" font-size="24" text-anchor="middle" fill="#8a94a8">late entry → open period ထဲ</text></g>
+        <g class="in"><rect x="100" y="770" width="884.1" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="100" y="770" width="884.1" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="542.1" y="804.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">reconciliation: expected settlement (T+2) မတိုင်ခင် alert မလုပ်</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Transaction တစ်ခုမှာ timestamp ဘယ်နှခု လိုလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Transaction တစ်ခုမှာ timestamp ဘယ်နှခု လိုလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">value · booking · settlement — သုံးခုလုံး သီးခြား သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">settlement က nullable၊ ငွေ မရွှေ့သေးရင် မရှိသေး</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Transaction တစ်ခုမှာ timestamp ဘယ်နှခု လိုလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">value · booking · settlement — သုံးခုလုံး သီးခြား သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">settlement က nullable၊ ငွေ မရွှေ့သေးရင် မရှိသေး</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">period boundary မှာ ကွဲတယ် — backdated၊ forward-dated</text><text x="188" y="443" font-size="26" fill="#8a94a8">ဘယ် time နဲ့ group လုပ်လဲ ဆိုတာက report ကို ပြောင်းတယ်</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Transaction တစ်ခုမှာ timestamp ဘယ်နှခု လိုလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">value · booking · settlement — သုံးခုလုံး သီးခြား သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">settlement က nullable၊ ငွေ မရွှေ့သေးရင် မရှိသေး</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">period boundary မှာ ကွဲတယ် — backdated၊ forward-dated</text><text x="188" y="443" font-size="26" fill="#8a94a8">ဘယ် time နဲ့ group လုပ်လဲ ဆိုတာက report ကို ပြောင်းတယ်</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">T+X ကို business day၊ cut-off၊ calendar နဲ့ တွက်</text><text x="188" y="575" font-size="26" fill="#8a94a8">reconciliation က expected settlement ကို စောင့်တယ်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Transaction တစ်ခုမှာ timestamp ဘယ်နှခု လိုလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">value · booking · settlement — သုံးခုလုံး သီးခြား သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">settlement က nullable၊ ငွေ မရွှေ့သေးရင် မရှိသေး</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">period boundary မှာ ကွဲတယ် — backdated၊ forward-dated</text><text x="188" y="443" font-size="26" fill="#8a94a8">ဘယ် time နဲ့ group လုပ်လဲ ဆိုတာက report ကို ပြောင်းတယ်</text></g><g><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">T+X ကို business day၊ cut-off၊ calendar နဲ့ တွက်</text><text x="188" y="575" font-size="26" fill="#8a94a8">reconciliation က expected settlement ကို စောင့်တယ်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">report → value / settlement၊ traceability → booking</text><text x="188" y="707" font-size="26" fill="#8a94a8">period ပိတ်ပြီးရင် late entry ကို open period ထဲ</text></g>
+        </svg>
+    - id: month-1
+      contentType: html
+      name: "Reporting period 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">REPORTING PERIOD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Month boundary ကို ဖြတ်တဲ့ payment တွေ</text>
+        <g class="in"><rect x="100" y="210" width="680" height="470" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="122" y="246" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">JANUARY</text></g>
+        <g class="in"><rect x="820" y="210" width="680" height="470" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="842" y="246" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">FEBRUARY</text></g>
+        <g class="in"><rect x="160" y="270" width="520" height="120" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="420" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-3 value</text><text x="420" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">31 Jan 23:58</text></g>
+        <g class="in"><rect x="920" y="270" width="520" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1180" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-3 booking</text><text x="1180" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">01 Feb 00:04</text></g>
+        <path d="M690 330L906 330" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="798" y="311.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">backdated</text>
+        </svg>
+    - id: month-2
+      contentType: html
+      name: "Reporting period 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">REPORTING PERIOD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Month boundary ကို ဖြတ်တဲ့ payment တွေ</text>
+        <rect x="100" y="210" width="680" height="470" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="122" y="246" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">JANUARY</text>
+        <rect x="820" y="210" width="680" height="470" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="842" y="246" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">FEBRUARY</text>
+        <rect x="160" y="270" width="520" height="120" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="420" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-3 value</text><text x="420" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">31 Jan 23:58</text>
+        <rect x="920" y="270" width="520" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1180" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-3 booking</text><text x="1180" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">01 Feb 00:04</text>
+        <path d="M690 330L906 330" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="798" y="311.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">backdated</text>
+        <g class="in"><rect x="160" y="500" width="520" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="420" y="550.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">so-4 booking</text><text x="420" y="591.6" font-size="24" text-anchor="middle" fill="#8a94a8">27 Jan 11:00</text></g>
+        <g class="in"><rect x="920" y="500" width="520" height="120" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1180" y="550.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">so-4 value</text><text x="1180" y="591.6" font-size="24" text-anchor="middle" fill="#8a94a8">03 Feb 09:00</text></g>
+        <path d="M690 560L906 560" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="798" y="541.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">forward-dated</text>
+        </svg>
+    - id: month-3
+      contentType: html
+      name: "Reporting period 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">REPORTING PERIOD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Month boundary ကို ဖြတ်တဲ့ payment တွေ</text>
+        <rect x="100" y="210" width="680" height="470" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="122" y="246" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">JANUARY</text>
+        <rect x="820" y="210" width="680" height="470" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="842" y="246" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">FEBRUARY</text>
+        <rect x="160" y="270" width="520" height="120" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="420" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-3 value</text><text x="420" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">31 Jan 23:58</text>
+        <rect x="920" y="270" width="520" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1180" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-3 booking</text><text x="1180" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">01 Feb 00:04</text>
+        <path d="M690 330L906 330" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="798" y="311.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">backdated</text>
+        <rect x="160" y="500" width="520" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="420" y="550.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">so-4 booking</text><text x="420" y="591.6" font-size="24" text-anchor="middle" fill="#8a94a8">27 Jan 11:00</text>
+        <rect x="920" y="500" width="520" height="120" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1180" y="550.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">so-4 value</text><text x="1180" y="591.6" font-size="24" text-anchor="middle" fill="#8a94a8">03 Feb 09:00</text>
+        <path d="M690 560L906 560" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="798" y="541.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">forward-dated</text>
+        <g class="in"><rect x="100" y="730" width="642.2" height="52" rx="26" fill="#b794f6" opacity="0.16"/><rect x="100" y="730" width="642.2" height="52" rx="26" fill="none" stroke="#b794f6" stroke-width="2"/><text x="421.1" y="765.8" font-size="28" text-anchor="middle" fill="#b794f6" font-weight="700">business report → value / settlement time</text></g>
+        <g class="in"><rect x="820" y="730" width="431.1" height="52" rx="26" fill="#4fd1c5" opacity="0.16"/><rect x="820" y="730" width="431.1" height="52" rx="26" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1035.6" y="765.8" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700">traceability → booking time</text></g>
+        </svg>
+    - id: three-1
+      contentType: html
+      name: "Three times 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">THREE TIMES</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Card payment တစ်ခုမှာ အချိန် သုံးခု</text>
+        <g class="in"><rect x="100" y="220" width="430" height="170" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-card" x="122" y="273" width="64" height="64" style="color:#f6c453"/><text x="355" y="293.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">value time</text><text x="355" y="337.7" font-size="24" text-anchor="middle" fill="#8a94a8">payment ဖြစ်တဲ့ အချိန်</text></g>
+        <g class="in"><path d="M120 530H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><circle cx="315" cy="530" r="10" fill="#f6c453"/><path d="M315 530V576" stroke="#f6c453" stroke-width="2.5"/><text x="315" y="612" font-size="28" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">T1</text><text x="315" y="644" font-size="23" text-anchor="middle" fill="#8a94a8">Thu 29 Jan 15:00</text></g></g>
+        </svg>
+    - id: three-2
+      contentType: html
+      name: "Three times 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">THREE TIMES</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Card payment တစ်ခုမှာ အချိန် သုံးခု</text>
+        <rect x="100" y="220" width="430" height="170" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-card" x="122" y="273" width="64" height="64" style="color:#f6c453"/><text x="355" y="293.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">value time</text><text x="355" y="337.7" font-size="24" text-anchor="middle" fill="#8a94a8">payment ဖြစ်တဲ့ အချိန်</text>
+        <g class="in"><rect x="585" y="220" width="430" height="170" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="607" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="840" y="293.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">booking time</text><text x="840" y="337.7" font-size="24" text-anchor="middle" fill="#8a94a8">ledger က မှတ်တဲ့ အချိန်</text></g>
+        <path d="M120 530H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><circle cx="315" cy="530" r="10" fill="#f6c453"/><path d="M315 530V576" stroke="#f6c453" stroke-width="2.5"/><text x="315" y="612" font-size="28" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">T1</text><text x="315" y="644" font-size="23" text-anchor="middle" fill="#8a94a8">Thu 29 Jan 15:00</text></g><g class="in"><circle cx="800" cy="530" r="10" fill="#4fd1c5"/><path d="M800 530V576" stroke="#4fd1c5" stroke-width="2.5"/><text x="800" y="612" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">T2</text><text x="800" y="644" font-size="23" text-anchor="middle" fill="#8a94a8">seconds … days later</text></g>
+        </svg>
+    - id: three-3
+      contentType: html
+      name: "Three times 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-card" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">THREE TIMES</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Card payment တစ်ခုမှာ အချိန် သုံးခု</text>
+        <rect x="100" y="220" width="430" height="170" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-card" x="122" y="273" width="64" height="64" style="color:#f6c453"/><text x="355" y="293.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">value time</text><text x="355" y="337.7" font-size="24" text-anchor="middle" fill="#8a94a8">payment ဖြစ်တဲ့ အချိန်</text>
+        <rect x="585" y="220" width="430" height="170" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="607" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="840" y="293.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">booking time</text><text x="840" y="337.7" font-size="24" text-anchor="middle" fill="#8a94a8">ledger က မှတ်တဲ့ အချိန်</text>
+        <g class="in"><rect x="1070" y="220" width="430" height="170" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-bank" x="1092" y="273" width="64" height="64" style="color:#68d391"/><text x="1325" y="293.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">settlement time</text><text x="1325" y="337.7" font-size="24" text-anchor="middle" fill="#8a94a8">ငွေ တကယ် ရွှေ့တဲ့ အချိန်</text></g>
+        <path d="M120 530H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g class="in"><path d="M315 480H1285" stroke="#f6ad55" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="800" y="464" font-size="24" text-anchor="middle" fill="#f6ad55" font-weight="600">T+2  (business days)</text></g><g><circle cx="315" cy="530" r="10" fill="#f6c453"/><path d="M315 530V576" stroke="#f6c453" stroke-width="2.5"/><text x="315" y="612" font-size="28" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">T1</text><text x="315" y="644" font-size="23" text-anchor="middle" fill="#8a94a8">Thu 29 Jan 15:00</text></g><g><circle cx="800" cy="530" r="10" fill="#4fd1c5"/><path d="M800 530V576" stroke="#4fd1c5" stroke-width="2.5"/><text x="800" y="612" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">T2</text><text x="800" y="644" font-size="23" text-anchor="middle" fill="#8a94a8">seconds … days later</text></g><g class="in"><circle cx="1285" cy="530" r="10" fill="#68d391"/><path d="M1285 530V576" stroke="#68d391" stroke-width="2.5"/><text x="1285" y="612" font-size="28" text-anchor="middle" fill="#68d391" font-weight="700" class="mono">T3</text><text x="1285" y="644" font-size="23" text-anchor="middle" fill="#8a94a8">Mon 02 Feb</text></g>
+        <g class="in"><rect x="100" y="740" width="578.3" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="100" y="740" width="578.3" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="389.1" y="774.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">internal transfer  →  settlement time မရှိ</text></g>
+        </svg>
+    - id: tplus-1
+      contentType: html
+      name: "T+X 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">T+X</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">T+2 ဆိုတာ business day နှစ်ရက်</text>
+        <g class="in"><path d="M120 330H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M201.6 312H1398.4" stroke="#f6ad55" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="800" y="296" font-size="24" text-anchor="middle" fill="#f6ad55" font-weight="600">4 calendar days, 2 business days</text></g><g><circle cx="201.6" cy="330" r="10" fill="#f6c453"/><path d="M201.6 330V376" stroke="#f6c453" stroke-width="2.5"/><text x="201.6" y="412" font-size="28" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Thu 29 Jan</text><text x="201.6" y="444" font-size="23" text-anchor="middle" fill="#8a94a8">T · value</text></g><g><circle cx="500.8" cy="330" r="10" fill="#f6ad55"/><path d="M500.8 330V376" stroke="#f6ad55" stroke-width="2.5"/><text x="500.8" y="412" font-size="28" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">Fri 30 Jan</text><text x="500.8" y="444" font-size="23" text-anchor="middle" fill="#8a94a8">T+1</text></g><g><circle cx="800" cy="330" r="10" fill="#9aa5b8"/><path d="M800 330V376" stroke="#9aa5b8" stroke-width="2.5"/><text x="800" y="412" font-size="28" text-anchor="middle" fill="#9aa5b8" font-weight="700" class="mono">Sat 31</text><text x="800" y="450" font-size="23" text-anchor="middle" fill="#8a94a8">မရေတွက်</text></g><g><circle cx="1099.2" cy="330" r="10" fill="#9aa5b8"/><path d="M1099.2 330V376" stroke="#9aa5b8" stroke-width="2.5"/><text x="1099.2" y="412" font-size="28" text-anchor="middle" fill="#9aa5b8" font-weight="700" class="mono">Sun 01 Feb</text><text x="1099.2" y="450" font-size="23" text-anchor="middle" fill="#8a94a8">မရေတွက်</text></g><g><circle cx="1398.4" cy="330" r="10" fill="#68d391"/><path d="M1398.4 330V376" stroke="#68d391" stroke-width="2.5"/><text x="1398.4" y="412" font-size="28" text-anchor="middle" fill="#68d391" font-weight="700" class="mono">Mon 02 Feb</text><text x="1398.4" y="444" font-size="23" text-anchor="middle" fill="#8a94a8">T+2 · settlement</text></g></g>
+        </svg>
+    - id: tplus-2
+      contentType: html
+      name: "T+X 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-clock" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M24 13v11l8 5"/></symbol><symbol id="i-flag" viewBox="0 0 48 48"><path d="M10 43V6M10 8h26l-6 9 6 9H10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">T+X</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">T+2 ဆိုတာ business day နှစ်ရက်</text>
+        <path d="M120 330H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M201.6 312H1398.4" stroke="#f6ad55" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="800" y="296" font-size="24" text-anchor="middle" fill="#f6ad55" font-weight="600">4 calendar days, 2 business days</text></g><g><circle cx="201.6" cy="330" r="10" fill="#f6c453"/><path d="M201.6 330V376" stroke="#f6c453" stroke-width="2.5"/><text x="201.6" y="412" font-size="28" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Thu 29 Jan</text><text x="201.6" y="444" font-size="23" text-anchor="middle" fill="#8a94a8">T · value</text></g><g><circle cx="500.8" cy="330" r="10" fill="#f6ad55"/><path d="M500.8 330V376" stroke="#f6ad55" stroke-width="2.5"/><text x="500.8" y="412" font-size="28" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">Fri 30 Jan</text><text x="500.8" y="444" font-size="23" text-anchor="middle" fill="#8a94a8">T+1</text></g><g><circle cx="800" cy="330" r="10" fill="#9aa5b8"/><path d="M800 330V376" stroke="#9aa5b8" stroke-width="2.5"/><text x="800" y="412" font-size="28" text-anchor="middle" fill="#9aa5b8" font-weight="700" class="mono">Sat 31</text><text x="800" y="450" font-size="23" text-anchor="middle" fill="#8a94a8">မရေတွက်</text></g><g><circle cx="1099.2" cy="330" r="10" fill="#9aa5b8"/><path d="M1099.2 330V376" stroke="#9aa5b8" stroke-width="2.5"/><text x="1099.2" y="412" font-size="28" text-anchor="middle" fill="#9aa5b8" font-weight="700" class="mono">Sun 01 Feb</text><text x="1099.2" y="450" font-size="23" text-anchor="middle" fill="#8a94a8">မရေတွက်</text></g><g><circle cx="1398.4" cy="330" r="10" fill="#68d391"/><path d="M1398.4 330V376" stroke="#68d391" stroke-width="2.5"/><text x="1398.4" y="412" font-size="28" text-anchor="middle" fill="#68d391" font-weight="700" class="mono">Mon 02 Feb</text><text x="1398.4" y="444" font-size="23" text-anchor="middle" fill="#8a94a8">T+2 · settlement</text></g>
+        <g class="in"><rect x="100" y="520" width="680" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-clock" x="122" y="553" width="64" height="64" style="color:#f6ad55"/><text x="480" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">cut-off time</text><text x="480" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">နောက်ကျရင် နောက် window ကို ရွှေ့</text></g>
+        <g class="in"><rect x="820" y="520" width="680" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-flag" x="842" y="553" width="64" height="64" style="color:#9aa5b8"/><text x="1200" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">business-day calendar</text><text x="1200" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">rail / market ရဲ့ holiday တွေ</text></g>
+        </svg>
+    - id: tplus-3
+      contentType: html
+      name: "T+X 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-clock" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M24 13v11l8 5"/></symbol><symbol id="i-flag" viewBox="0 0 48 48"><path d="M10 43V6M10 8h26l-6 9 6 9H10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">T+X</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">T+2 ဆိုတာ business day နှစ်ရက်</text>
+        <path d="M120 330H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M201.6 312H1398.4" stroke="#f6ad55" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="800" y="296" font-size="24" text-anchor="middle" fill="#f6ad55" font-weight="600">4 calendar days, 2 business days</text></g><g><circle cx="201.6" cy="330" r="10" fill="#f6c453"/><path d="M201.6 330V376" stroke="#f6c453" stroke-width="2.5"/><text x="201.6" y="412" font-size="28" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Thu 29 Jan</text><text x="201.6" y="444" font-size="23" text-anchor="middle" fill="#8a94a8">T · value</text></g><g><circle cx="500.8" cy="330" r="10" fill="#f6ad55"/><path d="M500.8 330V376" stroke="#f6ad55" stroke-width="2.5"/><text x="500.8" y="412" font-size="28" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">Fri 30 Jan</text><text x="500.8" y="444" font-size="23" text-anchor="middle" fill="#8a94a8">T+1</text></g><g><circle cx="800" cy="330" r="10" fill="#9aa5b8"/><path d="M800 330V376" stroke="#9aa5b8" stroke-width="2.5"/><text x="800" y="412" font-size="28" text-anchor="middle" fill="#9aa5b8" font-weight="700" class="mono">Sat 31</text><text x="800" y="450" font-size="23" text-anchor="middle" fill="#8a94a8">မရေတွက်</text></g><g><circle cx="1099.2" cy="330" r="10" fill="#9aa5b8"/><path d="M1099.2 330V376" stroke="#9aa5b8" stroke-width="2.5"/><text x="1099.2" y="412" font-size="28" text-anchor="middle" fill="#9aa5b8" font-weight="700" class="mono">Sun 01 Feb</text><text x="1099.2" y="450" font-size="23" text-anchor="middle" fill="#8a94a8">မရေတွက်</text></g><g><circle cx="1398.4" cy="330" r="10" fill="#68d391"/><path d="M1398.4 330V376" stroke="#68d391" stroke-width="2.5"/><text x="1398.4" y="412" font-size="28" text-anchor="middle" fill="#68d391" font-weight="700" class="mono">Mon 02 Feb</text><text x="1398.4" y="444" font-size="23" text-anchor="middle" fill="#8a94a8">T+2 · settlement</text></g>
+        <rect x="100" y="520" width="680" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-clock" x="122" y="553" width="64" height="64" style="color:#f6ad55"/><text x="480" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">cut-off time</text><text x="480" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">နောက်ကျရင် နောက် window ကို ရွှေ့</text>
+        <rect x="820" y="520" width="680" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-flag" x="842" y="553" width="64" height="64" style="color:#9aa5b8"/><text x="1200" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">business-day calendar</text><text x="1200" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">rail / market ရဲ့ holiday တွေ</text>
+        <g class="in"><rect x="100" y="720" width="638.3" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="100" y="720" width="638.3" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="419.1" y="754.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">US securities: T+2 → T+1, 28 May 2024</text></g>
+        <g class="in"><rect x="820" y="720" width="426.7" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="820" y="720" width="426.7" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1033.3" y="754.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">EU: T+1 from 11 Oct 2027</text></g>
+        <g class="in"><rect x="100" y="800" width="589.5" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="100" y="800" width="589.5" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="394.7" y="834.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700" class="mono">SEPA Instant: ≤ 10 seconds, 24/365</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9511
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "jan by value:      230.00\njan by booking:    150.00\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "jan by value:      230.00\njan by booking:    150.00\ntx-2 settles:      Mon 02 Feb\njan by settlement: 50.00\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "jan by value:      230.00\njan by booking:    150.00\ntx-2 settles:      Mon 02 Feb\njan by settlement: 50.00\nwith so-4: 230.00 by value, 210.00 by booking\n"
+
+scenes:
+  - id: hook
+    chapter: Created at တစ်ခုတည်း မလုံလောက်ဘူး
+    narration: >-
+      ငွေ အရွေ့အပြောင်း တစ်ခုကို database ထဲ သိမ်းတဲ့အခါ ပုံမှန် backend မှာဆိုရင် created at column
+      တစ်ခုတည်း ထည့်လေ့ ရှိပါတယ်။ ငွေ system မှာ ဒါ မလုံလောက်ပါဘူး။ [[mark:sel-data]] ဒီမှာ PSP က
+      capture လုပ်ပြီးသား card payment သုံးခု ရှိပါတယ်။ တစ်ခုချင်းမှာ အချိန် နှစ်ခု ပါပြီး၊ ပထမက
+      payment ဖြစ်တဲ့ အချိန်၊ ဒုတိယက ကိုယ့် system က မှတ်လိုက်တဲ့ အချိန်ပါ။ [[mark:sel-tx3]] တတိယ
+      payment က ဇန်နဝါရီ ၃၁ ရက်၊ သန်းခေါင် မထိုးခင် နှစ်မိနစ်မှာ ဖြစ်ပါတယ်။ ကိုယ့် system က
+      မှတ်လိုက်တာကတော့ သန်းခေါင် ကျော်ပြီး လေးမိနစ်မှာပါ၊ ဆိုလိုတာက ဖေဖော်ဝါရီလထဲ ရောက်သွားပါပြီ။
+      [[mark:sel-main]] main ထဲက ပထမ line က ဇန်နဝါရီလ စုစုပေါင်းကို payment ဖြစ်တဲ့ အချိန်နဲ့ တွက်ပြီး၊
+      ဒုတိယ line က မှတ်တဲ့ အချိန်နဲ့ တွက်ပါတယ်။ data တစ်ခုတည်းကနေ ဂဏန်း ဘယ်နှခု ထွက်မလဲ
+      ခန့်မှန်းကြည့်ပါ။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Value time vs booking time vs settlement time (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#value-time-vs-booking-time-vs-settlement-time",
+        }
+      - { title: "Go standard library — package time", url: "https://pkg.go.dev/time" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-data
+        type: editor.select
+        at: { mark: sel-data }
+        target:
+          {
+            file: main.go,
+            text: "\t{\"tx-1\", 5000, at(1, 26, 10, 0), at(1, 26, 10, 0)},\n\t{\"tx-2\", 10000, at(1, 29, 15, 0), at(1, 29, 15, 0)},\n\t{\"tx-3\", 8000, at(1, 31, 23, 58), at(2, 1, 0, 4)},",
+            occurrence: 1,
+          }
+      - id: sel-tx3
+        type: editor.select
+        at: { mark: sel-tx3 }
+        target: { file: main.go, text: "at(1, 31, 23, 58), at(2, 1, 0, 4)", occurrence: 1 }
+      - id: sel-main
+        type: editor.select
+        at: { mark: sel-main }
+        target:
+          {
+            file: main.go,
+            text: "\tfmt.Println(\"jan by value:     \", jan(byValue))\n\tfmt.Println(\"jan by booking:   \", jan(byBooking))",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "jan by booking:    150.00",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-value]] payment ဖြစ်တဲ့ အချိန်နဲ့ဆိုရင် ဇန်နဝါရီလမှာ ယူရို ၂၃၀ ရှိပါတယ်။
+      [[mark:pt-booking]] မှတ်တဲ့ အချိန်နဲ့ဆိုရင်တော့ ၁၅၀ ပဲ ရှိပါတယ်။ ယူရို ရှစ်ဆယ်က လ နှစ်လကြား
+      ရွေ့သွားတာပါ။ ဂဏန်း နှစ်ခုလုံး မှန်ပါတယ်၊ မေးခွန်း မတူတာပါ။ [[mark:dock-1]] created at
+      တစ်ခုတည်း ရှိရင်တော့ ကိုယ့် report က ဘယ် မေးခွန်းကို ဖြေနေလဲ ဆိုတာ ကိုယ်ကိုယ်တိုင်တောင်
+      ပြောလို့ မရတော့ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Value time vs booking time vs settlement time (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#value-time-vs-booking-time-vs-settlement-time",
+        }
+    actions:
+      - id: pt-value
+        type: console.point
+        at: { mark: pt-value }
+        target: { text: "jan by value", occurrence: 1 }
+      - id: pt-booking
+        type: console.point
+        at: { mark: pt-booking }
+        target: { text: "jan by booking", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: three
+    chapter: Value၊ booking၊ settlement
+    narration: >-
+      [[mark:show-three]] ငွေ system မှာ transaction တစ်ခုကို အချိန် သုံးခုနဲ့ ကြည့်ပါတယ်။
+      [[mark:pt-tvalue]] value time ဆိုတာ စီးပွားရေးအရ ဖြစ်ခဲ့တဲ့ အချိန်ပါ၊ card payment ဆိုရင် user က
+      ငွေ ပေးလိုက်တဲ့ အချိန်ပါ။ [[mark:three-2]] booking time ကတော့ ကိုယ့် ledger က အဲဒီ entry ကို
+      မှတ်လိုက်တဲ့ အချိန်ပါ၊ data ဘယ်လို ဝင်လာလဲ ပေါ်မူတည်ပြီး စက္ကန့်ပိုင်းကနေ ရက်ပိုင်းအထိ
+      နောက်ကျနိုင်ပါတယ်။ [[mark:three-3]] settlement time က ငွေ
+      တကယ် ရွှေ့တဲ့ အချိန်၊ ဆိုလိုတာက PSP က ကိုယ့် ဘဏ် account ထဲကို ငွေ လွှဲပေးတဲ့ အချိန်ပါ။
+      [[mark:pt-span]] အဲဒါကို များသောအားဖြင့် T plus X လို့ ရေးပြီး၊ value ရက်ကနေ business day X
+      ရက် အကြာ ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ ကြားထဲ ရက်တွေမှာ ငွေက PSP ဆီမှာ ရှိနေပြီး ကိုယ့် ဘဏ်ထဲ
+      မရောက်သေးပါဘူး။ ledger မှာတော့ အဲဒီ ကြားကာလကို receivable account နဲ့ ပြပါတယ်။ ငွေ လွှဲနေတုန်း
+      system နှစ်ခုလုံးမှာ ရှိနေသလို၊ ဒါမှမဟုတ် ဘယ်မှာမှ မရှိသလို ဖြစ်နေတဲ့ ငွေကိုတော့ float လို့ ခေါ်ပါတယ်။ [[mark:pt-none]] transaction တိုင်းမှာ
+      settlement time ရှိတာ မဟုတ်ပါဘူး။ user နှစ်ယောက်ကြား ledger ထဲမှာပဲ လွှဲတဲ့ internal transfer
+      မှာ ဘဏ်က ငွေ ဘယ်မှ မရွှေ့ပါဘူး။ [[mark:pt-lost]] ဒီ အချိန် သုံးခုကို created at တစ်ခုထဲ
+      ပေါင်းလိုက်ရင် ပျောက်သွားတာကို နောက်မှ ပြန်ဖော်လို့ မရပါဘူး။ ဒါကြောင့် သုံးခုလုံးကို သိမ်းတာက No lost
+      data ဆိုတဲ့ မူ၊ ဆိုလိုတာက ငွေနဲ့ ပတ်သက်ပြီး ဖြစ်ခဲ့သမျှ မပျောက်ရဘူး ဆိုတဲ့ မူရဲ့ အစိတ်အပိုင်း တစ်ခုပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Value time vs booking time vs settlement time (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#value-time-vs-booking-time-vs-settlement-time",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+    actions:
+      - {
+          id: show-three,
+          type: slide.show,
+          at: { mark: show-three, offsetMs: -700 },
+          slideId: three-1,
+        }
+      - {
+          id: pt-tvalue,
+          type: slide.point,
+          at: { mark: pt-tvalue },
+          target: { x: 0.197, y: 0.442 },
+        }
+      - { id: three-2, type: slide.show, at: { mark: three-2 }, slideId: three-2 }
+      - {
+          id: pt-tbooking,
+          type: slide.point,
+          at: { afterAction: three-2 },
+          target: { x: 0.481, y: 0.729 },
+        }
+      - { id: three-3, type: slide.show, at: { mark: three-3 }, slideId: three-3 }
+      - {
+          id: pt-tsettle,
+          type: slide.point,
+          at: { afterAction: three-3 },
+          target: { x: 0.803, y: 0.442 },
+        }
+      - { id: pt-span, type: slide.point, at: { mark: pt-span }, target: { x: 0.488, y: 0.549 } }
+      - { id: pt-none, type: slide.point, at: { mark: pt-none }, target: { x: 0.237, y: 0.887 } }
+      - { id: pt-lost, type: slide.point, at: { mark: pt-lost }, target: { x: 0.885, y: 0.12 } }
+
+  - id: settle
+    chapter: T plus two ကို တွက်ကြည့်
+    narration: >-
+      [[mark:close-three]] settlement ရက်ကို code နဲ့ တွက်ကြည့်ရအောင်။ [[mark:type-fn]] ဒီ function က
+      value ရက်ကနေ စပြီး တစ်ရက်ချင်း ရှေ့တိုးပါတယ်။ စနေ၊ တနင်္ဂနွေ မဟုတ်တဲ့ ရက်ကိုပဲ ရေတွက်ပြီး၊ X ရက်
+      ပြည့်တဲ့နေ့ကို settlement ရက်အဖြစ် ပြန်ပေးပါတယ်။ ပြက္ခဒိန် ရက်နဲ့ မဟုတ်ဘဲ business day နဲ့
+      ရေတွက်တာက ဒီ function ရဲ့ အဓိက အချက်ပါ။ [[mark:type-use]] main ထဲမှာတော့ ဒုတိယ payment ရဲ့
+      settlement ရက်ကို ထုတ်ပြပြီး၊ ဇန်နဝါရီလ စုစုပေါင်းကို settlement ရက်နဲ့ ထပ်တွက်ပါတယ်။ ဒုတိယ
+      payment က ကြာသပတေးနေ့ ညနေ သုံးနာရီမှာ ဖြစ်တာပါ။ PSP က T plus two နဲ့ ငွေ ပေးတယ် ဆိုပါစို့။
+      [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-settles]] ကြာသပတေးကနေ တနင်္လာနေ့ ဖြစ်သွားပါတယ်။
+      သောကြာက ပထမ ရက်ဖြစ်ပြီး စနေ တနင်္ဂနွေကို မရေတွက်လို့ တနင်္လာက ဒုတိယ ရက်ပါ။ ပြက္ခဒိန်နဲ့ဆို
+      လေးရက် ကြာပြီး လ တစ်လလည်း ကျော်သွားပါတယ်။ [[mark:pt-settlement]] settlement ရက်နဲ့ဆိုရင်
+      ဇန်နဝါရီလထဲမှာ ယူရို ငါးဆယ်ပဲ ကျန်ပါတော့တယ်၊ ဇန်နဝါရီ ၂၆ ရက် တနင်္လာနေ့က payment တစ်ခုပါ။
+      [[mark:dock-2]] ဆိုတော့ data တစ်ခုတည်း၊ လ တစ်လတည်းအတွက် ယူရို ၂၃၀၊ ၁၅၀ နဲ့ ငါးဆယ် ဆိုပြီး မတူတဲ့
+      ဂဏန်း သုံးခု ရပါတယ်။ ဇန်နဝါရီလအတွင်း settlement တကယ် ပြီးသွားတာက နောက်ဆုံး ဂဏန်းပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Transactions, timing & settlement (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#transactions-timing-settlement",
+        }
+      - { title: "Go standard library — time.Weekday", url: "https://pkg.go.dev/time#Weekday" }
+    actions:
+      - { id: close-three, type: slide.close, at: { mark: close-three } }
+      - id: type-fn
+        type: editor.type
+        at: { mark: type-fn }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"jan by booking:   \", jan(byBooking))\n}\n",
+            occurrence: 1,
+          }
+        text: "\n// settleDate is T+x counted in business days: Saturday and Sunday do not count.\nfunc settleDate(value time.Time, x int) time.Time {\n\td := value\n\tfor x > 0 {\n\t\td = d.AddDate(0, 0, 1)\n\t\tif d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {\n\t\t\tx--\n\t\t}\n\t}\n\treturn d\n}\n"
+        cadence: line-by-line
+      - id: type-use
+        type: editor.type
+        at: { mark: type-use }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"jan by booking:   \", jan(byBooking))\n",
+            occurrence: 1,
+          }
+        text: "\n\tfmt.Println(\"tx-2 settles:     \", settleDate(txs[1].Value, 2).Format(\"Mon 02 Jan\"))\n\tsettled := func(t Tx) time.Time { return settleDate(t.Value, 2) }\n\tfmt.Println(\"jan by settlement:\", jan(settled))\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "jan by settlement: 50.00",
+          timeoutMs: 8000,
+        }
+      - id: pt-settles
+        type: console.point
+        at: { mark: pt-settles }
+        target: { text: "tx-2 settles", occurrence: 1 }
+      - id: pt-settlement
+        type: console.point
+        at: { mark: pt-settlement }
+        target: { text: "jan by settlement", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+      - {
+          id: expect-file-settle,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "d.Weekday() != time.Saturday && d.Weekday() != time.Sunday",
+        }
+
+  - id: tplus
+    chapter: Business day၊ cut-off၊ calendar
+    narration: >-
+      [[mark:show-tplus]] T plus X ကို တွက်တဲ့အခါ ဂရုစိုက်ရတဲ့ အချက် သုံးခု ရှိပါတယ်။ [[mark:pt-sat]]
+      ပထမက ခုနက မြင်ခဲ့တဲ့ စနေ တနင်္ဂနွေပါ။ [[mark:tplus-2]] ဒုတိယက cut-off time ပါ။ cut-off ဆိုတာ settlement window
+      တစ်ခုအတွက် နေ့စဉ် နောက်ဆုံး အချိန်ပါ၊ အဲဒီ အချိန် ကျော်မှ ဝင်လာတဲ့ transaction က နောက် window
+      ထဲ ရောက်သွားပါတယ်။ [[mark:pt-cal]] တတိယက ရုံးပိတ်ရက် calendar ပါ။ ဘယ်ရက်က business day လဲ
+      ဆိုတာ rail တစ်ခုချင်း၊ market တစ်ခုချင်းရဲ့ calendar က ဆုံးဖြတ်တာ ဖြစ်လို့ စနေ တနင်္ဂနွေ စစ်ရုံနဲ့
+      မလုံလောက်ပါဘူး။ [[mark:tplus-3]] X ရဲ့ တန်ဖိုးကလည်း ပြောင်းလဲနေပါတယ်။ အမေရိကန် securities
+      market က ၂၀၂၄ မေလ ၂၈ ရက်မှာ T plus two ကနေ T plus one ကို ပြောင်းခဲ့ပါတယ်။ [[mark:pt-eu]] EU မှာလည်း ၂၀၂၇ အောက်တိုဘာ ၁၁ ရက်ကစပြီး T plus one ဖြစ်ဖို့
+      ဥပဒေ ထွက်ထားပါပြီ။ [[mark:pt-sepa]] SEPA Instant လို rail မှာတော့ တစ်နှစ်ပတ်လုံး နေ့ရော ညပါ
+      ဆယ်စက္ကန့်အတွင်း လက်ခံသူဆီ ငွေ ရောက်ပါတယ်။ ဆိုတော့ X ကို code ထဲမှာ အသေ ရေးမထားဘဲ rail
+      တစ်ခုချင်းရဲ့ configuration အဖြစ် ထားရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Transactions, timing & settlement (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#transactions-timing-settlement",
+        }
+      - {
+          title: "SEC press release 2023-29 — shortening the securities transaction settlement cycle",
+          url: "https://www.sec.gov/news/press-release/2023-29",
+        }
+      - {
+          title: "ECB — Instant payments",
+          url: "https://www.ecb.europa.eu/paym/retail/instant_payments/html/index.en.html",
+        }
+    actions:
+      - {
+          id: show-tplus,
+          type: slide.show,
+          at: { mark: show-tplus, offsetMs: -700 },
+          slideId: tplus-1,
+        }
+      - { id: pt-sat, type: slide.point, at: { mark: pt-sat }, target: { x: 0.481, y: 0.513 } }
+      - { id: tplus-2, type: slide.show, at: { mark: tplus-2 }, slideId: tplus-2 }
+      - {
+          id: pt-cutoff,
+          type: slide.point,
+          at: { afterAction: tplus-2 },
+          target: { x: 0.275, y: 0.731 },
+        }
+      - { id: pt-cal, type: slide.point, at: { mark: pt-cal }, target: { x: 0.725, y: 0.731 } }
+      - { id: tplus-3, type: slide.show, at: { mark: tplus-3 }, slideId: tplus-3 }
+      - {
+          id: pt-us,
+          type: slide.point,
+          at: { afterAction: tplus-3 },
+          target: { x: 0.256, y: 0.864 },
+        }
+      - { id: pt-eu, type: slide.point, at: { mark: pt-eu }, target: { x: 0.64, y: 0.864 } }
+      - { id: pt-sepa, type: slide.point, at: { mark: pt-sepa }, target: { x: 0.24, y: 0.953 } }
+
+  - id: month
+    chapter: Month boundary ကို ဖြတ်တဲ့အခါ
+    narration: >-
+      [[mark:show-month]] value နဲ့ booking ကွာတာ အရေးကြီးလာတာက reporting period ရဲ့ နယ်နိမိတ်ကို
+      ဖြတ်တဲ့အခါပါ။ [[mark:pt-v3]] booking က value ထက် နောက်ကျရင် backdated လို့ ခေါ်ပါတယ်။ တကယ်တော့
+      transaction အားလုံးနီးပါးက စက္ကန့်ပိုင်းလောက် backdated ဖြစ်ပြီးသားပါ။ ပြဿနာ ဖြစ်တာက ခုနက
+      တတိယ payment လို ရက်၊ လ၊ နှစ် နယ်နိမိတ်ကို ဖြတ်သွားတဲ့အခါပါ။ [[mark:month-2]] ပြောင်းပြန်
+      ဖြစ်တာလည်း ရှိပါတယ်၊ booking က value ထက် စောရင် forward-dated ပါ။ user တစ်ယောက်က ယူရို ၆၀
+      standing order၊ ဆိုလိုတာက ကြိုစီစဉ်ထားတဲ့ ငွေလွှဲ တစ်ခုကို ဇန်နဝါရီ ၂၇ ရက်မှာ စီစဉ်ထားပြီး ဖေဖော်ဝါရီ ၃ ရက်ကျမှ ဝင်မယ် ဆိုပါစို့။ system
+      က ဒီနေ့ မှတ်ပေမဲ့ ငွေက နောက်အပတ်ကျမှ ရွေ့မှာပါ။ [[mark:month-3]] ဒါဆို report တစ်ခုမှာ ဘယ်
+      အချိန်ကို သုံးမလဲ။ business က သုံးတဲ့ report တွေက များသောအားဖြင့် value time ဒါမှမဟုတ် settlement time ကို
+      သုံးပြီး၊ booking time ကတော့ ဘယ်အချိန်မှာ ဘာကို သိခဲ့လဲ ဆိုတာ ပြန် ခြေရာခံဖို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Value time vs booking time vs settlement time (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#value-time-vs-booking-time-vs-settlement-time",
+        }
+    actions:
+      - {
+          id: show-month,
+          type: slide.show,
+          at: { mark: show-month, offsetMs: -700 },
+          slideId: month-1,
+        }
+      - { id: pt-v3, type: slide.point, at: { mark: pt-v3 }, target: { x: 0.738, y: 0.442 } }
+      - { id: month-2, type: slide.show, at: { mark: month-2 }, slideId: month-2 }
+      - {
+          id: pt-v4,
+          type: slide.point,
+          at: { afterAction: month-2 },
+          target: { x: 0.263, y: 0.698 },
+        }
+      - { id: month-3, type: slide.show, at: { mark: month-3 }, slideId: month-3 }
+      - {
+          id: pt-use,
+          type: slide.point,
+          at: { afterAction: month-3 },
+          target: { x: 0.257, y: 0.878 },
+        }
+
+  - id: forward
+    narration: >-
+      [[mark:close-month]] standing order ကို data ထဲ ထည့်ကြည့်ရအောင်။ [[mark:type-so]] value က
+      ဖေဖော်ဝါရီ ၃ ရက်၊ booking က ဇန်နဝါရီ ၂၇ ရက်ပါ။ ပြီးရင် ဇန်နဝါရီလ စုစုပေါင်းကို value နဲ့ရော
+      booking နဲ့ပါ တစ်ကြောင်းတည်းမှာ ပြန်ထုတ်ပါတယ်။ ဒီတစ်ခါ ဂဏန်း ရွေ့သွားမယ့် ဘက်က ခုနက တတိယ
+      payment နဲ့ ပြောင်းပြန် ဖြစ်ရပါမယ်။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-so]] value နဲ့ဆို
+      ၂၃၀ ပဲ ရှိနေဆဲပါ၊ standing order က ဖေဖော်ဝါရီလရဲ့ ငွေ ဖြစ်လို့ပါ။ booking နဲ့ဆိုတော့ ၁၅၀ ကနေ
+      ၂၁၀ ဖြစ်သွားပါတယ်။ [[mark:dock-3]] booking time နဲ့ report လုပ်ရင် backdated entry က ဂဏန်းကို
+      လျော့စေပြီး forward-dated entry က တိုးစေပါတယ်။ နှစ်ခုလုံး ဇန်နဝါရီလမှာ တကယ် ဖြစ်ခဲ့တာနဲ့
+      မကိုက်ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Value time vs booking time vs settlement time (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#value-time-vs-booking-time-vs-settlement-time",
+        }
+    actions:
+      - { id: close-month, type: slide.close, at: { mark: close-month } }
+      - id: type-so
+        type: editor.type
+        at: { mark: type-so }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"jan by settlement:\", jan(settled))\n",
+            occurrence: 1,
+          }
+        text: "\n\ttxs = append(txs, Tx{\"so-4\", 6000, at(2, 3, 9, 0), at(1, 27, 11, 0)})\n\tfmt.Println(\"with so-4:\", jan(byValue), \"by value,\", jan(byBooking), \"by booking\")\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "with so-4: 230.00 by value, 210.00 by booking",
+          timeoutMs: 8000,
+        }
+      - id: pt-so
+        type: console.point
+        at: { mark: pt-so }
+        target: { text: "with so-4", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: close
+    chapter: Report ပို့ပြီးမှ ရောက်လာတဲ့ entry
+    narration: >-
+      [[mark:show-close]] ဒီနေရာကစပြီး ပိုစိတ်ဝင်စားဖို့ ကောင်းလာပါတယ်။ [[mark:pt-sent]] value time နဲ့
+      report လုပ်တယ် ဆိုပါစို့၊ ဇန်နဝါရီလ report ကို ဖေဖော်ဝါရီ ၂ ရက်မှာ ယူရို ၂၃၀ လို့ ပို့လိုက်ပါပြီ။
+      [[mark:close-2]] ဖေဖော်ဝါရီ ၅ ရက်ကျမှ value က ဇန်နဝါရီ ၃၀ ရက် ဖြစ်တဲ့ entry တစ်ခု ရောက်လာပါတယ်။
+      query ကို ပြန် run ရင် ဇန်နဝါရီလက ၂၇၀ ဖြစ်သွားပြီး ပို့ပြီးသား report နဲ့ မကိုက်တော့ပါဘူး။ value
+      time နဲ့ ထုတ်တဲ့ report က လ ကုန်သွားတာတောင် ဆက် ပြောင်းနေနိုင်တာပါ။ [[mark:close-3]] booking time
+      က ဒီမှာ အသုံးဝင်ပါတယ်။ value က ဇန်နဝါရီ ဖြစ်ပြီး booking က report ပို့တဲ့ အချိန် မတိုင်ခင်
+      ဖြစ်တဲ့ entry တွေကိုပဲ ယူရင်၊ ပို့ခဲ့တဲ့ ၂၃၀ ကို ဘယ်အချိန်မဆို ပြန်ထုတ်နိုင်ပါတယ်။ auditor က ဒီ
+      ဂဏန်း ဘယ်က ရလာလဲ မေးရင် ဖြေနိုင်တာ ဒါကြောင့်ပါ။ [[mark:pt-open]] ပြင်ပကို report လုပ်ပြီးသား period
+      ထဲကို backdate လုပ်ခွင့် များသောအားဖြင့် မရှိပါဘူး။ ဒါကြောင့် နောက်ကျ ရောက်လာတဲ့ entry ကို
+      လက်ရှိ ဖွင့်ထားတဲ့ period ထဲမှာ မှတ်ရပါတယ်။ [[mark:pt-recon]] settlement time ကလည်း reconciliation
+      ကို ပုံဖော်ပါတယ်။ PSP က T plus two နဲ့ ပေးရင် ဘဏ်ထဲ မရောက်သေးတဲ့ payment တွေက ပထမ နှစ်ရက်မှာ
+      ပုံမှန်ပါ၊ expected settlement ရက် မတိုင်ခင် alert မလုပ်မှ false alarm တွေ မထွက်မှာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Value time vs booking time vs settlement time (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#value-time-vs-booking-time-vs-settlement-time",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+    actions:
+      - {
+          id: show-close,
+          type: slide.show,
+          at: { mark: show-close, offsetMs: -700 },
+          slideId: close-1,
+        }
+      - { id: pt-sent, type: slide.point, at: { mark: pt-sent }, target: { x: 0.238, y: 0.42 } }
+      - { id: close-2, type: slide.show, at: { mark: close-2 }, slideId: close-2 }
+      - {
+          id: pt-late,
+          type: slide.point,
+          at: { afterAction: close-2 },
+          target: { x: 0.763, y: 0.42 },
+        }
+      - { id: close-3, type: slide.show, at: { mark: close-3 }, slideId: close-3 }
+      - {
+          id: pt-asof,
+          type: slide.point,
+          at: { afterAction: close-3 },
+          target: { x: 0.128, y: 0.746 },
+        }
+      - { id: pt-open, type: slide.point, at: { mark: pt-open }, target: { x: 0.797, y: 0.787 } }
+      - { id: pt-recon, type: slide.point, at: { mark: pt-recon }, target: { x: 0.333, y: 0.92 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ transaction တစ်ခုအတွက် timestamp ဘယ်နှခု လိုလဲ ဆိုတာ
+      မေးတတ်ပါတယ်။ created at တစ်ခုပဲ လို့ မဖြေပါနဲ့၊ အချက် သုံးချက်နဲ့ ဖြေပါ။ [[mark:iv-a]] ပထမ၊ value၊ booking၊ settlement သုံးခုကို သီးခြား
+      သိမ်းမယ်၊ ငွေ မရွှေ့သေးတဲ့ transaction မှာ settlement က ဗလာ ဖြစ်နိုင်တယ်။ [[mark:iv-b]] ဒုတိယ၊
+      အဲဒီ အချိန်တွေက period နယ်နိမိတ်မှာ ကွဲတတ်လို့ ဘယ် အချိန်နဲ့ group လုပ်လဲ ဆိုတာက report ရဲ့
+      ဂဏန်းကို ပြောင်းစေတယ်။ [[mark:iv-c]] တတိယ၊ settlement ရက်ကို business day၊ cut-off နဲ့ rail ရဲ့
+      calendar နဲ့ တွက်ရပြီး၊ reconciliation က အဲဒီ ရက်ကို စောင့်ရတယ်။ [[mark:iv-d]] ပြီးရင် ကိုယ်
+      ဘယ်လို သုံးမလဲ ဆက်ပြောပါ။ business report ကို value ဒါမှမဟုတ် settlement နဲ့ ထုတ်မယ်၊ booking
+      ကို as-of query အတွက် သုံးမယ်၊ ပိတ်ပြီးသား period ထဲ backdate မလုပ်ဘူး ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Value time vs booking time vs settlement time (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#value-time-vs-booking-time-vs-settlement-time",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] တတိယ payment ရဲ့ booking
+      time ကို ဇန်နဝါရီ ၃၁ ရက်၊ ည ဆယ့်တစ်နာရီ ငါးဆယ့်ကိုး မိနစ်လို့ ပြောင်းပြီး run ကြည့်ပါ။ booking နဲ့
+      တွက်တဲ့ ဇန်နဝါရီလ စုစုပေါင်းက value နဲ့ တွက်တာနဲ့ ညီသွားပြီး၊ settlement နဲ့ တွက်တာကတော့
+      မပြောင်းပါဘူး။ [[mark:try-why]] မှတ်တဲ့ အချိန် ငါးမိနစ် ကွာတာလေးက report ကို ယူရို ရှစ်ဆယ်
+      ရွှေ့နိုင်တာပါ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ ငွေ အရွေ့အပြောင်း တစ်ခုမှာ ဖြစ်တဲ့ အချိန်၊ မှတ်တဲ့
+      အချိန်၊ ငွေ တကယ် ရွှေ့တဲ့ အချိန် ဆိုပြီး သုံးခု ရှိပြီး၊ report တစ်ခုက ဘယ် အချိန်ကို မေးနေလဲ ဆိုတာ
+      သိမှ ဂဏန်း မှန်ပါတယ်။ နောက် lesson မှာတော့ ဘယ်အချိန် ဆိုတာအပြင်၊ ဘယ်သူ လုပ်လဲ၊ ဘာကြောင့် လုပ်လဲ
+      ဆိုတာကို audit က ဘယ်လို မေးလဲ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Value time vs booking time vs settlement time (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#value-time-vs-booking-time-vs-settlement-time",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "at(2, 1, 0, 4)", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

@@ -1,0 +1,880 @@
+# Fintech Engineering, lesson 19: overdrafts (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Handling overdrafts" and Appendix A "Write-off",
+# "Chargeback" (CC BY 4.0, Voytek Pitula).
+# Start state: main.go subtracts an 80.00 settlement from a 50.00 balance held in a uint64.
+# ledger.go is the course ledger plus must(); flows.go has the two users, funded(), settlement,
+# deposit, writeOff and report.
+# Edits, all insert-only, in main.go:
+#   1. a "never negative" balance column that clamps to zero   -> run-2: owed 100, bank 70, 30 invented
+#   2. the same settlement on the signed ledger, a deposit netted, the rest written off
+#                                                              -> run-3: -30.00, -10.00, 0.00 + 10.00 loss
+# Figures: forced (settlement above the hold; a chargeback after the payout), cannot (crash, wrap,
+# clamp; the right way), recover (book, net, ask, write off as entries), iv.
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-19-overdrafts
+  title: "Fintech Engineering 19: Overdraft ကို ကိုင်တွယ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      flows.go: |
+        package main
+
+        import "fmt"
+
+        const (
+        	u1 = "liability:user:1042"
+        	u2 = "liability:user:2077"
+        )
+
+        // move builds a two-line transaction: debit one account, credit the other.
+        func move(id, memo, debit, credit string, amount int64) Tx {
+        	return Tx{ID: id, Memo: memo, Lines: []Line{
+        		{Account: debit, Debit: amount},
+        		{Account: credit, Credit: amount},
+        	}}
+        }
+
+        // funded returns a ledger in which user 1042 deposited 50.00 and user 2077 deposited 100.00.
+        func funded() *Ledger {
+        	l := &Ledger{}
+        	must(l.Post(move("d1", "deposit", "asset:bank", u1, 5000)))
+        	must(l.Post(move("d2", "deposit", "asset:bank", u2, 10000)))
+        	return l
+        }
+
+        // settlement books what the outside world really paid out for the user.
+        func settlement(id, user string, amount int64) Tx {
+        	return move(id, "settlement", user, "asset:bank", amount)
+        }
+
+        func deposit(id, user string, amount int64) Tx {
+        	return move(id, "deposit", "asset:bank", user, amount)
+        }
+
+        // writeOff books a debt we no longer expect to recover as a loss.
+        func writeOff(id, user string, amount int64) Tx {
+        	return move(id, "write-off", "expense:writeoff", user, amount)
+        }
+
+        func report(l *Ledger, label string) {
+        	fmt.Printf("%s: user 1042 %s  bank %s  writeoff %s\n", label,
+        		cents(l.Balance(u1)), cents(l.Balance("asset:bank")), cents(l.Balance("expense:writeoff")))
+        }
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // Balance derives an account's balance on the side where that kind of account grows:
+        // assets and expenses grow with debits; liabilities, equity and revenue grow with credits.
+        func (l *Ledger) Balance(account string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind, _, _ := strings.Cut(account, ":"); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // must stops the program on an error that the example never expects.
+        func must(err error) {
+        	if err != nil {
+        		panic(err)
+        	}
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        	// User 1042 has 50.00. A settlement of 80.00 arrives for them anyway.
+        	var balance uint64 = 5000
+        	balance -= 8000
+        	fmt.Println("uint64 balance:", balance)
+        }
+  slides:
+    - id: cannot-1
+      contentType: html
+      name: "Forbidden ≠ unrepresentable 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">FORBIDDEN ≠ UNREPRESENTABLE</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1217.4" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အနုတ်ကို မရေးနိုင်တဲ့ system က ဘာဖြစ်လဲ</text>
+        <g class="in"><rect x="70" y="220" width="450" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-cross" x="92" y="263" width="64" height="64" style="color:#fc8181"/><text x="335" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">crash</text><text x="335" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">CHECK (balance &gt;= 0)</text></g>
+        <g class="in"><text x="95" y="425" font-size="26" fill="#e9edf5">bank already paid</text></g>
+        <g class="in"><text x="95" y="470" font-size="26" fill="#fc8181">ledger refuses the fact</text></g>
+        </svg>
+    - id: cannot-2
+      contentType: html
+      name: "Forbidden ≠ unrepresentable 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">FORBIDDEN ≠ UNREPRESENTABLE</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1217.4" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အနုတ်ကို မရေးနိုင်တဲ့ system က ဘာဖြစ်လဲ</text>
+        <rect x="70" y="220" width="450" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-cross" x="92" y="263" width="64" height="64" style="color:#fc8181"/><text x="335" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">crash</text><text x="335" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">CHECK (balance &gt;= 0)</text>
+        <text x="95" y="425" font-size="26" fill="#e9edf5">bank already paid</text>
+        <text x="95" y="470" font-size="26" fill="#fc8181">ledger refuses the fact</text>
+        <g class="in"><rect x="575" y="220" width="450" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-retry" x="597" y="263" width="64" height="64" style="color:#fc8181"/><text x="840" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">wrap</text><text x="840" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">uint64</text></g>
+        <g class="in"><text x="600" y="425" font-size="26" fill="#e9edf5">50.00 − 80.00 =</text></g>
+        <g class="in"><text x="600" y="470" font-size="26" fill="#fc8181" class="mono">18446744073709548616</text></g>
+        </svg>
+    - id: cannot-3
+      contentType: html
+      name: "Forbidden ≠ unrepresentable 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">FORBIDDEN ≠ UNREPRESENTABLE</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1217.4" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အနုတ်ကို မရေးနိုင်တဲ့ system က ဘာဖြစ်လဲ</text>
+        <rect x="70" y="220" width="450" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-cross" x="92" y="263" width="64" height="64" style="color:#fc8181"/><text x="335" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">crash</text><text x="335" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">CHECK (balance &gt;= 0)</text>
+        <text x="95" y="425" font-size="26" fill="#e9edf5">bank already paid</text>
+        <text x="95" y="470" font-size="26" fill="#fc8181">ledger refuses the fact</text>
+        <rect x="575" y="220" width="450" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-retry" x="597" y="263" width="64" height="64" style="color:#fc8181"/><text x="840" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">wrap</text><text x="840" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">uint64</text>
+        <text x="600" y="425" font-size="26" fill="#e9edf5">50.00 − 80.00 =</text>
+        <text x="600" y="470" font-size="26" fill="#fc8181" class="mono">18446744073709548616</text>
+        <g class="in"><rect x="1080" y="220" width="450" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-warn" x="1102" y="263" width="64" height="64" style="color:#fc8181"/><text x="1345" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">clamp</text><text x="1345" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">max(balance, 0)</text></g>
+        <g class="in"><text x="1105" y="425" font-size="26" fill="#e9edf5" class="mono">owed 100.00 · bank 70.00</text></g>
+        <g class="in"><text x="1105" y="470" font-size="26" fill="#fc8181">30.00 minted</text></g>
+        </svg>
+    - id: cannot-4
+      contentType: html
+      name: "Forbidden ≠ unrepresentable 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">FORBIDDEN ≠ UNREPRESENTABLE</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1080.6" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1217.4" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အနုတ်ကို မရေးနိုင်တဲ့ system က ဘာဖြစ်လဲ</text>
+        <rect x="70" y="220" width="450" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-cross" x="92" y="263" width="64" height="64" style="color:#fc8181"/><text x="335" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">crash</text><text x="335" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">CHECK (balance &gt;= 0)</text>
+        <text x="95" y="425" font-size="26" fill="#e9edf5">bank already paid</text>
+        <text x="95" y="470" font-size="26" fill="#fc8181">ledger refuses the fact</text>
+        <rect x="575" y="220" width="450" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-retry" x="597" y="263" width="64" height="64" style="color:#fc8181"/><text x="840" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">wrap</text><text x="840" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">uint64</text>
+        <text x="600" y="425" font-size="26" fill="#e9edf5">50.00 − 80.00 =</text>
+        <text x="600" y="470" font-size="26" fill="#fc8181" class="mono">18446744073709548616</text>
+        <rect x="1080" y="220" width="450" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-warn" x="1102" y="263" width="64" height="64" style="color:#fc8181"/><text x="1345" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">clamp</text><text x="1345" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">max(balance, 0)</text>
+        <text x="1105" y="425" font-size="26" fill="#e9edf5" class="mono">owed 100.00 · bank 70.00</text>
+        <text x="1105" y="470" font-size="26" fill="#fc8181">30.00 minted</text>
+        <g class="in"><rect x="70" y="600" width="1460" height="150" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><rect x="70" y="600" width="1460" height="150" rx="18" fill="#68d391" opacity="0.13"/><use href="#i-check" x="92" y="643" width="64" height="64" style="color:#68d391"/><text x="840" y="665.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">signed int64 + check at authorization + monitoring</text><text x="840" y="706.6" font-size="24" text-anchor="middle" fill="#8a94a8">balance ≥ 0 is an invariant to check, not a type to enforce</text></g>
+        </svg>
+    - id: forced-1
+      contentType: html
+      name: "Unintentional overdraft 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">UNINTENTIONAL OVERDRAFT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အပြင်ဘက်က ခွင့်မတောင်းဘူး</text>
+        <g class="in"><text x="70" y="235" font-size="26" fill="#8a94a8">settlement &gt; estimate</text></g>
+        <g class="in"><rect x="70" y="265" width="330" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="235" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">hold 50.00</text><text x="235" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">the estimate</text></g>
+        <g class="in"><rect x="430" y="265" width="330" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="595" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">settled 80.00</text><text x="595" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">rate · fee moved</text></g>
+        <path d="M410 320L416 320" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/>
+        <g class="in"><text x="70" y="640" font-size="84" fill="#fc8181" font-weight="800" class="mono">−30.00</text><text x="70" y="678" font-size="26" fill="#8a94a8">user 1042 after the settlement</text></g>
+        </svg>
+    - id: forced-2
+      contentType: html
+      name: "Unintentional overdraft 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">UNINTENTIONAL OVERDRAFT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အပြင်ဘက်က ခွင့်မတောင်းဘူး</text>
+        <text x="70" y="235" font-size="26" fill="#8a94a8">settlement &gt; estimate</text>
+        <rect x="70" y="265" width="330" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="235" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">hold 50.00</text><text x="235" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">the estimate</text>
+        <rect x="430" y="265" width="330" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="595" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">settled 80.00</text><text x="595" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">rate · fee moved</text>
+        <path d="M410 320L416 320" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <text x="70" y="640" font-size="84" fill="#fc8181" font-weight="800" class="mono">−30.00</text><text x="70" y="678" font-size="26" fill="#8a94a8">user 1042 after the settlement</text>
+        <g class="in"><path d="M800 220L800 700" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/></g>
+        <g class="in"><text x="840" y="235" font-size="26" fill="#8a94a8">reversal after the money left</text></g>
+        <g class="in"><rect x="840" y="265" width="330" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1005" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">deposit 100.00</text><text x="1005" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">card payment</text></g>
+        <g class="in"><rect x="1200" y="265" width="330" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1365" y="309.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">withdrawn 100.00</text><text x="1365" y="349" font-size="24" text-anchor="middle" fill="#8a94a8">already paid out</text></g>
+        <path d="M1180 320L1186 320" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/>
+        <g class="in"><rect x="1200" y="420" width="330" height="110" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="1365" y="463.9" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">chargeback 100.00</text><text x="1365" y="502.7" font-size="24" text-anchor="middle" fill="#8a94a8">cardholder's bank</text></g>
+        <path d="M1365 385L1365 406" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <g class="in"><text x="840" y="640" font-size="84" fill="#fc8181" font-weight="800" class="mono">−100.00</text><text x="840" y="678" font-size="26" fill="#8a94a8">user 1042 after the chargeback</text></g>
+        </svg>
+    - id: forced-3
+      contentType: html
+      name: "Unintentional overdraft 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">UNINTENTIONAL OVERDRAFT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အပြင်ဘက်က ခွင့်မတောင်းဘူး</text>
+        <text x="70" y="235" font-size="26" fill="#8a94a8">settlement &gt; estimate</text>
+        <rect x="70" y="265" width="330" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="235" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">hold 50.00</text><text x="235" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">the estimate</text>
+        <rect x="430" y="265" width="330" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="595" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">settled 80.00</text><text x="595" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">rate · fee moved</text>
+        <path d="M410 320L416 320" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <text x="70" y="640" font-size="84" fill="#fc8181" font-weight="800" class="mono">−30.00</text><text x="70" y="678" font-size="26" fill="#8a94a8">user 1042 after the settlement</text>
+        <path d="M800 220L800 700" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/>
+        <text x="840" y="235" font-size="26" fill="#8a94a8">reversal after the money left</text>
+        <rect x="840" y="265" width="330" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1005" y="310.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">deposit 100.00</text><text x="1005" y="351.6" font-size="24" text-anchor="middle" fill="#8a94a8">card payment</text>
+        <rect x="1200" y="265" width="330" height="110" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1365" y="309.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">withdrawn 100.00</text><text x="1365" y="349" font-size="24" text-anchor="middle" fill="#8a94a8">already paid out</text>
+        <path d="M1180 320L1186 320" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <rect x="1200" y="420" width="330" height="110" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="1365" y="463.9" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">chargeback 100.00</text><text x="1365" y="502.7" font-size="24" text-anchor="middle" fill="#8a94a8">cardholder's bank</text>
+        <path d="M1365 385L1365 406" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <text x="840" y="640" font-size="84" fill="#fc8181" font-weight="800" class="mono">−100.00</text><text x="840" y="678" font-size="26" fill="#8a94a8">user 1042 after the chargeback</text>
+        <g class="in"><rect x="70" y="780" width="840" height="54" rx="27" fill="#f6ad55" opacity="0.16"/><rect x="70" y="780" width="840" height="54" rx="27" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="490" y="817.5" font-size="30" text-anchor="middle" fill="#f6ad55" font-weight="700">reservation narrows the window — it cannot close it</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="49" fill="#e9edf5" font-weight="700">Balance column မှာ CHECK (balance &gt;= 0) ထားသင့်လား</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="49" fill="#e9edf5" font-weight="700">Balance column မှာ CHECK (balance &gt;= 0) ထားသင့်လား</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">အပြင်ဘက်က အနုတ်ကို အတင်း ဖြစ်စေနိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">settlement &gt; hold · payout ပြီးမှ chargeback / reversal</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="49" fill="#e9edf5" font-weight="700">Balance column မှာ CHECK (balance &gt;= 0) ထားသင့်လား</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">အပြင်ဘက်က အနုတ်ကို အတင်း ဖြစ်စေနိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">settlement &gt; hold · payout ပြီးမှ chargeback / reversal</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">မရေးနိုင်ရင် crash၊ wrap ဒါမှမဟုတ် clamp</text><text x="188" y="443" font-size="26" fill="#8a94a8">bank က ပေးပြီးသား fact ပျောက်တယ် · clamp က ငွေ ဖန်တီးတယ်</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="49" fill="#e9edf5" font-weight="700">Balance column မှာ CHECK (balance &gt;= 0) ထားသင့်လား</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">အပြင်ဘက်က အနုတ်ကို အတင်း ဖြစ်စေနိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">settlement &gt; hold · payout ပြီးမှ chargeback / reversal</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">မရေးနိုင်ရင် crash၊ wrap ဒါမှမဟုတ် clamp</text><text x="188" y="443" font-size="26" fill="#8a94a8">bank က ပေးပြီးသား fact ပျောက်တယ် · clamp က ငွေ ဖန်တီးတယ်</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#b794f6"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">balance ≥ 0 က invariant — authorization မှာ စစ်၊ နောက်မှ monitor</text><text x="188" y="575" font-size="26" fill="#8a94a8">construction နဲ့ မဟုတ်ဘူး · intentional overdraft က သီးခြား account</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="49" fill="#e9edf5" font-weight="700">Balance column မှာ CHECK (balance &gt;= 0) ထားသင့်လား</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">အပြင်ဘက်က အနုတ်ကို အတင်း ဖြစ်စေနိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">settlement &gt; hold · payout ပြီးမှ chargeback / reversal</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">မရေးနိုင်ရင် crash၊ wrap ဒါမှမဟုတ် clamp</text><text x="188" y="443" font-size="26" fill="#8a94a8">bank က ပေးပြီးသား fact ပျောက်တယ် · clamp က ငွေ ဖန်တီးတယ်</text></g><g><circle cx="138" cy="513" r="25" fill="#b794f6"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">balance ≥ 0 က invariant — authorization မှာ စစ်၊ နောက်မှ monitor</text><text x="188" y="575" font-size="26" fill="#8a94a8">construction နဲ့ မဟုတ်ဘူး · intentional overdraft က သီးခြား account</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">Signed balance၊ overdraft ကို book၊ alert၊ entry နဲ့ ပြန်ယူ</text><text x="188" y="707" font-size="26" fill="#8a94a8">netting · repayment · expense:writeoff</text></g>
+        </svg>
+    - id: recover-1
+      contentType: html
+      name: "Recovery 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RECOVERY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Book လုပ်ပြီး ထင်ထင်ရှားရှား ပြန်ယူ</text>
+        <g class="in"><rect x="70" y="215" width="980" height="332" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="92" y="250" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="171.9" y="250" font-size="22" fill="#8a94a8" font-weight="700">debit</text><text x="549.3" y="250" font-size="22" fill="#8a94a8" font-weight="700">credit</text><text x="1028" y="250" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M70 267H1050" stroke="#2a3345" stroke-width="2"/><g><text x="92" y="312" font-size="28" fill="#9aa5b8" class="mono">d1</text><text x="171.9" y="312" font-size="28" fill="#8a94a8" class="mono">asset:bank</text><text x="549.3" y="312" font-size="28" fill="#8a94a8" class="mono">liability:user:1042</text><text x="1028" y="312" font-size="28" text-anchor="end" fill="#8a94a8" class="mono">50.00</text></g><g><path d="M86 337H1034" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="382" font-size="28" fill="#9aa5b8" class="mono">s1</text><text x="171.9" y="382" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="549.3" y="382" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="1028" y="382" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">80.00</text></g></g>
+        <g class="in"><text x="1320" y="249" font-size="30" text-anchor="middle" fill="#b794f6" font-weight="700">liability:user:1042</text><text x="1320" y="281" font-size="22" text-anchor="middle" fill="#8a94a8">liability</text><path d="M1110 297H1530M1320 297V515" stroke="#b794f6" stroke-width="3" stroke-linecap="round" fill="none"/><text x="1215" y="327" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Debit</text><text x="1425" y="327" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Credit</text><g><text x="1215" y="373" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">80.00</text></g><g><text x="1425" y="373" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">50.00</text></g></g>
+        <g class="in"><text x="1110" y="640" font-size="72" fill="#fc8181" font-weight="800" class="mono">−30.00</text><text x="1110" y="678" font-size="26" fill="#8a94a8">user 1042 · booked</text></g>
+        </svg>
+    - id: recover-2
+      contentType: html
+      name: "Recovery 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RECOVERY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Book လုပ်ပြီး ထင်ထင်ရှားရှား ပြန်ယူ</text>
+        <rect x="70" y="215" width="980" height="332" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="92" y="250" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="171.9" y="250" font-size="22" fill="#8a94a8" font-weight="700">debit</text><text x="549.3" y="250" font-size="22" fill="#8a94a8" font-weight="700">credit</text><text x="1028" y="250" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M70 267H1050" stroke="#2a3345" stroke-width="2"/><g><text x="92" y="312" font-size="28" fill="#9aa5b8" class="mono">d1</text><text x="171.9" y="312" font-size="28" fill="#8a94a8" class="mono">asset:bank</text><text x="549.3" y="312" font-size="28" fill="#8a94a8" class="mono">liability:user:1042</text><text x="1028" y="312" font-size="28" text-anchor="end" fill="#8a94a8" class="mono">50.00</text></g><g><path d="M86 337H1034" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="382" font-size="28" fill="#9aa5b8" class="mono">s1</text><text x="171.9" y="382" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="549.3" y="382" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="1028" y="382" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">80.00</text></g><g class="in"><path d="M86 407H1034" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="452" font-size="28" fill="#9aa5b8" class="mono">d3</text><text x="171.9" y="452" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="549.3" y="452" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="1028" y="452" font-size="28" text-anchor="end" fill="#4fd1c5" class="mono">20.00</text></g>
+        <text x="1320" y="249" font-size="30" text-anchor="middle" fill="#b794f6" font-weight="700">liability:user:1042</text><text x="1320" y="281" font-size="22" text-anchor="middle" fill="#8a94a8">liability</text><path d="M1110 297H1530M1320 297V515" stroke="#b794f6" stroke-width="3" stroke-linecap="round" fill="none"/><text x="1215" y="327" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Debit</text><text x="1425" y="327" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Credit</text><g><text x="1215" y="373" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">80.00</text></g><g><text x="1425" y="373" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">50.00</text></g><g class="in"><text x="1425" y="417" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">20.00</text></g>
+        <g class="in"><text x="1110" y="640" font-size="72" fill="#f6ad55" font-weight="800" class="mono">−10.00</text><text x="1110" y="678" font-size="26" fill="#8a94a8">user 1042 · netted</text></g>
+        </svg>
+    - id: recover-3
+      contentType: html
+      name: "Recovery 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-mail" viewBox="0 0 48 48"><rect x="6" y="11" width="36" height="26" rx="3"/><path d="M6 13l18 14 18-14"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RECOVERY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Book လုပ်ပြီး ထင်ထင်ရှားရှား ပြန်ယူ</text>
+        <rect x="70" y="215" width="980" height="332" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="92" y="250" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="171.9" y="250" font-size="22" fill="#8a94a8" font-weight="700">debit</text><text x="549.3" y="250" font-size="22" fill="#8a94a8" font-weight="700">credit</text><text x="1028" y="250" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M70 267H1050" stroke="#2a3345" stroke-width="2"/><g><text x="92" y="312" font-size="28" fill="#9aa5b8" class="mono">d1</text><text x="171.9" y="312" font-size="28" fill="#8a94a8" class="mono">asset:bank</text><text x="549.3" y="312" font-size="28" fill="#8a94a8" class="mono">liability:user:1042</text><text x="1028" y="312" font-size="28" text-anchor="end" fill="#8a94a8" class="mono">50.00</text></g><g><path d="M86 337H1034" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="382" font-size="28" fill="#9aa5b8" class="mono">s1</text><text x="171.9" y="382" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="549.3" y="382" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="1028" y="382" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">80.00</text></g><g><path d="M86 407H1034" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="452" font-size="28" fill="#9aa5b8" class="mono">d3</text><text x="171.9" y="452" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="549.3" y="452" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="1028" y="452" font-size="28" text-anchor="end" fill="#4fd1c5" class="mono">20.00</text></g>
+        <g class="in"><rect x="70" y="590" width="980" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-mail" x="92" y="613" width="64" height="64" style="color:#6cb2f5"/><text x="600" y="635.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ask the user to repay</text><text x="600" y="676.6" font-size="24" text-anchor="middle" fill="#8a94a8">a request, not an entry — booked only when money arrives</text></g>
+        <text x="1320" y="249" font-size="30" text-anchor="middle" fill="#b794f6" font-weight="700">liability:user:1042</text><text x="1320" y="281" font-size="22" text-anchor="middle" fill="#8a94a8">liability</text><path d="M1110 297H1530M1320 297V515" stroke="#b794f6" stroke-width="3" stroke-linecap="round" fill="none"/><text x="1215" y="327" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Debit</text><text x="1425" y="327" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Credit</text><g><text x="1215" y="373" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">80.00</text></g><g><text x="1425" y="373" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">50.00</text></g><g><text x="1425" y="417" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">20.00</text></g>
+        <text x="1110" y="640" font-size="72" fill="#f6ad55" font-weight="800" class="mono">−10.00</text><text x="1110" y="678" font-size="26" fill="#8a94a8">user 1042 · netted</text>
+        </svg>
+    - id: recover-4
+      contentType: html
+      name: "Recovery 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-mail" viewBox="0 0 48 48"><rect x="6" y="11" width="36" height="26" rx="3"/><path d="M6 13l18 14 18-14"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">RECOVERY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Book လုပ်ပြီး ထင်ထင်ရှားရှား ပြန်ယူ</text>
+        <rect x="70" y="215" width="980" height="332" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="92" y="250" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="171.9" y="250" font-size="22" fill="#8a94a8" font-weight="700">debit</text><text x="549.3" y="250" font-size="22" fill="#8a94a8" font-weight="700">credit</text><text x="1028" y="250" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M70 267H1050" stroke="#2a3345" stroke-width="2"/><g><text x="92" y="312" font-size="28" fill="#9aa5b8" class="mono">d1</text><text x="171.9" y="312" font-size="28" fill="#8a94a8" class="mono">asset:bank</text><text x="549.3" y="312" font-size="28" fill="#8a94a8" class="mono">liability:user:1042</text><text x="1028" y="312" font-size="28" text-anchor="end" fill="#8a94a8" class="mono">50.00</text></g><g><path d="M86 337H1034" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="382" font-size="28" fill="#9aa5b8" class="mono">s1</text><text x="171.9" y="382" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="549.3" y="382" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="1028" y="382" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">80.00</text></g><g><path d="M86 407H1034" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="452" font-size="28" fill="#9aa5b8" class="mono">d3</text><text x="171.9" y="452" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="549.3" y="452" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="1028" y="452" font-size="28" text-anchor="end" fill="#4fd1c5" class="mono">20.00</text></g><g class="in"><rect x="76" y="482" width="968" height="60" rx="10" fill="#fc8181" opacity="0.14"/><path d="M86 477H1034" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="522" font-size="28" fill="#9aa5b8" class="mono">w1</text><text x="171.9" y="522" font-size="28" fill="#fc8181" class="mono">expense:writeoff</text><text x="549.3" y="522" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="1028" y="522" font-size="28" text-anchor="end" fill="#fc8181" class="mono">10.00</text></g>
+        <rect x="70" y="590" width="980" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-mail" x="92" y="613" width="64" height="64" style="color:#6cb2f5"/><text x="600" y="635.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ask the user to repay</text><text x="600" y="676.6" font-size="24" text-anchor="middle" fill="#8a94a8">a request, not an entry — booked only when money arrives</text>
+        <text x="1320" y="249" font-size="30" text-anchor="middle" fill="#b794f6" font-weight="700">liability:user:1042</text><text x="1320" y="281" font-size="22" text-anchor="middle" fill="#8a94a8">liability</text><path d="M1110 297H1530M1320 297V515" stroke="#b794f6" stroke-width="3" stroke-linecap="round" fill="none"/><text x="1215" y="327" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Debit</text><text x="1425" y="327" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Credit</text><g><text x="1215" y="373" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">80.00</text></g><g><text x="1425" y="373" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">50.00</text></g><g><text x="1425" y="417" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">20.00</text></g><g class="in"><text x="1425" y="461" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">10.00</text></g>
+        <g class="in"><text x="1110" y="640" font-size="72" fill="#68d391" font-weight="800" class="mono">0.00</text><text x="1110" y="678" font-size="26" fill="#8a94a8">user 1042 · after the write-off</text></g>
+        <g class="in"><rect x="70" y="770" width="789.8" height="52" rx="26" fill="#fc8181" opacity="0.16"/><rect x="70" y="770" width="789.8" height="52" rx="26" fill="none" stroke="#fc8181" stroke-width="2"/><text x="464.9" y="805.8" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">the loss is visible: expense:writeoff 10.00</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9519
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "uint64 balance: 18446744073709548616\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "uint64 balance: 18446744073709548616\nclamped: owed 100.00 bank 70.00 invented 30.00\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "uint64 balance: 18446744073709548616\nclamped: owed 100.00 bank 70.00 invented 30.00\nbooked: user 1042 -30.00  bank 70.00  writeoff 0.00\nnetted: user 1042 -10.00  bank 90.00  writeoff 0.00\nwritten off: user 1042 0.00  bank 90.00  writeoff 10.00\n"
+
+scenes:
+  - id: hook
+    chapter: Balance အနုတ် ဖြစ်ခွင့် ရှိလား
+    narration: >-
+      policy အရ user ရဲ့ balance က အနုတ် မဖြစ်ရပါဘူး၊ ဒါပေမဲ့ မှန်ကန်တဲ့ system မှာတောင် အနုတ်
+      ဖြစ်သွားတတ်ပါတယ်။ account balance အနုတ် ဖြစ်သွားတာကို overdraft လို့ ခေါ်ပါတယ်။ [[mark:kinds]]
+      overdraft နှစ်မျိုး ရှိပါတယ်။ တစ်မျိုးက business က ရည်ရွယ်ပြီး ပေးတဲ့ credit product ပါ၊ limit နဲ့
+      အတိုး ပါတဲ့ business feature ဖြစ်ပြီး သီးခြား account နဲ့ model လုပ်လေ့ ရှိပါတယ်၊ ဒီနေရာမှာ မပါပါဘူး။ ကျန်တစ်မျိုးက policy
+      က တားထားရက်နဲ့ ဖြစ်သွားတာပါ။ [[mark:sel-uint]] ပထမဆုံး ပေါ်လာတတ်တဲ့ အကြံက အနုတ်ကို type ကနေ
+      ပိတ်လိုက်ဖို့ပါ။ ဒီ balance က unsigned ကိန်းပြည့်ပါ၊ ယူရို ငါးဆယ် ရှိပါတယ်။ [[mark:sel-sub]] ယူရို
+      ရှစ်ဆယ်ရဲ့ settlement တစ်ခု ရောက်လာလို့ နုတ်လိုက်ပါတယ်။ ဘာထွက်မလဲ ခန့်မှန်းကြည့်ပါ။
+      [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Handling overdrafts (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-overdrafts",
+        }
+      - {
+          title: "The Go Programming Language Specification — Integer overflow",
+          url: "https://go.dev/ref/spec#Integer_overflow",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-uint
+        type: editor.select
+        at: { mark: sel-uint }
+        target: { file: main.go, text: "\tvar balance uint64 = 5000", occurrence: 1 }
+      - id: sel-sub
+        type: editor.select
+        at: { mark: sel-sub }
+        target: { file: main.go, text: "\tbalance -= 8000", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "uint64 balance: 18446744073709548616",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-uint]] error မတက်ဘဲ ဂဏန်း နှစ်ဆယ် လုံးရှိတဲ့ တန်ဖိုး ထွက်လာပါတယ်။ unsigned ကိန်းပြည့်က
+      သုညအောက် ရောက်တော့ အမြင့်ဆုံး တန်ဖိုးဘက်ကို ပတ်သွားတာပါ။ [[mark:dock-1]] ဆင့်နဲ့ ရေတွက်ထားတာမို့
+      user ဆီမှာ ယူရို ဂဏန်း ဆယ့်ရှစ်လုံးစာ ရှိနေတယ်လို့ system က ယုံသွားပါပြီ။ အနုတ် သုံးဆယ်
+      ဖြစ်ရမယ့် balance က အပေါင်းဘက်မှာ ဂဏန်း အကြီးကြီး ဖြစ်သွားတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Integer overflow",
+          url: "https://go.dev/ref/spec#Integer_overflow",
+        }
+    actions:
+      - id: pt-uint
+        type: console.point
+        at: { mark: pt-uint }
+        target: { text: "uint64 balance: 18446744073709548616", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: forced
+    chapter: မှန်တဲ့ system မှာ ဘာလို့ ဖြစ်လဲ
+    narration: >-
+      [[mark:show-forced]] ဒါဆို balance ဘာလို့ အနုတ် ဖြစ်ရတာလဲ၊ အရင် lesson မှာ reservation ရှိတယ်
+      မဟုတ်လား။ [[mark:pt-hold]] reservation က ခန့်မှန်းခြေ ပမာဏကိုပဲ hold လုပ်ပါတယ်။ [[mark:pt-paid]]
+      rate ဒါမှမဟုတ် fee ပြောင်းလို့ settlement က hold ထက် ကြီးလာရင်၊ ငွေက အပြင်မှာ ထွက်သွားပြီးသားမို့
+      ledger မှာ လက်ခံရုံကလွဲလို့ ရွေးစရာ မရှိပါဘူး။ [[mark:forced-2]] ဒုတိယ ဖြစ်ပုံက reversal ပါ၊ ဥပမာ
+      cardholder ရဲ့ ဘဏ်က card payment ကို အတင်း ပြန်လှည့်တဲ့ chargeback ပါ။ card နဲ့ ယူရို
+      ၁၀၀ deposit လုပ်ပြီး ထုတ်သွားပြီးမှ chargeback ရောက်လာရင်၊ [[mark:pt-n2]] ငွေ ထွက်သွားပြီးမှ
+      ရောက်လာတာမို့ balance က အနုတ် ယူရို ၁၀၀ ဖြစ်ပါတယ်။ [[mark:forced-3]] ဆိုလိုတာက reservation က
+      အနုတ် ဖြစ်နိုင်တဲ့ window ကို ကျဉ်းပေးပေမဲ့ ပိတ်ပေးနိုင်တာ မဟုတ်ပါဘူး။ အပြင်ဘက်က ကိုယ့်ကို ခွင့်
+      မတောင်းပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Handling overdrafts (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-overdrafts",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Payments, rails & cards (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#payments-rails-cards",
+        }
+    actions:
+      - {
+          id: show-forced,
+          type: slide.show,
+          at: { mark: show-forced, offsetMs: -700 },
+          slideId: forced-1,
+        }
+      - {
+          id: pt-forced-title,
+          type: slide.point,
+          at: { afterAction: show-forced },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: pt-hold, type: slide.point, at: { mark: pt-hold }, target: { x: 0.147, y: 0.426 } }
+      - { id: pt-paid, type: slide.point, at: { mark: pt-paid }, target: { x: 0.081, y: 0.767 } }
+      - { id: forced-2, type: slide.show, at: { mark: forced-2 }, slideId: forced-2 }
+      - {
+          id: pt-cb,
+          type: slide.point,
+          at: { afterAction: forced-2 },
+          target: { x: 0.853, y: 0.598 },
+        }
+      - { id: pt-n2, type: slide.point, at: { mark: pt-n2 }, target: { x: 0.563, y: 0.767 } }
+      - { id: forced-3, type: slide.show, at: { mark: forced-3 }, slideId: forced-3 }
+      - {
+          id: pt-narrow,
+          type: slide.point,
+          at: { afterAction: forced-3 },
+          target: { x: 0.3, y: 0.936 },
+        }
+
+  - id: clamp
+    chapter: Clamp က ငွေ ဖန်တီးတယ်
+    narration: >-
+      [[mark:close-forced]] unsigned type ကို ပြင်ဖို့ နောက်ထပ် ပေါ်လာတတ်တဲ့ အကြံက balance ကို သုညအောက်
+      မရောက်အောင် ဖြတ်ချလိုက်တာပါ၊ ဒါကို clamp လုပ်တယ်လို့ ခေါ်ပါတယ်။ [[mark:type-clamp]] ဒီ code မှာ
+      user နှစ်ယောက်ရဲ့ balance ကို column နဲ့ သိမ်းထားပြီး၊ ပထမ user ရဲ့ ယူရို ငါးဆယ်ထဲက ရှစ်ဆယ် နုတ်ပြီး
+      သုညမှာ ဖြတ်ချပါတယ်။ ဘဏ်ကတော့ ယူရို ရှစ်ဆယ် အပြည့် ပေးပြီးသားပါ။ နောက်ဆုံးမှာ user တွေကို
+      ပေးစရာ ရှိတဲ့ ငွေ စုစုပေါင်းနဲ့ ဘဏ်ထဲမှာ တကယ် ရှိတဲ့ ငွေကို ယှဉ်ပါတယ်။ [[mark:run-2]] run
+      လိုက်ရအောင်။ [[mark:pt-clamp]] user တွေကို ယူရို ၁၀၀ ပေးစရာ ရှိတယ်လို့ ပြနေပေမဲ့ ဘဏ်ထဲမှာ
+      ခုနစ်ဆယ်ပဲ ရှိပါတယ်။ user က ရှိတာထက် သုံးဆယ် ပိုထုတ်သွားပြီး အဲဒီ အကြွေးကို clamp က
+      ဖျက်ပစ်လိုက်တော့၊ ကွာနေတဲ့ ယူရို သုံးဆယ်က ဘယ်ကမှ မလာတဲ့ ငွေ ဖြစ်သွားပါတယ်။ [[mark:dock-2]] ဒါက No
+      invented data မူကို ချိုးတာပါ၊ ငွေကို မရှိဘဲ မဖန်တီးရဘူး ဆိုတာပါ။ accounting equation ပျက်သွားပြီး
+      ဘယ်နေရာမှာ ပျက်လဲ ဆိုတာကိုလည်း ဘယ် record ကမှ မပြောနိုင်ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Handling overdrafts (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-overdrafts",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - { id: close-forced, type: slide.close, at: { mark: close-forced } }
+      - id: type-clamp
+        type: editor.type
+        at: { mark: type-clamp }
+        target:
+          { file: main.go, after: "\tfmt.Println(\"uint64 balance:\", balance)\n", occurrence: 1 }
+        text: "\n\tcol := map[string]int64{u1: 5000, u2: 10000} // a \"never negative\" balance column\n\tcol[u1] = max(col[u1]-8000, 0)\n\tbank := int64(15000 - 8000) // the bank really paid out the whole 80.00\n\towed := col[u1] + col[u2]\n\tgap := owed - bank\n\tfmt.Println(\"clamped: owed\", cents(owed), \"bank\", cents(bank), \"invented\", cents(gap))\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "clamped: owed 100.00 bank 70.00 invented 30.00",
+          timeoutMs: 8000,
+        }
+      - id: pt-clamp
+        type: console.point
+        at: { mark: pt-clamp }
+        target: { text: "clamped: owed 100.00", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: cannot
+    narration: >-
+      [[mark:show-cannot]] ဒါက forbidden နဲ့ unrepresentable မတူဘူး ဆိုတဲ့ အချက်ပါ။ အနုတ်ကို ကိုယ်စား
+      မပြုနိုင်တဲ့ system က အနုတ်ကို အတင်း လက်ခံရတဲ့အခါ မှားတဲ့ နည်း သုံးနည်းထဲက တစ်နည်းနဲ့ပဲ
+      တုံ့ပြန်ပါတယ်။ [[mark:pt-crash]] ပထမက crash ပါ။ database မှာ balance သုညနဲ့ အထက် ဖြစ်ရမယ် ဆိုတဲ့
+      CHECK constraint ထားရင် settlement ကို ရေးတဲ့ write က fail ပြီး flow က အလယ်မှာ ရပ်သွားပါတယ်။
+      [[mark:pt-crash2]] ဘဏ်က ငွေ ပေးပြီးသားပါ၊ ledger ကသာ အဲဒီ fact ကို လက်မခံတော့ No lost data မူကို
+      ချိုးပါတယ်၊ ငွေနဲ့ ပတ်သက်ပြီး ဖြစ်ခဲ့သမျှ မပျောက်ရဘူး ဆိုတာပါ။ [[mark:cannot-2]] ဒုတိယက wrap ပါ၊
+      ခုနက unsigned ကိန်းပြည့်လို ပမာဏ အကြီးကြီး ဖြစ်သွားတာပါ။ [[mark:cannot-3]] တတိယက clamp ပါ၊
+      ကြည့်ရတာ ပြဿနာ မရှိသလိုပဲ ဖြစ်ပေမဲ့ ငွေကို တိတ်တိတ်လေး ဖန်တီးပါတယ်။ [[mark:cannot-4]] မှန်တဲ့ နည်းက balance ကို
+      signed ကိန်းပြည့်နဲ့ အနုတ်ပါ ရေးနိုင်အောင် ထားပြီး၊ သုညနဲ့ အထက် ဖြစ်ရမယ် ဆိုတာကို invariant
+      တစ်ခုအဖြစ် ဆက်ဆံတာပါ။ ငွေထုတ်ခွင့် ပြုတဲ့ authorization မှာ runtime check နဲ့ စစ်ပြီး၊ နောက်မှ
+      monitoring နဲ့ reconciliation နဲ့ ရှာပါတယ်၊ construction နဲ့ အတင်း မပိတ်ပါဘူး။ [[mark:pt-ok]]
+      overdraft တစ်ခု တွေ့ရင် စစ်ဆေးရမယ့် signal ပါ၊ bug ဖြစ်ချင်မှ ဖြစ်ပါတယ်။ ဒါက No trust မူပါ၊
+      ဘယ်သူ့ကိုမှ၊ ကိုယ့် component ကိုတောင် အလိုလို မယုံရဘူး ဆိုတာပါ။ ကိုယ့် check တွေ ဘာပဲ ပြောပြော
+      အပြင်ဘက်က overdraft ကို အတင်း ဖြစ်စေနိုင်လို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Handling overdrafts (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-overdrafts",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+    actions:
+      - {
+          id: show-cannot,
+          type: slide.show,
+          at: { mark: show-cannot, offsetMs: -700 },
+          slideId: cannot-1,
+        }
+      - {
+          id: pt-cannot-title,
+          type: slide.point,
+          at: { afterAction: show-cannot },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: pt-crash, type: slide.point, at: { mark: pt-crash }, target: { x: 0.184, y: 0.42 } }
+      - {
+          id: pt-crash2,
+          type: slide.point,
+          at: { mark: pt-crash2 },
+          target: { x: 0.097, y: 0.536 },
+        }
+      - { id: cannot-2, type: slide.show, at: { mark: cannot-2 }, slideId: cannot-2 }
+      - {
+          id: pt-wrap,
+          type: slide.point,
+          at: { afterAction: cannot-2 },
+          target: { x: 0.413, y: 0.536 },
+        }
+      - { id: cannot-3, type: slide.show, at: { mark: cannot-3 }, slideId: cannot-3 }
+      - {
+          id: pt-clamp-fig,
+          type: slide.point,
+          at: { afterAction: cannot-3 },
+          target: { x: 0.716, y: 0.536 },
+        }
+      - { id: cannot-4, type: slide.show, at: { mark: cannot-4 }, slideId: cannot-4 }
+      - {
+          id: pt-right,
+          type: slide.point,
+          at: { afterAction: cannot-4 },
+          target: { x: 0.5, y: 0.842 },
+        }
+      - { id: pt-ok, type: slide.point, at: { mark: pt-ok }, target: { x: 0.125, y: 0.184 } }
+
+  - id: book
+    chapter: Book လုပ်ပြီး ပြန်ယူ
+    narration: >-
+      [[mark:close-cannot]] overdraft ဖြစ်ပြီ ဆိုရင် ဖုံးမထားဘဲ book လုပ်ပြီး ထင်ထင်ရှားရှား ပြန်ယူရပါတယ်။
+      [[mark:type-ledger]] ဒီတစ်ခါ signed balance ရှိတဲ့ ledger ပေါ်မှာ ယူရို ရှစ်ဆယ် settlement ကို
+      အပြည့် post လုပ်ပါတယ်။ ပြီးတော့ user ရဲ့ နောက် deposit ယူရို နှစ်ဆယ်က အကြွေးကို ချေပါတယ်။
+      ကျန်နေသေးတဲ့ အနုတ်ကိုတော့ ပြန်ရဖို့ မမျှော်လင့်တော့လို့ loss အဖြစ် write-off
+      လုပ်ပါတယ်။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-booked]] settlement ကို
+      book လုပ်တော့ user ရဲ့ balance က အနုတ် သုံးဆယ်၊ ဘဏ်က ခုနစ်ဆယ် ဖြစ်ပြီး၊ ဒီတစ်ခါ ပေးစရာ
+      ရှိတာနဲ့ ဘဏ်ထဲက ငွေ ကိုက်ပါတယ်။ [[mark:pt-netted]] deposit ရောက်တော့ အနုတ် ဆယ်ပဲ ကျန်ပါတယ်၊ ဒါက
+      netting ပါ၊ နောက်ရောက်တဲ့ ငွေနဲ့ အကြွေးကို ချေတာပါ။ [[mark:pt-wo]] ကျန်တဲ့ ဆယ်ကို write-off
+      လုပ်တော့ user က သုည ပြန်ဖြစ်ပြီး၊ expense ဘက်မှာ ယူရို ဆယ်ရဲ့ loss ကို မြင်ရပါတယ်။ [[mark:dock-3]]
+      clamp နဲ့ ကွာတာက ဒီ loss က ပျောက်မသွားဘဲ entry တစ်ခု အနေနဲ့ ရှိနေတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Handling overdrafts (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-overdrafts",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Accounting & ledgers (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#accounting-ledgers",
+        }
+    actions:
+      - { id: close-cannot, type: slide.close, at: { mark: close-cannot } }
+      - id: type-ledger
+        type: editor.type
+        at: { mark: type-ledger }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"clamped: owed\", cents(owed), \"bank\", cents(bank), \"invented\", cents(gap))\n",
+            occurrence: 1,
+          }
+        text: "\n\tl := funded()\n\tmust(l.Post(settlement(\"s1\", u1, 8000)))\n\treport(l, \"booked\")\n\tmust(l.Post(deposit(\"d3\", u1, 2000)))\n\treport(l, \"netted\")\n\tif b := l.Balance(u1); b < 0 {\n\t\tmust(l.Post(writeOff(\"w1\", u1, -b)))\n\t}\n\treport(l, \"written off\")\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "written off: user 1042 0.00",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-writeoff,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: 'must(l.Post(writeOff("w1", u1, -b)))',
+        }
+      - id: pt-booked
+        type: console.point
+        at: { mark: pt-booked }
+        target: { text: "booked: user 1042 -30.00", occurrence: 1 }
+      - id: pt-netted
+        type: console.point
+        at: { mark: pt-netted }
+        target: { text: "netted: user 1042 -10.00", occurrence: 1 }
+      - id: pt-wo
+        type: console.point
+        at: { mark: pt-wo }
+        target: { text: "written off: user 1042 0.00", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: recover
+    narration: >-
+      [[mark:show-recover]] ပြန်ယူတဲ့ လမ်း သုံးလမ်းကို entry တွေနဲ့ ကြည့်ရအောင်။ [[mark:pt-s1]] အရင်ဆုံး
+      overdraft ကို ဖြစ်တဲ့အတိုင်း book လုပ်ထားပါတယ်။ [[mark:recover-2]] ပထမ လမ်းက netting ပါ၊ user ရဲ့
+      နောက် deposit တွေက အကြွေးကို အရင် ချေပါတယ်။ [[mark:recover-3]] ဒုတိယ လမ်းက user ကို ပြန်ဆပ်ဖို့
+      တောင်းတာပါ။ တောင်းတာ ကိုယ်တိုင်က entry မဟုတ်ပါဘူး၊ ငွေ တကယ် ရောက်မှ deposit လိုပဲ book
+      လုပ်ပါတယ်။ [[mark:recover-4]] တတိယ လမ်းက write-off ပါ။ expense ဒါမှမဟုတ် loss account ကို debit
+      လုပ်တဲ့ compensating entry နဲ့ user ရဲ့ balance ကို ပိတ်ပါတယ်။ [[mark:pt-loss]] ဒီတော့ ဆုံးရှုံးမှုက
+      report ထဲမှာ မြင်ရပြီး၊ ဘယ်ကနေ ဘယ်လို ဖြစ်လဲ ဆိုတာကို ledger က ပြောပြနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Handling overdrafts (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-overdrafts",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+    actions:
+      - {
+          id: show-recover,
+          type: slide.show,
+          at: { mark: show-recover, offsetMs: -700 },
+          slideId: recover-1,
+        }
+      - {
+          id: pt-recover-title,
+          type: slide.point,
+          at: { afterAction: show-recover },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: pt-s1, type: slide.point, at: { mark: pt-s1 }, target: { x: 0.117, y: 0.446 } }
+      - { id: recover-2, type: slide.show, at: { mark: recover-2 }, slideId: recover-2 }
+      - {
+          id: pt-d3,
+          type: slide.point,
+          at: { afterAction: recover-2 },
+          target: { x: 0.117, y: 0.523 },
+        }
+      - { id: recover-3, type: slide.show, at: { mark: recover-3 }, slideId: recover-3 }
+      - {
+          id: pt-ask,
+          type: slide.point,
+          at: { afterAction: recover-3 },
+          target: { x: 0.35, y: 0.787 },
+        }
+      - { id: recover-4, type: slide.show, at: { mark: recover-4 }, slideId: recover-4 }
+      - {
+          id: pt-w1,
+          type: slide.point,
+          at: { afterAction: recover-4 },
+          target: { x: 0.117, y: 0.601 },
+        }
+      - { id: pt-loss, type: slide.point, at: { mark: pt-loss }, target: { x: 0.284, y: 0.922 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ balance column ပေါ်မှာ သုညနဲ့ အထက် ဖြစ်ရမယ် ဆိုတဲ့ CHECK
+      constraint ထားသင့်လား လို့ မေးတတ်ပါတယ်။ ချက်ချင်း ထားမယ် လို့ မဖြေဘဲ အချက်
+      သုံးချက်နဲ့ ဖြေပါ။ [[mark:iv-a]] ပထမ၊ hold ထက် ကြီးတဲ့ settlement၊ ငွေ ထွက်ပြီးမှ
+      ရောက်လာတဲ့ chargeback လိုမျိုး အပြင်ဘက်က အနုတ်ကို အတင်း ဖြစ်စေနိုင်ပါတယ်။ [[mark:iv-b]] ဒုတိယ၊
+      အနုတ်ကို ရေးလို့ မရတဲ့ system က crash ဖြစ်ပြီး ဖြစ်ပြီးသား fact ကို ပျောက်စေတာ၊ wrap ဖြစ်တာ၊ clamp
+      လုပ်ပြီး ငွေ ဖန်တီးတာ တစ်ခုခု ဖြစ်ပါတယ်။ [[mark:iv-c]] တတိယ၊ balance သုညနဲ့ အထက် ဆိုတာ
+      invariant ပါ၊ authorization မှာ စစ်ပြီး နောက်မှ monitor လုပ်ပါတယ်။ [[mark:iv-d]] ပြီးရင် ကိုယ် ဘာလုပ်မလဲ
+      ဆက်ပြောပါ။ balance ကို signed ထားမယ်၊ overdraft ကို book လုပ်ပြီး alert ပေးမယ်၊ netting၊ repayment
+      ဒါမှမဟုတ် write-off entry နဲ့ ပြန်ယူမယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Handling overdrafts (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-overdrafts",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ledger ပေါ်က settlement
+      ပမာဏကို user ရှိတဲ့ ယူရို ငါးဆယ်နဲ့ ညီအောင် ပြောင်းပြီး run ကြည့်ပါ။ balance က သုည ဖြစ်ပြီး
+      deposit နောက်မှာ နှစ်ဆယ် ဖြစ်လာပြီး၊ write-off က ဘာမှ မလုပ်ပါဘူး။ [[mark:try-why]] code က balance
+      အနုတ် ဖြစ်မှပဲ write-off လုပ်လို့ပါ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ overdraft ကို တားမြစ်ထားလို့
+      ရပေမဲ့ ကိုယ်စားမပြုနိုင်အောင် လုပ်လို့ မရပါဘူး၊ ဖြစ်လာရင် book လုပ်ပြီး entry နဲ့ ပြန်ယူရပါတယ်။
+      နောက် lesson မှာ ငွေရွှေ့တဲ့ request တစ်ခု timeout ဖြစ်လို့ retry လုပ်တဲ့အခါ ငွေ နှစ်ခါ
+      မရွေ့အောင် idempotency key နဲ့ ဘယ်လို ကာကွယ်မလဲ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Handling overdrafts (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-overdrafts",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: 'settlement("s1", u1, 8000)', occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

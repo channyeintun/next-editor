@@ -1,0 +1,886 @@
+# Fintech Engineering, lesson 09: debit, credit and account types (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Double-entry bookkeeping" (account types, the accounting
+# equation), "Audits and audit trails" (assets against what is owed to users), Appendix A
+# "Accounting & ledgers" (CC BY 4.0, Voytek Pitula).
+# Start state: ledger.go is kit/go/ledger.go unchanged (Line, Tx, Ledger.Post, Balance by normal
+# side, cents); books.go adds Accounts, TrialBalance and Total(kind); main.go posts a deposit as
+# Dr asset:bank / Cr liability:user:1042 and prints every account's balance.
+# Edits, all insert-only:
+#   1. the fee as Dr liability:user:1042 / Cr revenue:fees      -> run-2: user 98.50, fees 1.50
+#   2. the trial balance and the accounting equation           -> run-3: 101.50 = 101.50, true
+# Figures: sign (the −100 that is a +100 debit), types (five types and the side each grows on),
+# iou (assets against whose money it is), chart (sub-ledger rolled up into the general ledger),
+# iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-09-account-types
+  title: "Fintech Engineering 09: Debit၊ credit နဲ့ account type"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      books.go: |
+        package main
+
+        import (
+        	"maps"
+        	"slices"
+        )
+
+        // Accounts lists every account that has a posted line, sorted.
+        func (l *Ledger) Accounts() []string {
+        	seen := map[string]bool{}
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			seen[line.Account] = true
+        		}
+        	}
+        	return slices.Sorted(maps.Keys(seen))
+        }
+
+        // TrialBalance adds up every debit and every credit in the books.
+        func (l *Ledger) TrialBalance() (debits, credits int64) {
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			debits += line.Debit
+        			credits += line.Credit
+        		}
+        	}
+        	return debits, credits
+        }
+
+        // Total adds up the balances of every account of one kind: Total("liability").
+        func (l *Ledger) Total(kind string) int64 {
+        	var sum int64
+        	for _, a := range l.Accounts() {
+        		if kindOf(a) == kind {
+        			sum += l.Balance(a)
+        		}
+        	}
+        	return sum
+        }
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // kindOf reads the account type from the name: "asset:bank" is an asset.
+        func kindOf(account string) string {
+        	kind, _, _ := strings.Cut(account, ":")
+        	return kind
+        }
+
+        // Balance derives an account's balance on the side where that kind of account grows:
+        // assets and expenses grow with debits; liabilities, equity and revenue grow with credits.
+        func (l *Ledger) Balance(account string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind := kindOf(account); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // post records tx and stops the program if the ledger refuses it.
+        func post(l *Ledger, tx Tx) {
+        	if err := l.Post(tx); err != nil {
+        		panic(err)
+        	}
+        }
+
+        func main() {
+        	var l Ledger
+        	post(&l, Tx{ID: "dep-1", Memo: "deposit", Lines: []Line{
+        		{Account: "asset:bank", Debit: 10000},
+        		{Account: "liability:user:1042", Credit: 10000},
+        	}})
+
+        	for _, acct := range l.Accounts() {
+        		fmt.Printf("%-20s %8s\n", acct, cents(l.Balance(acct)))
+        	}
+        }
+  slides:
+    - id: chart-1
+      contentType: html
+      name: "Chart of accounts 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">CHART OF ACCOUNTS</text>
+        <text x="80" y="150" font-size="44" fill="#e9edf5" font-weight="700">User တစ်ယောက် account တစ်ခု၊ general ledger မှာ တစ်ကြောင်း</text>
+        <g class="in"><rect x="100" y="230" width="620" height="520" rx="22" fill="#b794f6" fill-opacity="0.05" stroke="#b794f6" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="122" y="266" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.06em">SUB-LEDGER · liability:user:*</text></g>
+        <g class="in"><rect x="130" y="290" width="560" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="152" y="325" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="668" y="325" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M130 342H690" stroke="#2a3345" stroke-width="2"/><g><text x="152" y="383" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="668" y="383" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">98.50</text></g><g><path d="M146 404H674" stroke="#2a3345" stroke-width="1.5"/><text x="152" y="445" font-size="28" fill="#e9edf5" class="mono">liability:user:2077</text><text x="668" y="445" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">40.00</text></g><g><path d="M146 466H674" stroke="#2a3345" stroke-width="1.5"/><text x="152" y="507" font-size="28" fill="#e9edf5" class="mono">liability:user:3150</text><text x="668" y="507" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">12.00</text></g></g>
+        <g class="in"><text x="130" y="640" font-size="26" fill="#8a94a8">user တစ်သိန်းဆို account တစ်သိန်း</text></g>
+        </svg>
+    - id: chart-2
+      contentType: html
+      name: "Chart of accounts 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">CHART OF ACCOUNTS</text>
+        <text x="80" y="150" font-size="44" fill="#e9edf5" font-weight="700">User တစ်ယောက် account တစ်ခု၊ general ledger မှာ တစ်ကြောင်း</text>
+        <rect x="100" y="230" width="620" height="520" rx="22" fill="#b794f6" fill-opacity="0.05" stroke="#b794f6" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="122" y="266" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.06em">SUB-LEDGER · liability:user:*</text>
+        <rect x="130" y="290" width="560" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="152" y="325" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="668" y="325" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M130 342H690" stroke="#2a3345" stroke-width="2"/><g><text x="152" y="383" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="668" y="383" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">98.50</text></g><g><path d="M146 404H674" stroke="#2a3345" stroke-width="1.5"/><text x="152" y="445" font-size="28" fill="#e9edf5" class="mono">liability:user:2077</text><text x="668" y="445" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">40.00</text></g><g><path d="M146 466H674" stroke="#2a3345" stroke-width="1.5"/><text x="152" y="507" font-size="28" fill="#e9edf5" class="mono">liability:user:3150</text><text x="668" y="507" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">12.00</text></g>
+        <text x="130" y="640" font-size="26" fill="#8a94a8">user တစ်သိန်းဆို account တစ်သိန်း</text>
+        <g class="in"><rect x="900" y="290" width="600" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="922" y="325" font-size="22" fill="#8a94a8" font-weight="700">general ledger</text><text x="1478" y="325" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M900 342H1500" stroke="#2a3345" stroke-width="2"/><g><text x="922" y="383" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="1478" y="383" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">152.00</text></g><g><rect x="906" y="409" width="588" height="52" rx="10" fill="#b794f6" opacity="0.14"/><path d="M916 404H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="445" font-size="28" fill="#b794f6" class="mono">liability:users</text><text x="1478" y="445" font-size="28" text-anchor="end" fill="#b794f6" class="mono">150.50</text></g><g><path d="M916 466H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="507" font-size="28" fill="#e9edf5" class="mono">revenue:fees</text><text x="1478" y="507" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1.50</text></g></g>
+        <path d="M724 435L892 435" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="808" y="418.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">roll up</text>
+        <g class="in"><rect x="900" y="580" width="492.6" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="900" y="580" width="492.6" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1146.3" y="614.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">chart of accounts = account စာရင်း</text></g>
+        </svg>
+    - id: chart-3
+      contentType: html
+      name: "Chart of accounts 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">CHART OF ACCOUNTS</text>
+        <text x="80" y="150" font-size="44" fill="#e9edf5" font-weight="700">User တစ်ယောက် account တစ်ခု၊ general ledger မှာ တစ်ကြောင်း</text>
+        <rect x="100" y="230" width="620" height="520" rx="22" fill="#b794f6" fill-opacity="0.05" stroke="#b794f6" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="122" y="266" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.06em">SUB-LEDGER · liability:user:*</text>
+        <g class="in"><rect x="130" y="290" width="560" height="300" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="152" y="325" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="668" y="325" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M130 342H690" stroke="#2a3345" stroke-width="2"/><g><text x="152" y="383" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="668" y="383" font-size="28" text-anchor="end" fill="#fc8181" class="mono">88.50</text></g><g><path d="M146 404H674" stroke="#2a3345" stroke-width="1.5"/><text x="152" y="445" font-size="28" fill="#e9edf5" class="mono">liability:user:2077</text><text x="668" y="445" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">40.00</text></g><g><path d="M146 466H674" stroke="#2a3345" stroke-width="1.5"/><text x="152" y="507" font-size="28" fill="#e9edf5" class="mono">liability:user:3150</text><text x="668" y="507" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">12.00</text></g><g><rect x="136" y="533" width="548" height="52" rx="10" fill="#fc8181" opacity="0.14"/><path d="M146 528H674" stroke="#2a3345" stroke-width="1.5"/><text x="152" y="569" font-size="28" fill="#fc8181" class="mono">liability:user:1024</text><text x="668" y="569" font-size="28" text-anchor="end" fill="#fc8181" class="mono">10.00</text></g></g>
+        <text x="130" y="640" font-size="26" fill="#8a94a8">user တစ်သိန်းဆို account တစ်သိန်း</text>
+        <rect x="900" y="290" width="600" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="922" y="325" font-size="22" fill="#8a94a8" font-weight="700">general ledger</text><text x="1478" y="325" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">balance</text><path d="M900 342H1500" stroke="#2a3345" stroke-width="2"/><g><text x="922" y="383" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="1478" y="383" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">152.00</text></g><g><rect x="906" y="409" width="588" height="52" rx="10" fill="#b794f6" opacity="0.14"/><path d="M916 404H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="445" font-size="28" fill="#b794f6" class="mono">liability:users</text><text x="1478" y="445" font-size="28" text-anchor="end" fill="#b794f6" class="mono">150.50</text></g><g><path d="M916 466H1484" stroke="#2a3345" stroke-width="1.5"/><text x="922" y="507" font-size="28" fill="#e9edf5" class="mono">revenue:fees</text><text x="1478" y="507" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1.50</text></g>
+        <path d="M724 435L892 435" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="808" y="418.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">roll up</text>
+        <rect x="900" y="580" width="492.6" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="900" y="580" width="492.6" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1146.3" y="614.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">chart of accounts = account စာရင်း</text>
+        <g class="in"><text x="130" y="700" font-size="26" fill="#fc8181">1042 အစား 1024 — account အသစ်၊ total မပြောင်း</text></g>
+        </svg>
+    - id: iou-1
+      contentType: html
+      name: "Accounting equation 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">ACCOUNTING EQUATION</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">User ရဲ့ balance က platform ရဲ့ အကြွေး</text>
+        <g class="in"><text x="100" y="262" font-size="26" fill="#8a94a8">assets — ကိုယ့်ဘဏ်ထဲမှာ ရှိတာ</text></g>
+        <g class="in"><rect x="100" y="290" width="1400" height="90" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="294" width="1392" height="82" rx="10" fill="#4fd1c5" opacity="0.8"/><text x="800" y="420" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="600">asset:bank</text><text x="800" y="346" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">100.00</text></g></g>
+        </svg>
+    - id: iou-2
+      contentType: html
+      name: "Accounting equation 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">ACCOUNTING EQUATION</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">User ရဲ့ balance က platform ရဲ့ အကြွေး</text>
+        <text x="100" y="262" font-size="26" fill="#8a94a8">assets — ကိုယ့်ဘဏ်ထဲမှာ ရှိတာ</text>
+        <rect x="100" y="290" width="1400" height="90" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="294" width="1392" height="82" rx="10" fill="#4fd1c5" opacity="0.8"/><text x="800" y="420" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="600">asset:bank</text><text x="800" y="346" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">100.00</text></g>
+        <g class="in"><text x="100" y="482" font-size="26" fill="#8a94a8">ဒီငွေက ဘယ်သူ့ အတွက်လဲ</text></g>
+        <g class="in"><rect x="100" y="510" width="1400" height="90" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="514" width="1371" height="82" rx="10" fill="#b794f6" opacity="0.8"/><text x="789.5" y="640" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="600">liability:user:1042 — IOU</text><text x="789.5" y="566" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">98.50</text></g><g><rect x="1483" y="514" width="13" height="82" rx="10" fill="#68d391" opacity="0.8"/></g></g>
+        <g class="in"><text x="1500" y="482" font-size="26" text-anchor="end" fill="#68d391">revenue:fees 1.50 — ကိုယ့်ငွေ</text></g>
+        </svg>
+    - id: iou-3
+      contentType: html
+      name: "Accounting equation 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">ACCOUNTING EQUATION</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">User ရဲ့ balance က platform ရဲ့ အကြွေး</text>
+        <text x="100" y="262" font-size="26" fill="#8a94a8">assets — ကိုယ့်ဘဏ်ထဲမှာ ရှိတာ</text>
+        <rect x="100" y="290" width="1400" height="90" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="294" width="1392" height="82" rx="10" fill="#4fd1c5" opacity="0.8"/><text x="800" y="420" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="600">asset:bank</text><text x="800" y="346" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">100.00</text></g>
+        <text x="100" y="482" font-size="26" fill="#8a94a8">ဒီငွေက ဘယ်သူ့ အတွက်လဲ</text>
+        <rect x="100" y="510" width="1400" height="90" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="514" width="1371" height="82" rx="10" fill="#b794f6" opacity="0.8"/><text x="789.5" y="640" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="600">liability:user:1042 — IOU</text><text x="789.5" y="566" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">98.50</text></g><g><rect x="1483" y="514" width="13" height="82" rx="10" fill="#68d391" opacity="0.8"/></g>
+        <text x="1500" y="482" font-size="26" text-anchor="end" fill="#68d391">revenue:fees 1.50 — ကိုယ့်ငွေ</text>
+        <g class="in"><rect x="100" y="700" width="849.9" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="100" y="700" width="849.9" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="525" y="734.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">assets = liabilities + equity + revenue − expenses</text></g>
+        <g class="in"><rect x="100" y="790" width="727.6" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="100" y="790" width="727.6" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="463.8" y="824.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">audit: user တွေကို ပေးစရာ ရှိသလောက် asset ရှိရဲ့လား</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">User ရဲ့ balance က ဘာလို့ liability ဖြစ်တာလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">User ရဲ့ balance က ဘာလို့ liability ဖြစ်တာလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">ငွေက ကိုယ့်ဘဏ်ထဲမှာ — ဒါက asset</text><text x="188" y="311" font-size="26" fill="#8a94a8">user က ငွေ ပို့လိုက်တော့ ကိုယ့် bank account ထဲ ရောက်တယ်</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">User ရဲ့ balance က ဘာလို့ liability ဖြစ်တာလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">ငွေက ကိုယ့်ဘဏ်ထဲမှာ — ဒါက asset</text><text x="188" y="311" font-size="26" fill="#8a94a8">user က ငွေ ပို့လိုက်တော့ ကိုယ့် bank account ထဲ ရောက်တယ်</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#b794f6"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">User ရဲ့ balance က ကတိ — ပြန်ပေးရမယ့် IOU</text><text x="188" y="443" font-size="26" fill="#8a94a8">ပေးစရာ ရှိတာ ဖြစ်လို့ credit ဘက်မှာ တိုးတဲ့ liability</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">User ရဲ့ balance က ဘာလို့ liability ဖြစ်တာလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">ငွေက ကိုယ့်ဘဏ်ထဲမှာ — ဒါက asset</text><text x="188" y="311" font-size="26" fill="#8a94a8">user က ငွေ ပို့လိုက်တော့ ကိုယ့် bank account ထဲ ရောက်တယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#b794f6"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">User ရဲ့ balance က ကတိ — ပြန်ပေးရမယ့် IOU</text><text x="188" y="443" font-size="26" fill="#8a94a8">ပေးစရာ ရှိတာ ဖြစ်လို့ credit ဘက်မှာ တိုးတဲ့ liability</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#68d391"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">ကိုယ်ပိုင်ငွေက equity နဲ့ revenue — fee က user ဆီက ရွေ့လာတာ</text><text x="188" y="575" font-size="26" fill="#8a94a8">assets = liabilities + equity + revenue − expenses</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">User ရဲ့ balance က ဘာလို့ liability ဖြစ်တာလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">ငွေက ကိုယ့်ဘဏ်ထဲမှာ — ဒါက asset</text><text x="188" y="311" font-size="26" fill="#8a94a8">user က ငွေ ပို့လိုက်တော့ ကိုယ့် bank account ထဲ ရောက်တယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#b794f6"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">User ရဲ့ balance က ကတိ — ပြန်ပေးရမယ့် IOU</text><text x="188" y="443" font-size="26" fill="#8a94a8">ပေးစရာ ရှိတာ ဖြစ်လို့ credit ဘက်မှာ တိုးတဲ့ liability</text></g><g><circle cx="138" cy="513" r="25" fill="#68d391"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">ကိုယ်ပိုင်ငွေက equity နဲ့ revenue — fee က user ဆီက ရွေ့လာတာ</text><text x="188" y="575" font-size="26" fill="#8a94a8">assets = liabilities + equity + revenue − expenses</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">Audit — user liability တွေ စုစုပေါင်းလောက် asset ရှိရမယ်</text><text x="188" y="707" font-size="26" fill="#8a94a8">sub-ledger ကို roll up လုပ်ပြီး bank နဲ့ တိုက်စစ်တယ်</text></g>
+        </svg>
+    - id: sign-1
+      contentType: html
+      name: "Debit / credit 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">DEBIT / CREDIT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">−100 က တကယ်တော့ ဘဏ်ထဲက +100</text>
+        <g class="in"><text x="100" y="262" font-size="26" fill="#8a94a8">direction view — from / to</text></g>
+        <g class="in"><rect x="100" y="290" width="560" height="114" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="336.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">external:bank        −100.00</text></g><g><text x="124" y="375.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">user:1042             100.00</text></g></g>
+        <g class="in"><text x="100" y="520" font-size="32" fill="#fc8181">ဘဏ်မှာ ငွေ အနှုတ် ရှိလား?</text></g>
+        </svg>
+    - id: sign-2
+      contentType: html
+      name: "Debit / credit 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">DEBIT / CREDIT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">−100 က တကယ်တော့ ဘဏ်ထဲက +100</text>
+        <text x="100" y="262" font-size="26" fill="#8a94a8">direction view — from / to</text>
+        <rect x="100" y="290" width="560" height="114" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="336.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">external:bank        −100.00</text></g><g><text x="124" y="375.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">user:1042             100.00</text></g>
+        <text x="100" y="520" font-size="32" fill="#fc8181">ဘဏ်မှာ ငွေ အနှုတ် ရှိလား?</text>
+        <g class="in"><text x="940" y="284" font-size="30" text-anchor="middle" fill="#4fd1c5" font-weight="700">asset:bank</text><text x="940" y="316" font-size="22" text-anchor="middle" fill="#8a94a8">asset</text><path d="M760 332H1120M940 332V550" stroke="#4fd1c5" stroke-width="3" stroke-linecap="round" fill="none"/><text x="850" y="362" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Debit</text><text x="1030" y="362" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Credit</text><g><text x="850" y="408" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">100.00</text></g></g>
+        <g class="in"><text x="1340" y="284" font-size="30" text-anchor="middle" fill="#b794f6" font-weight="700">liability:user:1042</text><text x="1340" y="316" font-size="22" text-anchor="middle" fill="#8a94a8">liability</text><path d="M1160 332H1520M1340 332V550" stroke="#b794f6" stroke-width="3" stroke-linecap="round" fill="none"/><text x="1250" y="362" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Debit</text><text x="1430" y="362" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Credit</text><g><text x="1430" y="408" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">100.00</text></g></g>
+        </svg>
+    - id: sign-3
+      contentType: html
+      name: "Debit / credit 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">DEBIT / CREDIT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">−100 က တကယ်တော့ ဘဏ်ထဲက +100</text>
+        <text x="100" y="262" font-size="26" fill="#8a94a8">direction view — from / to</text>
+        <rect x="100" y="290" width="560" height="114" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="336.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">external:bank        −100.00</text></g><g><text x="124" y="375.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">user:1042             100.00</text></g>
+        <text x="100" y="520" font-size="32" fill="#fc8181">ဘဏ်မှာ ငွေ အနှုတ် ရှိလား?</text>
+        <text x="940" y="284" font-size="30" text-anchor="middle" fill="#4fd1c5" font-weight="700">asset:bank</text><text x="940" y="316" font-size="22" text-anchor="middle" fill="#8a94a8">asset</text><path d="M760 332H1120M940 332V550" stroke="#4fd1c5" stroke-width="3" stroke-linecap="round" fill="none"/><text x="850" y="362" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Debit</text><text x="1030" y="362" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Credit</text><g><text x="850" y="408" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">100.00</text></g>
+        <text x="1340" y="284" font-size="30" text-anchor="middle" fill="#b794f6" font-weight="700">liability:user:1042</text><text x="1340" y="316" font-size="22" text-anchor="middle" fill="#8a94a8">liability</text><path d="M1160 332H1520M1340 332V550" stroke="#b794f6" stroke-width="3" stroke-linecap="round" fill="none"/><text x="1250" y="362" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Debit</text><text x="1430" y="362" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">Credit</text><g><text x="1430" y="408" font-size="28" text-anchor="middle" fill="#e9edf5" class="mono">100.00</text></g>
+        <g class="in"><rect x="760" y="640" width="713" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="760" y="640" width="713" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="1116.5" y="674.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">entry တစ်ခု၊ ဘက် နှစ်ဖက် — Dr 100.00 = Cr 100.00</text></g>
+        <g class="in"><text x="760" y="740" font-size="26" fill="#8a94a8">asset က debit ဘက်မှာ တိုး၊ liability က credit ဘက်မှာ တိုး</text></g>
+        </svg>
+    - id: types-1
+      contentType: html
+      name: "Account types 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">ACCOUNT TYPES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Account type ငါးမျိုး၊ ဘယ်ဘက်မှာ တိုးလဲ</text>
+        <g class="in"><rect x="100" y="220" width="1160" height="472" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="255" font-size="22" fill="#8a94a8" font-weight="700">type</text><text x="315.3" y="255" font-size="22" fill="#8a94a8" font-weight="700">example</text><text x="752.5" y="255" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">grows on</text><text x="863.1" y="255" font-size="22" fill="#8a94a8" font-weight="700">ဆိုလိုတာ</text><path d="M100 272H1260" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="324" font-size="28" fill="#4fd1c5" class="mono">asset</text><text x="315.3" y="324" font-size="28" fill="#9aa5b8" class="mono">asset:bank</text><text x="752.5" y="324" font-size="28" text-anchor="middle" fill="#f6c453">debit</text><text x="863.1" y="324" font-size="28" fill="#e9edf5">ကိုယ် ပိုင်တာ၊ ကိုယ့်ဆီ ရှိတာ</text></g><g><path d="M116 356H1244" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="408" font-size="26" fill="#b794f6" class="mono">liability</text><text x="315.3" y="408" font-size="27" fill="#9aa5b8" class="mono">liability:user:1042</text><text x="752.5" y="408" font-size="28" text-anchor="middle" fill="#6cb2f5">credit</text><text x="863.1" y="408" font-size="28" fill="#e9edf5">ကိုယ် ပေးစရာ ရှိတာ</text></g><g><path d="M116 440H1244" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="492" font-size="28" fill="#b794f6" class="mono">equity</text><text x="315.3" y="492" font-size="28" fill="#9aa5b8" class="mono">equity:capital</text><text x="752.5" y="492" font-size="28" text-anchor="middle" fill="#6cb2f5">credit</text><text x="863.1" y="492" font-size="28" fill="#e9edf5">owner တွေရဲ့ အပိုင်</text></g></g>
+        <g class="in"><path d="M1290 276q14 0 14 14V384q0 14 14 14q-14 0 -14 14V506q0 14 -14 14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="1332" y="407" font-size="26" fill="#9aa5b8" font-weight="600">balance sheet</text></g>
+        </svg>
+    - id: types-2
+      contentType: html
+      name: "Account types 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">ACCOUNT TYPES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Account type ငါးမျိုး၊ ဘယ်ဘက်မှာ တိုးလဲ</text>
+        <rect x="100" y="220" width="1160" height="472" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="255" font-size="22" fill="#8a94a8" font-weight="700">type</text><text x="315.3" y="255" font-size="22" fill="#8a94a8" font-weight="700">example</text><text x="752.5" y="255" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">grows on</text><text x="863.1" y="255" font-size="22" fill="#8a94a8" font-weight="700">ဆိုလိုတာ</text><path d="M100 272H1260" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="324" font-size="28" fill="#4fd1c5" class="mono">asset</text><text x="315.3" y="324" font-size="28" fill="#9aa5b8" class="mono">asset:bank</text><text x="752.5" y="324" font-size="28" text-anchor="middle" fill="#f6c453">debit</text><text x="863.1" y="324" font-size="28" fill="#e9edf5">ကိုယ် ပိုင်တာ၊ ကိုယ့်ဆီ ရှိတာ</text></g><g><path d="M116 356H1244" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="408" font-size="26" fill="#b794f6" class="mono">liability</text><text x="315.3" y="408" font-size="27" fill="#9aa5b8" class="mono">liability:user:1042</text><text x="752.5" y="408" font-size="28" text-anchor="middle" fill="#6cb2f5">credit</text><text x="863.1" y="408" font-size="28" fill="#e9edf5">ကိုယ် ပေးစရာ ရှိတာ</text></g><g><path d="M116 440H1244" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="492" font-size="28" fill="#b794f6" class="mono">equity</text><text x="315.3" y="492" font-size="28" fill="#9aa5b8" class="mono">equity:capital</text><text x="752.5" y="492" font-size="28" text-anchor="middle" fill="#6cb2f5">credit</text><text x="863.1" y="492" font-size="28" fill="#e9edf5">owner တွေရဲ့ အပိုင်</text></g><g class="in"><path d="M116 524H1244" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="576" font-size="28" fill="#68d391" class="mono">revenue</text><text x="315.3" y="576" font-size="28" fill="#9aa5b8" class="mono">revenue:fees</text><text x="752.5" y="576" font-size="28" text-anchor="middle" fill="#6cb2f5">credit</text><text x="863.1" y="576" font-size="28" fill="#e9edf5">ရလာတဲ့ ဝင်ငွေ</text></g><g class="in"><path d="M116 608H1244" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="660" font-size="28" fill="#fc8181" class="mono">expense</text><text x="315.3" y="660" font-size="23" fill="#9aa5b8" class="mono">expense:processing-fee</text><text x="752.5" y="660" font-size="28" text-anchor="middle" fill="#f6c453">debit</text><text x="863.1" y="660" font-size="28" fill="#e9edf5">သုံးလိုက်ရတဲ့ ငွေ</text></g>
+        <path d="M1290 276q14 0 14 14V384q0 14 14 14q-14 0 -14 14V506q0 14 -14 14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="1332" y="407" font-size="26" fill="#9aa5b8" font-weight="600">balance sheet</text>
+        <g class="in"><path d="M1290 530q14 0 14 14V595q0 14 14 14q-14 0 -14 14V674q0 14 -14 14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="1332" y="618" font-size="26" fill="#9aa5b8" font-weight="600">income statement</text></g>
+        </svg>
+    - id: types-3
+      contentType: html
+      name: "Account types 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">ACCOUNT TYPES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Account type ငါးမျိုး၊ ဘယ်ဘက်မှာ တိုးလဲ</text>
+        <rect x="100" y="220" width="1160" height="472" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="255" font-size="22" fill="#8a94a8" font-weight="700">type</text><text x="315.3" y="255" font-size="22" fill="#8a94a8" font-weight="700">example</text><text x="752.5" y="255" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">grows on</text><text x="863.1" y="255" font-size="22" fill="#8a94a8" font-weight="700">ဆိုလိုတာ</text><path d="M100 272H1260" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="324" font-size="28" fill="#4fd1c5" class="mono">asset</text><text x="315.3" y="324" font-size="28" fill="#9aa5b8" class="mono">asset:bank</text><text x="752.5" y="324" font-size="28" text-anchor="middle" fill="#f6c453">debit</text><text x="863.1" y="324" font-size="28" fill="#e9edf5">ကိုယ် ပိုင်တာ၊ ကိုယ့်ဆီ ရှိတာ</text></g><g><path d="M116 356H1244" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="408" font-size="26" fill="#b794f6" class="mono">liability</text><text x="315.3" y="408" font-size="27" fill="#9aa5b8" class="mono">liability:user:1042</text><text x="752.5" y="408" font-size="28" text-anchor="middle" fill="#6cb2f5">credit</text><text x="863.1" y="408" font-size="28" fill="#e9edf5">ကိုယ် ပေးစရာ ရှိတာ</text></g><g><path d="M116 440H1244" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="492" font-size="28" fill="#b794f6" class="mono">equity</text><text x="315.3" y="492" font-size="28" fill="#9aa5b8" class="mono">equity:capital</text><text x="752.5" y="492" font-size="28" text-anchor="middle" fill="#6cb2f5">credit</text><text x="863.1" y="492" font-size="28" fill="#e9edf5">owner တွေရဲ့ အပိုင်</text></g><g><path d="M116 524H1244" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="576" font-size="28" fill="#68d391" class="mono">revenue</text><text x="315.3" y="576" font-size="28" fill="#9aa5b8" class="mono">revenue:fees</text><text x="752.5" y="576" font-size="28" text-anchor="middle" fill="#6cb2f5">credit</text><text x="863.1" y="576" font-size="28" fill="#e9edf5">ရလာတဲ့ ဝင်ငွေ</text></g><g><path d="M116 608H1244" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="660" font-size="28" fill="#fc8181" class="mono">expense</text><text x="315.3" y="660" font-size="23" fill="#9aa5b8" class="mono">expense:processing-fee</text><text x="752.5" y="660" font-size="28" text-anchor="middle" fill="#f6c453">debit</text><text x="863.1" y="660" font-size="28" fill="#e9edf5">သုံးလိုက်ရတဲ့ ငွေ</text></g>
+        <path d="M1290 276q14 0 14 14V384q0 14 14 14q-14 0 -14 14V506q0 14 -14 14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="1332" y="407" font-size="26" fill="#9aa5b8" font-weight="600">balance sheet</text>
+        <path d="M1290 530q14 0 14 14V595q0 14 14 14q-14 0 -14 14V674q0 14 -14 14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="1332" y="618" font-size="26" fill="#9aa5b8" font-weight="600">income statement</text>
+        <g class="in"><rect x="100" y="750" width="790" height="54" rx="27" fill="#f6c453" opacity="0.16"/><rect x="100" y="750" width="790" height="54" rx="27" fill="none" stroke="#f6c453" stroke-width="2"/><text x="495" y="787.5" font-size="30" text-anchor="middle" fill="#f6c453" font-weight="700">debit / credit = ဘက်၊ အဝင် / အထွက် မဟုတ်ဘူး</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9509
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "asset:bank             100.00\nliability:user:1042    100.00\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "asset:bank             100.00\nliability:user:1042     98.50\nrevenue:fees             1.50\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "asset:bank             100.00\nliability:user:1042     98.50\nrevenue:fees             1.50\ndebits 101.50 = credits 101.50\nassets = liabilities + equity + revenue - expenses: true\n"
+
+scenes:
+  - id: hook
+    chapter: အနှုတ် ၁၀၀ ဖြစ်နေတဲ့ ဘဏ်
+    narration: >-
+      ငွေ ရွေ့တာကို ဘယ်ကနေ ဘယ်ကို ဆိုပြီး မှတ်တော့ ယူရို ၁၀၀ deposit ဝင်လာတဲ့အခါ ဘဏ်ရဲ့ account က
+      အနှုတ် ၁၀၀ ဖြစ်သွားပါတယ်။ [[mark:show-sign]] ဒါပေမဲ့ ဘဏ်ထဲမှာ ငွေ အနှုတ် ရှိတာ မဟုတ်ပါဘူး၊ တကယ်တော့
+      platform ရဲ့ ဘဏ်ထဲမှာ ယူရို ၁၀၀ တိုးလာတာပါ။ [[mark:pt-q]] ဆိုတော့ အဲဒီ ဂဏန်းကို ဘယ်လို
+      ဖတ်ရမလဲ။ [[mark:sign-2]] accounting မှာ account တိုင်းကို ဘက် နှစ်ဖက် ခွဲထားပါတယ်။ ဘယ်ဘက်ကို
+      debit၊ ညာဘက်ကို credit လို့ ခေါ်ပါတယ်။ [[mark:pt-tb]] deposit မှာ ဘဏ်ရဲ့ account ကို debit
+      ဘက်မှာ ၁၀၀ ရေးပြီး၊ [[mark:pt-tu]] user ရဲ့ account ကို credit ဘက်မှာ ၁၀၀ ရေးပါတယ်။
+      [[mark:sign-3]] entry တစ်ခုမှာ debit စုစုပေါင်းနဲ့ credit စုစုပေါင်း အမြဲ ညီရပါတယ်။ from နဲ့ to
+      ဆိုတဲ့ ပုံစံက ဒါကို ကျစ်ကျစ်လျစ်လျစ် ရေးထားတာပဲ ဖြစ်ပြီး၊ classic ပုံစံကတော့ ရွေ့တာ
+      တစ်ခုချင်းကို debit line နဲ့ credit line ခွဲရေးတာပါ။ data က အတူတူပါပဲ။ ခုနက အနှုတ်
+      လက္ခဏာက debit နဲ့ credit ဆိုတဲ့ ဘက် ဖြစ်သွားတာပါ။ [[mark:pt-grow]] ဘယ်ဘက်က တိုးတာလဲ
+      ဆိုတာကတော့ account ရဲ့ type ပေါ်မှာ မူတည်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: show-sign,
+          type: slide.show,
+          at: { mark: show-sign, offsetMs: -700 },
+          slideId: sign-1,
+        }
+      - { id: pt-q, type: slide.point, at: { mark: pt-q }, target: { x: 0.1, y: 0.591 } }
+      - { id: sign-2, type: slide.show, at: { mark: sign-2 }, slideId: sign-2 }
+      - { id: pt-tb, type: slide.point, at: { mark: pt-tb }, target: { x: 0.519, y: 0.467 } }
+      - { id: pt-tu, type: slide.point, at: { mark: pt-tu }, target: { x: 0.881, y: 0.467 } }
+      - { id: sign-3, type: slide.show, at: { mark: sign-3 }, slideId: sign-3 }
+      - {
+          id: pt-same,
+          type: slide.point,
+          at: { afterAction: sign-3 },
+          target: { x: 0.692, y: 0.776 },
+        }
+      - { id: pt-grow, type: slide.point, at: { mark: pt-grow }, target: { x: 0.513, y: 0.836 } }
+
+  - id: types
+    chapter: Account type ငါးမျိုး
+    narration: >-
+      [[mark:show-types]] account တိုင်းမှာ type တစ်ခု ရှိပါတယ်။ [[mark:pt-asset]] asset က ကိုယ်
+      ပိုင်တဲ့ အရာ၊ ကိုယ့်ဆီ ရှိနေတဲ့ ငွေပါ၊ ဘဏ်ထဲက ငွေလိုမျိုးပါ။ asset က debit ဘက်မှာ
+      တိုးပါတယ်။ [[mark:pt-liab]] liability က ကိုယ် ပြန်ပေးစရာ ရှိတဲ့ အကြွေးပါ။ equity ကတော့
+      owner တွေ ထည့်ထားတဲ့ capital လို owner တွေရဲ့ အပိုင်ပါ။ အဲဒီ နှစ်မျိုးလုံး credit ဘက်မှာ
+      တိုးပါတယ်။ ဒီ သုံးမျိုးက balance sheet ပေါ်မှာ ပေါ်ပါတယ်။ [[mark:types-2]] လက်တွေ့မှာ နောက်ထပ်
+      နှစ်မျိုး လိုပါတယ်။ revenue က fee လို ရလာတဲ့ ဝင်ငွေ ဖြစ်လို့ credit ဘက်မှာ တိုးပါတယ်။
+      expense က card processing fee လို ကိုယ် ပေးလိုက်ရတဲ့ စရိတ် ဖြစ်လို့ debit ဘက်မှာ တိုးပါတယ်။
+      ဒီ နှစ်မျိုးက income statement ပေါ်မှာ ပေါ်ပါတယ်။ [[mark:types-3]] သတိထားရမှာက debit နဲ့ credit
+      က ဘက်တွေပါ၊ ငွေ အဝင် အထွက် မဟုတ်ပါဘူး။ debit ဆိုတာ အဝင် လို့ မှတ်ထားရင် liability account
+      တွေမှာ ပြောင်းပြန် ဖြစ်သွားပါတယ်။ ဒါကို code နဲ့ စမ်းကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Know your domain, Accounting & ledgers (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#accounting-ledgers",
+        }
+    actions:
+      - {
+          id: show-types,
+          type: slide.show,
+          at: { mark: show-types, offsetMs: -700 },
+          slideId: types-1,
+        }
+      - { id: pt-asset, type: slide.point, at: { mark: pt-asset }, target: { x: 0.138, y: 0.389 } }
+      - { id: pt-liab, type: slide.point, at: { mark: pt-liab }, target: { x: 0.138, y: 0.482 } }
+      - { id: types-2, type: slide.show, at: { mark: types-2 }, slideId: types-2 }
+      - {
+          id: pt-is,
+          type: slide.point,
+          at: { afterAction: types-2 },
+          target: { x: 0.138, y: 0.669 },
+        }
+      - { id: types-3, type: slide.show, at: { mark: types-3 }, slideId: types-3 }
+      - {
+          id: pt-side,
+          type: slide.point,
+          at: { afterAction: types-3 },
+          target: { x: 0.303, y: 0.902 },
+        }
+
+  - id: code
+    narration: >-
+      [[mark:close-types]] code ကို ကြည့်ရအောင်။ [[mark:sel-dep]] deposit ကို transaction တစ်ခုအနေနဲ့
+      post လုပ်ထားပါတယ်။ ပထမ line က ဘဏ်ရဲ့ asset account ကို debit ဘက်မှာ ၁၀၀၊ ဒုတိယ line က user
+      ရဲ့ liability account ကို credit ဘက်မှာ ၁၀၀ ပါ။ account နာမည်ရဲ့ ရှေ့ဆုံး အပိုင်းက သူ့ type ပါ။
+      [[mark:run-1]] run လိုက်ရအောင်။ [[mark:pt-bank]] ဘဏ်ရဲ့ account က အပေါင်း ၁၀၀ ဖြစ်သွားပါပြီ။
+      [[mark:pt-user]] user ရဲ့ account လည်း အပေါင်း ၁၀၀ ပါ။ ငွေ ရွေ့တာက အရင်အတိုင်းပါပဲ၊
+      ပြောင်းသွားတာက balance ကို ဖတ်ပုံပါ။ [[mark:open-ledger]] ဖတ်ပုံကို Balance ထဲမှာ
+      ကြည့်ရအောင်။ [[mark:sel-kind]] Balance က account type ကို နာမည်ကနေ ဖတ်ပါတယ်။ asset နဲ့
+      expense ဆိုရင် debit ထဲက credit ကို နုတ်ပြီး၊ ကျန်တဲ့ သုံးမျိုးဆိုရင် credit ထဲက debit ကို
+      နုတ်ပါတယ်။ ဒါကြောင့် account တိုင်းရဲ့ balance ကို သူ တိုးတဲ့ ဘက်ကနေ အပေါင်းနဲ့ ပြပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+    actions:
+      - { id: close-types, type: slide.close, at: { mark: close-types } }
+      - id: sel-dep
+        type: editor.select
+        at: { mark: sel-dep }
+        target:
+          {
+            file: main.go,
+            text: "{Account: \"asset:bank\", Debit: 10000},\n\t\t{Account: \"liability:user:1042\", Credit: 10000},",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "liability:user:1042    100.00",
+          timeoutMs: 8000,
+        }
+      - id: pt-bank
+        type: console.point
+        at: { mark: pt-bank }
+        target: { text: "asset:bank", occurrence: 1 }
+      - id: pt-user
+        type: console.point
+        at: { mark: pt-user }
+        target: { text: "liability:user:1042", occurrence: 1 }
+      - { id: open-ledger, type: workspace.openFile, at: { mark: open-ledger }, path: ledger.go }
+      - id: sel-kind
+        type: editor.select
+        at: { mark: sel-kind }
+        target:
+          {
+            file: ledger.go,
+            text: "if kind := kindOf(account); kind == \"asset\" || kind == \"expense\" {\n\t\treturn debit - credit\n\t}\n\treturn credit - debit",
+            occurrence: 1,
+          }
+
+  - id: fee
+    chapter: Debit က အဝင် မဟုတ်ဘူး
+    narration: >-
+      [[mark:open-main2]] fee ဖြတ်တာကို ထည့်ကြည့်ရအောင်။ [[mark:type-fee]] fee တစ်ယူရို ငါးဆယ်ဆင့်ကို
+      user ရဲ့ account ကနေ platform ရဲ့ revenue account ထဲ ရွှေ့ပါမယ်။ user ရဲ့ liability account ကို
+      debit လုပ်ပြီး revenue account ကို credit လုပ်ပါတယ်။ [[mark:ask-fee]] debit ကို အဝင် လို့
+      ထင်ထားရင် user ရဲ့ balance တက်မယ်လို့ ထင်စရာပါ။ တကယ် တက်မလား၊ ကျမလား run မလုပ်ခင်
+      ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-985]] user ရဲ့ balance က ၉၈ ယူရို
+      ၅၀ ဆင့်အထိ ကျသွားပါတယ်။ liability က credit ဘက်မှာ တိုးတော့ debit ဘက်မှာ ရေးလိုက်ရင်
+      လျော့ပါတယ်။ [[mark:pt-rev]] revenue ကတော့ credit ရလို့ တစ်ယူရို ငါးဆယ်ဆင့် တိုးလာပါတယ်။
+      [[mark:pt-bank2]] ဘဏ်ထဲက ငွေကတော့ ၁၀၀ ပါပဲ၊ ငွေ ဘဏ်ကနေ ဘယ်ကိုမှ မသွားသေးလို့ပါ။
+      [[mark:dock-2]] ပြောင်းသွားတာက ဒီ ၁၀၀ ထဲက ဘယ်လောက်က user ရဲ့ ငွေ ဖြစ်ပြီး ဘယ်လောက်က
+      platform ရဲ့ ငွေလဲ ဆိုတာပဲ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+    actions:
+      - { id: open-main2, type: workspace.openFile, at: { mark: open-main2 }, path: main.go }
+      - id: type-fee
+        type: editor.type
+        at: { mark: type-fee }
+        target:
+          {
+            file: main.go,
+            after: "\t\t{Account: \"liability:user:1042\", Credit: 10000},\n\t}})\n",
+            occurrence: 1,
+          }
+        text: "\tpost(&l, Tx{ID: \"fee-1\", Memo: \"deposit fee\", Lines: []Line{\n\t\t{Account: \"liability:user:1042\", Debit: 150},\n\t\t{Account: \"revenue:fees\", Credit: 150},\n\t}})\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "98.50",
+          timeoutMs: 8000,
+        }
+      - id: pt-985
+        type: console.point
+        at: { mark: pt-985 }
+        target: { text: "98.50", occurrence: 1 }
+      - id: pt-rev
+        type: console.point
+        at: { mark: pt-rev }
+        target: { text: "revenue:fees", occurrence: 1 }
+      - id: pt-bank2
+        type: console.point
+        at: { mark: pt-bank2 }
+        target: { text: "asset:bank", occurrence: 1 }
+      - {
+          id: expect-file-fee,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: '{Account: "liability:user:1042", Debit: 150},',
+        }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: iou
+    chapter: User ရဲ့ ငွေက ကိုယ့်အကြွေး
+    narration: >-
+      [[mark:show-iou]] ဘဏ်ထဲမှာ ရှိတဲ့ ယူရို ၁၀၀ က platform ရဲ့ asset ပါ။ [[mark:iou-2]] ဒါပေမဲ့ အဲဒီထဲက
+      ၉၈ ယူရို ၅၀ ဆင့်က user ကို ပြန်ပေးရမယ့် ငွေပါ။ custodial platform၊ ဆိုလိုတာက user ရဲ့ ငွေကို
+      ကိုယ်က ကိုင်ထားပေးတဲ့ platform မှာ user ရဲ့ balance ဆိုတာ platform က user ကို ပေးထားတဲ့ IOU
+      ပါ။ ပြန်ပေးမယ်လို့ ကတိပေးထားတဲ့ အကြွေး ဖြစ်လို့ liability ဘက်မှာ ရှိတာပါ။ [[mark:pt-rev2]]
+      platform ကိုယ်တိုင်ရဲ့ ငွေက fee ဖြတ်ထားတဲ့ တစ်ယူရို ငါးဆယ်ဆင့်ပဲ ရှိပါတယ်။ အဲဒီ ဝင်ငွေတောင်
+      ပေါ်လာတာ မဟုတ်ဘဲ user ရဲ့ liability ထဲကနေ ရွှေ့လာတာပါ၊ ငွေကို မရှိဘဲ မဖန်တီးရဘူး ဆိုတဲ့
+      No invented data မူက ဒီမှာလည်း ထိန်းထားပါတယ်။ [[mark:iou-3]] ဒီ ဆက်စပ်မှုကို accounting
+      equation လို့ ခေါ်ပါတယ်။ asset က liability၊ equity နဲ့ revenue ကို ပေါင်းပြီး expense ကို
+      နုတ်ထားတာနဲ့ အမြဲ ညီရပါတယ်။ [[mark:pt-audit]] audit မှာ စစ်တတ်တဲ့ မေးခွန်း တစ်ခုက ဒီ
+      equation ပေါ်မှာ အခြေခံပါတယ်။ user တွေကို ပေးစရာ ရှိသလောက် asset တကယ် ရှိရဲ့လား ဆိုတာပါ။
+      user ရဲ့ ငွေကို ကုမ္ပဏီ စရိတ်အတွက် သုံးလိုက်ရင် liability က မပြောင်းဘဲ asset ပဲ လျော့သွားလို့
+      ဒီ မေးခွန်းမှာ ချက်ချင်း ပေါ်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - { id: show-iou, type: slide.show, at: { mark: show-iou, offsetMs: -700 }, slideId: iou-1 }
+      - {
+          id: pt-ba,
+          type: slide.point,
+          at: { afterAction: show-iou },
+          target: { x: 0.488, y: 0.48 },
+        }
+      - { id: iou-2, type: slide.show, at: { mark: iou-2 }, slideId: iou-2 }
+      - { id: pt-br, type: slide.point, at: { afterAction: iou-2 }, target: { x: 0.481, y: 0.724 } }
+      - { id: pt-rev2, type: slide.point, at: { mark: pt-rev2 }, target: { x: 0.755, y: 0.549 } }
+      - { id: iou-3, type: slide.show, at: { mark: iou-3 }, slideId: iou-3 }
+      - { id: pt-eq, type: slide.point, at: { afterAction: iou-3 }, target: { x: 0.322, y: 0.842 } }
+      - { id: pt-audit, type: slide.point, at: { mark: pt-audit }, target: { x: 0.284, y: 0.942 } }
+
+  - id: trial
+    chapter: Trial balance
+    narration: >-
+      [[mark:close-iou]] equation ကို code နဲ့ စစ်ကြည့်ရအောင်။ [[mark:type-trial]] ပထမ နှစ်ကြောင်းက
+      trial balance ပါ၊ ledger တစ်ခုလုံးမှာ debit စုစုပေါင်းနဲ့ credit စုစုပေါင်း ညီသလား စစ်တာပါ။
+      နောက် သုံးကြောင်းက type တစ်ခုချင်းရဲ့ balance စုစုပေါင်းကို ယူပြီး accounting equation
+      မှန်သလား စစ်ပါတယ်။ [[mark:why-trial]] account သိန်းချီ ရှိတဲ့ ledger မှာတောင် ဒီ စစ်ဆေးမှု
+      နှစ်ခုက ဂဏန်း နှစ်လုံးစီကိုပဲ ယှဉ်ရတာပါ။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-dc]] debit နဲ့
+      credit နှစ်ဖက်လုံး ညီပါတယ်။ ၁၀၀ မဟုတ်ဘဲ ၁၀၁ ကျော် ဖြစ်နေတာက transaction နှစ်ခုလုံးရဲ့ line
+      တွေကို ပေါင်းထားလို့ပါ။ [[mark:pt-eq-true]] equation ကလည်း true ပါ။ [[mark:dock-3]] စိတ်ဝင်စားစရာက
+      ဒီ ledger မှာ trial balance က fail ဖို့ မဖြစ်နိုင်တာပါ၊ Post က debit နဲ့ credit မညီတဲ့
+      transaction ကို လက်မခံလို့ပါ။ ဒါဆို ဘာလို့ စစ်နေသေးလဲ။ [[mark:why-check]] ledger ထဲကို data ဝင်တာ Post တစ်ခုတည်းကနေ
+      မဟုတ်လို့ပါ။ migration၊ data import၊ database ကို တိုက်ရိုက် ပြင်တဲ့ script၊ sub-ledger
+      အများကြီးကို ပေါင်းထားတဲ့ report တွေမှာ trial balance က အဲဒီ code path တွေကို မယုံဘဲ ရလဒ်ကို
+      ပြန်စစ်တာပါ။ ဒါပေမဲ့ account မှားပြီး post လုပ်တာကိုတော့ trial balance က မဖမ်းနိုင်ပါဘူး၊
+      line တိုင်း ညီနေလို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Know your domain, Accounting & ledgers (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#accounting-ledgers",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - { id: close-iou, type: slide.close, at: { mark: close-iou } }
+      - id: type-trial
+        type: editor.type
+        at: { mark: type-trial }
+        target:
+          {
+            file: main.go,
+            after: "\t\tfmt.Printf(\"%-20s %8s\\n\", acct, cents(l.Balance(acct)))\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\tdebits, credits := l.TrialBalance()\n\tfmt.Println(\"debits\", cents(debits), \"= credits\", cents(credits))\n\ta, li, e := l.Total(\"asset\"), l.Total(\"liability\"), l.Total(\"equity\")\n\tr, x := l.Total(\"revenue\"), l.Total(\"expense\")\n\tfmt.Println(\"assets = liabilities + equity + revenue - expenses:\", a == li+e+r-x)\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "expenses: true",
+          timeoutMs: 8000,
+        }
+      - id: pt-dc
+        type: console.point
+        at: { mark: pt-dc }
+        target: { text: "= credits", occurrence: 1 }
+      - id: pt-eq-true
+        type: console.point
+        at: { mark: pt-eq-true }
+        target: { text: "expenses: true", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: chart
+    narration: >-
+      [[mark:show-chart]] user တစ်ယောက်ချင်းစီမှာ ကိုယ်ပိုင် liability account ရှိပါတယ်။ အဲဒီ account
+      တွေ အားလုံးကို sub-ledger လို့ ခေါ်ပါတယ်၊ ဆိုလိုတာက domain တစ်ခုအတွက် အသေးစိတ် စာရင်းပါ။
+      [[mark:pt-many]] user တစ်သိန်း ရှိရင် account တစ်သိန်း ရှိပါတယ်။ [[mark:chart-2]] general ledger
+      ကတော့ ကုမ္ပဏီ တစ်ခုလုံးရဲ့ စာရင်းချုပ်ပါ။ sub-ledger ထဲက balance တွေကို ပေါင်းပြီး user တွေကို
+      ပေးစရာ ရှိတဲ့ liability တစ်ကြောင်းအဖြစ် ပြပါတယ်။ [[mark:pt-roll]] audit ရဲ့ မေးခွန်းကို ဖြေတာက
+      ဒီ တစ်ကြောင်းကို ဘဏ်ထဲက asset နဲ့ ယှဉ်တာပါ။ [[mark:pt-coa]] post လုပ်လို့ ရတဲ့ account တွေရဲ့
+      စာရင်းကို chart of accounts လို့ ခေါ်ပါတယ်။ legal entity တစ်ခုချင်းအတွက်၊ reporting standard
+      တစ်ခုချင်းအတွက် chart of accounts သီးသန့် ရှိနိုင်ပါတယ်။ [[mark:chart-3]] ဒီ lesson ရဲ့ code မှာတော့ post လုပ်လိုက်တဲ့
+      account နာမည်တိုင်းက account ဖြစ်သွားလို့ user id မှာ ဂဏန်း တစ်လုံး မှားရုံနဲ့ account
+      အသစ်တစ်ခု တိတ်တိတ်လေး ပေါ်လာနိုင်ပါတယ်။ [[mark:pt-gl-same]] ငွေက account မှားထဲ ရောက်သွားပေမဲ့ စုစုပေါင်းတွေက
+      မပြောင်းလို့ trial balance ရော roll up ရော မဖမ်းနိုင်ပါဘူး။ chart of accounts ထဲမှာ မပါတဲ့ account ကို post
+      လုပ်ခွင့် မပေးတာက အဲဒါကို တားပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Know your domain, Accounting & ledgers (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#accounting-ledgers",
+        }
+    actions:
+      - {
+          id: show-chart,
+          type: slide.show,
+          at: { mark: show-chart, offsetMs: -700 },
+          slideId: chart-1,
+        }
+      - {
+          id: pt-sub,
+          type: slide.point,
+          at: { afterAction: show-chart },
+          target: { x: 0.123, y: 0.442 },
+        }
+      - { id: pt-many, type: slide.point, at: { mark: pt-many }, target: { x: 0.119, y: 0.724 } }
+      - { id: chart-2, type: slide.show, at: { mark: chart-2 }, slideId: chart-2 }
+      - {
+          id: pt-g,
+          type: slide.point,
+          at: { afterAction: chart-2 },
+          target: { x: 0.608, y: 0.442 },
+        }
+      - { id: pt-roll, type: slide.point, at: { mark: pt-roll }, target: { x: 0.608, y: 0.511 } }
+      - { id: pt-coa, type: slide.point, at: { mark: pt-coa }, target: { x: 0.71, y: 0.709 } }
+      - { id: chart-3, type: slide.show, at: { mark: chart-3 }, slideId: chart-3 }
+      - {
+          id: pt-typo,
+          type: slide.point,
+          at: { afterAction: chart-3 },
+          target: { x: 0.123, y: 0.649 },
+        }
+      - {
+          id: pt-gl-same,
+          type: slide.point,
+          at: { mark: pt-gl-same },
+          target: { x: 0.608, y: 0.511 },
+        }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ user ရဲ့ balance က platform အတွက် ဘာလို့ liability
+      ဖြစ်တာလဲ လို့ မေးတတ်ပါတယ်။ user ရဲ့ ငွေ မို့လို့ပါ လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး။ ငွေ ဘယ်မှာ
+      ရှိလဲ၊ ဘယ်သူ့ ငွေလဲ ဆိုတာ ခွဲပြီး ဖြေပါ။ [[mark:iv-a]] ပထမ၊ user ငွေ ပို့လိုက်တဲ့အခါ ငွေက
+      platform ရဲ့ ဘဏ်ထဲ ရောက်ပါတယ်၊ အဲဒါက platform ရဲ့ asset ပါ။ [[mark:iv-b]] ဒုတိယ၊ user ရဲ့
+      balance က အဲဒီ ငွေကို ပြန်ပေးမယ် ဆိုတဲ့ ကတိ ဖြစ်လို့ IOU ပါ၊ ပေးစရာ ရှိတာ ဖြစ်လို့ credit ဘက်မှာ
+      တိုးတဲ့ liability ပါ။ [[mark:iv-c]] တတိယ၊ platform ကိုယ်ပိုင် ငွေက equity နဲ့ fee လို revenue ဘက်မှာ
+      ရှိပြီး၊ accounting equation က asset၊ liability နဲ့ အဲဒါတွေကို ချိတ်ထားပါတယ်။ [[mark:iv-d]] ပြီးရင် ဘာကြောင့်
+      အရေးကြီးလဲ ဆက်ပြောပါ။ user liability တွေကို sub-ledger ကနေ roll up လုပ်ပြီး ဘဏ်ထဲက asset နဲ့
+      ပုံမှန် တိုက်စစ်ရပါတယ်။ asset က liability ထက် နည်းနေရင် user တွေရဲ့ ငွေကို တခြား နေရာမှာ
+      သုံးထားတာ ဖြစ်နိုင်လို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Know your domain, Accounting & ledgers (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#accounting-ledgers",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ဒီ fee transaction
+      အောက်မှာ user က ယူရို ၂၅ ထုတ်ယူတဲ့ withdrawal transaction တစ်ခု ထည့်ကြည့်ပါ။ မရေးခင် ဘယ်
+      account နှစ်ခုက ဘယ်ဘက်မှာ ပြောင်းမလဲ အရင် ခန့်မှန်းပါ။ [[mark:try-answer]] အဖြေက user ရဲ့
+      liability ကို debit၊ ဘဏ်ရဲ့ asset ကို credit ပါ။ run လိုက်ရင် နှစ်ခုလုံး ၂၅ စီ လျော့ပြီး equation က
+      true ပါပဲ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ debit နဲ့ credit က အဝင် အထွက် မဟုတ်ဘဲ ဘက် နှစ်ဖက်ပါ။
+      ဘယ်ဘက်မှာ တိုးလဲ ဆိုတာ account type က သတ်မှတ်ပြီး၊ user ရဲ့ balance က platform ရဲ့ liability
+      ပါ။ နောက် lesson မှာတော့ card deposit လို business event တစ်ခုက line နှစ်ကြောင်းထက် ပိုလာတဲ့အခါ
+      transaction တစ်ခုလုံးကို ဘယ်လို post လုပ်မလဲ၊ PSP ဆီမှာ ရှိနေသေးတဲ့ ငွေကို ဘယ်မှာ မှတ်မလဲ ဆိုတာ
+      ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target:
+          {
+            file: main.go,
+            text: "{Account: \"liability:user:1042\", Debit: 150},\n\t\t{Account: \"revenue:fees\", Credit: 150},",
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

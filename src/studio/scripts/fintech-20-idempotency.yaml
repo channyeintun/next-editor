@@ -1,0 +1,962 @@
+# Fintech Engineering, lesson 20: idempotency keys (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Idempotency" (intro, explicit keys, at scale)
+# (CC BY 4.0, Voytek Pitula).
+# Start state: Pay (main.go) saves each response under a scoped key but never looks it up; main
+# sends one payment and retries it after a lost response. api.go holds the Server and charge;
+# ledger.go is the course ledger.
+# Edits, all insert-only:
+#   1. the lookup before charging              -> run-2: the retry gets tx-1 back, 75.00 left
+#   2. a second payment whose copy arrives while the first waits for the provider
+#                                              -> run-3: both pass, 25.00 left (charged twice)
+#   3. claim the key (409 in progress) before charging -> run-4: the copy gets 409, 50.00 left
+# Figures: unknown (three worlds behind one timeout), key (the retry answered from the store),
+# barrier (check-then-save vs claim-first), stripe (Idempotency-Key), iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-20-idempotency
+  title: "Fintech Engineering 20: Idempotency key"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      api.go: |
+        package main
+
+        import "fmt"
+
+        // Request is one call to POST /payments. The client picks Key once per payment.
+        type Request struct {
+        	Client string
+        	Key    string
+        	From   string
+        	To     string
+        	Amount int64
+        }
+
+        // Response is what the server sends back: an HTTP status and a body.
+        type Response struct {
+        	Status int
+        	Body   string
+        }
+
+        func (r Response) String() string { return fmt.Sprintf("%d %s", r.Status, r.Body) }
+
+        // Server is the payment API: a ledger, and the responses it saved per idempotency key.
+        type Server struct {
+        	ledger Ledger
+        	keys   map[string]Response
+        	txs    int
+        	// atProvider runs once while a payment waits for the card network.
+        	atProvider func()
+        }
+
+        func newServer() *Server {
+        	s := &Server{keys: map[string]Response{}}
+        	s.ledger.Post(Tx{ID: "deposit", Lines: []Line{
+        		{Account: "asset:bank", Debit: 10000},
+        		{Account: "liability:user:1042", Credit: 10000},
+        	}})
+        	return s
+        }
+
+        // charge does the work: it waits for the card network, then moves the money.
+        func (s *Server) charge(r Request) Response {
+        	if wait := s.atProvider; wait != nil {
+        		s.atProvider = nil
+        		wait()
+        	}
+        	s.txs++
+        	id := fmt.Sprintf("tx-%d", s.txs)
+        	s.ledger.Post(Tx{ID: id, Lines: []Line{
+        		{Account: r.From, Debit: r.Amount},
+        		{Account: r.To, Credit: r.Amount},
+        	}})
+        	return Response{201, id}
+        }
+
+        // balance is what user 1042 has left.
+        func (s *Server) balance() string {
+        	return cents(s.ledger.Balance("liability:user:1042"))
+        }
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // kindOf reads the account type from the name: "asset:bank" is an asset.
+        func kindOf(account string) string {
+        	kind, _, _ := strings.Cut(account, ":")
+        	return kind
+        }
+
+        // Balance derives an account's balance on the side where that kind of account grows:
+        // assets and expenses grow with debits; liabilities, equity and revenue grow with credits.
+        func (l *Ledger) Balance(account string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind := kindOf(account); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // Pay is the endpoint POST /payments.
+        func (s *Server) Pay(r Request) Response {
+        	k := r.Client + "/pay/" + r.Key
+        	resp := s.charge(r)
+        	s.keys[k] = resp
+        	return resp
+        }
+
+        func main() {
+        	s := newServer()
+        	p := Request{Client: "app", Key: "k-1", Amount: 2500,
+        		From: "liability:user:1042", To: "liability:user:2077"}
+        	first := s.Pay(p) // the response is lost on the way back
+        	retry := s.Pay(p) // the client timed out, so it sends the same request again
+        	fmt.Println("first:", first, "  retry:", retry)
+        	fmt.Println("user 1042:", s.balance())
+        }
+  slides:
+    - id: barrier-1
+      contentType: html
+      name: "Atomic barrier 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">ATOMIC BARRIER</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Key ကို အလုပ် မစခင် အရင် claim လုပ်</text>
+        <g class="in"><text x="100" y="232" font-size="26" fill="#fc8181" font-weight="700">စစ်ပြီးမှ ဖြတ်၊ ပြီးမှ သိမ်း</text></g>
+        <g class="in"><rect x="100" y="260" width="680" height="332" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="295" font-size="22" fill="#8a94a8" font-weight="700"></text><text x="213.9" y="295" font-size="22" fill="#8a94a8" font-weight="700">two copies of k-2, in time order</text><path d="M100 312H780" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="357" font-size="28" fill="#9aa5b8" class="mono">A</text><text x="213.9" y="357" font-size="28" fill="#e9edf5" class="mono">SELECT k-2  → none</text></g><g><path d="M116 382H764" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="427" font-size="28" fill="#9aa5b8" class="mono">B</text><text x="213.9" y="427" font-size="28" fill="#e9edf5" class="mono">SELECT k-2  → none</text></g><g><path d="M116 452H764" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="497" font-size="28" fill="#9aa5b8" class="mono">A</text><text x="213.9" y="497" font-size="28" fill="#f6c453" class="mono">charge 25.00</text></g><g><rect x="106" y="527" width="668" height="60" rx="10" fill="#fc8181" opacity="0.14"/><path d="M116 522H764" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="567" font-size="28" fill="#9aa5b8" class="mono">B</text><text x="213.9" y="567" font-size="28" fill="#fc8181" class="mono">charge 25.00</text></g></g>
+        </svg>
+    - id: barrier-2
+      contentType: html
+      name: "Atomic barrier 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">ATOMIC BARRIER</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Key ကို အလုပ် မစခင် အရင် claim လုပ်</text>
+        <text x="100" y="232" font-size="26" fill="#fc8181" font-weight="700">စစ်ပြီးမှ ဖြတ်၊ ပြီးမှ သိမ်း</text>
+        <rect x="100" y="260" width="680" height="332" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="295" font-size="22" fill="#8a94a8" font-weight="700"></text><text x="213.9" y="295" font-size="22" fill="#8a94a8" font-weight="700">two copies of k-2, in time order</text><path d="M100 312H780" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="357" font-size="28" fill="#9aa5b8" class="mono">A</text><text x="213.9" y="357" font-size="28" fill="#e9edf5" class="mono">SELECT k-2  → none</text></g><g><path d="M116 382H764" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="427" font-size="28" fill="#9aa5b8" class="mono">B</text><text x="213.9" y="427" font-size="28" fill="#e9edf5" class="mono">SELECT k-2  → none</text></g><g><path d="M116 452H764" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="497" font-size="28" fill="#9aa5b8" class="mono">A</text><text x="213.9" y="497" font-size="28" fill="#f6c453" class="mono">charge 25.00</text></g><g><rect x="106" y="527" width="668" height="60" rx="10" fill="#fc8181" opacity="0.14"/><path d="M116 522H764" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="567" font-size="28" fill="#9aa5b8" class="mono">B</text><text x="213.9" y="567" font-size="28" fill="#fc8181" class="mono">charge 25.00</text></g>
+        <g class="in"><rect x="100" y="660" width="223.5" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="100" y="660" width="223.5" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="211.7" y="694.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">ဖြတ်တာ နှစ်ခါ</text></g>
+        </svg>
+    - id: barrier-3
+      contentType: html
+      name: "Atomic barrier 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">ATOMIC BARRIER</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Key ကို အလုပ် မစခင် အရင် claim လုပ်</text>
+        <text x="100" y="232" font-size="26" fill="#fc8181" font-weight="700">စစ်ပြီးမှ ဖြတ်၊ ပြီးမှ သိမ်း</text>
+        <rect x="100" y="260" width="680" height="332" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="295" font-size="22" fill="#8a94a8" font-weight="700"></text><text x="213.9" y="295" font-size="22" fill="#8a94a8" font-weight="700">two copies of k-2, in time order</text><path d="M100 312H780" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="357" font-size="28" fill="#9aa5b8" class="mono">A</text><text x="213.9" y="357" font-size="28" fill="#e9edf5" class="mono">SELECT k-2  → none</text></g><g><path d="M116 382H764" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="427" font-size="28" fill="#9aa5b8" class="mono">B</text><text x="213.9" y="427" font-size="28" fill="#e9edf5" class="mono">SELECT k-2  → none</text></g><g><path d="M116 452H764" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="497" font-size="28" fill="#9aa5b8" class="mono">A</text><text x="213.9" y="497" font-size="28" fill="#f6c453" class="mono">charge 25.00</text></g><g><rect x="106" y="527" width="668" height="60" rx="10" fill="#fc8181" opacity="0.14"/><path d="M116 522H764" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="567" font-size="28" fill="#9aa5b8" class="mono">B</text><text x="213.9" y="567" font-size="28" fill="#fc8181" class="mono">charge 25.00</text></g>
+        <rect x="100" y="660" width="223.5" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="100" y="660" width="223.5" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="211.7" y="694.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">ဖြတ်တာ နှစ်ခါ</text>
+        <g class="in"><text x="820" y="232" font-size="26" fill="#68d391" font-weight="700">Key ကို အရင် INSERT</text></g>
+        <g class="in"><rect x="820" y="260" width="680" height="332" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="842" y="295" font-size="22" fill="#8a94a8" font-weight="700"></text><text x="933.9" y="295" font-size="22" fill="#8a94a8" font-weight="700">two copies of k-2, in time order</text><path d="M820 312H1500" stroke="#2a3345" stroke-width="2"/><g><text x="842" y="357" font-size="28" fill="#9aa5b8" class="mono">A</text><text x="933.9" y="357" font-size="28" fill="#e9edf5" class="mono">INSERT k-2 (in progress) ✓</text></g><g><path d="M836 382H1484" stroke="#2a3345" stroke-width="1.5"/><text x="842" y="427" font-size="28" fill="#9aa5b8" class="mono">B</text><text x="933.9" y="427" font-size="28" fill="#f6ad55" class="mono">INSERT k-2 → conflict 409</text></g><g><path d="M836 452H1484" stroke="#2a3345" stroke-width="1.5"/><text x="842" y="497" font-size="28" fill="#9aa5b8" class="mono">A</text><text x="933.9" y="497" font-size="28" fill="#f6c453" class="mono">charge 25.00</text></g><g><path d="M836 522H1484" stroke="#2a3345" stroke-width="1.5"/><text x="842" y="567" font-size="28" fill="#9aa5b8" class="mono">A</text><text x="933.9" y="567" font-size="28" fill="#e9edf5" class="mono">UPDATE k-2 → 201 tx-2</text></g></g>
+        <g class="in"><rect x="820" y="660" width="237.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="820" y="660" width="237.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="938.6" y="694.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">ဖြတ်တာ တစ်ခါ</text></g>
+        <g class="in"><rect x="100" y="730" width="1400" height="114" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="776.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">PRIMARY KEY (client, operation, key)</text></g><g><text x="124" y="815.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT … ON CONFLICT DO NOTHING   -- 0 rows: the key already exists</text></g></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="44" fill="#e9edf5" font-weight="700">Payment API မှာ double charge မဖြစ်အောင် ဘယ်လို လုပ်မလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="44" fill="#e9edf5" font-weight="700">Payment API မှာ double charge မဖြစ်အောင် ဘယ်လို လုပ်မလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#6cb2f5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Timeout = ရလဒ် မသိ — client က retry လုပ်ရမယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">exactly-once delivery ကို အာမမခံနိုင်၊ at-least-once ပို့ပြီး server က duplicate ကို ပေါင်း</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="44" fill="#e9edf5" font-weight="700">Payment API မှာ double charge မဖြစ်အောင် ဘယ်လို လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#6cb2f5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Timeout = ရလဒ် မသိ — client က retry လုပ်ရမယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">exactly-once delivery ကို အာမမခံနိုင်၊ at-least-once ပို့ပြီး server က duplicate ကို ပေါင်း</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6c453"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">operation တစ်ခုစီကို client က key ပေး၊ (client, operation, key) နဲ့ scope</text><text x="188" y="443" font-size="26" fill="#8a94a8">payload ကနေ မခန့်မှန်းနဲ့ — ပမာဏ တူတဲ့ payment နှစ်ခု တကယ် ရှိနိုင်တယ်</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="44" fill="#e9edf5" font-weight="700">Payment API မှာ double charge မဖြစ်အောင် ဘယ်လို လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#6cb2f5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Timeout = ရလဒ် မသိ — client က retry လုပ်ရမယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">exactly-once delivery ကို အာမမခံနိုင်၊ at-least-once ပို့ပြီး server က duplicate ကို ပေါင်း</text></g><g><circle cx="138" cy="381" r="25" fill="#f6c453"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">operation တစ်ခုစီကို client က key ပေး၊ (client, operation, key) နဲ့ scope</text><text x="188" y="443" font-size="26" fill="#8a94a8">payload ကနေ မခန့်မှန်းနဲ့ — ပမာဏ တူတဲ့ payment နှစ်ခု တကယ် ရှိနိုင်တယ်</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Key ကို အလုပ် မစခင် atomic INSERT — unique constraint</text><text x="188" y="575" font-size="26" fill="#8a94a8">in progress ဆိုရင် 409၊ ပြီးရင် response ကို သိမ်းပြီး retry တိုင်းကို အဲဒါနဲ့ ဖြေ</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="44" fill="#e9edf5" font-weight="700">Payment API မှာ double charge မဖြစ်အောင် ဘယ်လို လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#6cb2f5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Timeout = ရလဒ် မသိ — client က retry လုပ်ရမယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">exactly-once delivery ကို အာမမခံနိုင်၊ at-least-once ပို့ပြီး server က duplicate ကို ပေါင်း</text></g><g><circle cx="138" cy="381" r="25" fill="#f6c453"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">operation တစ်ခုစီကို client က key ပေး၊ (client, operation, key) နဲ့ scope</text><text x="188" y="443" font-size="26" fill="#8a94a8">payload ကနေ မခန့်မှန်းနဲ့ — ပမာဏ တူတဲ့ payment နှစ်ခု တကယ် ရှိနိုင်တယ်</text></g><g><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Key ကို အလုပ် မစခင် atomic INSERT — unique constraint</text><text x="188" y="575" font-size="26" fill="#8a94a8">in progress ဆိုရင် 409၊ ပြီးရင် response ကို သိမ်းပြီး retry တိုင်းကို အဲဒါနဲ့ ဖြေ</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">Idempotency-Key header၊ key table၊ in progress → done</text><text x="188" y="707" font-size="26" fill="#8a94a8">error replay၊ payload mismatch၊ key သက်တမ်းကို ဘယ်လို ဆုံးဖြတ်ထားလဲ ဆက်ပြော</text></g>
+        </svg>
+    - id: key-1
+      contentType: html
+      name: "Idempotency key 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-teal" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#4fd1c5" stroke="#4fd1c5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">IDEMPOTENCY KEY</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="48" fill="#e9edf5" font-weight="700">Retry ကို အလုပ် ထပ်မလုပ်ဘဲ မှတ်ထားတဲ့ response နဲ့ ဖြေ</text>
+        <g class="in"><path d="M225 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="100" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="120" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="251" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><path d="M608.3 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="483.3" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="503.3" y="223" width="40" height="40" style="color:#b794f6"/><text x="634.3" y="250.8" font-size="23" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><path d="M991.7 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="866.7" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-key" x="886.7" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="1017.7" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Keys</text><path d="M1375 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1250" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="1270" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="1401" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><g><path d="M233 356.2H596.3" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="416.7" y="343.2" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST  key=k-1</text></g><g><path d="M616.3 431H1363" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="991.7" y="418" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">debit 25.00</text></g><g><path d="M616.3 505.9H979.7" fill="none" stroke="#4fd1c5" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-teal)"/><text x="800" y="492.9" font-size="25" text-anchor="middle" fill="#4fd1c5" font-weight="600" class="mono">k-1 → 201 tx-1</text></g></g>
+        </svg>
+    - id: key-2
+      contentType: html
+      name: "Idempotency key 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-teal" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#4fd1c5" stroke="#4fd1c5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">IDEMPOTENCY KEY</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="48" fill="#e9edf5" font-weight="700">Retry ကို အလုပ် ထပ်မလုပ်ဘဲ မှတ်ထားတဲ့ response နဲ့ ဖြေ</text>
+        <path d="M225 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="100" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="120" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="251" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><path d="M608.3 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="483.3" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="503.3" y="223" width="40" height="40" style="color:#b794f6"/><text x="634.3" y="250.8" font-size="23" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><path d="M991.7 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="866.7" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-key" x="886.7" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="1017.7" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Keys</text><path d="M1375 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1250" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="1270" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="1401" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><g><path d="M233 356.2H596.3" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="416.7" y="343.2" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST  key=k-1</text></g><g><path d="M616.3 431H1363" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="991.7" y="418" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">debit 25.00</text></g><g><path d="M616.3 505.9H979.7" fill="none" stroke="#4fd1c5" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-teal)"/><text x="800" y="492.9" font-size="25" text-anchor="middle" fill="#4fd1c5" font-weight="600" class="mono">k-1 → 201 tx-1</text></g><g class="in"><path d="M600.3 580.7H378.3" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M366.3 568.7l24 24M390.3 568.7l-24 24" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="493.3" y="567.7" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">201 tx-1</text></g>
+        </svg>
+    - id: key-3
+      contentType: html
+      name: "Idempotency key 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-teal" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#4fd1c5" stroke="#4fd1c5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">IDEMPOTENCY KEY</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="48" fill="#e9edf5" font-weight="700">Retry ကို အလုပ် ထပ်မလုပ်ဘဲ မှတ်ထားတဲ့ response နဲ့ ဖြေ</text>
+        <path d="M225 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="100" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="120" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="251" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><path d="M608.3 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="483.3" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="503.3" y="223" width="40" height="40" style="color:#b794f6"/><text x="634.3" y="250.8" font-size="23" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><path d="M991.7 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="866.7" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-key" x="886.7" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="1017.7" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Keys</text><path d="M1375 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1250" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="1270" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="1401" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><g><path d="M233 356.2H596.3" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="416.7" y="343.2" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST  key=k-1</text></g><g><path d="M616.3 431H1363" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="991.7" y="418" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">debit 25.00</text></g><g><path d="M616.3 505.9H979.7" fill="none" stroke="#4fd1c5" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-teal)"/><text x="800" y="492.9" font-size="25" text-anchor="middle" fill="#4fd1c5" font-weight="600" class="mono">k-1 → 201 tx-1</text></g><g><path d="M600.3 580.7H378.3" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M366.3 568.7l24 24M390.3 568.7l-24 24" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="493.3" y="567.7" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">201 tx-1</text></g><g class="in"><path d="M233 655.6H596.3" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="416.7" y="642.6" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">retry  key=k-1</text></g><g class="in"><rect x="821.7" y="704.5" width="340" height="48" rx="12" fill="#0b0e14" stroke="#68d391" stroke-width="2"/><text x="991.7" y="737.5" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600">k-1 ရှိပြီ → ledger ကို မထိ</text></g><g class="in"><path d="M600.3 805.3H237" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="416.7" y="792.3" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600" class="mono">201 tx-1</text></g>
+        </svg>
+    - id: stripe-1
+      contentType: html
+      name: "Stripe 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">STRIPE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Payment API တစ်ခုက ဒီ pattern ကို ဘယ်လို ပေးလဲ</text>
+        <g class="in"><rect x="100" y="240" width="700" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="274" font-size="22" fill="#8a94a8" font-weight="700" class="mono">request</text><path d="M100 286H800" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="332.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">POST /v1/…</text></g><g><rect x="108" y="346.4" width="684" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="371.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">Idempotency-Key: k-1</text></g><g><text x="124" y="410.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5"></text></g><g><text x="124" y="449.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">…request parameters</text></g></g>
+        <g class="in"><rect x="100" y="550" width="555.4" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="100" y="550" width="555.4" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="377.7" y="584.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">key ≤ 255 characters, client က ပို့တယ်</text></g>
+        </svg>
+    - id: stripe-2
+      contentType: html
+      name: "Stripe 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">STRIPE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Payment API တစ်ခုက ဒီ pattern ကို ဘယ်လို ပေးလဲ</text>
+        <rect x="100" y="240" width="700" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="274" font-size="22" fill="#8a94a8" font-weight="700" class="mono">request</text><path d="M100 286H800" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="332.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">POST /v1/…</text></g><g><rect x="108" y="346.4" width="684" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="371.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">Idempotency-Key: k-1</text></g><g><text x="124" y="410.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5"></text></g><g><text x="124" y="449.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">…request parameters</text></g>
+        <rect x="100" y="550" width="555.4" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="100" y="550" width="555.4" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="377.7" y="584.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">key ≤ 255 characters, client က ပို့တယ်</text>
+        <g class="in"><circle cx="888" cy="274" r="25" fill="#4fd1c5"/><text x="888" y="284" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="938" y="286" font-size="34" fill="#e9edf5" font-weight="600">ပထမ response ကို သိမ်းတယ်</text><text x="938" y="336" font-size="26" fill="#8a94a8">status code နဲ့ body၊ endpoint စ run ပြီးတာနဲ့</text></g><g class="in"><circle cx="888" cy="406" r="25" fill="#68d391"/><text x="888" y="416" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="938" y="418" font-size="34" fill="#e9edf5" font-weight="600">retry → သိမ်းထားတာကို ပြန်ပေး</text><text x="938" y="468" font-size="26" fill="#8a94a8">အလုပ်ကို ထပ်မလုပ်ဘူး</text></g>
+        </svg>
+    - id: stripe-3
+      contentType: html
+      name: "Stripe 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">STRIPE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Payment API တစ်ခုက ဒီ pattern ကို ဘယ်လို ပေးလဲ</text>
+        <rect x="100" y="240" width="700" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="274" font-size="22" fill="#8a94a8" font-weight="700" class="mono">request</text><path d="M100 286H800" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="332.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">POST /v1/…</text></g><g><rect x="108" y="346.4" width="684" height="39" rx="8" fill="#f6c453" opacity="0.16"/><text x="124" y="371.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">Idempotency-Key: k-1</text></g><g><text x="124" y="410.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5"></text></g><g><text x="124" y="449.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">…request parameters</text></g>
+        <rect x="100" y="550" width="555.4" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="100" y="550" width="555.4" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="377.7" y="584.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">key ≤ 255 characters, client က ပို့တယ်</text>
+        <g><circle cx="888" cy="274" r="25" fill="#4fd1c5"/><text x="888" y="284" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="938" y="286" font-size="34" fill="#e9edf5" font-weight="600">ပထမ response ကို သိမ်းတယ်</text><text x="938" y="336" font-size="26" fill="#8a94a8">status code နဲ့ body၊ endpoint စ run ပြီးတာနဲ့</text></g><g><circle cx="888" cy="406" r="25" fill="#68d391"/><text x="888" y="416" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="938" y="418" font-size="34" fill="#e9edf5" font-weight="600">retry → သိမ်းထားတာကို ပြန်ပေး</text><text x="938" y="468" font-size="26" fill="#8a94a8">အလုပ်ကို ထပ်မလုပ်ဘူး</text></g><g class="in"><circle cx="888" cy="538" r="25" fill="#f6ad55"/><text x="888" y="548" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="938" y="550" font-size="31" fill="#e9edf5" font-weight="600">run နေတုန်း copy ရောက်ရင် မသိမ်း</text><text x="938" y="600" font-size="26" fill="#8a94a8">client က ပြန် retry လုပ်လို့ ရတယ်</text></g>
+        <g class="in"><rect x="100" y="700" width="1420" height="110" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-db" x="122" y="723" width="64" height="64" style="color:#9aa5b8"/><text x="850" y="744.6" font-size="30" text-anchor="middle" fill="#e9edf5" font-weight="600">key သန်းထောင်ချီ — ဘယ်လောက်ကြာ သိမ်းမလဲ၊ error ကို ဘယ်လို replay လုပ်မလဲ</text><text x="850" y="790.2" font-size="24" text-anchor="middle" fill="#8a94a8">နောက် lesson</text></g>
+        </svg>
+    - id: unknown-1
+      contentType: html
+      name: "Timeout 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">TIMEOUT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Timeout ဆိုရင် client က ဘာဖြစ်ခဲ့လဲ မသိနိုင်ဘူး</text>
+        <g class="in"><text x="100" y="222" font-size="23" fill="#8a94a8">client မြင်တာ</text></g>
+        <g class="in"><text x="700" y="222" font-size="23" fill="#8a94a8">server မှာ တကယ် ဖြစ်ခဲ့တာ</text></g>
+        <g class="in"><text x="1180" y="222" font-size="23" fill="#8a94a8">ငွေ</text></g>
+        <g class="in"><rect x="100" y="250" width="300" height="120" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="122" y="278" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="300.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="290" y="341.6" font-size="24" text-anchor="middle" fill="#8a94a8">timeout</text></g>
+        <g class="in" opacity="0.45"><rect x="700" y="250" width="380" height="120" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-server" x="722" y="278" width="64" height="64" style="color:#9aa5b8"/><text x="930" y="298.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><text x="930" y="342.7" font-size="24" text-anchor="middle" fill="#8a94a8">request မရောက်ခဲ့</text></g>
+        <path d="M410 310L581.1 310" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M568.1 297l26 26M594.1 297l-26 26" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="495.6" y="293.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST</text>
+        <g class="in"><rect x="1180" y="286" width="216.6" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="1180" y="286" width="216.6" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="1288.3" y="320.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">မဖြတ်ရသေး</text></g>
+        </svg>
+    - id: unknown-2
+      contentType: html
+      name: "Timeout 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">TIMEOUT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Timeout ဆိုရင် client က ဘာဖြစ်ခဲ့လဲ မသိနိုင်ဘူး</text>
+        <text x="100" y="222" font-size="23" fill="#8a94a8">client မြင်တာ</text>
+        <text x="700" y="222" font-size="23" fill="#8a94a8">server မှာ တကယ် ဖြစ်ခဲ့တာ</text>
+        <text x="1180" y="222" font-size="23" fill="#8a94a8">ငွေ</text>
+        <rect x="100" y="250" width="300" height="120" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="122" y="278" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="300.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="290" y="341.6" font-size="24" text-anchor="middle" fill="#8a94a8">timeout</text>
+        <g opacity="0.45"><rect x="700" y="250" width="380" height="120" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-server" x="722" y="278" width="64" height="64" style="color:#9aa5b8"/><text x="930" y="298.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><text x="930" y="342.7" font-size="24" text-anchor="middle" fill="#8a94a8">request မရောက်ခဲ့</text></g>
+        <path d="M410 310L581.1 310" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M568.1 297l26 26M594.1 297l-26 26" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="495.6" y="293.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST</text>
+        <rect x="1180" y="286" width="216.6" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="1180" y="286" width="216.6" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="1288.3" y="320.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">မဖြတ်ရသေး</text>
+        <g class="in"><rect x="100" y="440" width="300" height="120" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="122" y="468" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="490.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="290" y="531.6" font-size="24" text-anchor="middle" fill="#8a94a8">timeout</text></g>
+        <g class="in"><rect x="700" y="440" width="380" height="120" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-server" x="722" y="468" width="64" height="64" style="color:#f6c453"/><text x="930" y="488.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><text x="930" y="532.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဖြတ်ပြီးပြီ</text></g>
+        <path d="M410 474L686 474" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="548" y="457.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST</text>
+        <path d="M690 526L518.9 526" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M505.9 513l26 26M531.9 513l-26 26" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="604.4" y="509.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">201</text>
+        <g class="in"><rect x="1180" y="476" width="227.8" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="1180" y="476" width="227.8" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="1293.9" y="510.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">25.00 ဖြတ်ပြီး</text></g>
+        </svg>
+    - id: unknown-3
+      contentType: html
+      name: "Timeout 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">TIMEOUT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Timeout ဆိုရင် client က ဘာဖြစ်ခဲ့လဲ မသိနိုင်ဘူး</text>
+        <text x="100" y="222" font-size="23" fill="#8a94a8">client မြင်တာ</text>
+        <text x="700" y="222" font-size="23" fill="#8a94a8">server မှာ တကယ် ဖြစ်ခဲ့တာ</text>
+        <text x="1180" y="222" font-size="23" fill="#8a94a8">ငွေ</text>
+        <rect x="100" y="250" width="300" height="120" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="122" y="278" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="300.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="290" y="341.6" font-size="24" text-anchor="middle" fill="#8a94a8">timeout</text>
+        <g opacity="0.45"><rect x="700" y="250" width="380" height="120" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-server" x="722" y="278" width="64" height="64" style="color:#9aa5b8"/><text x="930" y="298.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><text x="930" y="342.7" font-size="24" text-anchor="middle" fill="#8a94a8">request မရောက်ခဲ့</text></g>
+        <path d="M410 310L581.1 310" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M568.1 297l26 26M594.1 297l-26 26" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="495.6" y="293.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST</text>
+        <rect x="1180" y="286" width="216.6" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="1180" y="286" width="216.6" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="1288.3" y="320.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">မဖြတ်ရသေး</text>
+        <rect x="100" y="440" width="300" height="120" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="122" y="468" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="490.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="290" y="531.6" font-size="24" text-anchor="middle" fill="#8a94a8">timeout</text>
+        <rect x="700" y="440" width="380" height="120" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-server" x="722" y="468" width="64" height="64" style="color:#f6c453"/><text x="930" y="488.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><text x="930" y="532.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဖြတ်ပြီးပြီ</text>
+        <path d="M410 474L686 474" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="548" y="457.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST</text>
+        <path d="M690 526L518.9 526" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M505.9 513l26 26M531.9 513l-26 26" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="604.4" y="509.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">201</text>
+        <rect x="1180" y="476" width="227.8" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="1180" y="476" width="227.8" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="1293.9" y="510.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">25.00 ဖြတ်ပြီး</text>
+        <g class="in"><rect x="100" y="630" width="300" height="120" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="122" y="658" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="680.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="290" y="721.6" font-size="24" text-anchor="middle" fill="#8a94a8">timeout</text></g>
+        <g class="in"><rect x="700" y="630" width="380" height="120" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-server" x="722" y="658" width="64" height="64" style="color:#f6ad55"/><text x="930" y="678.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><text x="930" y="722.7" font-size="24" text-anchor="middle" fill="#8a94a8">provider ကို စောင့်နေ</text></g>
+        <path d="M410 690L686 690" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="548" y="673.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST</text>
+        <g class="in"><rect x="1180" y="666" width="304.9" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="1180" y="666" width="304.9" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="1332.4" y="700.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">ခဏနေရင် ဖြတ်မယ်</text></g>
+        </svg>
+    - id: unknown-4
+      contentType: html
+      name: "Timeout 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">TIMEOUT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Timeout ဆိုရင် client က ဘာဖြစ်ခဲ့လဲ မသိနိုင်ဘူး</text>
+        <text x="100" y="222" font-size="23" fill="#8a94a8">client မြင်တာ</text>
+        <text x="700" y="222" font-size="23" fill="#8a94a8">server မှာ တကယ် ဖြစ်ခဲ့တာ</text>
+        <text x="1180" y="222" font-size="23" fill="#8a94a8">ငွေ</text>
+        <rect x="100" y="250" width="300" height="120" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="122" y="278" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="300.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="290" y="341.6" font-size="24" text-anchor="middle" fill="#8a94a8">timeout</text>
+        <g opacity="0.45"><rect x="700" y="250" width="380" height="120" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-server" x="722" y="278" width="64" height="64" style="color:#9aa5b8"/><text x="930" y="298.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><text x="930" y="342.7" font-size="24" text-anchor="middle" fill="#8a94a8">request မရောက်ခဲ့</text></g>
+        <path d="M410 310L581.1 310" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M568.1 297l26 26M594.1 297l-26 26" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="495.6" y="293.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST</text>
+        <rect x="1180" y="286" width="216.6" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="1180" y="286" width="216.6" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="1288.3" y="320.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">မဖြတ်ရသေး</text>
+        <rect x="100" y="440" width="300" height="120" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="122" y="468" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="490.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="290" y="531.6" font-size="24" text-anchor="middle" fill="#8a94a8">timeout</text>
+        <rect x="700" y="440" width="380" height="120" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-server" x="722" y="468" width="64" height="64" style="color:#f6c453"/><text x="930" y="488.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><text x="930" y="532.7" font-size="24" text-anchor="middle" fill="#8a94a8">ဖြတ်ပြီးပြီ</text>
+        <path d="M410 474L686 474" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="548" y="457.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST</text>
+        <path d="M690 526L518.9 526" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M505.9 513l26 26M531.9 513l-26 26" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="604.4" y="509.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">201</text>
+        <rect x="1180" y="476" width="227.8" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="1180" y="476" width="227.8" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="1293.9" y="510.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">25.00 ဖြတ်ပြီး</text>
+        <rect x="100" y="630" width="300" height="120" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="122" y="658" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="680.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="290" y="721.6" font-size="24" text-anchor="middle" fill="#8a94a8">timeout</text>
+        <rect x="700" y="630" width="380" height="120" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-server" x="722" y="658" width="64" height="64" style="color:#f6ad55"/><text x="930" y="678.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Payment API</text><text x="930" y="722.7" font-size="24" text-anchor="middle" fill="#8a94a8">provider ကို စောင့်နေ</text>
+        <path d="M410 690L686 690" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="548" y="673.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">POST</text>
+        <rect x="1180" y="666" width="304.9" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="1180" y="666" width="304.9" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="1332.4" y="700.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">ခဏနေရင် ဖြတ်မယ်</text>
+        <g class="in"><rect x="86" y="236" width="328" height="148" rx="26" fill="none" stroke="#fc8181" stroke-width="10" opacity="0.18"/><rect x="86" y="236" width="328" height="148" rx="26" fill="none" stroke="#fc8181" stroke-width="3.5"/></g>
+        <g class="in"><rect x="86" y="426" width="328" height="148" rx="26" fill="none" stroke="#fc8181" stroke-width="10" opacity="0.18"/><rect x="86" y="426" width="328" height="148" rx="26" fill="none" stroke="#fc8181" stroke-width="3.5"/></g>
+        <g class="in"><rect x="86" y="616" width="328" height="148" rx="26" fill="none" stroke="#fc8181" stroke-width="10" opacity="0.18"/><rect x="86" y="616" width="328" height="148" rx="26" fill="none" stroke="#fc8181" stroke-width="3.5"/></g>
+        <g class="in"><rect x="100" y="800" width="1227.2" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="100" y="800" width="1227.2" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="713.6" y="834.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">client ဘက်က သုံးခုလုံး တူတယ်  →  retry လုပ်ရမယ်၊ server က duplicate ကို ဖြေရှင်းရမယ်</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9520
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "first: 201 tx-1   retry: 201 tx-2\nuser 1042: 50.00\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "first: 201 tx-1   retry: 201 tx-1\nuser 1042: 75.00\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "first: 201 tx-1   retry: 201 tx-1\nuser 1042: 75.00\ncopy in flight: 201 tx-2\noriginal: 201 tx-3\nuser 1042: 25.00\n"
+      run-4:
+        status: success
+        exitCode: 0
+        output: "first: 201 tx-1   retry: 201 tx-1\nuser 1042: 75.00\ncopy in flight: 409 in progress\noriginal: 201 tx-2\nuser 1042: 50.00\n"
+
+scenes:
+  - id: hook
+    chapter: Timeout ဖြစ်ရင် ဘာဖြစ်ခဲ့လဲ
+    narration: >-
+      ငွေဖြတ်ခိုင်းတဲ့ request တစ်ခု timeout ဖြစ်သွားရင် client ဘက်က သိတာ တစ်ခုပဲ ရှိပါတယ်၊
+      response မရောက်လာဘူး ဆိုတာပါ။ [[mark:show-unknown]] အဲဒီ timeout နောက်ကွယ်မှာ ဖြစ်နိုင်တာ
+      သုံးမျိုး ရှိပါတယ်။ [[mark:pt-u1]] request က server ကို မရောက်ခဲ့ရင် ငွေ မဖြတ်ရသေးပါဘူး။
+      [[mark:unknown-2]] server က ငွေ ဖြတ်ပြီးသွားပြီး၊ response ပဲ ပြန်လာတဲ့ လမ်းမှာ ပျောက်သွားတာ
+      ဖြစ်နိုင်ပါတယ်။ [[mark:unknown-3]] ဒါမှမဟုတ် server က provider ရဲ့ အဖြေကို စောင့်နေတုန်း ဖြစ်ပြီး
+      ခဏနေရင် ဖြတ်ပါလိမ့်မယ်။ [[mark:unknown-4]] client ဘက်ကနေ ကြည့်ရင် ဒီ သုံးမျိုးက ခွဲလို့ မရပါဘူး။
+      Two Generals problem အတိုင်းပါပဲ၊ ယုံလို့ မရတဲ့ channel ပေါ်မှာ message ဘယ်နှစ်ခါ ပို့ပို့ နှစ်ဖက်လုံး
+      သေချာသွားအောင် လုပ်လို့ မရပါဘူး။ [[mark:pt-tg]] ဒါကြောင့် exactly-once delivery ကို ဘယ်သူမှ အာမခံလို့ မရပါဘူး။
+      payment တစ်ခု မပျောက်စေချင်ရင် client က retry လုပ်ရပါမယ်၊ ဆိုလိုတာက message တစ်ခုက အနည်းဆုံး တစ်ခါ ရောက်ပြီး
+      တစ်ခါတလေ နှစ်ခါ ရောက်ပါမယ်။ ထပ်ရောက်လာတဲ့ copy ကို အန္တရာယ်မရှိအောင် လုပ်ရမှာက လက်ခံတဲ့ server
+      ရဲ့ တာဝန်ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+      - {
+          title: "Akkoyunlu, Ekanadham, Huber (1975) — Some Constraints and Trade-offs in the Design of Network Communications",
+          url: "https://doi.org/10.1145/800213.806523",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: show-unknown,
+          type: slide.show,
+          at: { mark: show-unknown, offsetMs: -700 },
+          slideId: unknown-1,
+        }
+      - { id: pt-u1, type: slide.point, at: { mark: pt-u1 }, target: { x: 0.556, y: 0.42 } }
+      - { id: unknown-2, type: slide.show, at: { mark: unknown-2 }, slideId: unknown-2 }
+      - {
+          id: pt-u2,
+          type: slide.point,
+          at: { afterAction: unknown-2 },
+          target: { x: 0.802, y: 0.593 },
+        }
+      - { id: unknown-3, type: slide.show, at: { mark: unknown-3 }, slideId: unknown-3 }
+      - {
+          id: pt-u3,
+          type: slide.point,
+          at: { afterAction: unknown-3 },
+          target: { x: 0.556, y: 0.842 },
+        }
+      - { id: unknown-4, type: slide.show, at: { mark: unknown-4 }, slideId: unknown-4 }
+      - {
+          id: pt-u4,
+          type: slide.point,
+          at: { afterAction: unknown-4 },
+          target: { x: 0.156, y: 0.631 },
+        }
+      - { id: pt-tg, type: slide.point, at: { mark: pt-tg }, target: { x: 0.44, y: 0.953 } }
+
+  - id: naive
+    chapter: Key ကို သိမ်းရုံနဲ့ မလုံလောက်ဘူး
+    narration: >-
+      [[mark:close-unknown]] Code နဲ့ ကြည့်ရအောင်။ [[mark:sel-save]] ဒါက payment endpoint ပါ။ client
+      ပို့လိုက်တဲ့ key ကို လက်ခံပြီး၊ ငွေဖြတ်ပြီးတဲ့ response ကို အဲဒီ key အောက်မှာ သိမ်းထားပါတယ်။ ဒါပေမဲ့
+      ငွေ မဖြတ်ခင် အဲဒီ key ကို တစ်ခါမှ ပြန်မကြည့်ပါဘူး။ [[mark:sel-calls]] အောက်မှာ user ၁၀၄၂ က ယူရို ၂၅
+      payment တစ်ခု ပို့ပါတယ်။ ပထမ response က လမ်းမှာ ပျောက်သွားလို့ client က timeout ဖြစ်ပြီး request
+      အတူတူကို key အတူတူနဲ့ ပြန်ပို့ပါတယ်။ user မှာ အစက ယူရို ၁၀၀ ရှိပါတယ်။ [[mark:run-1]] run
+      လိုက်ရအောင်။ [[mark:pt-r1]] ဒုတိယ response မှာ transaction အသစ် ပါလာပါတယ်။ [[mark:pt-b1]] ယူရို ၇၅
+      ကျန်ရမှာ ၅၀ ပဲ ကျန်ပါတော့တယ်၊ payment တစ်ခုကို နှစ်ခါ ဖြတ်လိုက်တာပါ။ [[mark:dock-1]] key ကို
+      လက်ခံပြီး သိမ်းထားရုံနဲ့ ဘာမှ မကာကွယ်ပါဘူး။ အလုပ် မလုပ်ခင် စစ်မှသာ barrier ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: close-unknown, type: slide.close, at: { mark: close-unknown } }
+      - id: sel-save
+        type: editor.select
+        at: { mark: sel-save }
+        target: { file: main.go, text: "s.keys[k] = resp", occurrence: 1 }
+      - id: sel-calls
+        type: editor.select
+        at: { mark: sel-calls }
+        target: { file: main.go, text: "first := s.Pay(p)", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "retry: 201 tx-2",
+          timeoutMs: 8000,
+        }
+      - id: pt-r1
+        type: console.point
+        at: { mark: pt-r1 }
+        target: { text: "retry: 201 tx-2", occurrence: 1 }
+      - id: pt-b1
+        type: console.point
+        at: { mark: pt-b1 }
+        target: { text: "user 1042: 50.00", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: key
+    chapter: Idempotency key
+    narration: >-
+      [[mark:show-key]] payment API တစ်ခု idempotent ဖြစ်တယ် ဆိုတာ message တစ်ခု နှစ်ခါ ရောက်လာရင်လည်း
+      ငွေက တစ်ခါပဲ ရွေ့တာကို ပြောတာပါ။ ဒီအတွက် သုံးတာက idempotency key ပါ။
+      [[mark:pt-req]] client က payment တစ်ခုစီအတွက် key တစ်ခု ထုတ်ပြီး request နဲ့အတူ ပို့ပါတယ်။
+      [[mark:pt-save]] server က ငွေ ဖြတ်ပြီးတာနဲ့ ရလာတဲ့ response ကို အဲဒီ key နဲ့ တွဲပြီး သိမ်းပါတယ်။
+      [[mark:key-2]] response လမ်းမှာ ပျောက်သွားလို့ client က timeout ဖြစ်ပါတယ်။ [[mark:key-3]] retry
+      ရောက်လာတဲ့အခါ server က key ကို အရင် ရှာပြီး၊ တွေ့ရင် ledger ကို မထိဘဲ သိမ်းထားတဲ့ response ကိုပဲ
+      ပြန်ပို့ပါတယ်။ [[mark:pt-same]] client အတွက်တော့ ပထမ response ကို နောက်ကျပြီး ရလိုက်တာနဲ့
+      အတူတူပါပဲ။ [[mark:why-key]] duplicate ကို payload ကနေ ခွဲလို့ မရဘူးလား လို့ မေးစရာ ရှိပါတယ်။ user
+      တစ်ယောက်က တစ်မိနစ်အတွင်း merchant တစ်ခုတည်းကို ယူရို ၂၅ နှစ်ခါ ပေးတာ retry လား၊ တကယ့် payment နှစ်ခုလား
+      ဆိုတာ data တစ်ခုတည်းကနေ ခွဲဖို့ ခက်ပါတယ်။ အဖြေကို သိတာက client ဖြစ်လို့ client က ပေးတဲ့ key က
+      များသောအားဖြင့် ပိုရိုးရှင်းပြီး ပိုစိတ်ချရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: show-key, type: slide.show, at: { mark: show-key, offsetMs: -700 }, slideId: key-1 }
+      - {
+          id: pt-key-t,
+          type: slide.point,
+          at: { afterAction: show-key },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: pt-req, type: slide.point, at: { mark: pt-req }, target: { x: 0.235, y: 0.411 } }
+      - { id: pt-save, type: slide.point, at: { mark: pt-save }, target: { x: 0.475, y: 0.578 } }
+      - { id: key-2, type: slide.show, at: { mark: key-2 }, slideId: key-2 }
+      - {
+          id: pt-lost,
+          type: slide.point,
+          at: { afterAction: key-2 },
+          target: { x: 0.29, y: 0.661 },
+        }
+      - { id: key-3, type: slide.show, at: { mark: key-3 }, slideId: key-3 }
+      - {
+          id: pt-hit,
+          type: slide.point,
+          at: { afterAction: key-3 },
+          target: { x: 0.595, y: 0.827 },
+        }
+      - { id: pt-same, type: slide.point, at: { mark: pt-same }, target: { x: 0.242, y: 0.91 } }
+      - { id: pt-why, type: slide.point, at: { mark: why-key }, target: { x: 0.235, y: 0.411 } }
+
+  - id: check
+    narration: >-
+      [[mark:close-key]] Code မှာ key ကို ဘယ်လို ဖွဲ့ထားလဲ အရင် ကြည့်ရအောင်။ [[mark:sel-scope]] key ကို
+      client နဲ့ operation နဲ့ တွဲထားပါတယ်။ client နှစ်ခုက key တစ်ခုတည်းကို မတော်တဆ ရွေးမိရင်၊ ဒါမှမဟုတ်
+      payment နဲ့ refund က key တူနေရင်၊ တစ်ခုရဲ့ response ကို နောက်တစ်ခုက မရသွားအောင်ပါ။
+      [[mark:type-check]] ငွေ မဖြတ်ခင် အဲဒီ key ကို ရှာပြီး၊ တွေ့ရင် သိမ်းထားတဲ့ response ကို ချက်ချင်း
+      ပြန်ပေးပါမယ်။ မတွေ့မှ ငွေ ဖြတ်ပါမယ်။ ပထမ request ကတော့ အရင်အတိုင်း ဖြတ်ပြီး response ကို
+      သိမ်းပါတယ်။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-r2]] retry က ပထမ request ရဲ့ transaction
+      အတိုင်း ပြန်ရပါတယ်၊ response နှစ်ခု တစ်ထပ်တည်း ကျပါတယ်။ [[mark:pt-b2]] user မှာ ယူရို ၇၅
+      ကျန်ပါတယ်၊ ဖြတ်တာ တစ်ခါပဲ ရှိပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: close-key, type: slide.close, at: { mark: close-key } }
+      - id: sel-scope
+        type: editor.select
+        at: { mark: sel-scope }
+        target: { file: main.go, text: 'k := r.Client + "/pay/" + r.Key', occurrence: 1 }
+      - id: type-check
+        type: editor.type
+        at: { mark: type-check }
+        target: { file: main.go, after: "\tk := r.Client + \"/pay/\" + r.Key\n", occurrence: 1 }
+        text: "\tif saved, ok := s.keys[k]; ok {\n\t\treturn saved\n\t}\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "retry: 201 tx-1",
+          timeoutMs: 8000,
+        }
+      - id: pt-r2
+        type: console.point
+        at: { mark: pt-r2 }
+        target: { text: "retry: 201 tx-1", occurrence: 1 }
+      - id: pt-b2
+        type: console.point
+        at: { mark: pt-b2 }
+        target: { text: "user 1042: 75.00", occurrence: 1 }
+
+  - id: inflight
+    chapter: အလုပ်လုပ်နေတုန်း ရောက်လာတဲ့ copy
+    narration: >-
+      retry က ပထမ request ပြီးမှ အမြဲ ရောက်တာ မဟုတ်ပါဘူး။ client ရဲ့ timeout က server ရဲ့ အလုပ်ထက်
+      တိုနေရင်၊ ဒါမှမဟုတ် user က ခလုတ်ကို နှစ်ခါ နှိပ်လိုက်ရင်၊ ပထမ request က provider ကို စောင့်နေတုန်း copy
+      ရောက်လာပါတယ်။ [[mark:type-flight]] ဒီ code က key အသစ်နဲ့ ဒုတိယ payment တစ်ခု ပို့ပါတယ်။ အဲဒီ
+      request က card network ကို စောင့်နေတုန်း သူ့ရဲ့ copy တစ်ခု ရောက်လာပါတယ်။ goroutine
+      မသုံးဘဲ ဖြစ်တဲ့ အစီအစဉ်အတိုင်း တစ်ဆင့်ချင်း ရေးထားတာပါ။ [[mark:predict]] key ကို စစ်တဲ့ line
+      ထည့်ပြီးပြီ ဆိုတော့ copy ဘာဖြစ်မလဲ၊ run မလုပ်ခင် ခန့်မှန်းကြည့်ပါ။ [[mark:run-3]] run လိုက်ရအောင်။
+      [[mark:pt-copy]] copy က ငြင်းခံရမယ့်အစား transaction အသစ်နဲ့ ငွေ ဖြတ်သွားပါတယ်။ [[mark:pt-orig]]
+      မူရင်း request ကလည်း သူ့အလုပ် ပြီးတဲ့အခါ နောက်ထပ် တစ်ခါ ဖြတ်ပါတယ်။ [[mark:pt-b3]] key တစ်ခုတည်းနဲ့
+      payment တစ်ခုအတွက် ယူရို ၅၀ ထွက်သွားပါတယ်။ [[mark:dock-3]] အကြောင်းက key ကို အလုပ် ပြီးမှ သိမ်းလို့ပါ။
+      ပထမ request အလုပ်လုပ်နေတဲ့ ကြားမှာ key က store ထဲ မရှိသေးတော့ copy က စစ်တာကို ဖြတ်ကျော်သွားပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - id: type-flight
+        type: editor.type
+        at: { mark: type-flight }
+        target:
+          { file: main.go, after: "\tfmt.Println(\"user 1042:\", s.balance())\n", occurrence: 1 }
+        text: "\n\tq := p\n\tq.Key = \"k-2\" // a second, real payment of the same amount\n\ts.atProvider = func() { fmt.Println(\"copy in flight:\", s.Pay(q)) }\n\tfmt.Println(\"original:\", s.Pay(q))\n\tfmt.Println(\"user 1042:\", s.balance())\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "copy in flight: 201 tx-2",
+          timeoutMs: 8000,
+        }
+      - id: pt-copy
+        type: console.point
+        at: { mark: pt-copy }
+        target: { text: "copy in flight: 201 tx-2", occurrence: 1 }
+      - id: pt-orig
+        type: console.point
+        at: { mark: pt-orig }
+        target: { text: "original: 201 tx-3", occurrence: 1 }
+      - id: pt-b3
+        type: console.point
+        at: { mark: pt-b3 }
+        target: { text: "user 1042: 25.00", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: barrier
+    chapter: Barrier က atomic ဖြစ်ရမယ်
+    narration: >-
+      [[mark:show-barrier]] database ပေါ်မှာ ဒါက ဒီလို ဖြစ်ပါတယ်။ [[mark:pt-w1]] request နှစ်ခုလုံးက key
+      ကို ရှာကြည့်ပြီး မတွေ့လို့ နှစ်ခုလုံး ဆက်သွားပါတယ်။ ရှာတာနဲ့ သိမ်းတာကြားမှာ အချိန် ကွာနေသရွေ့၊ ဘယ်လောက်
+      မြန်တဲ့ database ဖြစ်ဖြစ် race ဖြစ်နိုင်ပါတယ်။ [[mark:barrier-2]] ဒါကြောင့် ငွေ နှစ်ခါ ဖြတ်ပါတယ်။
+      [[mark:barrier-3]] ဖြေရှင်းနည်းက key ကို အလုပ် မစခင် အရင် claim လုပ်တာပါ။ [[mark:pt-ra]] ပထမ request
+      က key ကို in progress အနေနဲ့ အရင် insert လုပ်ပါတယ်။ [[mark:pt-rb]] copy ရဲ့ insert က unique
+      constraint ကို ထိပြီး ကျသွားလို့ conflict ပြန်ရပါတယ်။ [[mark:pt-sql]] သတိထားရမှာက စစ်တာနဲ့ claim
+      လုပ်တာ atomic ဖြစ်တဲ့ အဆင့် တစ်ခုတည်း ဖြစ်ရမှာပါ၊ unique constraint ပါတဲ့ INSERT တစ်ခုလိုမျိုးပါ။ ဒါဆိုရင် millisecond တစ်ခုတည်းမှာ ရောက်လာတဲ့ copy နှစ်ခုကြားမှာတောင်
+      တစ်ခုပဲ အောင်မယ် ဆိုတာကို database ကိုယ်တိုင် အာမခံပေးပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+      - {
+          title: "PostgreSQL documentation — INSERT, ON CONFLICT clause",
+          url: "https://www.postgresql.org/docs/current/sql-insert.html#SQL-ON-CONFLICT",
+        }
+    actions:
+      - {
+          id: show-barrier,
+          type: slide.show,
+          at: { mark: show-barrier, offsetMs: -700 },
+          slideId: barrier-1,
+        }
+      - { id: pt-w1, type: slide.point, at: { mark: pt-w1 }, target: { x: 0.113, y: 0.496 } }
+      - { id: barrier-2, type: slide.show, at: { mark: barrier-2 }, slideId: barrier-2 }
+      - {
+          id: pt-two,
+          type: slide.point,
+          at: { afterAction: barrier-2 },
+          target: { x: 0.126, y: 0.798 },
+        }
+      - { id: barrier-3, type: slide.show, at: { mark: barrier-3 }, slideId: barrier-3 }
+      - { id: pt-ra, type: slide.point, at: { mark: pt-ra }, target: { x: 0.564, y: 0.418 } }
+      - { id: pt-rb, type: slide.point, at: { mark: pt-rb }, target: { x: 0.564, y: 0.496 } }
+      - { id: pt-sql, type: slide.point, at: { mark: pt-sql }, target: { x: 0.128, y: 0.919 } }
+
+  - id: claim
+    narration: >-
+      [[mark:close-barrier]] Code မှာ ပြင်ရတာ line တစ်ကြောင်းပါ။ ဒီ program က thread တစ်ခုတည်းနဲ့ run လို့
+      map ကို စစ်တာနဲ့ ရေးတာကြားမှာ ဘာမှ ဝင်လို့ မရပါဘူး၊ database မှာဆိုရင် ခုနက INSERT ပါ။ [[mark:type-claim]] ငွေ မဖြတ်ခင် key
+      ကို in progress ဆိုတဲ့ conflict response နဲ့ အရင် ရေးထားပါမယ်။ ငွေ ဖြတ်ပြီးတဲ့အခါ အောက်က line က
+      အဲဒါကို တကယ့် response နဲ့ အစားထိုးပါတယ်။ ဒီ ကြားထဲ ရောက်လာတဲ့ copy က အဲဒီ conflict ကို တွေ့ပါမယ်။
+      [[mark:run-4]] run လိုက်ရအောင်။ [[mark:pt-409]] copy က conflict နဲ့ ငြင်းခံရပါတယ်။ client က ခဏနေမှ
+      ပြန် retry လုပ်ရင် ပြီးသွားတဲ့ response ကို ရပါလိမ့်မယ်။ [[mark:pt-b4]] payment နှစ်ခုအတွက် ယူရို ၅၀
+      ပဲ ထွက်ပါတယ်။ [[mark:dock-4]] ဒါက No invented data ဆိုတဲ့ မူပါ၊ ငွေကို မရှိဘဲ မဖန်တီးရဘူး။ retry ကို
+      ရှောင်လို့ မရတော့ ထပ်ရောက်လာတဲ့ copy တွေကို effect တစ်ခုတည်း ဖြစ်အောင် ပေါင်းပေးရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - { id: close-barrier, type: slide.close, at: { mark: close-barrier } }
+      - id: type-claim
+        type: editor.type
+        at: { mark: type-claim }
+        target: { file: main.go, after: "\t\treturn saved\n\t}\n", occurrence: 1 }
+        text: "\ts.keys[k] = Response{409, \"in progress\"}\n"
+        cadence: line-by-line
+      - { id: run-4, type: runtime.run, at: { mark: run-4, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-4,
+          type: expect.output,
+          at: { afterAction: run-4 },
+          contains: "copy in flight: 409 in progress",
+          timeoutMs: 8000,
+        }
+      - id: pt-409
+        type: console.point
+        at: { mark: pt-409 }
+        target: { text: "copy in flight: 409 in progress", occurrence: 1 }
+      - id: pt-b4
+        type: console.point
+        at: { mark: pt-b4 }
+        target: { text: "user 1042: 50.00", occurrence: 1 }
+      - { id: dock-4, type: runtime.collapseDock, at: { mark: dock-4 } }
+      - {
+          id: expect-file-claim,
+          type: expect.file,
+          at: { afterAction: run-4 },
+          path: main.go,
+          contains: 's.keys[k] = Response{409, "in progress"}',
+        }
+
+  - id: stripe
+    chapter: Stripe ရဲ့ Idempotency-Key
+    narration: >-
+      [[mark:show-stripe]] payment API တွေ ဒီ pattern ကို ဘယ်လို ပေးလဲ ဆိုတာ Stripe မှာ ကြည့်လို့ ရပါတယ်။
+      [[mark:pt-hdr]] client က Idempotency-Key header နဲ့ key ကို ပို့ပြီး၊ key က စာလုံး ၂၅၅ လုံးအထိ
+      ရှည်လို့ ရပါတယ်။ [[mark:stripe-2]] Stripe ရဲ့ API version တစ် မှာ endpoint စ run ပြီးတာနဲ့ ပထမ request ရဲ့
+      status code နဲ့ body ကို သိမ်းထားပါတယ်။ [[mark:pt-replay]] key တူတဲ့ retry တွေကို အလုပ် ထပ်မလုပ်ဘဲ
+      အဲဒီ response ကိုပဲ ပြန်ပေးပါတယ်။ [[mark:stripe-3]] request တစ်ခု run နေတုန်း key တူတဲ့
+      နောက်တစ်ခု ရောက်လာရင်တော့ အဲဒီ copy အတွက် ဘာမှ မသိမ်းလို့ client က ပြန် retry လုပ်လို့ ရပါတယ်။
+      ခုနက code မှာလည်း copy ကို အဲဒီလိုပဲ ခဏနေမှ ပြန်လာခိုင်းပါတယ်။ [[mark:pt-next]] ခက်တာက scale ပါ။ key သန်းထောင်ချီကို ဘယ်လောက်ကြာ
+      သိမ်းမလဲ ဆိုတာက ဒီ design ရဲ့ အဓိက trade-off တစ်ခု ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Stripe API reference — Idempotent requests",
+          url: "https://docs.stripe.com/api/idempotent_requests",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - {
+          id: show-stripe,
+          type: slide.show,
+          at: { mark: show-stripe, offsetMs: -700 },
+          slideId: stripe-1,
+        }
+      - { id: pt-hdr, type: slide.point, at: { mark: pt-hdr }, target: { x: 0.126, y: 0.426 } }
+      - { id: stripe-2, type: slide.show, at: { mark: stripe-2 }, slideId: stripe-2 }
+      - {
+          id: pt-saved,
+          type: slide.point,
+          at: { afterAction: stripe-2 },
+          target: { x: 0.606, y: 0.387 },
+        }
+      - {
+          id: pt-replay,
+          type: slide.point,
+          at: { mark: pt-replay },
+          target: { x: 0.606, y: 0.533 },
+        }
+      - { id: stripe-3, type: slide.show, at: { mark: stripe-3 }, slideId: stripe-3 }
+      - {
+          id: pt-clash,
+          type: slide.point,
+          at: { afterAction: stripe-3 },
+          target: { x: 0.606, y: 0.68 },
+        }
+      - { id: pt-next, type: slide.point, at: { mark: pt-next }, target: { x: 0.506, y: 0.909 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ payment API မှာ double charge မဖြစ်အောင် ဘယ်လို လုပ်မလဲ
+      ဆိုတာ မေးလေ့ရှိပါတယ်။ idempotency key သုံးမယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး။ အချက် သုံးချက်နဲ့
+      ဖြေပါ။ [[mark:iv-a]] ပထမ၊ timeout ဆိုတာ fail ဖြစ်တာ မဟုတ်ဘဲ ရလဒ် မသိရတာပါ၊ ဘာဖြစ်ခဲ့လဲ မသိနိုင်လို့ client က retry
+      လုပ်ရပြီး server က duplicate ကို တစ်ခုတည်းအဖြစ် ပေါင်းရမယ်။ [[mark:iv-b]] ဒုတိယ၊ key ကို client က
+      operation တစ်ခုစီအတွက် ပေးပြီး client နဲ့ operation အလိုက် scope လုပ်မယ်၊ payload ကနေ duplicate ကို
+      ခန့်မှန်းတာ မလုပ်ဘူး။ [[mark:iv-c]] တတိယ၊ key ကို အလုပ် မစခင် unique constraint နဲ့ atomic ဖြစ်အောင်
+      claim လုပ်မယ်၊ in progress ဆိုရင် conflict ပြန်ပြီး ပြီးရင် response ကို သိမ်းထားမယ်။ [[mark:iv-d]]
+      ပြီးရင် ကိုယ် ဘယ်လို တည်ဆောက်မလဲ ပြောပါ။ header နဲ့ key ယူပြီး key table မှာ in progress ကနေ done
+      ကို ရွှေ့မယ်၊ ပြီးတော့ error replay၊ payload မတူတာ၊ key သက်တမ်း ဆိုတဲ့ ဆုံးဖြတ်ချက် သုံးခုကိုလည်း
+      ဆက်ပြောပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] retry line ရဲ့ အပေါ်မှာ
+      request ရဲ့ key ကို အသစ် ပေးတဲ့ line တစ်ကြောင်း ထည့်ပြီး run ကြည့်ပါ။ retry က transaction အသစ်နဲ့
+      ဖြတ်ပြီး ယူရို ၂၅ ထပ်ထွက်ပါလိမ့်မယ်၊ server က duplicate ကို ပမာဏနဲ့ မဟုတ်ဘဲ key နဲ့ပဲ ခွဲလို့ပါ။ [[mark:try-why]] ဒါကြောင့် client က key ကို retry တစ်ခါစီမှာ မထုတ်ရပါဘူး၊ user
+      က payment လုပ်မယ်လို့ ဆုံးဖြတ်တဲ့ အချိန်မှာ တစ်ခါ ထုတ်ပြီး retry တိုင်းမှာ အဲဒီ key ကိုပဲ ပို့ရပါတယ်။
+      [[mark:recap]] ပြန်ချုပ်ရရင်၊ network က message ကို တစ်ခါပဲ ရောက်အောင် အာမမခံနိုင်လို့ retry
+      လုပ်ရပြီး၊ retry ကို အန္တရာယ်ကင်းအောင် လုပ်ပေးတာက အလုပ် မစခင် atomic claim လုပ်ထားတဲ့ key ပါ။ နောက်
+      lesson မှာတော့ error ကို ဘယ်လို replay လုပ်မလဲ၊ key ကို ဘယ်လောက်ကြာ ထားမလဲ ဆိုတဲ့ ခက်တဲ့ အစွန်းတွေကို
+      ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "retry := s.Pay(p)", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

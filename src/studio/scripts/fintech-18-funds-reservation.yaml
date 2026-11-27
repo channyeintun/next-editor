@@ -1,0 +1,933 @@
+# Fintech Engineering, lesson 18: funds reservation (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Funds reservation" and Appendix A "Authorization vs
+# capture" (CC BY 4.0, Voytek Pitula); fact A18 (Stripe authorization holds).
+# Start state: main.go writes two 80.00 withdrawals against a 100.00 balance as explicit steps
+# (both check, then both debit). ledger.go is the course ledger plus withdrawal() and must();
+# holds.go has Hold, Reserved, Available and Settle.
+# Edits, all insert-only:
+#   1. holds.go: Reserve, which checks available and records the hold in one step
+#   2. main.go: the two withdrawals again through Reserve    -> run-2: w2 refused; 100 / 80 / 20
+#   3. main.go: settle w1 at 79.50                           -> run-3: 20.50 / 0.00 / 20.50
+# Figures: race (the interleaving), bar (total vs available through reserve / refuse / settle),
+# life (reserved -> settled | released | expired), atomic (check and hold in one write), iv.
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-18-funds-reservation
+  title: "Fintech Engineering 18: Funds reservation"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      holds.go: |
+        package main
+
+        import "fmt"
+
+        // Hold is money set aside for one flow that has not finished yet.
+        type Hold struct {
+        	ID      string
+        	Account string
+        	Amount  int64
+        	Open    bool
+        }
+
+        // Holds keeps the reservations beside the ledger that holds the money.
+        type Holds struct {
+        	l     *Ledger
+        	holds []Hold
+        }
+
+        // Reserved sums the open holds on an account. Available is total minus reserved.
+        func (h *Holds) Reserved(account string) int64 {
+        	var sum int64
+        	for _, x := range h.holds {
+        		if x.Open && x.Account == account {
+        			sum += x.Amount
+        		}
+        	}
+        	return sum
+        }
+
+        func (h *Holds) Available(account string) int64 {
+        	return h.l.Balance(account) - h.Reserved(account)
+        }
+
+        // Settle closes a hold and posts the final amount; whatever was held above it is released.
+        func (h *Holds) Settle(id string, final int64) error {
+        	for i, x := range h.holds {
+        		if x.ID == id && x.Open {
+        			h.holds[i].Open = false
+        			return h.l.Post(withdrawal(id, x.Account, final))
+        		}
+        	}
+        	return fmt.Errorf("no open hold %s", id)
+        }
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // Balance derives an account's balance on the side where that kind of account grows:
+        // assets and expenses grow with debits; liabilities, equity and revenue grow with credits.
+        func (l *Ledger) Balance(account string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind, _, _ := strings.Cut(account, ":"); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // withdrawal pays a user's money out of the pooled bank account.
+        func withdrawal(id, user string, amount int64) Tx {
+        	return Tx{ID: id, Memo: "withdrawal", Lines: []Line{
+        		{Account: user, Debit: amount},
+        		{Account: "asset:bank", Credit: amount},
+        	}}
+        }
+
+        // must stops the program on an error that the example never expects.
+        func must(err error) {
+        	if err != nil {
+        		panic(err)
+        	}
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        const user = "liability:user:1042"
+
+        // funded returns a ledger in which the user has deposited 100.00.
+        func funded() *Ledger {
+        	l := &Ledger{}
+        	must(l.Post(Tx{ID: "d1", Memo: "deposit", Lines: []Line{
+        		{Account: "asset:bank", Debit: 10000},
+        		{Account: user, Credit: 10000},
+        	}}))
+        	return l
+        }
+
+        // show prints one labelled result: ok, or why it was rejected.
+        func show(label string, err error) {
+        	if err != nil {
+        		fmt.Println(label+": rejected —", err)
+        		return
+        	}
+        	fmt.Println(label + ": ok")
+        }
+
+        func balances(h *Holds) {
+        	total := h.l.Balance(user)
+        	fmt.Printf("total %s  reserved %s  available %s\n",
+        		cents(total), cents(h.Reserved(user)), cents(h.Available(user)))
+        }
+
+        func main() {
+        	// Two withdrawals of 80.00. Each checks the balance, waits on compliance and the bank,
+        	// then debits. The steps are written out in the order they interleave.
+        	l := funded()
+        	okA := l.Balance(user) >= 8000 // A checks
+        	okB := l.Balance(user) >= 8000 // B checks while A is still waiting
+        	if okA {
+        		must(l.Post(withdrawal("a", user, 8000))) // A debits
+        	}
+        	if okB {
+        		must(l.Post(withdrawal("b", user, 8000))) // B debits
+        	}
+        	fmt.Println("no hold: A", okA, "B", okB, "balance", cents(l.Balance(user)))
+        }
+  slides:
+    - id: atomic-1
+      contentType: html
+      name: "Consistency 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">CONSISTENCY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">စစ်တာနဲ့ reserve လုပ်တာ တစ်ဆင့်တည်း ဖြစ်ရမယ်</text>
+        <g class="in"><rect x="70" y="215" width="700" height="316" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="94" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">check, then write</text><path d="M70 261H770" stroke="#2a3345" stroke-width="2"/><g><text x="94" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#8a94a8">-- read first (worse on a replica)</text></g><g><text x="94" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">SELECT total - reserved</text></g><g><text x="94" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  FROM balances WHERE id = 1042;</text></g><g><text x="94" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#8a94a8">-- 100.00 ≥ 80.00, so hold it</text></g><g><text x="94" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT INTO holds VALUES ('w1', 8000);</text></g><g><rect x="78" y="477.4" width="684" height="39" rx="8" fill="#fc8181" opacity="0.16"/><text x="94" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">-- B read the same 100.00</text></g></g>
+        <g class="in"><circle cx="764" cy="221" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="750.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        </svg>
+    - id: atomic-2
+      contentType: html
+      name: "Consistency 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">CONSISTENCY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">စစ်တာနဲ့ reserve လုပ်တာ တစ်ဆင့်တည်း ဖြစ်ရမယ်</text>
+        <rect x="70" y="215" width="700" height="316" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="94" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">check, then write</text><path d="M70 261H770" stroke="#2a3345" stroke-width="2"/><g><text x="94" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#8a94a8">-- read first (worse on a replica)</text></g><g><text x="94" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">SELECT total - reserved</text></g><g><text x="94" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  FROM balances WHERE id = 1042;</text></g><g><text x="94" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#8a94a8">-- 100.00 ≥ 80.00, so hold it</text></g><g><text x="94" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT INTO holds VALUES ('w1', 8000);</text></g><g><rect x="78" y="477.4" width="684" height="39" rx="8" fill="#fc8181" opacity="0.16"/><text x="94" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">-- B read the same 100.00</text></g>
+        <circle cx="764" cy="221" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="750.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <g class="in"><rect x="830" y="215" width="700" height="394" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="854" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">one conditional write</text><path d="M830 261H1530" stroke="#2a3345" stroke-width="2"/><g><text x="854" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#8a94a8">BEGIN;</text></g><g><text x="854" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">UPDATE balances</text></g><g><text x="854" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">   SET reserved = reserved + 8000</text></g><g><text x="854" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5"> WHERE id = 1042</text></g><g><rect x="838" y="438.4" width="684" height="39" rx="8" fill="#68d391" opacity="0.16"/><text x="854" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">   AND total - reserved &gt;= 8000;</text></g><g><text x="854" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#68d391">-- 1 row: held · 0 rows: refused</text></g><g><text x="854" y="541.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT INTO holds VALUES ('w1', 8000);</text></g><g><text x="854" y="580.1" font-size="26" class="mono" xml:space="preserve" fill="#8a94a8">COMMIT;</text></g></g>
+        <g class="in"><circle cx="1524" cy="221" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="1510.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/></g>
+        </svg>
+    - id: atomic-3
+      contentType: html
+      name: "Consistency 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">CONSISTENCY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">စစ်တာနဲ့ reserve လုပ်တာ တစ်ဆင့်တည်း ဖြစ်ရမယ်</text>
+        <rect x="70" y="215" width="700" height="316" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="94" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">check, then write</text><path d="M70 261H770" stroke="#2a3345" stroke-width="2"/><g><text x="94" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#8a94a8">-- read first (worse on a replica)</text></g><g><text x="94" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">SELECT total - reserved</text></g><g><text x="94" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">  FROM balances WHERE id = 1042;</text></g><g><text x="94" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#8a94a8">-- 100.00 ≥ 80.00, so hold it</text></g><g><text x="94" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT INTO holds VALUES ('w1', 8000);</text></g><g><rect x="78" y="477.4" width="684" height="39" rx="8" fill="#fc8181" opacity="0.16"/><text x="94" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">-- B read the same 100.00</text></g>
+        <circle cx="764" cy="221" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="750.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="830" y="215" width="700" height="394" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="854" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">one conditional write</text><path d="M830 261H1530" stroke="#2a3345" stroke-width="2"/><g><text x="854" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#8a94a8">BEGIN;</text></g><g><text x="854" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">UPDATE balances</text></g><g><text x="854" y="385.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">   SET reserved = reserved + 8000</text></g><g><text x="854" y="424.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5"> WHERE id = 1042</text></g><g><rect x="838" y="438.4" width="684" height="39" rx="8" fill="#68d391" opacity="0.16"/><text x="854" y="463.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">   AND total - reserved &gt;= 8000;</text></g><g><text x="854" y="502.1" font-size="26" class="mono" xml:space="preserve" fill="#68d391">-- 1 row: held · 0 rows: refused</text></g><g><text x="854" y="541.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT INTO holds VALUES ('w1', 8000);</text></g><g><text x="854" y="580.1" font-size="26" class="mono" xml:space="preserve" fill="#8a94a8">COMMIT;</text></g>
+        <circle cx="1524" cy="221" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="1510.2" y="207.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/>
+        <g class="in"><rect x="70" y="640" width="789.8" height="52" rx="26" fill="#b794f6" opacity="0.16"/><rect x="70" y="640" width="789.8" height="52" rx="26" fill="none" stroke="#b794f6" stroke-width="2"/><text x="464.9" y="675.8" font-size="28" text-anchor="middle" fill="#b794f6" font-weight="700" class="mono">conditional write · row lock · serializable</text></g>
+        <g class="in"><rect x="70" y="730" width="729" height="52" rx="26" fill="#fc8181" opacity="0.16"/><rect x="70" y="730" width="729" height="52" rx="26" fill="none" stroke="#fc8181" stroke-width="2"/><text x="434.5" y="765.8" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700">never a stale read: no eventual consistency here</text></g>
+        </svg>
+    - id: bar-1
+      contentType: html
+      name: "Hold and release 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">HOLD AND RELEASE</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Total နဲ့ available မတူဘူး</text>
+        <g class="in"><rect x="100" y="230" width="597" height="56" rx="28" fill="#f6c453" opacity="0.16"/><rect x="100" y="230" width="597" height="56" rx="28" fill="none" stroke="#f6c453" stroke-width="2"/><text x="398.5" y="269.2" font-size="32" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">available = total − reserved</text></g>
+        <g class="in"><text x="100" y="390" font-size="32" fill="#e9edf5" class="mono">total 100.00</text></g>
+        <g class="in"><rect x="100" y="420" width="1400" height="90" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="424" width="1392" height="82" rx="10" fill="#4fd1c5" opacity="0.8"/><text x="800" y="550" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="600">available</text><text x="800" y="476" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">100.00</text></g></g>
+        </svg>
+    - id: bar-2
+      contentType: html
+      name: "Hold and release 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">HOLD AND RELEASE</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Total နဲ့ available မတူဘူး</text>
+        <rect x="100" y="230" width="597" height="56" rx="28" fill="#f6c453" opacity="0.16"/><rect x="100" y="230" width="597" height="56" rx="28" fill="none" stroke="#f6c453" stroke-width="2"/><text x="398.5" y="269.2" font-size="32" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">available = total − reserved</text>
+        <text x="100" y="390" font-size="32" fill="#e9edf5" class="mono">total 100.00</text>
+        <g class="in"><rect x="100" y="420" width="1400" height="90" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="424" width="272" height="82" rx="10" fill="#4fd1c5" opacity="0.8"/><text x="240" y="550" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="600">available</text><text x="240" y="476" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">20.00</text></g><g><rect x="384" y="424" width="1112" height="82" rx="10" fill="#f6ad55" opacity="0.28"/><rect x="384" y="424" width="1112" height="82" rx="10" fill="url(#hatch)" stroke="#f6ad55" stroke-width="2.5"/><text x="940" y="550" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="600">reserved · w1</text><text x="940" y="476" font-size="30" text-anchor="middle" fill="#e9edf5" font-weight="700" class="mono">80.00</text></g></g>
+        </svg>
+    - id: bar-3
+      contentType: html
+      name: "Hold and release 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">HOLD AND RELEASE</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Total နဲ့ available မတူဘူး</text>
+        <rect x="100" y="230" width="597" height="56" rx="28" fill="#f6c453" opacity="0.16"/><rect x="100" y="230" width="597" height="56" rx="28" fill="none" stroke="#f6c453" stroke-width="2"/><text x="398.5" y="269.2" font-size="32" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">available = total − reserved</text>
+        <text x="100" y="390" font-size="32" fill="#e9edf5" class="mono">total 100.00</text>
+        <rect x="100" y="420" width="1400" height="90" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="424" width="272" height="82" rx="10" fill="#4fd1c5" opacity="0.8"/><text x="240" y="550" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="600">available</text><text x="240" y="476" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">20.00</text></g><g><rect x="384" y="424" width="1112" height="82" rx="10" fill="#f6ad55" opacity="0.28"/><rect x="384" y="424" width="1112" height="82" rx="10" fill="url(#hatch)" stroke="#f6ad55" stroke-width="2.5"/><text x="940" y="550" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="600">reserved · w1</text><text x="940" y="476" font-size="30" text-anchor="middle" fill="#e9edf5" font-weight="700" class="mono">80.00</text></g>
+        <g class="in"><rect x="100" y="660" width="620" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-cross" x="122" y="688" width="64" height="64" style="color:#fc8181"/><text x="450" y="710.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">w2 wants 80.00</text><text x="450" y="751.6" font-size="24" text-anchor="middle" fill="#8a94a8">checked against available 20.00</text></g>
+        </svg>
+    - id: bar-4
+      contentType: html
+      name: "Hold and release 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">HOLD AND RELEASE</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Total နဲ့ available မတူဘူး</text>
+        <rect x="100" y="230" width="597" height="56" rx="28" fill="#f6c453" opacity="0.16"/><rect x="100" y="230" width="597" height="56" rx="28" fill="none" stroke="#f6c453" stroke-width="2"/><text x="398.5" y="269.2" font-size="32" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">available = total − reserved</text>
+        <g class="in"><text x="100" y="390" font-size="32" fill="#e9edf5" class="mono">total 20.50  (was 100.00)</text></g>
+        <g class="in"><rect x="100" y="420" width="1400" height="90" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="104" y="424" width="279" height="82" rx="10" fill="#4fd1c5" opacity="0.8"/><text x="243.5" y="550" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="600">available</text><text x="243.5" y="476" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">20.50</text></g><g><rect x="391" y="424" width="1105" height="82" rx="10" fill="#9aa5b8" opacity="0.8"/><text x="943.5" y="550" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">paid out · w1</text><text x="943.5" y="476" font-size="30" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">79.50</text></g></g>
+        <g class="in"><rect x="100" y="660" width="620" height="120" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-check" x="122" y="688" width="64" height="64" style="color:#68d391"/><text x="450" y="710.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">settle w1 at 79.50</text><text x="450" y="751.6" font-size="24" text-anchor="middle" fill="#8a94a8">estimate 80.00 · actual 79.50</text></g>
+        <g class="in"><rect x="800" y="700" width="443" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="800" y="700" width="443" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1021.5" y="734.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">0.50 released → available</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Double spending ကို ဘယ်လို ကာကွယ်မလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Double spending ကို ဘယ်လို ကာကွယ်မလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Race — check နဲ့ debit ကြားမှာ အပြင် call တွေ ရှိတယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">request နှစ်ခုလုံး check ကို ဖြတ်သွားနိုင်တယ်</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Double spending ကို ဘယ်လို ကာကွယ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Race — check နဲ့ debit ကြားမှာ အပြင် call တွေ ရှိတယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">request နှစ်ခုလုံး check ကို ဖြတ်သွားနိုင်တယ်</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Reserve first — available = total − reserved နဲ့ စစ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">estimate ကို hold၊ actual ကို settle၊ ကျန်တာ release</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Double spending ကို ဘယ်လို ကာကွယ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Race — check နဲ့ debit ကြားမှာ အပြင် call တွေ ရှိတယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">request နှစ်ခုလုံး check ကို ဖြတ်သွားနိုင်တယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Reserve first — available = total − reserved နဲ့ စစ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">estimate ကို hold၊ actual ကို settle၊ ကျန်တာ release</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#b794f6"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Atomic — စစ်တာနဲ့ hold ကို တစ်ဆင့်တည်း၊ linearizable</text><text x="188" y="575" font-size="26" fill="#8a94a8">conditional write · row lock · serializable — replica မဟုတ်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Double spending ကို ဘယ်လို ကာကွယ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Race — check နဲ့ debit ကြားမှာ အပြင် call တွေ ရှိတယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">request နှစ်ခုလုံး check ကို ဖြတ်သွားနိုင်တယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Reserve first — available = total − reserved နဲ့ စစ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">estimate ကို hold၊ actual ကို settle၊ ကျန်တာ release</text></g><g><circle cx="138" cy="513" r="25" fill="#b794f6"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Atomic — စစ်တာနဲ့ hold ကို တစ်ဆင့်တည်း၊ linearizable</text><text x="188" y="575" font-size="26" fill="#8a94a8">conditional write · row lock · serializable — replica မဟုတ်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">Conditional write တစ်ခု၊ hold တိုင်းကို settle / release</text><text x="188" y="707" font-size="26" fill="#8a94a8">expiry က safety net — orphan hold က ငွေကို lock ပဲ လုပ်တယ်</text></g>
+        </svg>
+    - id: life-1
+      contentType: html
+      name: "Lifecycle 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">LIFECYCLE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Reservation တိုင်း တစ်နေရာမှာ ဆုံးရမယ်</text>
+        <g class="in"><rect x="90" y="430" width="400" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><rect x="90" y="430" width="400" height="130" rx="18" fill="#f6ad55" opacity="0.13"/><use href="#i-lock" x="112" y="463" width="64" height="64" style="color:#f6ad55"/><text x="330" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">reserved</text><text x="330" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">card: authorization</text></g>
+        </svg>
+    - id: life-2
+      contentType: html
+      name: "Lifecycle 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">LIFECYCLE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Reservation တိုင်း တစ်နေရာမှာ ဆုံးရမယ်</text>
+        <rect x="90" y="430" width="400" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><rect x="90" y="430" width="400" height="130" rx="18" fill="#f6ad55" opacity="0.13"/><use href="#i-lock" x="112" y="463" width="64" height="64" style="color:#f6ad55"/><text x="330" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">reserved</text><text x="330" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">card: authorization</text>
+        <g class="in"><rect x="1050" y="220" width="460" height="120" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-check" x="1072" y="248" width="64" height="64" style="color:#68d391"/><text x="1320" y="271.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">settled</text><text x="1320" y="311.3" font-size="23" text-anchor="middle" fill="#8a94a8">post the actual · card: capture</text></g>
+        <g class="in"><rect x="1050" y="435" width="460" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-retry" x="1072" y="463" width="64" height="64" style="color:#4fd1c5"/><text x="1320" y="487.1" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">released</text><text x="1320" y="525.9" font-size="22" text-anchor="middle" fill="#8a94a8">flow failed · back to available</text></g>
+        <path d="M499.3 491.4L1036.9 285" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/><text x="768.1" y="372" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">done</text>
+        <path d="M500 495L1036 495" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="768" y="478.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">failed</text>
+        </svg>
+    - id: life-3
+      contentType: html
+      name: "Lifecycle 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol><symbol id="i-clock" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M24 13v11l8 5"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">LIFECYCLE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Reservation တိုင်း တစ်နေရာမှာ ဆုံးရမယ်</text>
+        <rect x="90" y="430" width="400" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><rect x="90" y="430" width="400" height="130" rx="18" fill="#f6ad55" opacity="0.13"/><use href="#i-lock" x="112" y="463" width="64" height="64" style="color:#f6ad55"/><text x="330" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">reserved</text><text x="330" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">card: authorization</text>
+        <rect x="1050" y="220" width="460" height="120" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-check" x="1072" y="248" width="64" height="64" style="color:#68d391"/><text x="1320" y="271.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">settled</text><text x="1320" y="311.3" font-size="23" text-anchor="middle" fill="#8a94a8">post the actual · card: capture</text>
+        <rect x="1050" y="435" width="460" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-retry" x="1072" y="463" width="64" height="64" style="color:#4fd1c5"/><text x="1320" y="487.1" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">released</text><text x="1320" y="525.9" font-size="22" text-anchor="middle" fill="#8a94a8">flow failed · back to available</text>
+        <path d="M499.3 491.4L1036.9 285" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/><text x="768.1" y="372" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">done</text>
+        <path d="M500 495L1036 495" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="768" y="478.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">failed</text>
+        <g class="in"><rect x="1050" y="650" width="460" height="120" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-clock" x="1072" y="678" width="64" height="64" style="color:#9aa5b8"/><text x="1320" y="700.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">expired</text><text x="1320" y="741.6" font-size="24" text-anchor="middle" fill="#8a94a8">safety net · optional</text></g>
+        <path d="M499.3 498.6L1036.9 705" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="768.1" y="585.6" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">nobody resolved it</text>
+        <g class="in"><rect x="90" y="690" width="655.9" height="48" rx="24" fill="#f6ad55" opacity="0.16"/><rect x="90" y="690" width="655.9" height="48" rx="24" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="418" y="722.4" font-size="24" text-anchor="middle" fill="#f6ad55" font-weight="700">orphan hold → money locked, never lost or created</text></g>
+        </svg>
+    - id: race-1
+      contentType: html
+      name: "Check, then act 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">CHECK, THEN ACT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Request နှစ်ခု၊ balance တစ်ခု</text>
+        <g class="in"><path d="M225 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="100" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="120" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="251" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Request A</text><path d="M800 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="695" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1375 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1250" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="1270" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="1401" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Request B</text><g><path d="M233 362.3H788" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="512.5" y="349.3" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">100.00 ≥ 80.00 ✓</text></g></g>
+        </svg>
+    - id: race-2
+      contentType: html
+      name: "Check, then act 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">CHECK, THEN ACT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Request နှစ်ခု၊ balance တစ်ခု</text>
+        <path d="M225 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="100" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="120" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="251" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Request A</text><path d="M800 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="695" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1375 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1250" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="1270" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="1401" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Request B</text><g><path d="M233 362.3H788" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="512.5" y="349.3" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">100.00 ≥ 80.00 ✓</text></g><g class="in"><rect x="60.7" y="422.3" width="328.5" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="225" y="455.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">compliance · bank call…</text></g><g class="in"><path d="M1367 534.3H812" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1087.5" y="521.3" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">100.00 ≥ 80.00 ✓</text></g>
+        </svg>
+    - id: race-3
+      contentType: html
+      name: "Check, then act 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">CHECK, THEN ACT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Request နှစ်ခု၊ balance တစ်ခု</text>
+        <path d="M225 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="100" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="120" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="251" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Request A</text><path d="M800 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="695" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1375 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1250" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="1270" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="1401" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Request B</text><g><path d="M233 362.3H788" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="512.5" y="349.3" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">100.00 ≥ 80.00 ✓</text></g><g><rect x="60.7" y="422.3" width="328.5" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="225" y="455.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">compliance · bank call…</text></g><g><path d="M1367 534.3H812" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1087.5" y="521.3" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">100.00 ≥ 80.00 ✓</text></g><g class="in"><path d="M233 620.3H788" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="512.5" y="607.3" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">debit 80.00</text></g><g class="in"><path d="M1367 706.3H812" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="1087.5" y="693.3" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">debit 80.00</text></g><g class="in"><rect x="687.5" y="766.3" width="225" height="48" rx="12" fill="#0b0e14" stroke="#fc8181" stroke-width="2"/><text x="800" y="799.3" font-size="25" text-anchor="middle" fill="#fc8181" font-weight="600">balance −60.00</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9518
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "no hold: A true B true balance -60.00\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "no hold: A true B true balance -60.00\nw1 reserve 80.00: ok\nw2 reserve 80.00: rejected — available 20.00, need 80.00\ntotal 100.00  reserved 80.00  available 20.00\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "no hold: A true B true balance -60.00\nw1 reserve 80.00: ok\nw2 reserve 80.00: rejected — available 20.00, need 80.00\ntotal 100.00  reserved 80.00  available 20.00\nw1 settle 79.50: ok\ntotal 20.50  reserved 0.00  available 20.50\n"
+
+scenes:
+  - id: hook
+    chapter: Check လုပ်ပြီးမှ debit လုပ်ရင်
+    narration: >-
+      ငွေထုတ်တဲ့ request တစ်ခုက balance ကို စစ်ပြီး ချက်ချင်း debit လုပ်တာ မဟုတ်ပါဘူး။ ကြားထဲမှာ
+      compliance check လုပ်တာ၊ ဘဏ်ဘက်မှာ withdrawal ကို မှတ်ပုံတင်တာ စတဲ့ အပြင်ဘက်က အလုပ်တွေ
+      ရှိပါတယ်။ [[mark:sel-race]] ဒီ program က ယူရို ၁၀၀ ရှိတဲ့ account ကနေ ယူရို ရှစ်ဆယ်စီ ထုတ်မယ့်
+      request နှစ်ခုကို၊ တပြိုင်နက် ဖြစ်တဲ့အခါ အဆင့်တွေ ရောသွားတဲ့ အစီအစဉ်အတိုင်း တစ်ဆင့်ချင်း
+      ရေးထားတာပါ။ [[mark:sel-checks]] request နှစ်ခုလုံးက balance ကို အရင် စစ်ပါတယ်၊ ဒုတိယ request က
+      ပထမ request က အပြင်ဘက်ကို စောင့်နေတုန်း စစ်တာပါ။ [[mark:sel-debits]] ပြီးမှ တစ်ခုချင်း debit
+      လုပ်ပါတယ်။ balance ဘယ်လောက် ကျန်မလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+    actions:
+      - { id: open-main-1, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-race
+        type: editor.select
+        at: { mark: sel-race }
+        target: { file: main.go, text: "\tl := funded()", occurrence: 1 }
+      - id: sel-checks
+        type: editor.select
+        at: { mark: sel-checks }
+        target:
+          {
+            file: main.go,
+            text: "\tokA := l.Balance(user) >= 8000 // A checks\n\tokB := l.Balance(user) >= 8000 // B checks while A is still waiting",
+            occurrence: 1,
+          }
+      - id: sel-debits
+        type: editor.select
+        at: { mark: sel-debits }
+        target:
+          {
+            file: main.go,
+            text: "\t\tmust(l.Post(withdrawal(\"b\", user, 8000))) // B debits",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "balance -60.00",
+          timeoutMs: 8000,
+        }
+
+  - id: race
+    narration: >-
+      [[mark:pt-race]] check နှစ်ခုလုံး ဖြတ်သွားပြီး balance က အနုတ် ယူရို ခြောက်ဆယ် ဖြစ်သွားပါတယ်။
+      ယူရို ၁၀၀ ပဲ ရှိတဲ့ account ကနေ ယူရို ၁၆၀ ထွက်သွားတာပါ။ [[mark:dock-1]] ကွာနေတဲ့ ယူရို
+      ခြောက်ဆယ်က မရှိဘဲ ဖန်တီးလိုက်တဲ့ ငွေပါ။ [[mark:show-race]] request တစ်ခုက balance ကို စစ်တော့
+      ယူရို ၁၀၀ ရှိလို့ ဖြတ်ပါတယ်။ [[mark:race-2]] ပြီးတော့ compliance နဲ့ ဘဏ်ကို စောင့်ပါတယ်၊ ဒီ
+      ကြားကာလက database write တစ်ခုထက် အများကြီး ပိုကြာပါတယ်။ [[mark:pt-cb]] အဲဒီ ကြားထဲမှာ ဒုတိယ
+      request ရောက်လာပြီး balance ကို စစ်တော့၊ ပထမ request က debit မလုပ်ရသေးလို့ ယူရို ၁၀၀ ကိုပဲ
+      မြင်ပါတယ်။ [[mark:race-3]] နောက်ဆုံး နှစ်ခုလုံး debit လုပ်တော့ ငွေ တစ်စုတည်းက transaction
+      နှစ်ခုကို ထောက်ပံ့လိုက်သလို ဖြစ်သွားပါတယ်။ [[mark:reverse]] အစီအစဉ်ကို ပြောင်းပြန် လုပ်ရင်လည်း
+      မရပါဘူး၊ အပြင်ဘက်ကို အရင် ခေါ်ပြီးမှ balance မလောက်မှန်း သိရရင် ဘဏ်ဘက်မှာ withdrawal က
+      မှတ်ပြီးသား ဖြစ်နေပါပြီ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+    actions:
+      - id: pt-race
+        type: console.point
+        at: { mark: pt-race }
+        target: { text: "balance -60.00", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+      - {
+          id: show-race,
+          type: slide.show,
+          at: { mark: show-race, offsetMs: -700 },
+          slideId: race-1,
+        }
+      - {
+          id: pt-ca,
+          type: slide.point,
+          at: { afterAction: show-race },
+          target: { x: 0.295, y: 0.418 },
+        }
+      - { id: race-2, type: slide.show, at: { mark: race-2 }, slideId: race-2 }
+      - {
+          id: pt-wait,
+          type: slide.point,
+          at: { afterAction: race-2 },
+          target: { x: 0.116, y: 0.514 },
+        }
+      - { id: pt-cb, type: slide.point, at: { mark: pt-cb }, target: { x: 0.655, y: 0.609 } }
+      - { id: race-3, type: slide.show, at: { mark: race-3 }, slideId: race-3 }
+      - {
+          id: pt-neg,
+          type: slide.point,
+          at: { afterAction: race-3 },
+          target: { x: 0.475, y: 0.896 },
+        }
+
+  - id: hold
+    chapter: Hold and release
+    narration: >-
+      [[mark:show-bar]] ဖြေရှင်းနည်းက funds reservation ပါ၊ hold and release လို့လည်း ခေါ်ပါတယ်။
+      အပြင်ဘက်ကို မခေါ်ခင် ငွေကို ဒီ transaction အတွက် သီးသန့် ဖယ်ထားပြီးမှ နှေးတဲ့ အလုပ်ကို
+      လုပ်တာပါ။ [[mark:pt-f]] ဒါကြောင့် balance နှစ်မျိုး ဖြစ်လာပါတယ်။ total က user ပိုင်တဲ့ ငွေ
+      အားလုံးပါ၊ reserve လုပ်ထားတာလည်း ပါပါတယ်။ available ကတော့ total ထဲက reserve လုပ်ထားတာကို
+      နုတ်ထားတာပါ။ [[mark:bar-2]] ပထမ request က ယူရို ရှစ်ဆယ်ကို reserve လုပ်လိုက်ရင် total က ၁၀၀
+      ရှိနေသေးပေမဲ့ available က နှစ်ဆယ်ပဲ ကျန်ပါတယ်။ [[mark:bar-3]] balance စစ်တာနဲ့ reservation အသစ်
+      လုပ်တာ အားလုံးကို available နဲ့ စစ်တာမို့ ဒုတိယ request ရဲ့ ယူရို ရှစ်ဆယ်ကို ငြင်းလိုက်ပါတယ်။
+      ငွေ တစ်စုတည်းက transaction နှစ်ခုကို မထောက်ပံ့နိုင်တော့တာ ဒီ စည်းမျဉ်းကြောင့်ပါ။ [[mark:bar-4]]
+      အပြင်ဘက်က အလုပ် ပြီးတော့ reservation ကို settle လုပ်ပါတယ်။ fee ဒါမှမဟုတ် rate ကြောင့် နောက်ဆုံး
+      ပမာဏက ခန့်မှန်းထားတာနဲ့ မတူနိုင်လို့၊ ခန့်မှန်းခြေ ယူရို ရှစ်ဆယ်ကို hold လုပ်ပြီး တကယ့် ပမာဏ
+      ခုနစ်ဆယ့်ကိုး ဒသမ ငါး ကို settle လုပ်၊ ကျန်တဲ့ သုည ဒသမ ငါး ကို release လုပ်ပါတယ်။ [[mark:pt-rel]]
+      ဒါက No invented data မူပါ၊ ငွေကို မရှိဘဲ မဖန်တီးရဘူး ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - { id: show-bar, type: slide.show, at: { mark: show-bar, offsetMs: -700 }, slideId: bar-1 }
+      - {
+          id: pt-b1,
+          type: slide.point,
+          at: { afterAction: show-bar },
+          target: { x: 0.5, y: 0.576 },
+        }
+      - { id: pt-f, type: slide.point, at: { mark: pt-f }, target: { x: 0.243, y: 0.327 } }
+      - { id: bar-2, type: slide.show, at: { mark: bar-2 }, slideId: bar-2 }
+      - { id: pt-b2, type: slide.point, at: { afterAction: bar-2 }, target: { x: 0.575, y: 0.624 } }
+      - { id: bar-3, type: slide.show, at: { mark: bar-3 }, slideId: bar-3 }
+      - {
+          id: pt-w2-fig,
+          type: slide.point,
+          at: { afterAction: bar-3 },
+          target: { x: 0.256, y: 0.876 },
+        }
+      - { id: bar-4, type: slide.show, at: { mark: bar-4 }, slideId: bar-4 }
+      - { id: pt-st, type: slide.point, at: { afterAction: bar-4 }, target: { x: 0.256, y: 0.876 } }
+      - { id: pt-rel, type: slide.point, at: { mark: pt-rel }, target: { x: 0.632, y: 0.842 } }
+
+  - id: reserve
+    narration: >-
+      [[mark:close-bar]] code နဲ့ ရေးကြည့်ရအောင်။ [[mark:open-holds]] hold တွေကို ledger ဘေးမှာ သီးခြား
+      သိမ်းထားပြီး၊ available က ledger ရဲ့ balance ထဲက ဖွင့်ထားဆဲ hold တွေကို နုတ်ထားတာပါ။
+      [[mark:type-reserve]] Reserve က available ကို စစ်ပြီး hold ကို အဲဒီ တစ်ဆင့်တည်းမှာ မှတ်ပါတယ်။
+      စစ်ပြီးတဲ့ နောက် ကြားထဲကို တခြား request ဝင်လို့ရတဲ့ အချိန် မကျန်အောင်ပါ။ ဒီ program မှာ request
+      တွေ တစ်ခုပြီးမှ တစ်ခု run လို့ တစ်ဆင့်တည်း ဖြစ်ပြီးသားပါ၊ တကယ့် system မှာတော့ database ကို
+      တစ်ဆင့်တည်း ဖြစ်အောင် ခိုင်းရပြီး၊ အဲဒါကို ခဏနေ ကြည့်ပါမယ်။ [[mark:open-main-2]] request
+      နှစ်ခုကို reserve နဲ့ ပြန်လုပ်ကြည့်ရအောင်။ [[mark:type-calls]] ယူရို ၁၀၀ ရှိတဲ့ ledger အသစ်ပေါ်မှာ
+      ယူရို ရှစ်ဆယ်စီ reserve နှစ်ခု လုပ်ပြီး၊ balance သုံးမျိုးလုံးကို ထုတ်ပြပါတယ်။ ဒီတစ်ခါ ဒုတိယ
+      request ကို အပြင်ဘက် မခေါ်ခင်မှာပဲ ရပ်နိုင်ရပါမယ်။ [[mark:run-2]] run လိုက်ရအောင်။
+      [[mark:pt-w2]] ဒုတိယ request ကို available နှစ်ဆယ်ပဲ ရှိလို့ ငြင်းလိုက်ပါတယ်။ [[mark:pt-bal2]]
+      total က ၁၀၀၊ reserved က ရှစ်ဆယ်၊ available က နှစ်ဆယ် ဖြစ်ပြီး၊ [[mark:dock-2]] ledger ထဲမှာတော့ ငွေ ဘာမှ
+      မရွေ့ရသေးပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+    actions:
+      - { id: close-bar, type: slide.close, at: { mark: close-bar } }
+      - { id: open-holds, type: workspace.openFile, at: { mark: open-holds }, path: holds.go }
+      - id: type-reserve
+        type: editor.type
+        at: { mark: type-reserve }
+        target:
+          {
+            file: holds.go,
+            after: "\treturn fmt.Errorf(\"no open hold %s\", id)\n}\n",
+            occurrence: 1,
+          }
+        text: "\n// Reserve checks the available balance and records the hold in one step.\nfunc (h *Holds) Reserve(id, account string, amount int64) error {\n\tif avail := h.Available(account); amount > avail {\n\t\treturn fmt.Errorf(\"available %s, need %s\", cents(avail), cents(amount))\n\t}\n\th.holds = append(h.holds, Hold{ID: id, Account: account, Amount: amount, Open: true})\n\treturn nil\n}\n"
+        cadence: line-by-line
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: type-calls
+        type: editor.type
+        at: { mark: type-calls }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"no hold: A\", okA, \"B\", okB, \"balance\", cents(l.Balance(user)))\n",
+            occurrence: 1,
+          }
+        text: "\n\th := &Holds{l: funded()}\n\tshow(\"w1 reserve 80.00\", h.Reserve(\"w1\", user, 8000))\n\tshow(\"w2 reserve 80.00\", h.Reserve(\"w2\", user, 8000))\n\tbalances(h)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "w2 reserve 80.00: rejected",
+          timeoutMs: 8000,
+        }
+      - id: pt-w2
+        type: console.point
+        at: { mark: pt-w2 }
+        target: { text: "w2 reserve 80.00: rejected", occurrence: 1 }
+      - id: pt-bal2
+        type: console.point
+        at: { mark: pt-bal2 }
+        target: { text: "total 100.00", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: settle
+    narration: >-
+      [[mark:type-settle]] အပြင်ဘက်က တကယ့် ပမာဏ ခုနစ်ဆယ့်ကိုး ဒသမ ငါး ပြန်လာတယ် ဆိုပါစို့။ ဒီ line
+      တွေက ပထမ hold ကို အဲဒီ ပမာဏနဲ့ settle လုပ်ပြီး balance တွေကို ပြန်ထုတ်ပါတယ်။ Settle က hold ကို
+      ပိတ်ပြီး တကယ့် ပမာဏကိုပဲ ledger ထဲ post လုပ်လို့၊ hold လုပ်ထားတဲ့ ပိုငွေက အလိုလို available ထဲ
+      ပြန်ရောက်ပါတယ်။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-bal3]] total က နှစ်ဆယ် ဒသမ ငါး၊
+      reserved က သုည၊ available ကလည်း နှစ်ဆယ် ဒသမ ငါး ဖြစ်ပါတယ်။ [[mark:dock-3]] ledger ထဲ ရောက်တာက
+      တကယ် ထွက်သွားတဲ့ ငွေပဲ ဖြစ်ပြီး၊ ခန့်မှန်းခြေ ယူရို ရှစ်ဆယ်က ဘယ် entry ထဲမှာမှ မပါပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+    actions:
+      - id: type-settle
+        type: editor.type
+        at: { mark: type-settle }
+        target:
+          {
+            file: main.go,
+            after: "\tshow(\"w2 reserve 80.00\", h.Reserve(\"w2\", user, 8000))\n\tbalances(h)\n",
+            occurrence: 1,
+          }
+        text: "\n\tshow(\"w1 settle 79.50\", h.Settle(\"w1\", 7950))\n\tbalances(h)\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "total 20.50",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-reserve,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: holds.go,
+          contains: "if avail := h.Available(account); amount > avail {",
+        }
+      - id: pt-bal3
+        type: console.point
+        at: { mark: pt-bal3 }
+        target: { text: "total 20.50", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: life
+    chapter: Reservation တိုင်း ဆုံးရမယ်
+    narration: >-
+      [[mark:show-life]] reservation တစ်ခုမှာ ပုံမှန် အဆုံး နှစ်မျိုး ရှိပါတယ်။ [[mark:life-2]] flow
+      အောင်မြင်ရင် settle လုပ်ပြီး တကယ့် ပမာဏကို post လုပ်ပါတယ်၊ တစ်ခုခု မှားသွားရင် release လုပ်ပြီး
+      ငွေက available ထဲ ပြန်ရောက်ပါတယ်။ ဒါကြောင့် reservation ဖန်တီးတဲ့ flow တိုင်းက အဲဒါကို
+      တစ်နေရာမှာ ဆုံးအောင် တာဝန်ယူရပါတယ်။ [[mark:life-3]] ဘယ်သူမှ မဆုံးပေးတဲ့ hold က user ရဲ့ ငွေကို
+      ပိတ်ထားပါတယ်။ expiry ဒါမှမဟုတ် timeout ကို safety net အနေနဲ့ ထားလို့ရပေမဲ့ မဖြစ်မနေ
+      မဟုတ်ပါဘူး၊ system ရဲ့ discipline ကို အားကိုးလည်း ရပါတယ်။ [[mark:pt-orphan]] သတိထားမိဖို့
+      ကောင်းတာက ဒီ failure mode က conservative ဖြစ်တာပါ။ orphan hold က ငွေကို lock ပဲ လုပ်ပြီး၊ ငွေ
+      ပျောက်တာ၊ ငွေ ပေါ်လာတာ မဖြစ်ပါဘူး။ [[mark:pt-card]] card payment မှာလည်း ဒီ pattern ပဲ
+      ရှိပါတယ်။ authorization က hold ချတာ၊ capture က တကယ် charge လုပ်တာပါ။ [[mark:stripe]] Stripe မှာ
+      manual capture နဲ့ဆို card payment ကို အခု authorize လုပ်ပြီး နောက်မှ capture လုပ်နိုင်ပါတယ်။
+      capture မလုပ်ခင် authorization သက်တမ်း ကုန်သွားရင် ငွေကို release လုပ်ပြီး payment က canceled
+      ဖြစ်သွားပါတယ်။ [[mark:window]] customer ကိုယ်တိုင် online မှာ စတဲ့ payment တွေအတွက် Visa၊
+      Mastercard၊ Amex နဲ့ Discover မှာ ခုနစ်ရက် ရှိပါတယ်။ ဒါပေမဲ့ card network၊ ဆိုင်မှာ တိုက်ရိုက် ပေးတာလား၊
+      merchant ဘက်က စတာလား ဆိုတာပေါ် မူတည်ပြီး ကွာလို့ ရက် တစ်ခုတည်းကို code ထဲမှာ အသေ မထားရပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Payments, rails & cards (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#payments-rails-cards",
+        }
+      - {
+          title: "Stripe — Place a hold on a payment method",
+          url: "https://docs.stripe.com/payments/place-a-hold-on-a-payment-method",
+        }
+    actions:
+      - {
+          id: show-life,
+          type: slide.show,
+          at: { mark: show-life, offsetMs: -700 },
+          slideId: life-1,
+        }
+      - {
+          id: pt-res,
+          type: slide.point,
+          at: { afterAction: show-life },
+          target: { x: 0.181, y: 0.631 },
+        }
+      - { id: life-2, type: slide.show, at: { mark: life-2 }, slideId: life-2 }
+      - { id: pt-set, type: slide.point, at: { afterAction: life-2 }, target: { x: 0.8, y: 0.387 } }
+      - { id: life-3, type: slide.show, at: { mark: life-3 }, slideId: life-3 }
+      - { id: pt-exp, type: slide.point, at: { afterAction: life-3 }, target: { x: 0.8, y: 0.864 } }
+      - {
+          id: pt-orphan,
+          type: slide.point,
+          at: { mark: pt-orphan },
+          target: { x: 0.255, y: 0.829 },
+        }
+      - { id: pt-card, type: slide.point, at: { mark: pt-card }, target: { x: 0.181, y: 0.631 } }
+      - { id: pt-capture, type: slide.point, at: { mark: stripe }, target: { x: 0.8, y: 0.387 } }
+      - { id: pt-window, type: slide.point, at: { mark: window }, target: { x: 0.8, y: 0.864 } }
+
+  - id: atomic
+    chapter: Consistency ဘယ်လောက် လိုလဲ
+    narration: >-
+      [[mark:show-atomic]] ဒီ pattern တစ်ခုလုံးက တစ်ချက်ပေါ်မှာ မူတည်ပါတယ်။ စစ်တာနဲ့ reservation
+      မှတ်တာက linearizable ဖြစ်ရပါမယ်၊ ဆိုလိုတာက စစ်တဲ့အခါ နောက်ဆုံး write ကို မြင်ရပြီး၊ စစ်တာနဲ့
+      ရေးတာကြားကို ဘယ် request မှ ဝင်လို့ မရအောင် ဖြစ်ရပါမယ်။ [[mark:pt-bad]] available ကို အရင် ဖတ်ပြီးမှ
+      hold ကို သီးခြား ထည့်တဲ့ ပုံစံက ခုနက race ကို ပြန်ဖြစ်စေပါတယ်၊ request နှစ်ခုလုံး ယူရို ၁၀၀ ကို
+      ဖတ်ပြီးမှ hold ထည့်နိုင်လို့ပါ။ replica ကနေ ဖတ်ရင် ပိုဆိုးပါတယ်၊ replica နောက်ကျနေရင် ပြီးသွားတဲ့
+      hold ကိုတောင် မမြင်ရလို့ပါ။ [[mark:atomic-2]] မှန်တဲ့ ပုံစံက စစ်တာကို write ထဲမှာ
+      ထည့်လိုက်တာပါ။ [[mark:pt-cond]] update က available လုံလောက်မှပဲ row ကို ပြောင်းပြီး၊ row တစ်ကြောင်း
+      ပြောင်းရင် hold ရ၊ သုည ကြောင်း ဆိုရင် ငြင်းပါတယ်။ [[mark:atomic-3]] row lock နဲ့ ဒါမှမဟုတ်
+      serializable isolation နဲ့လည်း ရပါတယ်၊ ဒါပေမဲ့ eventual consistency ကတော့ ဒီနေရာမှာ လုံးဝ
+      မရပါဘူး။ [[mark:lock-why]] account ကို အပြင်ဘက် call ပြီးတဲ့အထိ lock ချထားရင်ရော ဆိုတာ မေးစရာပါ။
+      ရပေမဲ့ နှေးတဲ့ call တစ်ခုစာ lock ကို ကိုင်ထားရလို့ အဲဒီ account ရဲ့ တခြား request အားလုံး
+      စောင့်ရပါတယ်။ reservation က ရှည်လျားတဲ့ critical section တစ်ခုကို reserve နဲ့ settle ဆိုတဲ့
+      တိုတောင်းတဲ့ atomic အဆင့် နှစ်ဆင့် ခွဲပေးလိုက်တာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+    actions:
+      - {
+          id: show-atomic,
+          type: slide.show,
+          at: { mark: show-atomic, offsetMs: -700 },
+          slideId: atomic-1,
+        }
+      - {
+          id: pt-title-atomic,
+          type: slide.point,
+          at: { afterAction: show-atomic },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: pt-bad, type: slide.point, at: { mark: pt-bad }, target: { x: 0.109, y: 0.571 } }
+      - { id: atomic-2, type: slide.show, at: { mark: atomic-2 }, slideId: atomic-2 }
+      - {
+          id: pt-good,
+          type: slide.point,
+          at: { afterAction: atomic-2 },
+          target: { x: 0.738, y: 0.686 },
+        }
+      - { id: pt-cond, type: slide.point, at: { mark: pt-cond }, target: { x: 0.584, y: 0.528 } }
+      - { id: atomic-3, type: slide.show, at: { mark: atomic-3 }, slideId: atomic-3 }
+      - {
+          id: pt-ways,
+          type: slide.point,
+          at: { afterAction: atomic-3 },
+          target: { x: 0.284, y: 0.778 },
+        }
+      - { id: pt-noec, type: slide.point, at: { mark: lock-why }, target: { x: 0.738, y: 0.686 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ double spending ကို ဘယ်လို ကာကွယ်မလဲ လို့
+      မေးလေ့ရှိပါတယ်။ lock သုံးမယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး။ [[mark:iv-a]] ပထမ၊ balance စစ်တာနဲ့ debit လုပ်တာကြားမှာ compliance၊ provider call လို နှေးတဲ့ အလုပ်တွေ ရှိလို့
+      request နှစ်ခုလုံး check ကို ဖြတ်သွားနိုင်ပါတယ်။ [[mark:iv-b]] ဒုတိယ၊ အပြင်ဘက်ကို မခေါ်ခင် reserve
+      လုပ်ပြီး၊ check နဲ့ reservation အသစ် အားလုံးကို available နဲ့ စစ်ပါ။ [[mark:iv-c]] တတိယ၊ စစ်တာနဲ့ hold မှတ်တာ တစ်ဆင့်တည်း
+      ဖြစ်ရပါမယ်။ conditional write၊ row lock ဒါမှမဟုတ် serializable isolation နဲ့ပါ၊ replica ကနေ
+      ဖတ်တာ မဖြစ်ရပါဘူး။ [[mark:iv-d]] ပြီးရင် ကိုယ် ဘာလုပ်မလဲ ဆက်ပြောပါ။ reservation ကို conditional
+      write တစ်ခုနဲ့ လုပ်မယ်၊ flow တိုင်းကို settle ဒါမှမဟုတ် release နဲ့ ဆုံးအောင် လုပ်မယ်၊ expiry ကို
+      safety net အဖြစ်ပဲ ထားမယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ဒုတိယ reserve line
+      အောက်မှာ ယူရို နှစ်ဆယ်အတွက် တတိယ reserve တစ်ခု ထပ်ထည့်ပြီး run ကြည့်ပါ။ available နှစ်ဆယ်
+      အတိအကျ ရှိလို့ လက်ခံပြီး available က သုည ဖြစ်သွားပါမယ်။ [[mark:try-why]] settle လုပ်ပြီးတဲ့
+      နောက်မှာလည်း reserved က နှစ်ဆယ် ကျန်နေတာကို တွေ့ရပါမယ်၊ အဲဒီ hold က ဆုံးဖို့ စောင့်နေဆဲ မို့ပါ။
+      [[mark:recap]] ပြန်ချုပ်ရရင်၊ balance ကို စစ်ပြီးမှ debit လုပ်တာ မဟုတ်ဘဲ၊ ငွေကို တစ်ဆင့်တည်းနဲ့
+      reserve လုပ်ပြီးမှ အပြင်ဘက်ကို ခေါ်ရပါတယ်။ နောက် lesson မှာ settle လုပ်တဲ့ ပမာဏက hold ထက်
+      ကြီးလာတဲ့အခါ၊ ဆိုလိုတာက policy က ခွင့်မပြုပေမဲ့ balance က အနုတ် ဖြစ်သွားတဲ့အခါ ဘာလုပ်မလဲ
+      ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Handling overdrafts (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-overdrafts",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target:
+          {
+            file: main.go,
+            text: "\tshow(\"w2 reserve 80.00\", h.Reserve(\"w2\", user, 8000))",
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

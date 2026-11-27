@@ -1,0 +1,896 @@
+# Fintech Engineering, lesson 17: invariants and three ways to enforce them (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Invariants" (CC BY 4.0, Voytek Pitula).
+# Start state: main.go has Amount (a positive amount, one constructor) and transfer (a two-line,
+# always balanced Tx); main tries a -5.00 Amount and posts a 100.00 deposit. ledger.go is the
+# course ledger (Post rejects an unbalanced Tx); nightly.go is a separate scan of what is stored.
+# Edits, all insert-only, in main.go:
+#   1. a three-line payout whose bank leg forgot the fee     -> run-2: Post rejects t2
+#   2. a backfill that appends straight to the store + scan  -> run-3: the nightly check finds t3
+# Figures: nets (three moments, what each catches), scope (wider invariant, later check),
+# table (what each sees and misses), iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-17-invariants
+  title: "Fintech Engineering 17: Invariant ကို ထိန်းတဲ့ နည်း ၃ မျိုး"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      ledger.go: |
+        package main
+
+        import "fmt"
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // Amount is a positive amount in minor units, and NewAmount is the only way to make one.
+        // (In a real codebase Amount lives in its own package, so no other code can set cents.)
+        type Amount struct{ cents int64 }
+
+        func NewAmount(c int64) (Amount, error) {
+        	if c <= 0 {
+        		return Amount{}, fmt.Errorf("amount must be positive, got %s", cents(c))
+        	}
+        	return Amount{c}, nil
+        }
+
+        // transfer builds a two-line transaction from one Amount, so it cannot be unbalanced.
+        func transfer(id, debit, credit string, a Amount) Tx {
+        	return Tx{ID: id, Lines: []Line{{Account: debit, Debit: a.cents}, {Account: credit, Credit: a.cents}}}
+        }
+
+        // show prints one labelled result: ok, or why it was rejected.
+        func show(label string, err error) {
+        	if err != nil {
+        		fmt.Println(label+": rejected —", err)
+        		return
+        	}
+        	fmt.Println(label + ": ok")
+        }
+
+        func main() {
+        	l := &Ledger{}
+        	_, err := NewAmount(-500)
+        	show("construct -5.00", err)
+        	a, _ := NewAmount(10000)
+        	show("post t1", l.Post(transfer("t1", "asset:bank", "liability:user:1042", a)))
+        }
+      nightly.go: |
+        package main
+
+        import "fmt"
+
+        // nightlyCheck is a separate job. It reads what was stored, not what Post was asked to do,
+        // and it does not call Post's code: a check that shares the code it checks shares its bugs.
+        func nightlyCheck(l *Ledger) string {
+        	for _, tx := range l.txs {
+        		var debit, credit int64
+        		for _, line := range tx.Lines {
+        			debit += line.Debit
+        			credit += line.Credit
+        		}
+        		if debit != credit {
+        			return fmt.Sprintf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        		}
+        	}
+        	return "ok"
+        }
+  slides:
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Books အမြဲ balance ဖြစ်တာ ဘယ်လို အာမခံမလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Books အမြဲ balance ဖြစ်တာ ဘယ်လို အာမခံမလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#68d391"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Construction — မှားတဲ့ transaction ကို ဆောက်လို့ မရအောင်</text><text x="188" y="311" font-size="26" fill="#8a94a8">amount type · balanced constructor · DB constraints</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Books အမြဲ balance ဖြစ်တာ ဘယ်လို အာမခံမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#68d391"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Construction — မှားတဲ့ transaction ကို ဆောက်လို့ မရအောင်</text><text x="188" y="311" font-size="26" fill="#8a94a8">amount type · balanced constructor · DB constraints</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Runtime — write path တစ်ခုတည်း၊ မညီရင် တစ်ခုလုံး reject</text><text x="188" y="443" font-size="26" fill="#8a94a8">fail loudly — log ရေးပြီး ဆက်မသွားဘူး</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Books အမြဲ balance ဖြစ်တာ ဘယ်လို အာမခံမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#68d391"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Construction — မှားတဲ့ transaction ကို ဆောက်လို့ မရအောင်</text><text x="188" y="311" font-size="26" fill="#8a94a8">amount type · balanced constructor · DB constraints</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Runtime — write path တစ်ခုတည်း၊ မညီရင် တစ်ခုလုံး reject</text><text x="188" y="443" font-size="26" fill="#8a94a8">fail loudly — log ရေးပြီး ဆက်မသွားဘူး</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Post-factum — သီးခြား nightly check နဲ့ bank reconciliation</text><text x="188" y="575" font-size="26" fill="#8a94a8">path ကို ကျော်တဲ့ write နဲ့ ship ပြီးသား bug ကို ဖမ်းတဲ့ တစ်ခုတည်း</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Books အမြဲ balance ဖြစ်တာ ဘယ်လို အာမခံမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#68d391"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Construction — မှားတဲ့ transaction ကို ဆောက်လို့ မရအောင်</text><text x="188" y="311" font-size="26" fill="#8a94a8">amount type · balanced constructor · DB constraints</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Runtime — write path တစ်ခုတည်း၊ မညီရင် တစ်ခုလုံး reject</text><text x="188" y="443" font-size="26" fill="#8a94a8">fail loudly — log ရေးပြီး ဆက်မသွားဘူး</text></g><g><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Post-factum — သီးခြား nightly check နဲ့ bank reconciliation</text><text x="188" y="575" font-size="26" fill="#8a94a8">path ကို ကျော်တဲ့ write နဲ့ ship ပြီးသား bug ကို ဖမ်းတဲ့ တစ်ခုတည်း</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">တွေ့ရင် alert၊ data ကို မပြင်ဘဲ linked entry နဲ့ ပြင်</text><text x="188" y="707" font-size="26" fill="#8a94a8">ကိုယ် ဘာလုပ်မလဲ ဆိုတာပါ ဆက်ဖြေပါ</text></g>
+        </svg>
+    - id: nets-1
+      contentType: html
+      name: "Three ways 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">THREE WAYS</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Invariant ကို စစ်လို့ရတဲ့ အချိန် 3 ခု</text>
+        <g class="in"><text x="280" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">မဖြစ်ခင်</text></g>
+        <g class="in"><text x="800" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">ဖြစ်နေတုန်း</text></g>
+        <g class="in"><text x="1320" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">သိမ်းပြီးမှ</text></g>
+        <g class="in"><rect x="70" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-code" x="92" y="293" width="64" height="64" style="color:#6cb2f5"/><text x="320" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">build a Tx</text><text x="320" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">code</text></g>
+        <g class="in"><rect x="590" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-gear" x="612" y="293" width="64" height="64" style="color:#9aa5b8"/><text x="840" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Post</text><text x="840" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">the write path</text></g>
+        <g class="in"><rect x="1110" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="1132" y="293" width="64" height="64" style="color:#4fd1c5"/><text x="1360" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="1360" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">stored rows</text></g>
+        <path d="M500 325L576 325" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M1020 325L1096 325" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: nets-2
+      contentType: html
+      name: "Three ways 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">THREE WAYS</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Invariant ကို စစ်လို့ရတဲ့ အချိန် 3 ခု</text>
+        <text x="280" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">မဖြစ်ခင်</text>
+        <text x="800" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">ဖြစ်နေတုန်း</text>
+        <text x="1320" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">သိမ်းပြီးမှ</text>
+        <rect x="70" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-code" x="92" y="293" width="64" height="64" style="color:#6cb2f5"/><text x="320" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">build a Tx</text><text x="320" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">code</text>
+        <rect x="590" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-gear" x="612" y="293" width="64" height="64" style="color:#9aa5b8"/><text x="840" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Post</text><text x="840" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">the write path</text>
+        <rect x="1110" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="1132" y="293" width="64" height="64" style="color:#4fd1c5"/><text x="1360" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="1360" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">stored rows</text>
+        <path d="M500 325L576 325" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M1020 325L1096 325" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><path d="M280 384L280 456" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/></g>
+        <g class="in"><rect x="70" y="460" width="420" height="130" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="70" y="460" width="420" height="130" rx="18" fill="#b794f6" opacity="0.13"/><text x="280" y="515.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">by construction</text><text x="280" y="556.6" font-size="24" text-anchor="middle" fill="#8a94a8">types · constructors · DB rules</text></g>
+        <g class="in"><rect x="139.9" y="650" width="280.2" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="139.9" y="650" width="280.2" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="280" y="684.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">NewAmount(-500)</text></g>
+        </svg>
+    - id: nets-3
+      contentType: html
+      name: "Three ways 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">THREE WAYS</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Invariant ကို စစ်လို့ရတဲ့ အချိန် 3 ခု</text>
+        <text x="280" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">မဖြစ်ခင်</text>
+        <text x="800" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">ဖြစ်နေတုန်း</text>
+        <text x="1320" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">သိမ်းပြီးမှ</text>
+        <rect x="70" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-code" x="92" y="293" width="64" height="64" style="color:#6cb2f5"/><text x="320" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">build a Tx</text><text x="320" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">code</text>
+        <rect x="590" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-gear" x="612" y="293" width="64" height="64" style="color:#9aa5b8"/><text x="840" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Post</text><text x="840" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">the write path</text>
+        <rect x="1110" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="1132" y="293" width="64" height="64" style="color:#4fd1c5"/><text x="1360" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="1360" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">stored rows</text>
+        <path d="M500 325L576 325" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M1020 325L1096 325" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M280 384L280 456" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/>
+        <rect x="70" y="460" width="420" height="130" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="70" y="460" width="420" height="130" rx="18" fill="#b794f6" opacity="0.13"/><text x="280" y="515.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">by construction</text><text x="280" y="556.6" font-size="24" text-anchor="middle" fill="#8a94a8">types · constructors · DB rules</text>
+        <rect x="139.9" y="650" width="280.2" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="139.9" y="650" width="280.2" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="280" y="684.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">NewAmount(-500)</text>
+        <g class="in"><path d="M800 384L800 456" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/></g>
+        <g class="in"><rect x="590" y="460" width="420" height="130" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="590" y="460" width="420" height="130" rx="18" fill="#b794f6" opacity="0.13"/><text x="800" y="515.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">runtime check</text><text x="800" y="556.6" font-size="24" text-anchor="middle" fill="#8a94a8">assert inside Post</text></g>
+        <g class="in"><rect x="554.1" y="650" width="491.8" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="554.1" y="650" width="491.8" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="800" y="684.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">debit 100.00 ≠ credit 102.90</text></g>
+        </svg>
+    - id: nets-4
+      contentType: html
+      name: "Three ways 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">THREE WAYS</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Invariant ကို စစ်လို့ရတဲ့ အချိန် 3 ခု</text>
+        <text x="280" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">မဖြစ်ခင်</text>
+        <text x="800" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">ဖြစ်နေတုန်း</text>
+        <text x="1320" y="236" font-size="26" text-anchor="middle" fill="#8a94a8">သိမ်းပြီးမှ</text>
+        <rect x="70" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-code" x="92" y="293" width="64" height="64" style="color:#6cb2f5"/><text x="320" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">build a Tx</text><text x="320" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">code</text>
+        <rect x="590" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-gear" x="612" y="293" width="64" height="64" style="color:#9aa5b8"/><text x="840" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Post</text><text x="840" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">the write path</text>
+        <rect x="1110" y="270" width="420" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="1132" y="293" width="64" height="64" style="color:#4fd1c5"/><text x="1360" y="315.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="1360" y="356.6" font-size="24" text-anchor="middle" fill="#8a94a8">stored rows</text>
+        <path d="M500 325L576 325" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M1020 325L1096 325" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M280 384L280 456" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/>
+        <rect x="70" y="460" width="420" height="130" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="70" y="460" width="420" height="130" rx="18" fill="#b794f6" opacity="0.13"/><text x="280" y="515.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">by construction</text><text x="280" y="556.6" font-size="24" text-anchor="middle" fill="#8a94a8">types · constructors · DB rules</text>
+        <rect x="139.9" y="650" width="280.2" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="139.9" y="650" width="280.2" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="280" y="684.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">NewAmount(-500)</text>
+        <path d="M800 384L800 456" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/>
+        <rect x="590" y="460" width="420" height="130" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="590" y="460" width="420" height="130" rx="18" fill="#b794f6" opacity="0.13"/><text x="800" y="515.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">runtime check</text><text x="800" y="556.6" font-size="24" text-anchor="middle" fill="#8a94a8">assert inside Post</text>
+        <rect x="554.1" y="650" width="491.8" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="554.1" y="650" width="491.8" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="800" y="684.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">debit 100.00 ≠ credit 102.90</text>
+        <g class="in"><path d="M1320 384L1320 456" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/></g>
+        <g class="in"><rect x="1110" y="460" width="420" height="130" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="1110" y="460" width="420" height="130" rx="18" fill="#b794f6" opacity="0.13"/><text x="1320" y="515.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">post-factum</text><text x="1320" y="556.6" font-size="24" text-anchor="middle" fill="#8a94a8">nightly scan · reconciliation</text></g>
+        <g class="in"><rect x="590" y="740" width="420" height="100" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-warn" x="612" y="758" width="64" height="64" style="color:#fc8181"/><text x="840" y="780.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">backfill script</text><text x="840" y="821.6" font-size="24" text-anchor="middle" fill="#8a94a8">writes around Post</text></g>
+        <g class="in"><path d="M1012 795L1556 795L1556 325" fill="none" stroke="#fc8181" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+        <path d="M1557 325L1533 325" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <g class="in"><rect x="1155.5" y="650" width="329" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="1155.5" y="650" width="329" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="1320" y="684.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">tx t3 not balanced</text></g>
+        </svg>
+    - id: scope-1
+      contentType: html
+      name: "Scope 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SCOPE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">နယ်ပယ် ကျယ်လေ၊ ဖမ်းမိတာ နောက်ကျလေ</text>
+        <g class="in"><rect x="250" y="560" width="1100" height="140" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="272" y="596" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">ONE VALUE</text></g>
+        <g class="in"><rect x="560" y="612" width="198.8" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="560" y="612" width="198.8" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="659.4" y="646.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">amount &gt; 0</text></g>
+        <g class="in"><rect x="1079.9" y="612" width="240.1" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="1079.9" y="612" width="240.1" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="1200" y="646.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">by construction</text></g>
+        </svg>
+    - id: scope-2
+      contentType: html
+      name: "Scope 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SCOPE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">နယ်ပယ် ကျယ်လေ၊ ဖမ်းမိတာ နောက်ကျလေ</text>
+        <g class="in"><rect x="190" y="450" width="1220" height="280" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="212" y="486" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">ONE TRANSACTION</text></g>
+        <rect x="250" y="560" width="1100" height="140" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="272" y="596" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">ONE VALUE</text>
+        <rect x="560" y="612" width="198.8" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="560" y="612" width="198.8" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="659.4" y="646.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">amount &gt; 0</text>
+        <rect x="1079.9" y="612" width="240.1" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="1079.9" y="612" width="240.1" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="1200" y="646.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">by construction</text>
+        <g class="in"><rect x="560" y="474" width="329" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="560" y="474" width="329" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="724.5" y="508.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Σ debit = Σ credit</text></g>
+        <g class="in"><rect x="974.5" y="474" width="405.5" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="974.5" y="474" width="405.5" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="1177.3" y="508.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">constructor + runtime check</text></g>
+        </svg>
+    - id: scope-3
+      contentType: html
+      name: "Scope 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SCOPE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">နယ်ပယ် ကျယ်လေ၊ ဖမ်းမိတာ နောက်ကျလေ</text>
+        <g class="in"><rect x="130" y="340" width="1340" height="420" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="152" y="376" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">ONE ACCOUNT · MANY TX</text></g>
+        <rect x="190" y="450" width="1220" height="280" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="212" y="486" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">ONE TRANSACTION</text>
+        <rect x="250" y="560" width="1100" height="140" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="272" y="596" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">ONE VALUE</text>
+        <rect x="560" y="612" width="198.8" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="560" y="612" width="198.8" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="659.4" y="646.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">amount &gt; 0</text>
+        <rect x="1079.9" y="612" width="240.1" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="1079.9" y="612" width="240.1" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="1200" y="646.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">by construction</text>
+        <rect x="560" y="474" width="329" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="560" y="474" width="329" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="724.5" y="508.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Σ debit = Σ credit</text>
+        <rect x="974.5" y="474" width="405.5" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="974.5" y="474" width="405.5" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="1177.3" y="508.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">constructor + runtime check</text>
+        <g class="in"><rect x="560" y="364" width="215.1" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="560" y="364" width="215.1" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="667.5" y="398.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">balance ≥ 0</text></g>
+        <g class="in"><rect x="990.4" y="364" width="449.6" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="990.4" y="364" width="449.6" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="1215.2" y="398.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">runtime check, at authorization</text></g>
+        </svg>
+    - id: scope-4
+      contentType: html
+      name: "Scope 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SCOPE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">နယ်ပယ် ကျယ်လေ၊ ဖမ်းမိတာ နောက်ကျလေ</text>
+        <g class="in"><rect x="70" y="230" width="1460" height="560" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="92" y="266" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">OUR LEDGER + THE BANK</text></g>
+        <rect x="130" y="340" width="1340" height="420" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="152" y="376" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">ONE ACCOUNT · MANY TX</text>
+        <rect x="190" y="450" width="1220" height="280" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="212" y="486" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">ONE TRANSACTION</text>
+        <rect x="250" y="560" width="1100" height="140" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="272" y="596" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">ONE VALUE</text>
+        <rect x="560" y="612" width="198.8" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="560" y="612" width="198.8" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="659.4" y="646.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">amount &gt; 0</text>
+        <rect x="1079.9" y="612" width="240.1" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="1079.9" y="612" width="240.1" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="1200" y="646.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">by construction</text>
+        <rect x="560" y="474" width="329" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="560" y="474" width="329" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="724.5" y="508.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Σ debit = Σ credit</text>
+        <rect x="974.5" y="474" width="405.5" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="974.5" y="474" width="405.5" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="1177.3" y="508.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">constructor + runtime check</text>
+        <rect x="560" y="364" width="215.1" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="560" y="364" width="215.1" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="667.5" y="398.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">balance ≥ 0</text>
+        <rect x="990.4" y="364" width="449.6" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="990.4" y="364" width="449.6" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="1215.2" y="398.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">runtime check, at authorization</text>
+        <g class="in"><rect x="560" y="254" width="475.5" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="560" y="254" width="475.5" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="797.8" y="288.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">asset:bank = bank statement</text></g>
+        <g class="in"><rect x="1234.7" y="254" width="265.3" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="1234.7" y="254" width="265.3" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="1367.4" y="288.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">post-factum only</text></g>
+        </svg>
+    - id: table-1
+      contentType: html
+      name: "Trade-offs 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">TRADE-OFFS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">တစ်ခုက တစ်ခုကို အစားမထိုးနိုင်ဘူး</text>
+        <g class="in"><rect x="70" y="210" width="1460" height="397" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="92" y="245" font-size="22" fill="#8a94a8" font-weight="700">method</text><text x="435.5" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်အချိန် ဖမ်းလဲ</text><text x="779.1" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာကို မြင်လဲ</text><text x="1122.6" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာ လွတ်သွားလဲ</text><path d="M70 262H1530" stroke="#2a3345" stroke-width="2"/><g><text x="92" y="329.5" font-size="28" fill="#68d391" font-weight="700">by construction</text><text x="435.5" y="329.5" font-size="28" fill="#e9edf5">မဖြစ်ခင်</text><text x="779.1" y="329.5" font-size="28" fill="#e9edf5">one object</text><text x="1122.6" y="329.5" font-size="25" fill="#e9edf5">many accounts · other systems</text></g></g>
+        </svg>
+    - id: table-2
+      contentType: html
+      name: "Trade-offs 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">TRADE-OFFS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">တစ်ခုက တစ်ခုကို အစားမထိုးနိုင်ဘူး</text>
+        <rect x="70" y="210" width="1460" height="397" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="92" y="245" font-size="22" fill="#8a94a8" font-weight="700">method</text><text x="435.5" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်အချိန် ဖမ်းလဲ</text><text x="779.1" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာကို မြင်လဲ</text><text x="1122.6" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာ လွတ်သွားလဲ</text><path d="M70 262H1530" stroke="#2a3345" stroke-width="2"/><g><text x="92" y="329.5" font-size="28" fill="#68d391" font-weight="700">by construction</text><text x="435.5" y="329.5" font-size="28" fill="#e9edf5">မဖြစ်ခင်</text><text x="779.1" y="329.5" font-size="28" fill="#e9edf5">one object</text><text x="1122.6" y="329.5" font-size="25" fill="#e9edf5">many accounts · other systems</text></g><g class="in"><path d="M86 377H1514" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="444.5" font-size="28" fill="#f6ad55" font-weight="700">runtime check</text><text x="435.5" y="444.5" font-size="28" fill="#e9edf5">ဖြစ်တဲ့ အချိန်</text><text x="779.1" y="444.5" font-size="28" fill="#e9edf5">one code path</text><text x="1122.6" y="444.5" font-size="28" fill="#e9edf5">writes around that path</text></g>
+        </svg>
+    - id: table-3
+      contentType: html
+      name: "Trade-offs 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">TRADE-OFFS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">တစ်ခုက တစ်ခုကို အစားမထိုးနိုင်ဘူး</text>
+        <rect x="70" y="210" width="1460" height="397" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="92" y="245" font-size="22" fill="#8a94a8" font-weight="700">method</text><text x="435.5" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်အချိန် ဖမ်းလဲ</text><text x="779.1" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာကို မြင်လဲ</text><text x="1122.6" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာ လွတ်သွားလဲ</text><path d="M70 262H1530" stroke="#2a3345" stroke-width="2"/><g><text x="92" y="329.5" font-size="28" fill="#68d391" font-weight="700">by construction</text><text x="435.5" y="329.5" font-size="28" fill="#e9edf5">မဖြစ်ခင်</text><text x="779.1" y="329.5" font-size="28" fill="#e9edf5">one object</text><text x="1122.6" y="329.5" font-size="25" fill="#e9edf5">many accounts · other systems</text></g><g><path d="M86 377H1514" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="444.5" font-size="28" fill="#f6ad55" font-weight="700">runtime check</text><text x="435.5" y="444.5" font-size="28" fill="#e9edf5">ဖြစ်တဲ့ အချိန်</text><text x="779.1" y="444.5" font-size="28" fill="#e9edf5">one code path</text><text x="1122.6" y="444.5" font-size="28" fill="#e9edf5">writes around that path</text></g><g class="in"><path d="M86 492H1514" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="559.5" font-size="28" fill="#4fd1c5" font-weight="700">post-factum</text><text x="435.5" y="559.5" font-size="28" fill="#e9edf5">hours later</text><text x="779.1" y="559.5" font-size="28" fill="#e9edf5">everything stored</text><text x="1122.6" y="559.5" font-size="27" fill="#e9edf5">rules it does not check · late</text></g>
+        </svg>
+    - id: table-4
+      contentType: html
+      name: "Trade-offs 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">TRADE-OFFS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">တစ်ခုက တစ်ခုကို အစားမထိုးနိုင်ဘူး</text>
+        <rect x="70" y="210" width="1460" height="397" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="92" y="245" font-size="22" fill="#8a94a8" font-weight="700">method</text><text x="435.5" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်အချိန် ဖမ်းလဲ</text><text x="779.1" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာကို မြင်လဲ</text><text x="1122.6" y="245" font-size="22" fill="#8a94a8" font-weight="700">ဘာ လွတ်သွားလဲ</text><path d="M70 262H1530" stroke="#2a3345" stroke-width="2"/><g><text x="92" y="329.5" font-size="28" fill="#68d391" font-weight="700">by construction</text><text x="435.5" y="329.5" font-size="28" fill="#e9edf5">မဖြစ်ခင်</text><text x="779.1" y="329.5" font-size="28" fill="#e9edf5">one object</text><text x="1122.6" y="329.5" font-size="25" fill="#e9edf5">many accounts · other systems</text></g><g><path d="M86 377H1514" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="444.5" font-size="28" fill="#f6ad55" font-weight="700">runtime check</text><text x="435.5" y="444.5" font-size="28" fill="#e9edf5">ဖြစ်တဲ့ အချိန်</text><text x="779.1" y="444.5" font-size="28" fill="#e9edf5">one code path</text><text x="1122.6" y="444.5" font-size="28" fill="#e9edf5">writes around that path</text></g><g><path d="M86 492H1514" stroke="#2a3345" stroke-width="1.5"/><text x="92" y="559.5" font-size="28" fill="#4fd1c5" font-weight="700">post-factum</text><text x="435.5" y="559.5" font-size="28" fill="#e9edf5">hours later</text><text x="779.1" y="559.5" font-size="28" fill="#e9edf5">everything stored</text><text x="1122.6" y="559.5" font-size="27" fill="#e9edf5">rules it does not check · late</text></g>
+        <g class="in"><rect x="70" y="720" width="975.2" height="54" rx="27" fill="#b794f6" opacity="0.16"/><rect x="70" y="720" width="975.2" height="54" rx="27" fill="none" stroke="#b794f6" stroke-width="2"/><text x="557.6" y="757.5" font-size="30" text-anchor="middle" fill="#b794f6" font-weight="700">real systems use all three — each sees what the others miss</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9517
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "construct -5.00: rejected — amount must be positive, got -5.00\npost t1: ok\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "construct -5.00: rejected — amount must be positive, got -5.00\npost t1: ok\npost t2: rejected — tx t2 is not balanced: debit 100.00, credit 102.90\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "construct -5.00: rejected — amount must be positive, got -5.00\npost t1: ok\npost t2: rejected — tx t2 is not balanced: debit 100.00, credit 102.90\nnightly: tx t3 is not balanced: debit 50.00, credit 0.00\n"
+
+scenes:
+  - id: hook
+    chapter: Invariant ဆိုတာ ဘာလဲ
+    narration: >-
+      ledger က ငွေ ဘယ်လို ရွေ့ခဲ့လဲ ဆိုတာကို မှတ်ပေးပါတယ်။ အခုကစပြီး ငွေကို တကယ် ရွှေ့တဲ့ flow
+      တွေဘက် ကူးပါမယ်။ flow တစ်ခုက write တစ်ခါတည်း မဟုတ်ပါဘူး၊ အဆင့်တွေ၊ တပြိုင်နက် ဝင်လာတဲ့
+      request တွေ၊ ကြားထဲမှာ ပျက်သွားတာတွေကို ဖြတ်သွားရပြီး၊ အဲဒီ တစ်လျှောက်လုံးမှာ invariant တွေ
+      မပျက်ရပါဘူး။ [[mark:define]] invariant ဆိုတာ ဘယ်အချိန်မှာမဆို မှန်နေရမယ့် အခြေအနေ ဖြစ်ကြောင်း immutability မှာ တွေ့ခဲ့ပါပြီ။ accounting
+      equation က တစ်ခု၊ post လုပ်ထားတဲ့ transaction တိုင်း balance ဖြစ်ရမယ် ဆိုတာက တစ်ခုပါ။ business
+      က သတ်မှတ်တဲ့ limit တွေကလည်း invariant တွေပါပဲ။ မေးစရာက အဲဒါတွေကို ဘယ်နေရာမှာ စစ်မလဲ
+      ဆိုတာပါ။ [[mark:sel-amount]] ပထမ နေရာက type ပါ။ Amount တစ်ခု ရနိုင်တဲ့ နည်းက ဒီ constructor
+      တစ်ခုတည်းပဲ ရှိပြီး၊ သူက သုည နဲ့ အနုတ် ပမာဏကို လက်မခံပါဘူး။ [[mark:sel-transfer]] transfer
+      ကတော့ Amount တစ်ခုတည်းကနေ line နှစ်ကြောင်းကို ဆောက်ပေးလို့ debit နဲ့ credit မညီတဲ့
+      transaction ကို ဆောက်လို့ကို မရပါဘူး။ [[mark:sel-main]] main ထဲမှာ အနုတ် ငါးယူရိုနဲ့ Amount
+      တစ်ခု ဆောက်ကြည့်ပြီး၊ ယူရို ၁၀၀ deposit ကို post လုပ်ပါတယ်။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Executing money flows (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#executing-money-flows",
+        }
+    actions:
+      - { id: open-main-1, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-amount
+        type: editor.select
+        at: { mark: sel-amount }
+        target: { file: main.go, text: "func NewAmount(c int64) (Amount, error) {", occurrence: 1 }
+      - id: sel-transfer
+        type: editor.select
+        at: { mark: sel-transfer }
+        target:
+          {
+            file: main.go,
+            text: "func transfer(id, debit, credit string, a Amount) Tx {",
+            occurrence: 1,
+          }
+      - id: sel-main
+        type: editor.select
+        at: { mark: sel-main }
+        target:
+          {
+            file: main.go,
+            text: "\t_, err := NewAmount(-500)\n\tshow(\"construct -5.00\", err)",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "construct -5.00: rejected",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-construct]] အနုတ် ပမာဏကို constructor က ငြင်းလိုက်ပါတယ်။ မှားတဲ့ Amount က program ထဲမှာ
+      တစ်ခါမှ မရှိခဲ့ပါဘူး၊ ဒါကြောင့် ဒီနောက်က code ဘယ်နေရာမှာမှ ပမာဏ အပေါင်း ဟုတ်မဟုတ် ပြန်စစ်စရာ
+      မလိုတော့ပါဘူး။ [[mark:pt-t1]] deposit ကတော့ ပုံမှန်အတိုင်း post ဖြစ်သွားပါတယ်။ [[mark:dock-1]] ဒါကို
+      by construction လို့ ခေါ်ပါတယ်၊ မှားတဲ့ state ကို ကိုယ်စားပြုလို့ကို မရအောင် လုပ်ထားတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+    actions:
+      - id: pt-construct
+        type: console.point
+        at: { mark: pt-construct }
+        target: { text: "construct -5.00: rejected", occurrence: 1 }
+      - id: pt-t1
+        type: console.point
+        at: { mark: pt-t1 }
+        target: { text: "post t1: ok", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: nets
+    chapter: စစ်လို့ရတဲ့ အချိန် သုံးခု
+    narration: >-
+      [[mark:show-nets]] transaction တစ်ခုကို စစ်လို့ရတဲ့ အချိန် သုံးခု ရှိပါတယ်။ code က ဆောက်တဲ့
+      အချိန်၊ Post က လက်ခံတဲ့ အချိန်၊ ပြီးတော့ ledger ထဲမှာ သိမ်းပြီးသွားတဲ့ အချိန်ပါ။ [[mark:nets-2]]
+      ပထမ အချိန်မှာ စစ်တာက by construction ပါ။ မှားတဲ့ object က ဘယ်တော့မှ မရှိလာလို့ အင်အား
+      အကြီးဆုံးပါ။ [[mark:nets-3]] ဒုတိယက runtime check ပါ။ logic run နေတဲ့ နေရာမှာ assertion
+      ထားတာမို့ invariant ပျက်တဲ့ အချိန်မှာပဲ ဖမ်းမိပြီး၊ ငွေ မရွေ့ခင် ရပ်လိုက်နိုင်ပါတယ်။
+      [[mark:nets-4]] တတိယက post-factum ပါ။ သိမ်းပြီးသား data ကို နောက်မှ ပြန်ဖတ်ပြီး ချိုးဖောက်ထားတာ
+      ရှိမရှိ ရှာတာပါ။ ညတိုင်း run တဲ့ check တွေနဲ့ reconciliation job တွေ ဒီထဲမှာ ပါပါတယ်။
+      reconciliation ဆိုတာ system နှစ်ခုရဲ့ မှတ်တမ်းတွေ ကိုက်မကိုက် တိုက်စစ်တာပါ။ [[mark:pt-n3]] code
+      ကို ကျော်ပြီး တိုက်ရိုက် ရေးသွားတဲ့ data ကို မြင်နိုင်တာ ဒီနည်း တစ်ခုတည်းပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+    actions:
+      - {
+          id: show-nets,
+          type: slide.show,
+          at: { mark: show-nets, offsetMs: -700 },
+          slideId: nets-1,
+        }
+      - {
+          id: pt-nets-1,
+          type: slide.point,
+          at: { afterAction: show-nets },
+          target: { x: 0.175, y: 0.431 },
+        }
+      - { id: nets-2, type: slide.show, at: { mark: nets-2 }, slideId: nets-2 }
+      - {
+          id: pt-nets-2,
+          type: slide.point,
+          at: { afterAction: nets-2 },
+          target: { x: 0.175, y: 0.664 },
+        }
+      - { id: nets-3, type: slide.show, at: { mark: nets-3 }, slideId: nets-3 }
+      - {
+          id: pt-nets-3,
+          type: slide.point,
+          at: { afterAction: nets-3 },
+          target: { x: 0.5, y: 0.664 },
+        }
+      - { id: nets-4, type: slide.show, at: { mark: nets-4 }, slideId: nets-4 }
+      - {
+          id: pt-nets-4,
+          type: slide.point,
+          at: { afterAction: nets-4 },
+          target: { x: 0.825, y: 0.664 },
+        }
+      - { id: pt-n3, type: slide.point, at: { mark: pt-n3 }, target: { x: 0.5, y: 0.942 } }
+
+  - id: runtime
+    narration: >-
+      [[mark:close-nets]] construction က အကုန်လုံးကို မကာနိုင်ပါဘူး။ fee ပါတဲ့ payout လို line
+      သုံးကြောင်း transaction ကို transfer နဲ့ ဆောက်လို့ မရတော့ code က line တွေကို ကိုယ်တိုင်
+      စီရပါတယ်။ [[mark:type-t2]] ဒီ payout က user ဆီက ယူရို ၁၀၀ ကို debit လုပ်ပြီး၊ fee နှစ် ဒသမ ကိုး ကို
+      revenue ထဲ credit လုပ်ပါတယ်။ ဒါပေမဲ့ bank ဘက် line မှာ fee ကို နုတ်ဖို့ ကျန်ခဲ့လို့ bank ကနေ
+      ယူရို ၁၀၀ အပြည့် ထွက်သွားမယ့် ပုံ ဖြစ်နေပါတယ်။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-t2]] Post က transaction တစ်ခုလုံးကို
+      ငြင်းလိုက်ပါတယ်။ debit က ယူရို ၁၀၀ ဖြစ်ပြီး credit က ၁၀၂ ဒသမ ကိုး ဖြစ်နေတော့၊ ကွာနေတဲ့ နှစ် ဒသမ ကိုး
+      က ဘယ်ကမှ မလာတဲ့ ငွေပါ။ [[mark:open-ledger]] ဒီ စစ်တဲ့ code က ledger ရဲ့ Post ထဲမှာ ရှိပါတယ်။
+      [[mark:sel-check]] debit နဲ့ credit မညီတာနဲ့ error ပြန်ပြီး line တစ်ကြောင်းမှ မသိမ်းပါဘူး၊ log
+      ရေးပြီး ဆက်သွားတာ မဟုတ်ပါဘူး။ ယူဆချက် ပျက်ရင် ကျယ်ကျယ်လောင်လောင် fail ဖြစ်ရမယ်
+      ဆိုတာက No trust မူပါ၊ ဆိုလိုတာက ဘယ်သူ့ကိုမှ၊ ကိုယ့် component ကိုတောင် အလိုလို မယုံရဘူး
+      ဆိုတာပါ။ [[mark:path]] ဒါပေမဲ့ runtime check က သူ ရှိတဲ့ code လမ်းကြောင်းကို ဖြတ်တဲ့ write တွေကိုပဲ
+      မြင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - { id: close-nets, type: slide.close, at: { mark: close-nets } }
+      - id: type-t2
+        type: editor.type
+        at: { mark: type-t2 }
+        target:
+          {
+            file: main.go,
+            after: "\tshow(\"post t1\", l.Post(transfer(\"t1\", \"asset:bank\", \"liability:user:1042\", a)))\n",
+            occurrence: 1,
+          }
+        text: "\n\tshow(\"post t2\", l.Post(Tx{ID: \"t2\", Memo: \"payout with a fee\", Lines: []Line{\n\t\t{Account: \"liability:user:1042\", Debit: 10000},\n\t\t{Account: \"asset:bank\", Credit: 10000},\n\t\t{Account: \"revenue:fees\", Credit: 290},\n\t}}))\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "post t2: rejected",
+          timeoutMs: 8000,
+        }
+      - id: pt-t2
+        type: console.point
+        at: { mark: pt-t2 }
+        target: { text: "post t2: rejected", occurrence: 1 }
+      - { id: open-ledger, type: workspace.openFile, at: { mark: open-ledger }, path: ledger.go }
+      - id: sel-check
+        type: editor.select
+        at: { mark: sel-check }
+        target: { file: ledger.go, text: "\tif debit != credit {", occurrence: 1 }
+
+  - id: bypass
+    chapter: Code ကို ကျော်ပြီး ရေးရင်
+    narration: >-
+      [[mark:open-main-2]] Post ကို မဖြတ်ဘဲ ရေးရင် ဘာဖြစ်မလဲ။ backfill script တစ်ခု၊ migration တစ်ခု၊
+      production database မှာ လက်နဲ့ run လိုက်တဲ့ SQL တစ်ကြောင်း စတာတွေက application code ကို
+      မဖြတ်ပါဘူး။ [[mark:type-t3]] ဒီ line တွေက ledger ရဲ့ storage ထဲကို တိုက်ရိုက် append လုပ်ပြီး၊
+      bank account ကို ယူရို ငါးဆယ် debit လုပ်တဲ့ line တစ်ကြောင်းတည်း ထည့်ပါတယ်။ credit ဘက်မှာ ဘာမှ
+      မရှိပါဘူး။ နောက်ဆုံး line က nightly check ရဲ့ ရလဒ်ကို ထုတ်ပြပါတယ်။ [[mark:open-nightly]] nightly
+      check က သီးခြား job တစ်ခုပါ။ [[mark:sel-nightly]] Post ကို ဘာ ခိုင်းခဲ့လဲ ဆိုတာ မကြည့်ဘဲ
+      သိမ်းထားပြီးသား transaction တိုင်းကို ပြန်ပေါင်းပါတယ်။ ဒီ write အတွက် runtime check က ဘာပြောမလဲ၊
+      nightly check က ဘာပြောမလဲ၊ run မလုပ်ခင် ခန့်မှန်းကြည့်ပါ။ [[mark:run-3]] run လိုက်ရအောင်။
+      [[mark:pt-nightly]] runtime check က ဘာမှ မပြောပါဘူး၊ ဘာကြောင့်လဲဆိုတော့ ဒီ write က သူ့ဆီကို
+      မရောက်ခဲ့လို့ပါ။ nightly check ကတော့ backfill transaction မှာ debit ယူရို ငါးဆယ် ရှိပြီး credit
+      သုည ဖြစ်နေတာကို တွေ့ပါတယ်။ [[mark:dock-3]] သတိထားရမှာက အချိန်ပါ။ ဒီ check က ညမှ run တော့
+      မှားနေတဲ့ balance က နာရီ အတော်ကြာ ရှိနေခဲ့ပြီး၊ အဲဒီ balance ကို ကြည့်ပြီး ငွေ ထုတ်ခွင့် ပြုခဲ့ရင်
+      ငွေက ထွက်သွားပြီးသား ဖြစ်နေပါပြီ။ [[mark:independent]] nightly check က Post ရဲ့ code ကို ပြန်မသုံးဘဲ
+      သီးခြား ရေးထားတာလည်း အကြောင်းရှိပါတယ်၊ စစ်ခံရတဲ့ code ကို မှီနေရင် bug တစ်ခုတည်းက နှစ်နေရာလုံးမှာ
+      ပါသွားလို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+    actions:
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: type-t3
+        type: editor.type
+        at: { mark: type-t3 }
+        target:
+          {
+            file: main.go,
+            after: "\t\t{Account: \"revenue:fees\", Credit: 290},\n\t}}))\n",
+            occurrence: 1,
+          }
+        text: "\n\tl.txs = append(l.txs, Tx{ID: \"t3\", Memo: \"backfill script\", Lines: []Line{\n\t\t{Account: \"asset:bank\", Debit: 5000},\n\t}})\n\tfmt.Println(\"nightly:\", nightlyCheck(l))\n"
+        cadence: line-by-line
+      - { id: open-nightly, type: workspace.openFile, at: { mark: open-nightly }, path: nightly.go }
+      - id: sel-nightly
+        type: editor.select
+        at: { mark: sel-nightly }
+        target: { file: nightly.go, text: "\tfor _, tx := range l.txs {", occurrence: 1 }
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "nightly: tx t3 is not balanced",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-nightly,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: 'fmt.Println("nightly:", nightlyCheck(l))',
+        }
+      - id: pt-nightly
+        type: console.point
+        at: { mark: pt-nightly }
+        target: { text: "nightly: tx t3 is not balanced", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: scope
+    chapter: ဘယ် invariant ကို ဘယ်မှာ စစ်မလဲ
+    narration: >-
+      [[mark:show-scope]] ဒါဆို construction တစ်ခုတည်းနဲ့ ဘာလို့ မလုံလောက်တာလဲ။ invariant တိုင်းမှာ သူ
+      ကြည့်ရမယ့် နယ်ပယ် ရှိလို့ပါ။ [[mark:pt-v1]] ပမာဏ အပေါင်း ဖြစ်ရမယ် ဆိုတာက တန်ဖိုး တစ်ခုတည်းကို
+      ကြည့်ရုံနဲ့ ရလို့ type နဲ့ အပြည့် ကာနိုင်ပါတယ်။ [[mark:scope-2]] transaction balance ဖြစ်ရမယ်
+      ဆိုတာကတော့ line အများကြီးကို ပေါင်းကြည့်ရလို့၊ transfer လို constructor နဲ့ တစ်စိတ်တစ်ပိုင်းပဲ
+      ကာနိုင်ပြီး Post ထဲက check လိုသေးပါတယ်။ database ဘက်မှာလည်း row တစ်ကြောင်းချင်းကို စစ်တဲ့ constraint က row အများကြီး ပေါင်းမှ
+      သိရတဲ့ စည်းမျဉ်းကို မစစ်နိုင်ပါဘူး။ [[mark:scope-3]] account balance အနုတ် မဖြစ်ရဘူး ဆိုတာက
+      transaction တစ်ခုထက် ပိုကျယ်ပါတယ်။ account ရဲ့ transaction အားလုံးပေါ် မူတည်လို့ object တစ်ခုကို
+      ကြည့်ရုံနဲ့ မသိနိုင်ပါဘူး၊ ငွေ ထုတ်ခွင့် ပြုတဲ့ authorization အချိန်မှာ runtime check နဲ့ စစ်ရပါတယ်။ [[mark:scope-4]] အကျယ်ဆုံးကတော့ ကိုယ့် ledger ထဲက bank account နဲ့ ဘဏ်ရဲ့
+      statement ကိုက်ရမယ် ဆိုတာပါ။ system နှစ်ခုကို ဖြတ်တဲ့ invariant မို့ ကိုယ့် code ထဲမှာ ဘယ်လိုမှ
+      စစ်လို့ မရဘဲ၊ post-factum reconciliation နဲ့ပဲ စစ်နိုင်ပါတယ်။ [[mark:pt-w4]] နယ်ပယ် ကျယ်လာလေ၊
+      စစ်နိုင်တဲ့ အချိန် နောက်ကျလာလေ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Handling overdrafts (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-overdrafts",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+    actions:
+      - {
+          id: show-scope,
+          type: slide.show,
+          at: { mark: show-scope, offsetMs: -700 },
+          slideId: scope-1,
+        }
+      - { id: pt-v1, type: slide.point, at: { mark: pt-v1 }, target: { x: 0.406, y: 0.744 } }
+      - { id: scope-2, type: slide.show, at: { mark: scope-2 }, slideId: scope-2 }
+      - {
+          id: pt-v2,
+          type: slide.point,
+          at: { afterAction: scope-2 },
+          target: { x: 0.447, y: 0.591 },
+        }
+      - { id: scope-3, type: slide.show, at: { mark: scope-3 }, slideId: scope-3 }
+      - {
+          id: pt-v3,
+          type: slide.point,
+          at: { afterAction: scope-3 },
+          target: { x: 0.411, y: 0.469 },
+        }
+      - { id: scope-4, type: slide.show, at: { mark: scope-4 }, slideId: scope-4 }
+      - {
+          id: pt-v4,
+          type: slide.point,
+          at: { afterAction: scope-4 },
+          target: { x: 0.492, y: 0.347 },
+        }
+      - { id: pt-w4, type: slide.point, at: { mark: pt-w4 }, target: { x: 0.848, y: 0.347 } }
+
+  - id: table
+    narration: >-
+      [[mark:show-table]] နည်း သုံးမျိုးကို ယှဉ်ကြည့်ရအောင်။ [[mark:pt-r1]] construction က မှားတဲ့ data
+      မဖြစ်ခင်ကတည်းက တားပေမဲ့ object တစ်ခုစာပဲ မြင်ပါတယ်။ [[mark:table-2]] runtime check က ဖြစ်တဲ့
+      အချိန်မှာပဲ ဖမ်းပေမဲ့ သူ့ code လမ်းကြောင်းကိုပဲ မြင်ပါတယ်။ ဒါကြောင့် ledger ကို ရေးတဲ့ လမ်းကြောင်း
+      တစ်ခုတည်းပဲ ထားဖို့ လိုပါတယ်။ [[mark:table-3]] post-factum က သိမ်းထားသမျှကို မြင်ပြီး၊ ship
+      ပြီးသား bug ကို ဖမ်းနိုင်တဲ့ နည်း တစ်ခုတည်းပါ၊ ဒါပေမဲ့ နောက်ကျပါတယ်။ [[mark:table-4]]
+      ဒါကြောင့် တကယ့် system တွေက သုံးမျိုးလုံးကို တွဲသုံးကြပါတယ်။ invariant ကို ယူဆထားလို့ မရဘဲ
+      စစ်ရပြီး၊ ကိုယ့် code ထုတ်ပေးတဲ့ data ကိုတောင် ပြန်စစ်ရတာ No trust မူပါပဲ။ [[mark:pbt]] runtime
+      check ကို property-based test ထဲမှာလည်း သုံးနိုင်ပြီး၊ အဲဒါကို testing အပိုင်းမှာ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - {
+          id: show-table,
+          type: slide.show,
+          at: { mark: show-table, offsetMs: -700 },
+          slideId: table-1,
+        }
+      - { id: pt-r1, type: slide.point, at: { mark: pt-r1 }, target: { x: 0.119, y: 0.412 } }
+      - { id: table-2, type: slide.show, at: { mark: table-2 }, slideId: table-2 }
+      - {
+          id: pt-r2,
+          type: slide.point,
+          at: { afterAction: table-2 },
+          target: { x: 0.119, y: 0.54 },
+        }
+      - { id: table-3, type: slide.show, at: { mark: table-3 }, slideId: table-3 }
+      - {
+          id: pt-r3,
+          type: slide.point,
+          at: { afterAction: table-3 },
+          target: { x: 0.119, y: 0.668 },
+        }
+      - { id: table-4, type: slide.show, at: { mark: table-4 }, slideId: table-4 }
+      - {
+          id: pt-all,
+          type: slide.point,
+          at: { afterAction: table-4 },
+          target: { x: 0.342, y: 0.869 },
+        }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ invariant ဆိုတာ ဘာလဲ၊ books အမြဲ balance ဖြစ်နေတယ်
+      ဆိုတာ ဘယ်လို အာမခံမလဲ လို့ မေးလေ့ရှိပါတယ်။ Post ထဲမှာ စစ်ထားပါတယ် လို့ပဲ ဖြေရင် တစ်ဝက်ပဲ
+      ရှိပါသေးတယ်။ အချက် သုံးချက်နဲ့ ဖြေပါ။ [[mark:iv-a]] ပထမ၊ construction နဲ့ မှားတဲ့ transaction ကို
+      ဆောက်လို့ မရအောင် type၊ constructor၊ database constraint တွေနဲ့ ကာပါ။ [[mark:iv-b]] ဒုတိယ၊ ledger ကို ရေးတဲ့ လမ်းကြောင်း
+      တစ်ခုတည်းမှာ runtime check ထားပြီး၊ မညီရင် transaction တစ်ခုလုံးကို ငြင်းပါ။ log ရေးပြီး
+      ဆက်မသွားပါနဲ့။ [[mark:iv-c]] တတိယ၊ သိမ်းထားတဲ့ data ကို သီးခြား job တစ်ခုနဲ့ ညတိုင်း ပြန်စစ်ပြီး၊
+      ဘဏ်နဲ့လည်း reconcile လုပ်ပါ။ လမ်းကြောင်းကို ကျော်တဲ့ write တွေနဲ့ ship ပြီးသား bug တွေကို ဖမ်းတာ
+      ဒီတစ်ခုပဲ ရှိပါတယ်။ [[mark:iv-d]] ပြီးရင် ကိုယ် ဘာလုပ်မလဲ ဆက်ပြောပါ။ nightly check က တစ်ခုခု
+      တွေ့ရင် data ကို တိုက်ရိုက် မပြင်ဘဲ alert ပေးပြီး စစ်ဆေးမယ်၊ ပြင်ရင်လည်း original နဲ့ link ပါတဲ့
+      reversal ဒါမှမဟုတ် correction နဲ့ပဲ ပြင်မယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:open-main-3]] backfill transaction
+      ကို ပြန်ကြည့်ပါ။ [[mark:sel-try]] ဒီ line အောက်ကို line တစ်ကြောင်း ထပ်ထည့်ပြီး၊ user ရဲ့ liability account ကို ယူရို ငါးဆယ်
+      credit လုပ်ပါ။ run ကြည့်ရင် nightly check က ok လို့ ပြပါလိမ့်မယ်။ [[mark:try-why]] nightly check က ok
+      ပြပေမဲ့ ဘဏ်ထဲကို တကယ် မရောက်ခဲ့တဲ့ ယူရို ငါးဆယ်ကို user က ထုတ်ယူလို့ ရသွားပါပြီ။ balance
+      ဖြစ်တာနဲ့ မှန်တာ မတူပါဘူး၊ ဒီအမှားကို ledger အပြင်က ဘဏ် statement နဲ့ တိုက်စစ်တဲ့ reconciliation ကပဲ မြင်ပါတယ်။
+      [[mark:recap]] ပြန်ချုပ်ရရင်၊ invariant တစ်ခုကို မဖြစ်ခင်၊ ဖြစ်နေတုန်း၊ သိမ်းပြီးမှ ဆိုတဲ့ အချိန်
+      သုံးခုမှာ စစ်နိုင်ပြီး၊ တစ်ခုစီက ကျန်တဲ့ နှစ်ခု လွတ်သွားတာကို ဖမ်းပါတယ်။ နောက်ပိုင်း lesson တွေက
+      တပြိုင်နက် ဝင်လာတဲ့ request တွေ၊ ကြားထဲမှာ ပျက်တာတွေကြားမှာ invariant ကို ဘယ်လို ထိန်းမလဲ
+      ဆိုတာပါ။
+      နောက် lesson မှာ request နှစ်ခုက balance တစ်ခုတည်းကို တပြိုင်နက် စစ်ပြီး နှစ်ခုလုံး ငွေထုတ်သွားတာကို
+      ဘယ်လို ကာကွယ်မလဲ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - { id: open-main-3, type: workspace.openFile, at: { mark: open-main-3 }, path: main.go }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target:
+          { file: main.go, text: "\t\t{Account: \"asset:bank\", Debit: 5000},", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

@@ -1,0 +1,909 @@
+# Fintech Engineering, lesson 39: end to end, a conversion with cashback (Burmese).
+#
+# Source: Fintech Engineering Handbook, Appendix B "Flow 3: An in-app conversion with cashback"
+# (CC BY 4.0, Voytek Pitula), with pointers back to the lessons that taught each pattern.
+# Start state: ledger.go (the course ledger, every line in one currency, balanced per currency,
+# Sum per currency), convert.go (the two assets, USDC as (network, contract); a directional quote
+# in EUR per USDC; big.Rat math; toMinor = the one rounding, down; share; the outbox Store),
+# main.go (1000.00 EUR deposited; the rate rounded too early vs full precision; the mid; the spread).
+# Edits, all insert-only, in main.go:
+#   1. the conversion posted in EUR and USDC, spread to revenue, outbox row -> run-2 both sums zero
+#   2. a 0.1% cashback funded from expense:promo                             -> run-3 still zero
+# Runs: run-1 (early rounding 1083.000000 vs 1082.954299, mid, spread), run-2, run-3.
+# Figures: quote (direction, key, reservation, asset identity), math (one rounding, the spread),
+# books (the entries per currency), pull (spread vs cashback), iv.
+# Facts: A03 (USDC uses 6 decimals).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-39-flow-conversion
+  title: "Fintech Engineering 39: Flow ၃၊ conversion နဲ့ cashback"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      convert.go: |
+        package main
+
+        import "math/big"
+
+        // The two assets. USDC is a token, identified by (network, contract), not by its symbol and not
+        // equal to the dollar; the ids here are illustrative (lesson 06).
+        const (
+        	eur  = "EUR"
+        	usdc = "net-a:0x1111"
+        )
+
+        var symbol = map[string]string{eur: "EUR", usdc: "USDC"}
+        var decimals = map[string]int{eur: 2, usdc: 6}
+
+        // Quote prices one USDC in EUR. It is directional: the user buys USDC at the ask; selling USDC
+        // back would get the bid, which is not the inverse of the ask.
+        type Quote struct {
+        	ID       string
+        	Bid, Ask *big.Rat
+        }
+
+        var quote = Quote{"q-1", rat("0.92110"), rat("0.92340")}
+
+        func rat(s string) *big.Rat {
+        	r, _ := new(big.Rat).SetString(s)
+        	return r
+        }
+
+        // toMinor is the one rounding: an exact amount of an asset, down to its minor units.
+        func toMinor(x *big.Rat, asset string) int64 {
+        	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals[asset])), nil)
+        	return down(new(big.Rat).Mul(x, new(big.Rat).SetInt(scale)))
+        }
+
+        // down drops what is left below one minor unit.
+        func down(x *big.Rat) int64 { return new(big.Int).Quo(x.Num(), x.Denom()).Int64() }
+
+        // buy is how much USDC paid EUR (in cents) buys at price EUR per USDC, exact and then rounded.
+        func buy(paid int64, price *big.Rat) (*big.Rat, int64) {
+        	exact := new(big.Rat).Quo(big.NewRat(paid, 100), price)
+        	return exact, toMinor(exact, usdc)
+        }
+
+        // share is rate × an amount in minor units, rounded down like everything else.
+        func share(amount int64, rate *big.Rat) int64 {
+        	return down(new(big.Rat).Mul(big.NewRat(amount, 1), rate))
+        }
+
+        // Event is an outbox row: published after the commit, at least once, deduped on ID downstream.
+        type Event struct{ ID, Type string }
+
+        // Store commits a posting and its outbox row in one database transaction, or neither.
+        type Store struct {
+        	ledger Ledger
+        	outbox []Event
+        }
+
+        func (s *Store) Commit(tx Tx, evt Event) {
+        	if err := s.ledger.Post(tx); err != nil {
+        		panic(err)
+        	}
+        	s.outbox = append(s.outbox, evt)
+        }
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount of one asset on one side of one account.
+        type Line struct {
+        	Account  string
+        	Currency string // the asset: a fiat code, or a token's (network, contract)
+        	Debit    int64
+        	Credit   int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if, in every currency, its debits equal its credits.
+        // Two currencies are never added together.
+        func (l *Ledger) Post(tx Tx) error {
+        	net := map[string]int64{}
+        	for _, line := range tx.Lines {
+        		net[line.Currency] += line.Debit - line.Credit
+        	}
+        	for _, c := range []string{eur, usdc} {
+        		if net[c] != 0 {
+        			return fmt.Errorf("tx %s is not balanced in %s: %s", tx.ID, symbol[c], format(net[c], decimals[c]))
+        		}
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // Balance derives an account's balance in one currency, on the side where its kind grows.
+        func (l *Ledger) Balance(account, currency string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account && line.Currency == currency {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind, _, _ := strings.Cut(account, ":"); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // Sum is Σ debits − Σ credits over every account in one currency: always zero.
+        func (l *Ledger) Sum(currency string) int64 {
+        	var n int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Currency == currency {
+        				n += line.Debit - line.Credit
+        			}
+        		}
+        	}
+        	return n
+        }
+
+        // format prints minor units with exp decimal places: format(1234, 2) is "12.34" (money.go).
+        func format(minor int64, exp int) string {
+        	sign := ""
+        	if minor < 0 {
+        		sign, minor = "-", -minor
+        	}
+        	digits := fmt.Sprintf("%0*d", exp+1, minor)
+        	if exp == 0 {
+        		return sign + digits
+        	}
+        	return sign + digits[:len(digits)-exp] + "." + digits[len(digits)-exp:]
+        }
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"math/big"
+        )
+
+        const user = "liability:user:1042"
+
+        func main() {
+        	s := &Store{}
+        	s.Commit(Tx{ID: "dep-1", Memo: "deposit", Lines: []Line{
+        		{Account: "asset:bank", Currency: eur, Debit: 1000_00},
+        		{Account: user, Currency: eur, Credit: 1000_00},
+        	}}, Event{"dep-1", "deposit.credited"})
+        	paid := int64(1000_00) // the user converts 1000.00 EUR into USDC, key k-1, reserved
+
+        	rate4 := rat(new(big.Rat).Inv(quote.Ask).FloatString(4)) // USDC per EUR, rounded too early
+        	early := toMinor(new(big.Rat).Mul(big.NewRat(paid, 100), rate4), usdc)
+        	exact, got := buy(paid, quote.Ask)
+        	mid := new(big.Rat).Quo(new(big.Rat).Add(quote.Bid, quote.Ask), big.NewRat(2, 1))
+        	_, atMid := buy(paid, mid)
+        	spread := atMid - got
+        	fmt.Println("rate rounded first:", format(early, 6), "USDC")
+        	fmt.Println("full precision:    ", format(got, 6), "USDC, exact", exact.FloatString(10)+"…")
+        	fmt.Println("at the mid", mid.FloatString(5)+":", format(atMid, 6), "USDC")
+        	fmt.Println("spread to revenue: ", format(spread, 6), "USDC")
+        }
+
+        // report prints each currency on its own: the sum, then the accounts this flow touches.
+        func (s *Store) report() {
+        	l, u := &s.ledger, func(c string) string { return format(s.ledger.Balance(user, c), decimals[c]) }
+        	fmt.Printf("EUR  sum %s  user %s  fx-conversion %s\n", format(l.Sum(eur), 2), u(eur),
+        		format(l.Balance("equity:fx-conversion", eur), 2))
+        	fmt.Printf("USDC sum %s  user %s  spread %s  promo %s\n", format(l.Sum(usdc), 6), u(usdc),
+        		format(l.Balance("revenue:spread", usdc), 6), format(l.Balance("expense:promo", usdc), 6))
+        	fmt.Print("outbox:")
+        	for _, e := range s.outbox {
+        		fmt.Print(" ", e.ID)
+        	}
+        	fmt.Println()
+        }
+  slides:
+    - id: books-1
+      contentType: html
+      name: "Double-entry · per currency 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DOUBLE-ENTRY · PER CURRENCY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Currency တစ်ခုချင်းစီမှာ သုည</text>
+        <g class="in"><rect x="80" y="210" width="1080" height="458" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="245" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="238.9" y="245" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="634.4" y="245" font-size="22" fill="#8a94a8" font-weight="700">asset</text><text x="925" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">debit</text><text x="1138" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">credit</text><path d="M80 262H1160" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="301" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="301" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="634.4" y="301" font-size="28" fill="#e9edf5" class="mono">EUR</text><text x="925" y="301" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1000.00</text></g><g><path d="M96 320H1144" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="359" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="359" font-size="28" fill="#e9edf5" class="mono">equity:fx-conversion</text><text x="634.4" y="359" font-size="28" fill="#e9edf5" class="mono">EUR</text><text x="1138" y="359" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1000.00</text></g></g>
+        <g class="in"><rect x="1210" y="300" width="149.9" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="1210" y="300" width="149.9" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1285" y="334.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">EUR Σ 0</text></g>
+        </svg>
+    - id: books-2
+      contentType: html
+      name: "Double-entry · per currency 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DOUBLE-ENTRY · PER CURRENCY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Currency တစ်ခုချင်းစီမှာ သုည</text>
+        <rect x="80" y="210" width="1080" height="458" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="245" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="238.9" y="245" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="634.4" y="245" font-size="22" fill="#8a94a8" font-weight="700">asset</text><text x="925" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">debit</text><text x="1138" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">credit</text><path d="M80 262H1160" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="301" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="301" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="634.4" y="301" font-size="28" fill="#e9edf5" class="mono">EUR</text><text x="925" y="301" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1000.00</text></g><g><path d="M96 320H1144" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="359" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="359" font-size="28" fill="#e9edf5" class="mono">equity:fx-conversion</text><text x="634.4" y="359" font-size="28" fill="#e9edf5" class="mono">EUR</text><text x="1138" y="359" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1000.00</text></g><g class="in"><path d="M96 378H1144" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="417" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="417" font-size="28" fill="#e9edf5" class="mono">equity:fx-conversion</text><text x="634.4" y="417" font-size="28" fill="#e9edf5" class="mono">USDC</text><text x="925" y="417" font-size="24" text-anchor="end" fill="#e9edf5" class="mono">1084.304689</text></g><g class="in"><path d="M96 436H1144" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="475" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="475" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="634.4" y="475" font-size="28" fill="#e9edf5" class="mono">USDC</text><text x="1138" y="475" font-size="24" text-anchor="end" fill="#e9edf5" class="mono">1082.954299</text></g><g class="in"><path d="M96 494H1144" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="533" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="533" font-size="28" fill="#e9edf5" class="mono">revenue:spread</text><text x="634.4" y="533" font-size="28" fill="#e9edf5" class="mono">USDC</text><text x="1138" y="533" font-size="28" text-anchor="end" fill="#f6c453" class="mono">1.350390</text></g>
+        <rect x="1210" y="300" width="149.9" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="1210" y="300" width="149.9" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1285" y="334.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">EUR Σ 0</text>
+        <g class="in"><rect x="1210" y="470" width="166.2" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="1210" y="470" width="166.2" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1293.1" y="504.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">USDC Σ 0</text></g>
+        <g class="in"><text x="80" y="760" font-size="26" fill="#8a94a8">no rate column: 1082.954299 ÷ 1000.00 is the rate</text></g>
+        </svg>
+    - id: books-3
+      contentType: html
+      name: "Double-entry · per currency 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DOUBLE-ENTRY · PER CURRENCY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Currency တစ်ခုချင်းစီမှာ သုည</text>
+        <rect x="80" y="210" width="1080" height="458" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="245" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="238.9" y="245" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="634.4" y="245" font-size="22" fill="#8a94a8" font-weight="700">asset</text><text x="925" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">debit</text><text x="1138" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">credit</text><path d="M80 262H1160" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="301" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="301" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="634.4" y="301" font-size="28" fill="#e9edf5" class="mono">EUR</text><text x="925" y="301" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1000.00</text></g><g><path d="M96 320H1144" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="359" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="359" font-size="28" fill="#e9edf5" class="mono">equity:fx-conversion</text><text x="634.4" y="359" font-size="28" fill="#e9edf5" class="mono">EUR</text><text x="1138" y="359" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1000.00</text></g><g><path d="M96 378H1144" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="417" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="417" font-size="28" fill="#e9edf5" class="mono">equity:fx-conversion</text><text x="634.4" y="417" font-size="28" fill="#e9edf5" class="mono">USDC</text><text x="925" y="417" font-size="24" text-anchor="end" fill="#e9edf5" class="mono">1084.304689</text></g><g><path d="M96 436H1144" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="475" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="475" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="634.4" y="475" font-size="28" fill="#e9edf5" class="mono">USDC</text><text x="1138" y="475" font-size="24" text-anchor="end" fill="#e9edf5" class="mono">1082.954299</text></g><g><path d="M96 494H1144" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="533" font-size="24" fill="#9aa5b8" class="mono">conv-1</text><text x="238.9" y="533" font-size="28" fill="#e9edf5" class="mono">revenue:spread</text><text x="634.4" y="533" font-size="28" fill="#e9edf5" class="mono">USDC</text><text x="1138" y="533" font-size="28" text-anchor="end" fill="#f6c453" class="mono">1.350390</text></g><g class="in"><path d="M96 552H1144" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="591" font-size="28" fill="#9aa5b8" class="mono">cb-1</text><text x="238.9" y="591" font-size="28" fill="#e9edf5" class="mono">expense:promo</text><text x="634.4" y="591" font-size="28" fill="#e9edf5" class="mono">USDC</text><text x="925" y="591" font-size="28" text-anchor="end" fill="#fc8181" class="mono">1.082954</text></g><g class="in"><path d="M96 610H1144" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="649" font-size="28" fill="#9aa5b8" class="mono">cb-1</text><text x="238.9" y="649" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="634.4" y="649" font-size="28" fill="#e9edf5" class="mono">USDC</text><text x="1138" y="649" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">1.082954</text></g>
+        <rect x="1210" y="300" width="149.9" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="1210" y="300" width="149.9" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1285" y="334.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">EUR Σ 0</text>
+        <rect x="1210" y="470" width="166.2" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="1210" y="470" width="166.2" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1293.1" y="504.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">USDC Σ 0</text>
+        <g class="in"><rect x="1210" y="640" width="166.2" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="1210" y="640" width="166.2" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1293.1" y="674.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">USDC Σ 0</text></g>
+        <text x="80" y="760" font-size="26" fill="#8a94a8">no rate column: 1082.954299 ÷ 1000.00 is the rate</text>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Currency conversion တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Currency conversion တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Directional quote · key · reservation</text><text x="188" y="311" font-size="26" fill="#8a94a8">ask နဲ့ bid မတူ၊ quote id ကို request နဲ့ တွဲ</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Currency conversion တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Directional quote · key · reservation</text><text x="188" y="311" font-size="26" fill="#8a94a8">ask နဲ့ bid မတူ၊ quote id ကို request နဲ့ တွဲ</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Full precision နဲ့ တွက်၊ edge မှာ တစ်ခါ round</text><text x="188" y="443" font-size="26" fill="#8a94a8">spread ကို revenue account ထဲ explicit၊ rate column မထား</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Currency conversion တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Directional quote · key · reservation</text><text x="188" y="311" font-size="26" fill="#8a94a8">ask နဲ့ bid မတူ၊ quote id ကို request နဲ့ တွဲ</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Full precision နဲ့ တွက်၊ edge မှာ တစ်ခါ round</text><text x="188" y="443" font-size="26" fill="#8a94a8">spread ကို revenue account ထဲ explicit၊ rate column မထား</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Currency တစ်ခုချင်း balance၊ cashback ကို promo ကနေ fund</text><text x="188" y="575" font-size="26" fill="#8a94a8">ကိုယ်ပိုင် rounding decision၊ residual တိုင်းမှာ account နာမည်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Currency conversion တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Directional quote · key · reservation</text><text x="188" y="311" font-size="26" fill="#8a94a8">ask နဲ့ bid မတူ၊ quote id ကို request နဲ့ တွဲ</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Full precision နဲ့ တွက်၊ edge မှာ တစ်ခါ round</text><text x="188" y="443" font-size="26" fill="#8a94a8">spread ကို revenue account ထဲ explicit၊ rate column မထား</text></g><g><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Currency တစ်ခုချင်း balance၊ cashback ကို promo ကနေ fund</text><text x="188" y="575" font-size="26" fill="#8a94a8">ကိုယ်ပိုင် rounding decision၊ residual တိုင်းမှာ account နာမည်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">Asset id = (network, contract)၊ outbox နဲ့ publish</text><text x="188" y="707" font-size="26" fill="#8a94a8">consumer က event id နဲ့ dedupe၊ Σ per currency ကို invariant အဖြစ် စစ်</text></g>
+        </svg>
+    - id: math-1
+      contentType: html
+      name: "Precision · rounding 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">PRECISION · ROUNDING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Full precision နဲ့ တွက်၊ တစ်ခါပဲ round</text>
+        <g class="in"><text x="100" y="250" font-size="26" fill="#8a94a8">big.Rat, exact</text></g>
+        <g class="in"><text x="100" y="320" font-size="46" fill="#e9edf5" class="mono">1000.00 ÷ 0.92340 = 1082.9542993286…</text></g>
+        </svg>
+    - id: math-2
+      contentType: html
+      name: "Precision · rounding 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">PRECISION · ROUNDING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Full precision နဲ့ တွက်၊ တစ်ခါပဲ round</text>
+        <text x="100" y="250" font-size="26" fill="#8a94a8">big.Rat, exact</text>
+        <text x="100" y="320" font-size="46" fill="#e9edf5" class="mono">1000.00 ÷ 0.92340 = 1082.9542993286…</text>
+        <g class="in"><rect x="100" y="390" width="640" height="120" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-check" x="122" y="418" width="64" height="64" style="color:#68d391"/><text x="460" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">user gets 1082.954299</text><text x="460" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">rounded down once, at the edge</text></g>
+        <g class="in"><rect x="820" y="390" width="680" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-cross" x="842" y="418" width="64" height="64" style="color:#fc8181"/><text x="1200" y="439.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">rate rounded first: 1083.000000</text><text x="1200" y="479" font-size="24" text-anchor="middle" fill="#8a94a8">1.0830 × 1000 → 0.045701 USDC invented</text></g>
+        </svg>
+    - id: math-3
+      contentType: html
+      name: "Precision · rounding 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">PRECISION · ROUNDING</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Full precision နဲ့ တွက်၊ တစ်ခါပဲ round</text>
+        <text x="100" y="250" font-size="26" fill="#8a94a8">big.Rat, exact</text>
+        <text x="100" y="320" font-size="46" fill="#e9edf5" class="mono">1000.00 ÷ 0.92340 = 1082.9542993286…</text>
+        <rect x="100" y="390" width="640" height="120" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-check" x="122" y="418" width="64" height="64" style="color:#68d391"/><text x="460" y="440.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">user gets 1082.954299</text><text x="460" y="481.6" font-size="24" text-anchor="middle" fill="#8a94a8">rounded down once, at the edge</text>
+        <rect x="820" y="390" width="680" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-cross" x="842" y="418" width="64" height="64" style="color:#fc8181"/><text x="1200" y="439.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">rate rounded first: 1083.000000</text><text x="1200" y="479" font-size="24" text-anchor="middle" fill="#8a94a8">1.0830 × 1000 → 0.045701 USDC invented</text>
+        <g class="in"><text x="100" y="590" font-size="26" fill="#8a94a8">the same EUR at the mid − what the user gets</text></g>
+        <g class="in"><text x="100" y="660" font-size="46" fill="#f6c453" class="mono">1084.304689 − 1082.954299 = 1.350390</text></g>
+        <g class="in"><rect x="100" y="720" width="736" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="100" y="720" width="736" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="468" y="754.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">→ revenue:spread  (the residual has a name)</text></g>
+        </svg>
+    - id: pull-1
+      contentType: html
+      name: "Where it gets interesting 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-chart" viewBox="0 0 48 48"><path d="M7 7v34h34M15 35V25M23 35V15M31 35V21M39 35V11"/></symbol><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">WHERE IT GETS INTERESTING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Spread နဲ့ cashback က ဆန့်ကျင်ဘက် ဆွဲတယ်</text>
+        <g class="in"><rect x="90" y="230" width="440" height="140" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-chart" x="112" y="268" width="64" height="64" style="color:#f6c453"/><text x="350" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">revenue:spread</text><text x="350" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">the user pays us</text></g>
+        <g class="in"><rect x="580" y="450" width="440" height="140" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="580" y="450" width="440" height="140" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-user" x="602" y="488" width="64" height="64" style="color:#b794f6"/><text x="840" y="508.9" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">liability:user:1042</text><text x="840" y="547.7" font-size="24" text-anchor="middle" fill="#8a94a8">USDC</text></g>
+        <path d="M577.8 510.2L533.1 313.7" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="355.4" y="419.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">1.350390 in the rate</text>
+        </svg>
+    - id: pull-2
+      contentType: html
+      name: "Where it gets interesting 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-chart" viewBox="0 0 48 48"><path d="M7 7v34h34M15 35V25M23 35V15M31 35V21M39 35V11"/></symbol><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-coin" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M29.5 18c-1-2.2-3-3.5-5.5-3.5-3.3 0-6 1.8-6 4.6 0 6.3 12 3.3 12 9.6 0 2.900-2.700 4.800-6 4.800-2.800 0-5-1.300-6-3.500M24 10v4.500M24 33.500V38"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">WHERE IT GETS INTERESTING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Spread နဲ့ cashback က ဆန့်ကျင်ဘက် ဆွဲတယ်</text>
+        <rect x="90" y="230" width="440" height="140" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-chart" x="112" y="268" width="64" height="64" style="color:#f6c453"/><text x="350" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">revenue:spread</text><text x="350" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">the user pays us</text>
+        <rect x="580" y="450" width="440" height="140" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="580" y="450" width="440" height="140" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-user" x="602" y="488" width="64" height="64" style="color:#b794f6"/><text x="840" y="508.9" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">liability:user:1042</text><text x="840" y="547.7" font-size="24" text-anchor="middle" fill="#8a94a8">USDC</text>
+        <g class="in"><rect x="1070" y="230" width="440" height="140" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-coin" x="1092" y="268" width="64" height="64" style="color:#fc8181"/><text x="1330" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">expense:promo</text><text x="1330" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">we pay the user</text></g>
+        <path d="M577.8 510.2L533.1 313.7" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><text x="355.4" y="419.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">1.350390 in the rate</text>
+        <path d="M1067.8 309.8L1023.1 506.3" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M1067.8 309.8L1023.1 506.3')"/><text x="1155.4" y="415.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">1.082954</text>
+        <g class="in"><rect x="90" y="680" width="963.9" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="90" y="680" width="963.9" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="571.9" y="714.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">margin on this trade: 1.350390 − 1.082954 = 0.267436 USDC</text></g>
+        <g class="in"><rect x="90" y="770" width="830.2" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="90" y="770" width="830.2" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="505.1" y="804.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">both real · both posted · both rounded on purpose · Σ still 0</text></g>
+        </svg>
+    - id: quote-1
+      contentType: html
+      name: "Quote · reservation 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-swap" viewBox="0 0 48 48"><path d="M8 17h31l-7-7M40 31H9l7 7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">QUOTE · RESERVATION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Rate မှာ direction ရှိတယ်၊ ပြီးမှ reserve</text>
+        <g class="in"><rect x="100" y="230" width="620" height="130" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="100" y="230" width="620" height="130" rx="18" fill="#f6c453" opacity="0.13"/><use href="#i-swap" x="122" y="263" width="64" height="64" style="color:#f6c453"/><text x="450" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">ask 0.92340</text><text x="450" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8">EUR per USDC · the user buys USDC here</text></g>
+        <g class="in"><text x="410" y="432" font-size="26" text-anchor="middle" fill="#8a94a8" class="mono">mid 0.92225 · reference, not traded</text></g>
+        <g class="in"><rect x="100" y="480" width="620" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-swap" x="122" y="513" width="64" height="64" style="color:#9aa5b8"/><text x="450" y="535.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">bid 0.92110</text><text x="450" y="576.6" font-size="24" text-anchor="middle" fill="#8a94a8">selling USDC back · not 1 / ask</text></g>
+        </svg>
+    - id: quote-2
+      contentType: html
+      name: "Quote · reservation 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-swap" viewBox="0 0 48 48"><path d="M8 17h31l-7-7M40 31H9l7 7"/></symbol><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">QUOTE · RESERVATION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Rate မှာ direction ရှိတယ်၊ ပြီးမှ reserve</text>
+        <rect x="100" y="230" width="620" height="130" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="100" y="230" width="620" height="130" rx="18" fill="#f6c453" opacity="0.13"/><use href="#i-swap" x="122" y="263" width="64" height="64" style="color:#f6c453"/><text x="450" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">ask 0.92340</text><text x="450" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8">EUR per USDC · the user buys USDC here</text>
+        <text x="410" y="432" font-size="26" text-anchor="middle" fill="#8a94a8" class="mono">mid 0.92225 · reference, not traded</text>
+        <rect x="100" y="480" width="620" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-swap" x="122" y="513" width="64" height="64" style="color:#9aa5b8"/><text x="450" y="535.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">bid 0.92110</text><text x="450" y="576.6" font-size="24" text-anchor="middle" fill="#8a94a8">selling USDC back · not 1 / ask</text>
+        <g class="in"><rect x="860" y="230" width="640" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-key" x="882" y="263" width="64" height="64" style="color:#6cb2f5"/><text x="1220" y="285.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">convert 1000.00 EUR · k-1</text><text x="1220" y="326.6" font-size="24" text-anchor="middle" fill="#8a94a8">idempotency key, quote q-1</text></g>
+        <g class="in"><rect x="860" y="450" width="640" height="70" rx="14" fill="#121824" stroke="#2a3345" stroke-width="2"/><g><rect x="864" y="454" width="632" height="62" rx="10" fill="#f6ad55" opacity="0.28"/><rect x="864" y="454" width="632" height="62" rx="10" fill="url(#hatch)" stroke="#f6ad55" stroke-width="2.5"/><text x="1180" y="560" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="600">reserved</text><text x="1180" y="496" font-size="30" text-anchor="middle" fill="#e9edf5" font-weight="700" class="mono">1000.00 EUR</text></g></g>
+        <g class="in"><rect x="100" y="700" width="955.8" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="100" y="700" width="955.8" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="577.9" y="734.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">EUR and USDC are never added · USDC = (network, contract) ≠ USD</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9539
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "rate rounded first: 1083.000000 USDC\nfull precision:     1082.954299 USDC, exact 1082.9542993286…\nat the mid 0.92225: 1084.304689 USDC\nspread to revenue:  1.350390 USDC\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "rate rounded first: 1083.000000 USDC\nfull precision:     1082.954299 USDC, exact 1082.9542993286…\nat the mid 0.92225: 1084.304689 USDC\nspread to revenue:  1.350390 USDC\nEUR  sum 0.00  user 0.00  fx-conversion 1000.00\nUSDC sum 0.000000  user 1082.954299  spread 1.350390  promo 0.000000\noutbox: dep-1 conv-1\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "rate rounded first: 1083.000000 USDC\nfull precision:     1082.954299 USDC, exact 1082.9542993286…\nat the mid 0.92225: 1084.304689 USDC\nspread to revenue:  1.350390 USDC\nEUR  sum 0.00  user 0.00  fx-conversion 1000.00\nUSDC sum 0.000000  user 1082.954299  spread 1.350390  promo 0.000000\noutbox: dep-1 conv-1\nEUR  sum 0.00  user 0.00  fx-conversion 1000.00\nUSDC sum 0.000000  user 1084.037253  spread 1.350390  promo 1.082954\noutbox: dep-1 conv-1 cb-1\n"
+
+scenes:
+  - id: hook
+    chapter: Flow ၃၊ conversion နဲ့ cashback
+    narration: >-
+      ငွေ system အတွင်းမှာပဲ ရွေ့တဲ့ conversion မှာ မယုံရတဲ့ rail လည်း မရှိ၊ ပြန်ယူမရတဲ့ broadcast လည်း
+      မရှိပါဘူး။ အခက်က ငွေပမာဏကို ဘယ်လို ကိုယ်စားပြုလဲ၊ ဘယ်လို round လုပ်လဲ ဆိုတဲ့ layer မှာ ရှိပြီး၊ No
+      invented data၊ ငွေကို မရှိဘဲ မဖန်တီးရဘူး ဆိုတဲ့ မူကို အပြင်းဆုံး စမ်းတဲ့ flow ပါ။ [[mark:sel-paid]] ဒီ
+      program မှာ user က ယူရို တစ်ထောင်ကို USDC ပြောင်းပါတယ်။ [[mark:sel-early]] ပထမ နည်းက rate ကို ဒသမ
+      လေးနေရာ အရင် round လုပ်ပြီးမှ ယူရို ပမာဏနဲ့ မြှောက်တာပါ။ [[mark:sel-buy]] ဒုတိယ နည်းက ယူရိုကို quote ရဲ့
+      ဈေးနဲ့ အတိအကျ စားပြီး၊ နောက်ဆုံးမှ တစ်ခါပဲ round လုပ်တာပါ။ နှစ်ခု ဘယ်လောက် ကွာမလဲ ခန့်မှန်းကြည့်ပါ။
+      [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 3: An in-app conversion with cashback (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-3-an-in-app-conversion-with-cashback",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Precision handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#precision-handling",
+        }
+      - { title: "Go standard library — math/big (Rat)", url: "https://pkg.go.dev/math/big#Rat" }
+    actions:
+      - { id: open-main-1, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-paid
+        type: editor.select
+        at: { mark: sel-paid }
+        target: { file: main.go, text: "\tpaid := int64(1000_00)", occurrence: 1 }
+      - id: sel-early
+        type: editor.select
+        at: { mark: sel-early }
+        target:
+          {
+            file: main.go,
+            text: "\trate4 := rat(new(big.Rat).Inv(quote.Ask).FloatString(4))",
+            occurrence: 1,
+          }
+      - id: sel-buy
+        type: editor.select
+        at: { mark: sel-buy }
+        target: { file: main.go, text: "\texact, got := buy(paid, quote.Ask)", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "spread to revenue:  1.350390 USDC",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-early]] rate ကို စောစော round လုပ်တဲ့ နည်းက USDC တစ်ထောင့်ရှစ်ဆယ့်သုံး အတိအကျ ပေးပါတယ်။
+      [[mark:pt-full]] full precision နဲ့ဆို အဲဒီထက် USDC သုည ဒသမ သုညလေးငါး လောက် နည်းပါတယ်။ ကွာတဲ့ ငွေက ဘယ်
+      account ကမှ မလာပါဘူး၊ rate ရဲ့ ဒသမ နောက်ဆုံး နေရာတွေကနေ မရှိဘဲ ပေါ်လာတာပါ၊ conversion တိုင်းမှာ ပမာဏ တစ်မျိုးစီနဲ့ ထပ်ဖြစ်နိုင်ပါတယ်။
+      [[mark:pt-mid]] mid rate နဲ့ဆို ဒီ ယူရိုက USDC ပိုရပါတယ်။ [[mark:pt-spread]] အဲဒီ ကွာခြားချက်က spread ပါ၊ ကိုယ့်
+      revenue ဖြစ်ပြီး explicit book လုပ်ရမယ့် ငွေပါ။ [[mark:dock-1]] ဂဏန်းတွေ ဘယ်က လာလဲ အဆင့်လိုက် ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+    actions:
+      - id: pt-early
+        type: console.point
+        at: { mark: pt-early }
+        target: { text: "rate rounded first: 1083.000000 USDC", occurrence: 1 }
+      - id: pt-full
+        type: console.point
+        at: { mark: pt-full }
+        target: { text: "full precision:     1082.954299 USDC", occurrence: 1 }
+      - id: pt-mid
+        type: console.point
+        at: { mark: pt-mid }
+        target: { text: "at the mid 0.92225: 1084.304689 USDC", occurrence: 1 }
+      - id: pt-spread
+        type: console.point
+        at: { mark: pt-spread }
+        target: { text: "spread to revenue:  1.350390 USDC", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: quote
+    chapter: Quote၊ reservation၊ asset
+    narration: >-
+      [[mark:show-quote]] ပထမ အဆင့်က quote ပါ။ [[mark:pt-ask]] lesson ၇ မှာ မြင်ခဲ့သလို rate မှာ direction ရှိပါတယ်။
+      user က USDC ဝယ်တာမို့ ကိုယ်က ask ဈေးနဲ့ ရောင်းပါတယ်။ [[mark:pt-bid]] USDC ကို ယူရို ပြန်ပြောင်းရင် bid ဈေးကို
+      သုံးရပြီး၊ ဒါက ask ရဲ့ ပြောင်းပြန် မဟုတ်ပါဘူး။ [[mark:pt-qmid]] အလယ်က mid ဈေးနဲ့ ဒီ quote မှာ trade မလုပ်ပါဘူး၊
+      spread ကို တိုင်းဖို့နဲ့ နောက်မှ holding ရဲ့ တန်ဖိုး တွက်ဖို့ reference အဖြစ်ပဲ သုံးပါတယ်။ [[mark:quote-2]]
+      request က တခြား flow တွေလိုပဲ idempotency key နဲ့ ရောက်ပြီး၊ quote id ကို တွဲထားပြီး ယူရို တစ်ထောင်ကို lesson
+      ၁၈ မှာလို reserve လုပ်ပါတယ်။ [[mark:pt-assets]] ပြီးတော့ ယူရိုနဲ့ USDC ကို ဘယ်တော့မှ ပေါင်းမတွက်ပါဘူး။ lesson ၆
+      မှာလို USDC ဆိုတာ network နဲ့ contract address နဲ့ ခွဲသိရတဲ့ token ဖြစ်ပြီး ဒေါ်လာနဲ့ အတူတူ မဟုတ်ပါဘူး၊ ဒသမ
+      ခြောက်နေရာ သုံးပါတယ်။ currency နှစ်ခုကြားက တံတားက ထိန်းထားတဲ့ rate နဲ့ explicit conversion တစ်ခုပဲ ရှိပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — FX Rates (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#fx-rates",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Currency handling (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#currency-handling",
+        }
+      - {
+          title: "Circle — USDC-backed stablecoin specification (native USDC, 6 decimal places)",
+          url: "https://developers.circle.com/xreserve/concepts/usdc-backed-stablecoin-specification",
+        }
+    actions:
+      - {
+          id: show-quote,
+          type: slide.show,
+          at: { mark: show-quote, offsetMs: -700 },
+          slideId: quote-1,
+        }
+      - { id: pt-ask, type: slide.point, at: { mark: pt-ask }, target: { x: 0.256, y: 0.409 } }
+      - { id: pt-bid, type: slide.point, at: { mark: pt-bid }, target: { x: 0.256, y: 0.687 } }
+      - { id: pt-qmid, type: slide.point, at: { mark: pt-qmid }, target: { x: 0.123, y: 0.493 } }
+      - { id: quote-2, type: slide.show, at: { mark: quote-2 }, slideId: quote-2 }
+      - {
+          id: pt-res,
+          type: slide.point,
+          at: { afterAction: quote-2 },
+          target: { x: 0.738, y: 0.587 },
+        }
+      - {
+          id: pt-assets,
+          type: slide.point,
+          at: { mark: pt-assets },
+          target: { x: 0.355, y: 0.842 },
+        }
+
+  - id: math
+    chapter: Full precision၊ rounding တစ်ခါ
+    narration: >-
+      [[mark:show-math]] တွက်တဲ့အခါ ကြားထဲမှာ ဘာမှ round မလုပ်ပါဘူး။ [[mark:pt-ex]] ယူရို တစ်ထောင်ကို ask ဈေးနဲ့ စားရင်
+      ဒသမ နောက်မှာ အဆုံးမရှိ ဆက်သွားတဲ့ ဂဏန်း ထွက်လို့ Go ရဲ့ rational number type နဲ့ ပိုင်းဝေ ပိုင်းခြေ အတိုင်း ထားပါတယ်။
+      [[mark:math-2]] နယ်နိမိတ်ကို ရောက်မှ၊ ဆိုလိုတာက သိမ်းမယ့် ပမာဏ ဖြစ်မှ USDC ရဲ့ ဒသမ ခြောက်နေရာကို တစ်ခါပဲ round
+      လုပ်ပါတယ်။ lesson ၅ မှာလို mode ကိုလည်း တမင် ရွေးပါတယ်၊ ဒီမှာ round down ပါ၊ မရှိတဲ့ ငွေကို မပေးမိအောင် conservative
+      ဖြစ်တဲ့ ရွေးချယ်မှုပါ။ [[mark:pt-early2]] rate ကို စောစော round လုပ်တဲ့ နည်းကတော့ ဒီ ဆုံးဖြတ်ချက်ကို ကြားထဲမှာ
+      ဝှက်ထားတာပါ၊ ဒီ ဥပမာမှာ ငွေ ဖန်တီးမိပြီး တခြား rate မှာဆို ငွေ ပျောက်နိုင်ပါတယ်။ [[mark:math-3]] spread
+      ကိုတော့ explicit book လုပ်ပါတယ်။ ယူရို တစ်ထောင်ကို mid နဲ့ တန်ဖိုးထားတဲ့ USDC ထဲက user ရတဲ့ USDC ကို
+      နုတ်ပြီး revenue spread account ထဲ ထည့်တာပါ။ [[mark:pt-rev]] ဒါကြောင့် round down လုပ်လိုက်လို့ ကျန်တဲ့ အပိုင်းအစလေးတွေ ပျောက်မသွားဘဲ spread
+      ထဲမှာ နာမည်နဲ့ ရှိနေပါတယ်။ transaction rate ကိုလည်း column တစ်ခုအဖြစ် မသိမ်းပါဘူး၊ amount နှစ်ခုကို စားရင်
+      ထွက်လာလို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 3: An in-app conversion with cashback (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-3-an-in-app-conversion-with-cashback",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+    actions:
+      - { id: show-math, type: slide.show, at: { mark: show-math }, slideId: math-1 }
+      - { id: pt-ex, type: slide.point, at: { mark: pt-ex }, target: { x: 0.1, y: 0.369 } }
+      - { id: math-2, type: slide.show, at: { mark: math-2 }, slideId: math-2 }
+      - {
+          id: pt-got,
+          type: slide.point,
+          at: { afterAction: math-2 },
+          target: { x: 0.263, y: 0.576 },
+        }
+      - {
+          id: pt-early2,
+          type: slide.point,
+          at: { mark: pt-early2 },
+          target: { x: 0.725, y: 0.576 },
+        }
+      - { id: math-3, type: slide.show, at: { mark: math-3 }, slideId: math-3 }
+      - { id: pt-sp, type: slide.point, at: { afterAction: math-3 }, target: { x: 0.1, y: 0.747 } }
+      - { id: pt-rev, type: slide.point, at: { mark: pt-rev }, target: { x: 0.286, y: 0.864 } }
+
+  - id: post
+    chapter: Currency တစ်ခုချင်း balance
+    narration: >-
+      [[mark:close-math]] ဒီ conversion ကို post လုပ်ကြည့်ရအောင်။ [[mark:open-ledger]] ဒီ lesson ရဲ့ ledger မှာ line
+      တိုင်းမှာ currency ပါပါတယ်။ [[mark:sel-net]] Post က debit နဲ့ credit ကို currency တစ်ခုချင်း သီးခြား စစ်ပြီး၊ ယူရိုနဲ့
+      USDC ကို ဘယ်တော့မှ ပေါင်းမတွက်ပါဘူး။ [[mark:open-main-2]] main မှာ conversion ကို post လုပ်ပါမယ်။ [[mark:type-post]] reservation ကို settle လုပ်တဲ့
+      conversion transaction ထဲမှာ ယူရိုဘက်က user ကို debit လုပ်ပြီး fx conversion account ကို credit လုပ်ပါတယ်။
+      fx conversion account ဆိုတာ currency နှစ်ခုကြားက တံတားဖြစ်ပြီး ကိုယ့် FX position ကို ပြတဲ့ account ပါ။ USDC ဘက်မှာတော့ အဲဒီ account ကို mid rate နဲ့ တွက်ထားတဲ့ ပမာဏ
+      နဲ့ debit လုပ်၊ user ကို ရတဲ့ ပမာဏ credit လုပ်ပြီး၊ ကွာတာကို revenue spread ထဲ credit လုပ်ပါတယ်။ [[mark:post-trail]] တကယ့် system မှာ
+      posting က lesson ၁၁ ရဲ့ အချိန်တွေနဲ့ audit trail ပါရပါမယ်။ posting နဲ့ outbox row ကို database transaction
+      တစ်ခုတည်းမှာ commit လုပ်ပြီး၊ နောက်ဆုံးမှာ currency တစ်ခုချင်းရဲ့ ပေါင်းလဒ်ကို
+      ထုတ်ပါတယ်။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-eur]] ယူရို ပေါင်းလဒ်က သုည ဖြစ်ပြီး user ရဲ့ ယူရိုက
+      conversion account ကို ရောက်သွားပါတယ်။ [[mark:pt-usdc]] USDC ပေါင်းလဒ်ကလည်း သုည ဖြစ်ပါတယ်၊ user ရတဲ့ ပမာဏနဲ့
+      spread ပေါင်းရင် conversion account ရဲ့ USDC နဲ့ အတိအကျ ညီလို့ပါ။ ဆိုလိုတာက conversion account ရဲ့ balance နှစ်ခုက
+      mid rate နဲ့ တန်ဖိုး တူပြီး၊ ကွာတာ အားလုံးက spread ထဲ ရောက်နေပါတယ်။ [[mark:pt-out1]] outbox ထဲမှာလည်း conversion
+      event ရှိနေပါပြီ။ [[mark:dock-2]] ဒါပေမဲ့ ဒီ flow မှာ cashback မပါသေးပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+    actions:
+      - { id: close-math, type: slide.close, at: { mark: close-math } }
+      - { id: open-ledger, type: workspace.openFile, at: { mark: open-ledger }, path: ledger.go }
+      - id: sel-net
+        type: editor.select
+        at: { mark: sel-net }
+        target:
+          {
+            file: ledger.go,
+            text: "\t\tnet[line.Currency] += line.Debit - line.Credit",
+            occurrence: 1,
+          }
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: type-post
+        type: editor.type
+        at: { mark: type-post }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"spread to revenue: \", format(spread, 6), \"USDC\")\n",
+            occurrence: 1,
+          }
+        text: "\n\ts.Commit(Tx{ID: \"conv-1\", Memo: \"EUR to USDC at quote q-1\", Lines: []Line{\n\t\t{Account: user, Currency: eur, Debit: paid},\n\t\t{Account: \"equity:fx-conversion\", Currency: eur, Credit: paid},\n\t\t{Account: \"equity:fx-conversion\", Currency: usdc, Debit: atMid},\n\t\t{Account: user, Currency: usdc, Credit: got},\n\t\t{Account: \"revenue:spread\", Currency: usdc, Credit: spread},\n\t}}, Event{\"conv-1\", \"conversion.settled\"})\n\ts.report()\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "USDC sum 0.000000  user 1082.954299  spread 1.350390  promo 0.000000",
+          timeoutMs: 8000,
+        }
+      - id: pt-eur
+        type: console.point
+        at: { mark: pt-eur }
+        target: { text: "EUR  sum 0.00", occurrence: 1 }
+      - id: pt-usdc
+        type: console.point
+        at: { mark: pt-usdc }
+        target: { text: "USDC sum 0.000000  user 1082.954299", occurrence: 1 }
+      - id: pt-out1
+        type: console.point
+        at: { mark: pt-out1 }
+        target: { text: "outbox: dep-1 conv-1", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+      - {
+          id: expect-file,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: '{Account: "revenue:spread", Currency: usdc, Credit: spread},',
+        }
+
+  - id: cashback
+    chapter: Cashback က တကယ့် ငွေ
+    narration: >-
+      [[mark:type-cb]] cashback အတွက် user ရဲ့ balance ကို တိုက်ရိုက် တိုးလိုက်ရင် ငွေကို မရှိဘဲ ဖန်တီးလိုက်တာပါ။ ဒါကြောင့် ဒီ
+      line တွေက USDC ပမာဏရဲ့ သုည ဒသမ တစ် ရာခိုင်နှုန်းကို တွက်ပြီး၊ သူ့ကိုယ်ပိုင် rounding ဆုံးဖြတ်ချက်နဲ့ round down
+      လုပ်ပြီး၊ company ရဲ့ promo expense account ကနေ user ဆီကို ပုံမှန် posting တစ်ခုနဲ့ ရွှေ့ပါတယ်။ outbox row
+      လည်း တွဲပါပါတယ်။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-usdc3]] USDC ပေါင်းလဒ်က သုည ဖြစ်နေဆဲပါ။ user
+      ရဲ့ USDC တိုးလာပြီး promo expense က အဲဒီ ပမာဏအတိုင်း ပေါ်လာပါတယ်၊ ငွေ ဘယ်ကလာလဲ ဆိုတာ ledger က
+      ဖြေနိုင်ပါတယ်။ [[mark:pt-out3]] outbox ထဲမှာ cashback event ထပ်ရောက်ပါတယ်။ lesson ၂၅ မှာလို relay က at least once
+      publish လုပ်လို့ statement၊ notification၊ analytics လို consumer တွေက event id နဲ့ dedupe လုပ်ရပါတယ်။
+      [[mark:show-books]] entry အားလုံးကို currency အလိုက် ပြန်ကြည့်ရအောင်။ [[mark:pt-eurrows]] ယူရို line နှစ်ကြောင်းက
+      သူ့ချင်း သုည ဖြစ်ပါတယ်။ [[mark:books-2]] USDC line သုံးကြောင်းကလည်း သူ့ချင်း သုည ဖြစ်ပြီး၊ [[mark:pt-norate]]
+      rate column မရှိပါဘူး၊ USDC ပမာဏကို ယူရို ပမာဏနဲ့ စားရင် ရပါတယ်။ [[mark:books-3]] cashback line နှစ်ကြောင်းက
+      USDC ထဲမှာပဲ ထပ်ပြီး ညီပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 3: An in-app conversion with cashback (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-3-an-in-app-conversion-with-cashback",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+    actions:
+      - id: type-cb
+        type: editor.type
+        at: { mark: type-cb }
+        target: { file: main.go, after: "\ts.report()\n", occurrence: 1 }
+        text: "\n\tback := share(got, rat(\"0.001\")) // a 0.1% cashback, rounded down: our decision\n\ts.Commit(Tx{ID: \"cb-1\", Memo: \"cashback on conv-1\", Lines: []Line{\n\t\t{Account: \"expense:promo\", Currency: usdc, Debit: back},\n\t\t{Account: user, Currency: usdc, Credit: back},\n\t}}, Event{\"cb-1\", \"cashback.paid\"})\n\ts.report()\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "USDC sum 0.000000  user 1084.037253  spread 1.350390  promo 1.082954",
+          timeoutMs: 8000,
+        }
+      - id: pt-usdc3
+        type: console.point
+        at: { mark: pt-usdc3 }
+        target: { text: "USDC sum 0.000000  user 1084.037253", occurrence: 1 }
+      - id: pt-out3
+        type: console.point
+        at: { mark: pt-out3 }
+        target: { text: "outbox: dep-1 conv-1 cb-1", occurrence: 1 }
+      - {
+          id: show-books,
+          type: slide.show,
+          at: { mark: show-books, offsetMs: -700 },
+          slideId: books-1,
+        }
+      - {
+          id: pt-eurrows,
+          type: slide.point,
+          at: { mark: pt-eurrows },
+          target: { x: 0.797, y: 0.398 },
+        }
+      - { id: books-2, type: slide.show, at: { mark: books-2 }, slideId: books-2 }
+      - {
+          id: pt-su,
+          type: slide.point,
+          at: { afterAction: books-2 },
+          target: { x: 0.802, y: 0.587 },
+        }
+      - {
+          id: pt-norate,
+          type: slide.point,
+          at: { mark: pt-norate },
+          target: { x: 0.088, y: 0.858 },
+        }
+      - { id: books-3, type: slide.show, at: { mark: books-3 }, slideId: books-3 }
+      - {
+          id: pt-cbrows,
+          type: slide.point,
+          at: { afterAction: books-3 },
+          target: { x: 0.125, y: 0.671 },
+        }
+
+  - id: pull
+    chapter: ခက်တဲ့ နေရာ၊ ဆန့်ကျင်ဘက် ဆွဲအား
+    narration: >-
+      [[mark:show-pull]] ခက်တဲ့ နေရာက transaction တစ်ခုတည်းမှာ ငွေ နှစ်စု ဆန့်ကျင်ဘက် ရွေ့တာပါ။ [[mark:pt-sprd]] spread က
+      user ဆီကနေ ကိုယ့်ဆီ ရောက်တဲ့ revenue ပါ။ [[mark:pull-2]] cashback ကတော့ ကိုယ်က user ကို ပေးတဲ့ expense ပါ။
+      နှစ်ခုလုံး တကယ့် ငွေ ဖြစ်ပြီး၊ နှစ်ခုလုံး books ထဲကို ဖြတ်ပြီး နှစ်ခုလုံး round လုပ်ရပါတယ်။ [[mark:pt-net]] ဒါကြောင့်
+      ဒီ trade တစ်ခုရဲ့ margin ကို account နှစ်ခုကနေ တိုက်ရိုက် ဖတ်လို့ ရပါတယ်။ cashback ကို spread ထဲက နုတ်ပြီး
+      net တစ်ခုတည်း book လုပ်လိုက်ရင်တော့ marketing ကုန်ကျစရိတ်လည်း မမြင်ရ၊ spread ဝင်ငွေလည်း မမြင်ရ ဖြစ်သွားပါတယ်။
+      [[mark:pt-both]] ဒါကြောင့် ဒီ transaction တစ်ခုတည်းက မူ နှစ်ခုကို တပြိုင်နက် ထိန်းရပါတယ်။ currency တိုင်းမှာ
+      books ညီပြီး ဘာမှ မဖန်တီးတာက No invented data ဖြစ်ပြီး၊ အပိုင်းအစ တိုင်းကို account တစ်ခုခုမှာ ခြေရာခံထားတာက
+      No lost data ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 3: An in-app conversion with cashback (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-3-an-in-app-conversion-with-cashback",
+        }
+    actions:
+      - { id: show-pull, type: slide.show, at: { mark: show-pull }, slideId: pull-1 }
+      - { id: pt-sprd, type: slide.point, at: { mark: pt-sprd }, target: { x: 0.194, y: 0.42 } }
+      - { id: pull-2, type: slide.show, at: { mark: pull-2 }, slideId: pull-2 }
+      - {
+          id: pt-pro,
+          type: slide.point,
+          at: { afterAction: pull-2 },
+          target: { x: 0.806, y: 0.42 },
+        }
+      - { id: pt-net, type: slide.point, at: { mark: pt-net }, target: { x: 0.351, y: 0.82 } }
+      - { id: pt-both, type: slide.point, at: { mark: pt-both }, target: { x: 0.309, y: 0.92 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech system design interview တွေမှာ currency conversion feature တစ်ခု ဒီဇိုင်းဆွဲပါ၊ ငွေ
+      မပေါ်မပျောက်ဘူး ဆိုတာ ဘယ်လို သေချာမလဲ လို့ မေးလေ့ရှိပါတယ်။ decimal type သုံးမယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး။
+      [[mark:iv-a]] ပထမ၊ direction ပါတဲ့ quote ကို id နဲ့ request မှာ တွဲ၊ idempotency key နဲ့ ယူရိုကို reserve လုပ်ပါ။
+      [[mark:iv-b]] ဒုတိယ၊ ကြားထဲမှာ full precision နဲ့ တွက်ပြီး၊ သိမ်းမယ့် ပမာဏကို mode ရွေးပြီး တစ်ခါပဲ round
+      လုပ်ပါ၊ spread ကို revenue account ထဲ explicit book လုပ်ပြီး rate ကို column အဖြစ် မသိမ်းပါနဲ့။ [[mark:iv-c]]
+      တတိယ၊ currency တစ်ခုချင်းစီမှာ balance ဖြစ်ရပြီး၊ cashback ကို promo account ကနေ ပုံမှန် posting နဲ့ fund
+      လုပ်ပြီး ကိုယ်ပိုင် rounding ဆုံးဖြတ်ချက် ပေးပါ။ [[mark:iv-d]] ပြီးရင် ကိုယ် ဘာ build လုပ်မလဲ ဆက်ပြောပါ။ asset ကို
+      network နဲ့ contract နဲ့ ခွဲသိမယ်၊ posting နဲ့ outbox row ကို တစ်ခါတည်း commit လုပ်မယ်၊ currency အလိုက် ပေါင်းလဒ်
+      သုည ဆိုတာကို invariant အဖြစ် နေ့တိုင်း စစ်မယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 3: An in-app conversion with cashback (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-3-an-in-app-conversion-with-cashback",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] cashback ရာခိုင်နှုန်းကို သုည ဒသမ တစ် ကနေ
+      သုည ဒသမ နှစ် ကို ပြောင်းပြီး run ကြည့်ပါ။ promo expense က spread ထက် များသွားလို့ ဒီ trade မှာ ကိုယ်က ရှုံးပေမဲ့၊
+      USDC ပေါင်းလဒ်ကတော့ သုည ဖြစ်နေဆဲ ဆိုတာ တွေ့ရပါမယ်။ books ညီတာနဲ့ business မှာ အမြတ်ရတာက မတူပါဘူး။
+      [[mark:recap]] ပြန်ချုပ်ရရင်၊ conversion မှာ quote က direction ရှိ၊ currency တွေကို ဘယ်တော့မှ မပေါင်း၊ တစ်ခါပဲ
+      round လုပ်ပြီး၊ spread နဲ့ cashback နှစ်ခုလုံးကို နာမည်ရှိတဲ့ account ထဲ post လုပ်မှ ငွေ မပေါ်မပျောက်ပါဘူး။
+      နောက်ဆုံး lesson မှာ ဒီ course တစ်ခုလုံးကို system design interview တစ်ခုအတွက် အဆင့် ခြောက်ဆင့်နဲ့ ပြန်စုပြီး
+      wallet transfer API တစ်ခုကို ဒီဇိုင်းဆွဲကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 3: An in-app conversion with cashback (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-3-an-in-app-conversion-with-cashback",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: 'rat("0.001")', occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

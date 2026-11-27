@@ -1,0 +1,826 @@
+# Fintech Engineering, lesson 30: property-based testing for money code (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Testing" (intro, property-based testing, invariant checks
+# between steps) (CC BY 4.0, Voytek Pitula).
+# Start state: split.go holds the naive split, allocate (lesson 05's fix), sum and cents;
+# wallet.go a wallet with holds (reserve / capture / release) and its invariant check; gen.go a
+# generator of random wallet operations; main.go a seeded testing/quick config and one example test.
+# Edits, all insert-only, in main.go:
+#   1. the property "the parts add up to the whole" over generated amounts and part counts
+#                                                     -> run-2: counterexample 396.99 in 4 parts
+#   2. a generated sequence of wallet operations with the invariant checked after every step
+#                                                     -> run-3: step 25 breaks it (capture of a released hold)
+# Figures: space (examples vs generated inputs), oracle (generator → code → invariant →
+# counterexample), steps (a check after every step), iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-30-property-testing
+  title: "Fintech Engineering 30: Property-based testing"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      gen.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"math/rand"
+        	"strings"
+        )
+
+        // randomStep generates one operation, applies it to the wallet and names it.
+        func randomStep(r *rand.Rand, w *Wallet) string {
+        	amount := int64(r.Intn(50)+1) * 100
+        	op := r.Intn(4)
+        	switch {
+        	case op == 0:
+        		w.Deposit(amount)
+        		return "deposit " + cents(amount)
+        	case op == 1 || len(w.Holds) == 0:
+        		w.Reserve(amount)
+        		return "reserve " + cents(amount)
+        	}
+        	i := r.Intn(len(w.Holds))
+        	if op == 2 {
+        		w.Capture(w.Holds[i])
+        	} else {
+        		w.Release(w.Holds[i])
+        	}
+        	return fmt.Sprintf("hold %d: %s", i+1, strings.Join(w.Holds[i].Log, " → "))
+        }
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"math/rand"
+        	"testing/quick"
+        )
+
+        // cfg: up to 1000 generated cases from a fixed seed, so every run sees the same inputs.
+        var cfg = &quick.Config{MaxCount: 1000, Rand: rand.New(rand.NewSource(7))}
+
+        func main() {
+        	fmt.Println("example, 100.00 in 4 parts adds up:", sum(split(10000, 4)) == 10000)
+        }
+      split.go: |
+        package main
+
+        import "fmt"
+
+        // split divides an amount in cents into n equal parts: the version that looks right.
+        func split(total int64, n int) []int64 {
+        	parts := make([]int64, n)
+        	for i := range parts {
+        		parts[i] = total / int64(n)
+        	}
+        	return parts
+        }
+
+        // allocate gives the cents left over by the division to the first parts, one each.
+        func allocate(total int64, n int) []int64 {
+        	parts := split(total, n)
+        	for i := 0; i < int(total%int64(n)); i++ {
+        		parts[i]++
+        	}
+        	return parts
+        }
+
+        func sum(parts []int64) (s int64) {
+        	for _, p := range parts {
+        		s += p
+        	}
+        	return s
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      wallet.go: |
+        package main
+
+        import "fmt"
+
+        // Hold reserves part of a user's funds until it is captured (paid out) or released.
+        type Hold struct {
+        	Amount int64
+        	State  string // open, captured, released
+        	Log    []string
+        }
+
+        // Wallet is one user's money: available, held by open holds, and paid to merchants.
+        type Wallet struct {
+        	Deposited, Available, Held, Paid int64
+        	Holds                            []*Hold
+        }
+
+        func (w *Wallet) Deposit(a int64) { w.Deposited, w.Available = w.Deposited+a, w.Available+a }
+
+        func (w *Wallet) Reserve(a int64) {
+        	if a <= w.Available {
+        		w.Available, w.Held = w.Available-a, w.Held+a
+        		w.Holds = append(w.Holds, &Hold{a, "open", []string{"reserve " + cents(a)}})
+        	}
+        }
+
+        func (w *Wallet) Capture(h *Hold) {
+        	if h.State != "captured" {
+        		w.Held, w.Paid, h.State = w.Held-h.Amount, w.Paid+h.Amount, "captured"
+        	}
+        	h.Log = append(h.Log, "capture")
+        }
+
+        func (w *Wallet) Release(h *Hold) {
+        	if h.State == "open" {
+        		w.Held, w.Available, h.State = w.Held-h.Amount, w.Available+h.Amount, "released"
+        	}
+        	h.Log = append(h.Log, "release")
+        }
+
+        // check is the invariant: what is held equals the sum of the open holds.
+        func (w *Wallet) check() error {
+        	var open int64
+        	for _, h := range w.Holds {
+        		if h.State == "open" {
+        			open += h.Amount
+        		}
+        	}
+        	if w.Held != open {
+        		total := w.Available+w.Held+w.Paid == w.Deposited
+        		return fmt.Errorf("held %s, open holds %s (total adds up: %v)", cents(w.Held), cents(open), total)
+        	}
+        	return nil
+        }
+  slides:
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေတွက်တဲ့ code ကို ဘယ်လို test လုပ်မလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေတွက်တဲ့ code ကို ဘယ်လို test လုပ်မလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#6cb2f5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Examples တင် မလုံဘူး — လူ ရွေးတဲ့ input တွေက round number</text><text x="188" y="311" font-size="26" fill="#8a94a8">bug တွေက combination နဲ့ edge မှာ ရှိတတ်တယ်</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေတွက်တဲ့ code ကို ဘယ်လို test လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#6cb2f5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Examples တင် မလုံဘူး — လူ ရွေးတဲ့ input တွေက round number</text><text x="188" y="311" font-size="26" fill="#8a94a8">bug တွေက combination နဲ့ edge မှာ ရှိတတ်တယ်</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Property — any input အတွက် invariant မှန်ရမယ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">Σ parts = total၊ held = open holds — invariant က oracle</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေတွက်တဲ့ code ကို ဘယ်လို test လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#6cb2f5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Examples တင် မလုံဘူး — လူ ရွေးတဲ့ input တွေက round number</text><text x="188" y="311" font-size="26" fill="#8a94a8">bug တွေက combination နဲ့ edge မှာ ရှိတတ်တယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Property — any input အတွက် invariant မှန်ရမယ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">Σ parts = total၊ held = open holds — invariant က oracle</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Sequence — generated ops၊ step တိုင်းပြီး invariant စစ်</text><text x="188" y="575" font-size="26" fill="#8a94a8">fixed seed နဲ့ replay၊ counterexample ကို example test အဖြစ် သိမ်း</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေတွက်တဲ့ code ကို ဘယ်လို test လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#6cb2f5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Examples တင် မလုံဘူး — လူ ရွေးတဲ့ input တွေက round number</text><text x="188" y="311" font-size="26" fill="#8a94a8">bug တွေက combination နဲ့ edge မှာ ရှိတတ်တယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Property — any input အတွက် invariant မှန်ရမယ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">Σ parts = total၊ held = open holds — invariant က oracle</text></g><g><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Sequence — generated ops၊ step တိုင်းပြီး invariant စစ်</text><text x="188" y="575" font-size="26" fill="#8a94a8">fixed seed နဲ့ replay၊ counterexample ကို example test အဖြစ် သိမ်း</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">အရေးကြီးတဲ့ money math + state machine မှာ property + CI ထဲ seed log</text><text x="188" y="707" font-size="26" fill="#8a94a8">example test က ဥပမာ၊ property က စည်းမျဉ်း</text></g>
+        </svg>
+    - id: oracle-1
+      contentType: html
+      name: "The oracle 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">THE ORACLE</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1080.6" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1080.6" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1156.5" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">မျှော်ထားတဲ့ တန်ဖိုး မဟုတ်ဘဲ invariant က စစ်တယ်</text>
+        <g class="in"><rect x="60" y="420" width="330" height="150" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-gear" x="82" y="463" width="64" height="64" style="color:#6cb2f5"/><text x="265" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">generator</text><text x="265" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">amount · parts</text></g>
+        <g class="in"><rect x="560" y="420" width="330" height="150" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-code" x="582" y="463" width="64" height="64" style="color:#9aa5b8"/><text x="765" y="487.1" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">split</text><text x="765" y="525.9" font-size="22" text-anchor="middle" fill="#8a94a8">the code under test</text></g>
+        <path d="M400 495L546 495" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="473" y="478.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">396.99, 4</text>
+        </svg>
+    - id: oracle-2
+      contentType: html
+      name: "The oracle 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol><symbol id="i-scale" viewBox="0 0 48 48"><path d="M24 6v36M13 42h22M8 14h32"/><path d="M8 14 3 27a6 6 0 0 0 10 0zM40 14l-5 13a6 6 0 0 0 10 0z"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">THE ORACLE</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1080.6" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1080.6" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1156.5" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">မျှော်ထားတဲ့ တန်ဖိုး မဟုတ်ဘဲ invariant က စစ်တယ်</text>
+        <rect x="60" y="420" width="330" height="150" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-gear" x="82" y="463" width="64" height="64" style="color:#6cb2f5"/><text x="265" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">generator</text><text x="265" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">amount · parts</text>
+        <rect x="560" y="420" width="330" height="150" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-code" x="582" y="463" width="64" height="64" style="color:#9aa5b8"/><text x="765" y="487.1" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">split</text><text x="765" y="525.9" font-size="22" text-anchor="middle" fill="#8a94a8">the code under test</text>
+        <path d="M400 495L546 495" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="473" y="478.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">396.99, 4</text>
+        <g class="in"><rect x="1060" y="420" width="470" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="1060" y="420" width="470" height="150" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-scale" x="1082" y="463" width="64" height="64" style="color:#4fd1c5"/><text x="1335" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Σ parts = total</text><text x="1335" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">for every input</text></g>
+        <path d="M900 495L1046 495" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="973" y="478.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">99.24 ×4</text>
+        </svg>
+    - id: oracle-3
+      contentType: html
+      name: "The oracle 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol><symbol id="i-scale" viewBox="0 0 48 48"><path d="M24 6v36M13 42h22M8 14h32"/><path d="M8 14 3 27a6 6 0 0 0 10 0zM40 14l-5 13a6 6 0 0 0 10 0z"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">THE ORACLE</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1080.6" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1080.6" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1156.5" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">မျှော်ထားတဲ့ တန်ဖိုး မဟုတ်ဘဲ invariant က စစ်တယ်</text>
+        <rect x="60" y="420" width="330" height="150" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-gear" x="82" y="463" width="64" height="64" style="color:#6cb2f5"/><text x="265" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">generator</text><text x="265" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">amount · parts</text>
+        <rect x="560" y="420" width="330" height="150" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-code" x="582" y="463" width="64" height="64" style="color:#9aa5b8"/><text x="765" y="487.1" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">split</text><text x="765" y="525.9" font-size="22" text-anchor="middle" fill="#8a94a8">the code under test</text>
+        <path d="M400 495L546 495" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="473" y="478.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600" class="mono">396.99, 4</text>
+        <rect x="1060" y="420" width="470" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="1060" y="420" width="470" height="150" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-scale" x="1082" y="463" width="64" height="64" style="color:#4fd1c5"/><text x="1335" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Σ parts = total</text><text x="1335" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">for every input</text>
+        <path d="M900 495L1046 495" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="973" y="478.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600" class="mono">99.24 ×4</text>
+        <g class="in"><rect x="1060" y="680" width="470" height="150" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-cross" x="1082" y="723" width="64" height="64" style="color:#fc8181"/><text x="1335" y="745.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">counterexample</text><text x="1335" y="786.6" font-size="24" text-anchor="middle" fill="#8a94a8">396.99 in 4 parts → 396.96</text></g>
+        <path d="M1295 580L1295 666" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/><text x="1394.3" y="630.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">false → stop</text>
+        <path d="M1285 420Q762 230 239 420" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/><text x="762" y="308.8" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">true → next case</text>
+        <g class="in"><rect x="60" y="720" width="557.1" height="50" rx="25" fill="#6cb2f5" opacity="0.16"/><rect x="60" y="720" width="557.1" height="50" rx="25" fill="none" stroke="#6cb2f5" stroke-width="2"/><text x="338.5" y="754.1" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="700">fixed seed → the same cases every run</text></g>
+        </svg>
+    - id: space-1
+      contentType: html
+      name: "Property-based testing 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">PROPERTY-BASED TESTING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Example 3 ခုက input space ထဲမှာ အစက် 3 စက်ပဲ</text>
+        <g class="in"><rect x="70" y="205" width="930" height="640" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="92" y="241" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">inputs: amount × parts</text></g>
+        <g class="in"><rect x="170" y="330" width="247.6" height="50" rx="25" fill="#68d391" opacity="1"/><text x="293.8" y="364.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">100.00 / 4  ✓</text></g>
+        <g class="in"><rect x="560" y="470" width="231.3" height="50" rx="25" fill="#68d391" opacity="1"/><text x="675.7" y="504.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">50.00 / 2  ✓</text></g>
+        <g class="in"><rect x="260" y="660" width="231.3" height="50" rx="25" fill="#68d391" opacity="1"/><text x="375.7" y="694.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">10.00 / 5  ✓</text></g>
+        <g class="in"><text x="1050" y="300" font-size="32" fill="#68d391" font-weight="700">hand-written</text></g>
+        <g class="in"><text x="1050" y="345" font-size="26" fill="#8a94a8">round amounts — remainder 0</text></g>
+        </svg>
+    - id: space-2
+      contentType: html
+      name: "Property-based testing 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">PROPERTY-BASED TESTING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Example 3 ခုက input space ထဲမှာ အစက် 3 စက်ပဲ</text>
+        <rect x="70" y="205" width="930" height="640" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="92" y="241" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">inputs: amount × parts</text>
+        <g class="in"><text x="558" y="766" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="284" y="814" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="704" y="695" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="733" y="305" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="946" y="354" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="289" y="537" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="891" y="765" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="750" y="591" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="606" y="294" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="773" y="377" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="511" y="375" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="819" y="550" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="417" y="525" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="620" y="585" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="671" y="400" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="163" y="307" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="796" y="290" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="148" y="771" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="892" y="566" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="439" y="379" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="413" y="630" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="871" y="410" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="232" y="542" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="818" y="393" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="524" y="682" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="95" y="566" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="711" y="392" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="359" y="299" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="945" y="593" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="110" y="667" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="225" y="785" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="947" y="428" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="837" y="484" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="798" y="687" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="589" y="370" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="356" y="534" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="852" y="691" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="938" y="792" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="395" y="822" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="303" y="306" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="165" y="565" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="516" y="746" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="142" y="470" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="461" y="609" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="796" y="774" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="904" y="320" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="483" y="302" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="626" y="816" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="918" y="495" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="319" y="614" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="486" y="822" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="411" y="309" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="569" y="624" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="658" y="721" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="272" y="633" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="576" y="442" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="681" y="799" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="225" y="637" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="345" y="800" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="947" y="721" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="303" y="466" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="622" y="653" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="878" y="475" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="167" y="639" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="683" y="313" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="758" y="674" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="748" y="745" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="707" y="609" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="122" y="304" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="460" y="448" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="842" y="818" font-size="50" fill="#6cb2f5">•</text></g>
+        <g class="in"><text x="405" y="449" font-size="50" fill="#6cb2f5">•</text></g>
+        <rect x="170" y="330" width="247.6" height="50" rx="25" fill="#68d391" opacity="1"/><text x="293.8" y="364.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">100.00 / 4  ✓</text>
+        <rect x="560" y="470" width="231.3" height="50" rx="25" fill="#68d391" opacity="1"/><text x="675.7" y="504.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">50.00 / 2  ✓</text>
+        <rect x="260" y="660" width="231.3" height="50" rx="25" fill="#68d391" opacity="1"/><text x="375.7" y="694.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">10.00 / 5  ✓</text>
+        <text x="1050" y="300" font-size="32" fill="#68d391" font-weight="700">hand-written</text>
+        <text x="1050" y="345" font-size="26" fill="#8a94a8">round amounts — remainder 0</text>
+        <g class="in"><text x="1050" y="450" font-size="32" fill="#6cb2f5" font-weight="700">generated</text></g>
+        <g class="in"><text x="1050" y="495" font-size="26" fill="#8a94a8" class="mono">up to 1000 cases · seed 7</text></g>
+        <g class="in"><text x="1050" y="600" font-size="32" fill="#4fd1c5" font-weight="700">assert a property</text></g>
+        <g class="in"><rect x="1050" y="640" width="280.2" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="1050" y="640" width="280.2" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1190.1" y="674.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">Σ parts = total</text></g>
+        <g class="in"><text x="1050" y="745" font-size="26" fill="#8a94a8">not one expected value</text></g>
+        </svg>
+    - id: steps-1
+      contentType: html
+      name: "Invariants between steps 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">INVARIANTS BETWEEN STEPS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Step တိုင်းပြီးတိုင်း invariant ကို စစ်ပါ</text>
+        <g class="in"><rect x="70" y="240" width="300" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="220" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">reserve 3.00</text><text x="220" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">step 17 · hold 3</text></g>
+        <g class="in"><rect x="450" y="240" width="300" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="600" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">release</text><text x="600" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">step 20</text></g>
+        <g class="in"><rect x="830" y="240" width="300" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="980" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">release</text><text x="980" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">step 21 · no-op</text></g>
+        <path d="M380 305L436 305" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M760 305L816 305" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <g class="in"><rect x="145.4" y="400" width="149.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="145.4" y="400" width="149.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="220" y="434.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">check ✓</text></g>
+        <g class="in"><rect x="525.4" y="400" width="149.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="525.4" y="400" width="149.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="600" y="434.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">check ✓</text></g>
+        <g class="in"><rect x="905.4" y="400" width="149.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="905.4" y="400" width="149.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="980" y="434.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">check ✓</text></g>
+        </svg>
+    - id: steps-2
+      contentType: html
+      name: "Invariants between steps 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">INVARIANTS BETWEEN STEPS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Step တိုင်းပြီးတိုင်း invariant ကို စစ်ပါ</text>
+        <rect x="70" y="240" width="300" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="220" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">reserve 3.00</text><text x="220" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">step 17 · hold 3</text>
+        <rect x="450" y="240" width="300" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="600" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">release</text><text x="600" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">step 20</text>
+        <rect x="830" y="240" width="300" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="980" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">release</text><text x="980" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">step 21 · no-op</text>
+        <g class="in"><rect x="1210" y="240" width="320" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="1370" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">capture</text><text x="1370" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">step 25</text></g>
+        <path d="M380 305L436 305" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M760 305L816 305" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M1140 305L1196 305" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <rect x="145.4" y="400" width="149.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="145.4" y="400" width="149.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="220" y="434.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">check ✓</text>
+        <rect x="525.4" y="400" width="149.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="525.4" y="400" width="149.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="600" y="434.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">check ✓</text>
+        <rect x="905.4" y="400" width="149.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="905.4" y="400" width="149.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="980" y="434.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">check ✓</text>
+        <g class="in"><rect x="1295.4" y="400" width="149.2" height="50" rx="25" fill="#fc8181" opacity="1"/><text x="1370" y="434.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700">check ✗</text></g>
+        <g class="in"><text x="1530" y="500" font-size="26" text-anchor="end" fill="#fc8181" class="mono">held 42.00 ≠ open holds 45.00</text></g>
+        <g class="in"><text x="1530" y="545" font-size="26" text-anchor="end" fill="#8a94a8" class="mono">total adds up: true</text></g>
+        </svg>
+    - id: steps-3
+      contentType: html
+      name: "Invariants between steps 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">INVARIANTS BETWEEN STEPS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Step တိုင်းပြီးတိုင်း invariant ကို စစ်ပါ</text>
+        <rect x="70" y="240" width="300" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="220" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">reserve 3.00</text><text x="220" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">step 17 · hold 3</text>
+        <rect x="450" y="240" width="300" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="600" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">release</text><text x="600" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">step 20</text>
+        <rect x="830" y="240" width="300" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="980" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">release</text><text x="980" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">step 21 · no-op</text>
+        <rect x="1210" y="240" width="320" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="1370" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">capture</text><text x="1370" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">step 25</text>
+        <path d="M380 305L436 305" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M760 305L816 305" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M1140 305L1196 305" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <rect x="145.4" y="400" width="149.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="145.4" y="400" width="149.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="220" y="434.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">check ✓</text>
+        <rect x="525.4" y="400" width="149.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="525.4" y="400" width="149.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="600" y="434.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">check ✓</text>
+        <rect x="905.4" y="400" width="149.2" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="905.4" y="400" width="149.2" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="980" y="434.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">check ✓</text>
+        <rect x="1295.4" y="400" width="149.2" height="50" rx="25" fill="#fc8181" opacity="1"/><text x="1370" y="434.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700">check ✗</text>
+        <text x="1530" y="500" font-size="26" text-anchor="end" fill="#fc8181" class="mono">held 42.00 ≠ open holds 45.00</text>
+        <text x="1530" y="545" font-size="26" text-anchor="end" fill="#8a94a8" class="mono">total adds up: true</text>
+        <g class="in"><path d="M70 600L1530 600" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/></g>
+        <g class="in"><text x="70" y="670" font-size="32" fill="#9aa5b8" font-weight="700">check at the end only</text></g>
+        <g class="in"><text x="70" y="715" font-size="26" fill="#8a94a8">something broke, somewhere in 500 steps</text></g>
+        <g class="in"><text x="820" y="670" font-size="32" fill="#68d391" font-weight="700">check after every step</text></g>
+        <g class="in"><text x="820" y="715" font-size="26" fill="#8a94a8">step 25, capture of a released hold</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9530
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "example, 100.00 in 4 parts adds up: true\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "example, 100.00 in 4 parts adds up: true\ncounterexample: 396.99 in 4 parts sums to 396.96\nproperty, parts add up: false\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "example, 100.00 in 4 parts adds up: true\ncounterexample: 396.99 in 4 parts sums to 396.96\nproperty, parts add up: false\nstep 25 broke the books: held 42.00, open holds 45.00 (total adds up: true)\nhold 3: reserve 3.00 → release → release → capture\n"
+
+scenes:
+  - id: hook
+    chapter: Testing၊ example တွေ ဘာလို့ မလုံလောက်လဲ
+    narration: >-
+      ငွေ system အတွက် ledger၊ invariant၊ idempotency နဲ့ control တွေကို တည်ဆောက်ခဲ့ပြီးပြီ ဆိုတော့၊ ကျန်တဲ့ မေးခွန်းက အဲဒါတွေ တကယ် မှန်ကြောင်း ဘယ်လို သိမလဲ ဆိုတာပါ။ No trust၊ ဆိုလိုတာက ဘယ်သူ့ကိုမှ၊ ကိုယ့် component ကိုတောင် အလိုလို မယုံရဘူး ဆိုတဲ့ မူအရ ကိုယ့် code ကိုယ်တိုင်ကိုလည်း မှန်တယ်လို့ ယူဆလို့ မရပါဘူး။ [[mark:hard]] ခက်တာက ငွေ system မှာ မျှော်ထားတဲ့ output တွေကို စာရင်းလုပ်လို့ မရတာပါ။ operation sequence တွေက အရမ်းများပြီး၊ bug တွေက combination ထဲမှာ ရှိတတ်ပါတယ်။ [[mark:open-split]] ပထမ ဥပမာ အနေနဲ့ ငွေပမာဏကို အပိုင်း တူတူ ခွဲတဲ့ function တစ်ခုကို ယူကြည့်ရအောင်။ [[mark:sel-split]] ဒီ split က ပမာဏကို အပိုင်းအရေအတွက်နဲ့ စားပြီး အပိုင်းတိုင်းကို အဲဒီ ရလဒ် ပေးပါတယ်။ ကြည့်လိုက်ရင် မှန်ပုံ ရပါတယ်၊ test တွေ ဘာကို ဖမ်းနိုင်လဲ ကြည့်ဖို့ ဒီ အတိုင်း ထားထားတာပါ။ [[mark:open-main]] test ရေးရင် ပုံမှန် ရေးကြတဲ့ ပုံစံက example test ပါ။ [[mark:sel-example]] ယူရို ၁၀၀ ကို လေးပုံ ခွဲပြီး၊ အပိုင်းတွေ ပြန်ပေါင်းရင် ၁၀၀ ပြန်ရလား စစ်ပါတယ်။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - { id: open-split, type: workspace.openFile, at: { mark: open-split }, path: split.go }
+      - id: sel-split
+        type: editor.select
+        at: { mark: sel-split }
+        target: { file: split.go, text: "\t\tparts[i] = total / int64(n)", occurrence: 1 }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: main.go }
+      - id: sel-example
+        type: editor.select
+        at: { mark: sel-example }
+        target: { file: main.go, text: "sum(split(10000, 4)) == 10000", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "example, 100.00 in 4 parts adds up: true",
+          timeoutMs: 8000,
+        }
+
+  - id: space
+    chapter: Input space
+    narration: >-
+      [[mark:pt-ex]] example test က pass ပါတယ်၊ ယူရို ၁၀၀ ကို လေးပုံ ခွဲရင် ၂၅ စီ အတိအကျ ရလို့ပါ။ [[mark:show-space]] ပြဿနာက ကိုယ်တို့ ရွေးတဲ့ example တွေက ဘယ်လို ဂဏန်းတွေလဲ ဆိုတာပါ။ [[mark:pt-ex1]] လူက test ရေးရင် ၁၀၀၊ ၅၀၊ ၁၀ လို ပြည့်ပြည့် ဂဏန်းတွေကို ရွေးတတ်ပြီး၊ အဲဒါတွေက အပိုင်းအရေအတွက်နဲ့ စားလို့ ပြတ်ပါတယ်။ ဖြစ်နိုင်တဲ့ input အားလုံးထဲမှာ အစက် သုံးစက်ပဲ စစ်ထားတာပါ။ [[mark:space-2]] property-based testing မှာတော့ input တွေကို framework က generate လုပ်ပေးပါတယ်။ output တစ်ခုချင်းကို မျှော်ထားပြီး စစ်တာ မဟုတ်ဘဲ၊ ဘယ် input အတွက်မဆို မှန်ရမယ့် property တစ်ခုကို စစ်ပါတယ်။ [[mark:pt-prop]] ဒီ function အတွက် property က ရှင်းပါတယ်၊ အပိုင်းတွေကို ပြန်ပေါင်းရင် မူလ ပမာဏ ပြန်ရရမယ်။ ငွေ system မှာ ဒီလို property တွေက invariant တွေပါပဲ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - id: pt-ex
+        type: console.point
+        at: { mark: pt-ex }
+        target: { text: "example, 100.00 in 4 parts adds up: true", occurrence: 1 }
+      - {
+          id: show-space,
+          type: slide.show,
+          at: { mark: show-space, offsetMs: -700 },
+          slideId: space-1,
+        }
+      - { id: pt-ex1, type: slide.point, at: { mark: pt-ex1 }, target: { x: 0.177, y: 0.431 } }
+      - { id: space-2, type: slide.show, at: { mark: space-2 }, slideId: space-2 }
+      - {
+          id: pt-gen,
+          type: slide.point,
+          at: { afterAction: space-2 },
+          target: { x: 0.68, y: 0.513 },
+        }
+      - { id: pt-prop, type: slide.point, at: { mark: pt-prop }, target: { x: 0.738, y: 0.776 } }
+
+  - id: property
+    chapter: Property တစ်ခု ရေးကြည့်ရအောင်
+    narration: >-
+      [[mark:close-space]] Go ရဲ့ standard library ထဲက testing quick နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-prop]] ဒီ function က framework ပေးတဲ့ random ဂဏန်း နှစ်ခုကို ယူပါတယ်။ ပထမ ဂဏန်းကနေ ယူရို တစ်ထောင် အောက် ပမာဏ တစ်ခု၊ ဒုတိယ ဂဏန်းကနေ တစ်ကနေ ခုနစ်အထိ အပိုင်းအရေအတွက် တစ်ခု ထုတ်ပါတယ်။ ပြီးရင် split ရဲ့ အပိုင်းတွေကို ပြန်ပေါင်းပြီး မူလ ပမာဏနဲ့ မညီရင် အဲဒီ input ကို counterexample အနေနဲ့ ထုတ်ပြပါတယ်။ အောက်ဆုံး line က ဒီ property ကို case တစ်ထောင်အထိ စစ်ခိုင်းတာပါ။ example test pass ခဲ့တဲ့ function ပဲ ဆိုတော့ ဘာထွက်မလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-cx]] framework က ယူရို ၃၉၆ ဒသမ ကိုးကိုး ကို လေးပုံ ခွဲတဲ့ case ကို ရှာတွေ့ပါတယ်။ ပြန်ပေါင်းတော့ ဆင့် သုံးပြား ပျောက်နေပါတယ်။ [[mark:pt-false]] ဒါကြောင့် property က false ပါ။ [[mark:dock-2]] စားလို့ မပြတ်တဲ့ အကြွင်းကို split က လွှင့်ပစ်လိုက်တာပါ၊ ပြည့်ပြည့် ဂဏန်းတွေနဲ့ ရေးတဲ့ example က ဒါကို ဘယ်တော့မှ မမြင်ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - { title: "Go standard library — testing/quick", url: "https://pkg.go.dev/testing/quick" }
+    actions:
+      - { id: close-space, type: slide.close, at: { mark: close-space } }
+      - id: type-prop
+        type: editor.type
+        at: { mark: type-prop }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"example, 100.00 in 4 parts adds up:\", sum(split(10000, 4)) == 10000)\n",
+            occurrence: 1,
+          }
+        text: "\n\taddsUp := func(t uint32, k uint8) bool {\n\t\ttotal, n := int64(t%100000), int(k%7)+1\n\t\tif got := sum(split(total, n)); got != total {\n\t\t\tfmt.Println(\"counterexample:\", cents(total), \"in\", n, \"parts sums to\", cents(got))\n\t\t\treturn false\n\t\t}\n\t\treturn true\n\t}\n\tfmt.Println(\"property, parts add up:\", quick.Check(addsUp, cfg) == nil)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "property, parts add up: false",
+          timeoutMs: 8000,
+        }
+      - id: pt-cx
+        type: console.point
+        at: { mark: pt-cx }
+        target: { text: "counterexample: 396.99 in 4 parts sums to 396.96", occurrence: 1 }
+      - id: pt-false
+        type: console.point
+        at: { mark: pt-false }
+        target: { text: "property, parts add up: false", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: oracle
+    narration: >-
+      [[mark:show-oracle]] ဖြစ်သွားတာကို ပြန်ကြည့်ရအောင်။ generator က input တစ်ခု ထုတ်ပြီး code ကို ခေါ်ပါတယ်။ [[mark:oracle-2]] ရလဒ်ကို မျှော်ထားတဲ့ တန်ဖိုး တစ်ခုနဲ့ မတိုက်ဘဲ invariant နဲ့ စစ်ပါတယ်။ ဒါကြောင့် input ဘာပဲ ဖြစ်ဖြစ် အဖြေ မှန်မမှန် ဆုံးဖြတ်ပေးနိုင်တဲ့ oracle ရှိနေတာပါ။ ကိုယ်တို့ ကြိုတွက်ထားတဲ့ တန်ဖိုးက မှားနေနိုင်ပေမဲ့၊ ပေါင်းလဒ် မပြောင်းရဘူး ဆိုတဲ့ စည်းမျဉ်းက မမှားပါဘူး။ [[mark:oracle-3]] မှန်ရင် နောက် case ကို ဆက်သွားပြီး၊ မှားရင် ရပ်ပြီး counterexample ကို ပြပါတယ်။ [[mark:pt-seed]] seed ကို ပုံသေ ထားထားလို့ run တိုင်းမှာ case တွေ အတူတူ ထွက်ပြီး၊ ဒီ counterexample ကို ဘယ်အချိန်မဆို ပြန်ရပါတယ်။ [[mark:pt-princ]] split က စားလို့ မပြတ်တိုင်း ဆင့် အနည်းငယ် ပျောက်စေပြီး၊ ဘယ်သူ့ဆီမှ မရောက်တဲ့ ငွေ ဖြစ်သွားပါတယ်။ အကြွင်းကို အပိုင်းတွေဆီ ခွဲပေးတဲ့ allocate ကတော့ split ဖိုင်ထဲမှာ ရှိပြီး၊ နောက်ဆုံးမှာ ကိုယ်တိုင် စမ်းကြည့်ရပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+    actions:
+      - {
+          id: show-oracle,
+          type: slide.show,
+          at: { mark: show-oracle, offsetMs: -700 },
+          slideId: oracle-1,
+        }
+      - {
+          id: pt-gen2,
+          type: slide.point,
+          at: { afterAction: show-oracle },
+          target: { x: 0.141, y: 0.642 },
+        }
+      - { id: oracle-2, type: slide.show, at: { mark: oracle-2 }, slideId: oracle-2 }
+      - {
+          id: pt-oracle,
+          type: slide.point,
+          at: { afterAction: oracle-2 },
+          target: { x: 0.809, y: 0.642 },
+        }
+      - { id: oracle-3, type: slide.show, at: { mark: oracle-3 }, slideId: oracle-3 }
+      - {
+          id: pt-cxcard,
+          type: slide.point,
+          at: { afterAction: oracle-3 },
+          target: { x: 0.809, y: 0.931 },
+        }
+      - { id: pt-seed, type: slide.point, at: { mark: pt-seed }, target: { x: 0.205, y: 0.864 } }
+      - { id: pt-princ, type: slide.point, at: { mark: pt-princ }, target: { x: 0.125, y: 0.184 } }
+
+  - id: sequence
+    chapter: Step တိုင်းမှာ invariant စစ်ပါ
+    narration: >-
+      [[mark:close-oracle]] function တစ်ခုထက် ပိုခက်တာက state ရှိတဲ့ system ပါ။ wallet ဖိုင်ထဲမှာ user တစ်ယောက်ရဲ့ ငွေကို reserve လုပ်တာ၊ capture လုပ်တာ၊ release လုပ်တာ ရှိပြီး၊ invariant က held ထဲက ငွေက ဖွင့်ထားဆဲ hold တွေရဲ့ ပေါင်းလဒ်နဲ့ အမြဲ ညီရမယ် ဆိုတာပါ။ operation တစ်ခုချင်းကို သီးသန့် example test ရေးရင် pass ပါလိမ့်မယ်။ [[mark:type-seq]] ဒီ loop က generator ကို operation ငါးရာအထိ random ထုတ်ခိုင်းပါတယ်။ deposit၊ reserve၊ ပြီးတော့ ရှိပြီးသား hold တစ်ခုခုကို capture ဒါမှမဟုတ် release လုပ်တာပါ။ အရေးကြီးတာက operation တစ်ခု ပြီးတိုင်း invariant ကို စစ်ပြီး၊ ချိုးတဲ့ step မှာ ချက်ချင်း ရပ်တာပါ။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-step]] step နှစ်ဆယ့်ငါးမှာ ချိုးသွားပါတယ်။ held ထဲမှာ ရှိရမယ့် ငွေထက် ယူရို သုံး လျော့နေပါတယ်။ [[mark:pt-hold]] အောက်က line က အဲဒီ hold ရဲ့ သမိုင်းပါ။ reserve လုပ်၊ release လုပ်၊ ထပ် release လုပ်ပြီးမှ capture လုပ်ထားပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+    actions:
+      - { id: close-oracle, type: slide.close, at: { mark: close-oracle } }
+      - id: type-seq
+        type: editor.type
+        at: { mark: type-seq }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"property, parts add up:\", quick.Check(addsUp, cfg) == nil)\n",
+            occurrence: 1,
+          }
+        text: "\n\tw, r := &Wallet{}, rand.New(rand.NewSource(7))\n\tfor step := 1; step <= 500; step++ {\n\t\top := randomStep(r, w)\n\t\tif err := w.check(); err != nil {\n\t\t\tfmt.Println(\"step\", step, \"broke the books:\", err)\n\t\t\tfmt.Println(op)\n\t\t\tbreak\n\t\t}\n\t}\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "step 25 broke the books",
+          timeoutMs: 8000,
+        }
+      - id: pt-step
+        type: console.point
+        at: { mark: pt-step }
+        target: { text: "step 25 broke the books", occurrence: 1 }
+      - id: pt-hold
+        type: console.point
+        at: { mark: pt-hold }
+        target: { text: "hold 3: reserve 3.00", occurrence: 1 }
+      - {
+          id: expect-file-check,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "if err := w.check(); err != nil {",
+        }
+
+  - id: steps
+    narration: >-
+      [[mark:show-steps]] step တွေကို တစ်ခုချင်း ကြည့်ရအောင်။ reserve လုပ်တုန်းက check မှန်ပါတယ်၊ release လုပ်တုန်းကလည်း မှန်ပါတယ်။ ဒုတိယ release ကလည်း ဘာမှ မပြောင်းလို့ မှန်ပါတယ်။ [[mark:steps-2]] ဒါပေမဲ့ release လုပ်ပြီးသား hold ကို capture လုပ်တဲ့ အခါ wallet က လက်ခံလိုက်ပါတယ်။ user က ယူရို သုံး ပြန်ရပြီးသား၊ merchant ကလည်း အဲဒီ ယူရို သုံးကို ရသွားတော့ ငွေ နှစ်ခါ သုံးမိသွားတာပါ။ No invented data၊ ဆိုလိုတာက ငွေကို မရှိဘဲ မဖန်တီးရဘူး ဆိုတဲ့ မူကို တိုက်ရိုက် ချိုးတာပါ။ [[mark:pt-total]] စိတ်ဝင်စားစရာက စုစုပေါင်းက ကိုက်နေသေးတာပါ။ held က ရှိရမယ့်ထက် ယူရို သုံး လျော့သွားတာက ပိုထွက်သွားတဲ့ ငွေကို ဖုံးထားလို့ပါ။ ဒါကြောင့် စုစုပေါင်း ကိုက်သလား ဆိုတဲ့ invariant တစ်ခုတည်းနဲ့ မလုံလောက်ပါဘူး။ [[mark:steps-3]] step တိုင်းမှာ စစ်ရတဲ့ အကြောင်းလည်း ဒါပါ။ အဆုံးမှာပဲ စစ်ရင် step ငါးရာထဲက တစ်နေရာမှာ မှားနေတယ် လို့ပဲ သိပြီး၊ နောက်ပိုင်း step တွေက error ကို ဖုံးသွားနိုင်ပါသေးတယ်။ step တိုင်းမှာ စစ်တော့ ဘယ် step၊ ဘယ် operation ဆိုတာ တန်းသိပါတယ်။ scale ကြီးရင် ဒါကို လက်နဲ့ ရေးလို့ မရပါဘူး၊ harness က check ကို step တိုင်းကြား ထည့်ပေးရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+    actions:
+      - {
+          id: show-steps,
+          type: slide.show,
+          at: { mark: show-steps, offsetMs: -700 },
+          slideId: steps-1,
+        }
+      - {
+          id: pt-o1,
+          type: slide.point,
+          at: { afterAction: show-steps },
+          target: { x: 0.131, y: 0.509 },
+        }
+      - { id: steps-2, type: slide.show, at: { mark: steps-2 }, slideId: steps-2 }
+      - {
+          id: pt-o4,
+          type: slide.point,
+          at: { afterAction: steps-2 },
+          target: { x: 0.856, y: 0.42 },
+        }
+      - { id: pt-total, type: slide.point, at: { mark: pt-total }, target: { x: 0.808, y: 0.619 } }
+      - { id: steps-3, type: slide.show, at: { mark: steps-3 }, slideId: steps-3 }
+      - {
+          id: pt-each,
+          type: slide.point,
+          at: { afterAction: steps-3 },
+          target: { x: 0.55, y: 0.758 },
+        }
+
+  - id: senior
+    chapter: ဘယ်နေရာမှာ ခက်လာလဲ
+    narration: >-
+      [[mark:close-steps]] bug ကိုယ်တိုင်ကို ကြည့်ရအောင်။ [[mark:open-wallet]] wallet ဖိုင်ထဲက capture မှာ ရှိပါတယ်။ [[mark:sel-bug]] capture မလုပ်ခင် hold က ဖွင့်ထားဆဲလား မစစ်ဘဲ၊ capture မလုပ်ရသေးဘူးလား ဆိုတာပဲ စစ်ထားပါတယ်။ code ကို ဖတ်ရုံနဲ့ လွတ်သွားနိုင်ပြီး၊ operation သုံးခု အစီအစဉ်တကျ ပေါင်းမှ ပေါ်လာတဲ့ bug ပါ။ ဒီ နည်းကို တကယ် သုံးတဲ့ အခါ ခက်တဲ့ အချက် သုံးချက် ရှိပါတယ်။ [[mark:open-main2]] ပထမက generator ကိုယ်တိုင်က ယူဆချက်တွေ ဖြစ်တာပါ။ [[mark:sel-gen]] ဒီ line က အပိုင်းအရေအတွက်ကို သုည ဘယ်တော့မှ မထုတ်ပါဘူး၊ ပမာဏကိုလည်း ယူရို တစ်ထောင်အောက်ပဲ ထုတ်ပါတယ်။ generator မထုတ်တဲ့ input ကို test က ဘယ်တော့မှ မမေးလို့၊ သုည အပိုင်းလို case ကို သီးသန့် test ရေးရပါတယ်။ ဒုတိယက counterexample က အသေးဆုံး မဟုတ်တာပါ။ ဒီ framework က ပထမဆုံး fail တဲ့ random input ကို ပြတာ ဖြစ်လို့၊ အဲဒါကို အသေးဆုံး ဖြစ်အောင် ကိုယ်တိုင် လျှော့ပြီး example test အဖြစ် သိမ်းထားရပါတယ်။ [[mark:sel-seed]] တတိယက seed ပါ။ ဒီမှာ ပုံသေ ထားထားပေမဲ့ CI မှာတော့ run တိုင်း seed အသစ်နဲ့ run လေ့ရှိပြီး၊ fail ရင် ပြန် replay လုပ်နိုင်အောင် seed ကို log ထဲ ထုတ်ထားရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+      - { title: "Go standard library — testing/quick", url: "https://pkg.go.dev/testing/quick" }
+    actions:
+      - { id: close-steps, type: slide.close, at: { mark: close-steps } }
+      - { id: open-wallet, type: workspace.openFile, at: { mark: open-wallet }, path: wallet.go }
+      - id: sel-bug
+        type: editor.select
+        at: { mark: sel-bug }
+        target: { file: wallet.go, text: 'if h.State != "captured" {', occurrence: 1 }
+      - { id: open-main2, type: workspace.openFile, at: { mark: open-main2 }, path: main.go }
+      - id: sel-gen
+        type: editor.select
+        at: { mark: sel-gen }
+        target: { file: main.go, text: "total, n := int64(t%100000), int(k%7)+1", occurrence: 1 }
+      - id: sel-seed
+        type: editor.select
+        at: { mark: sel-seed }
+        target: { file: main.go, text: "rand.NewSource(7)", occurrence: 1 }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ ငွေတွက်တဲ့ code ကို ဘယ်လို test လုပ်မလဲ လို့ မေးလေ့ရှိပါတယ်။ unit test တွေ ရေးပါမယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး၊ အချက် သုံးချက်နဲ့ ဖြေပါ။ [[mark:iv-a]] ပထမ၊ example test တွေက လူ ရွေးတဲ့ input ကိုပဲ စစ်ပြီး၊ လူက ပြည့်ပြည့် ဂဏန်းတွေကို ရွေးတတ်ပါတယ်။ bug တွေက edge နဲ့ combination တွေမှာ ရှိတတ်ပါတယ်။ [[mark:iv-b]] ဒုတိယ၊ property test နဲ့ input ဘာပဲ ဖြစ်ဖြစ် invariant မှန်ရမယ်လို့ စစ်ပါတယ်။ အပိုင်းတွေ ပြန်ပေါင်းရင် မူလ ပမာဏ ရတာ၊ books balance ဖြစ်တာ စတာတွေက oracle ပါ။ [[mark:iv-c]] တတိယ၊ state ရှိတဲ့ system အတွက် operation sequence ကို generate လုပ်ပြီး step တိုင်းမှာ invariant ကို စစ်ပါတယ်။ seed ကို log ထုတ်ထားလို့ fail ရင် replay လုပ်နိုင်ပြီး၊ counterexample ကို example test အဖြစ် သိမ်းပါတယ်။ [[mark:iv-d]] ပြီးရင် ကိုယ် ဘာလုပ်မလဲ ဆိုတာ ဆက်ပြောပါ။ အရေးကြီးတဲ့ money math နဲ့ state machine တွေမှာ property test ထားပြီး CI မှာ seed အသစ်နဲ့ run မယ်၊ example test ကို ဥပမာ အဖြစ်ပဲ ထားပြီး စည်းမျဉ်းကို property နဲ့ စစ်မယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] property ထဲက split ကို allocate လို့ ပြောင်းပြီး run ကြည့်ပါ။ allocate က အကြွင်း ဆင့်တွေကို ရှေ့ဆုံး အပိုင်းတွေဆီ တစ်ပြားစီ ခွဲပေးလို့ property က case တစ်ထောင်လုံးမှာ true ဖြစ်ပါလိမ့်မယ်။ sequence အပိုင်းက seed သီးသန့် သုံးထားလို့ step နှစ်ဆယ့်ငါး ဆိုတဲ့ အဖြေကတော့ မပြောင်းပါဘူး။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ ငွေ code ရဲ့ output တွေကို စာရင်းလုပ်လို့ မရတဲ့ အခါ invariant ကို oracle အဖြစ် သုံးပြီး၊ generate လုပ်ထားတဲ့ input တွေနဲ့ operation sequence တွေပေါ်မှာ step တိုင်း စစ်ရပါတယ်။ နောက် lesson မှာ ဒီ နည်းကိုပဲ idempotency၊ crash ဖြစ်ပြီး ပြန်ဆက်တာ၊ round-trip နဲ့ production test လို တခြား test နည်းတွေမှာ ဘယ်လို သုံးလဲ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "sum(split(total, n))", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

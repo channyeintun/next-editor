@@ -1,0 +1,1001 @@
+# Fintech Engineering, lesson 22: resumable money flows (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Full resumability" and Appendix B "Flow 1: A crypto
+# withdrawal" (CC BY 4.0, Voytek Pitula).
+# Start state: flow.go holds the withdrawal as an explicit state machine (new → reserved →
+# screened → sent → settled, rejected → released), a bank that pays once per idempotency key, and
+# a crash hook that kills the process after a step happened and before it is recorded. main.go:
+# resume() keeps the flow's progress in a map that is the process's own memory; main crashes the
+# process after the payout and runs resume again.
+# Edits, all insert-only:
+#   1. main.go: progress = store (the database)      -> run-2: settled, still 2 payouts, no hold
+#   2. flow.go: the payout carries the flow id as key  -> run-3: 1 payout
+#   3. main.go: a second withdrawal compliance rejects -> run-4: released, 0 payouts (compensation)
+# Figures: steps (the state machine, a crash between every pair), gap (dying between the effect
+# and its record), driver (stalled flows resumed; durable-execution engines), forward (roll forward
+# or compensate), iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-22-resumability
+  title: "Fintech Engineering 22: Crash ဖြစ်လည်း ဆက်သွားတဲ့ flow"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      flow.go: |
+        package main
+
+        import "fmt"
+
+        // Flow is one withdrawal. State names the last step it finished.
+        type Flow struct {
+        	ID     string
+        	Amount int64
+        	State  string
+        }
+
+        // store stands in for the database: it survives a crash; a process's variables do not.
+        var store = map[string]Flow{}
+
+        // final states: nothing is left to do.
+        func final(state string) bool { return state == "settled" || state == "released" }
+
+        // System is user 1042's money and the outside world the flow talks to.
+        type System struct {
+        	balance, held int64
+        	bank          Bank
+        	reject        string // the flow compliance will block
+        	crashAt       string // the process dies right after a step that reaches this state
+        }
+
+        func newSystem() *System { return &System{balance: 20000, bank: Bank{done: map[string]bool{}}} }
+
+        // next runs the one step that follows f.State and returns the state it reaches.
+        func (s *System) next(f *Flow) string {
+        	switch f.State {
+        	case "new":
+        		s.held += f.Amount // reserve
+        		return "reserved"
+        	case "reserved":
+        		if f.ID == s.reject {
+        			return "rejected"
+        		}
+        		return "screened"
+        	case "rejected":
+        		s.held -= f.Amount // compensate: release the reservation
+        		return "released"
+        	case "screened":
+        		req := Payout{Ref: f.ID, Amount: f.Amount}
+        		s.bank.Send(req)
+        		return "sent"
+        	default: // "sent"
+        		s.held -= f.Amount
+        		s.balance -= f.Amount // settle
+        		return "settled"
+        	}
+        }
+
+        // crash kills the process if it is set to die at this state.
+        func (s *System) crash(state string) {
+        	if state == s.crashAt {
+        		s.crashAt = "" // the restarted process does not crash again
+        		panic("process died after: " + state)
+        	}
+        }
+
+        // Payout is a request to the bank. Key is the idempotency key; Ref is our reference.
+        type Payout struct {
+        	Key, Ref string
+        	Amount   int64
+        }
+
+        // Bank is the outside world: money it sends cannot be taken back.
+        type Bank struct {
+        	sent []Payout
+        	done map[string]bool
+        }
+
+        // Send pays out once per key; a request without a key is always paid.
+        func (b *Bank) Send(p Payout) {
+        	if p.Key != "" && b.done[p.Key] {
+        		return
+        	}
+        	b.done[p.Key] = p.Key != ""
+        	b.sent = append(b.sent, p)
+        }
+
+        func (s *System) report(id string) string {
+        	n := 0
+        	for _, p := range s.bank.sent {
+        		if p.Ref == id {
+        			n++
+        		}
+        	}
+        	state := store[id].State
+        	if state == "" {
+        		state = "not stored"
+        	}
+        	return fmt.Sprintf("%s: %s   payouts sent: %d   on hold: %s", id, state, n, cents(s.held))
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // resume drives one withdrawal from wherever it got to, one step at a time.
+        func resume(s *System, id string) {
+        	progress := map[string]Flow{} // this process's memory: a crash wipes it
+        	f, ok := progress[id]
+        	if !ok {
+        		f = Flow{ID: id, Amount: 8000, State: "new"}
+        	}
+        	for !final(f.State) {
+        		state := s.next(&f)
+        		s.crash(state) // the step has happened; its record has not
+        		f.State = state
+        		progress[id] = f // record the step before the next one starts
+        	}
+        }
+
+        // run is one life of a process: a crash ends it, and the next run starts fresh.
+        func run(work func()) {
+        	defer func() {
+        		if died := recover(); died != nil {
+        			fmt.Println(died)
+        		}
+        	}()
+        	work()
+        }
+
+        func main() {
+        	s := newSystem()
+        	s.crashAt = "sent"
+        	run(func() { resume(s, "wd-7") }) // the API starts the withdrawal
+        	run(func() { resume(s, "wd-7") }) // after the restart, the driver picks it up
+        	fmt.Println(s.report("wd-7"))
+
+        }
+  slides:
+    - id: driver-1
+      contentType: html
+      name: "Driver 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cpu" viewBox="0 0 48 48"><rect x="12" y="12" width="24" height="24" rx="3"/><path d="M19 6v6M29 6v6M19 36v6M29 36v6M6 19h6M6 29h6M36 19h6M36 29h6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DRIVER</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ရပ်နေတဲ့ flow ကို လွတ်လပ်တဲ့ driver က ဆက်တွန်း</text>
+        <g class="in"><rect x="100" y="260" width="400" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-cpu" x="122" y="293" width="64" height="64" style="color:#6cb2f5"/><text x="340" y="313.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Process</text><text x="340" y="357.7" font-size="24" text-anchor="middle" fill="#8a94a8">step တိုင်း commit</text></g>
+        <g class="in"><rect x="640" y="240" width="860" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="662" y="275" font-size="22" fill="#8a94a8" font-weight="700">flow</text><text x="866.8" y="275" font-size="22" fill="#8a94a8" font-weight="700">state</text><text x="1153.4" y="275" font-size="22" fill="#8a94a8" font-weight="700"></text><path d="M640 292H1500" stroke="#2a3345" stroke-width="2"/><g><text x="662" y="333" font-size="28" fill="#e9edf5" class="mono">wd-5</text><text x="866.8" y="333" font-size="28" fill="#68d391" class="mono">settled</text><text x="1153.4" y="333" font-size="28" fill="#e9edf5">ပြီးပြီ</text></g><g><path d="M656 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="662" y="395" font-size="28" fill="#e9edf5" class="mono">wd-6</text><text x="866.8" y="395" font-size="28" fill="#b794f6" class="mono">screened</text><text x="1153.4" y="395" font-size="28" fill="#e9edf5">manual review စောင့်</text></g><g><rect x="646" y="421" width="848" height="52" rx="10" fill="#f6ad55" opacity="0.14"/><path d="M656 416H1484" stroke="#2a3345" stroke-width="1.5"/><text x="662" y="457" font-size="28" fill="#e9edf5" class="mono">wd-7</text><text x="866.8" y="457" font-size="28" fill="#f6ad55" class="mono">screened</text><text x="1153.4" y="457" font-size="28" fill="#e9edf5">process သေသွားတယ်</text></g></g>
+        <path d="M509.7 287.4L626.4 315.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: driver-2
+      contentType: html
+      name: "Driver 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cpu" viewBox="0 0 48 48"><rect x="12" y="12" width="24" height="24" rx="3"/><path d="M19 6v6M29 6v6M19 36v6M29 36v6M6 19h6M6 29h6M36 19h6M36 29h6"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DRIVER</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ရပ်နေတဲ့ flow ကို လွတ်လပ်တဲ့ driver က ဆက်တွန်း</text>
+        <rect x="100" y="260" width="400" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-cpu" x="122" y="293" width="64" height="64" style="color:#6cb2f5"/><text x="340" y="313.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Process</text><text x="340" y="357.7" font-size="24" text-anchor="middle" fill="#8a94a8">step တိုင်း commit</text>
+        <rect x="640" y="240" width="860" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="662" y="275" font-size="22" fill="#8a94a8" font-weight="700">flow</text><text x="866.8" y="275" font-size="22" fill="#8a94a8" font-weight="700">state</text><text x="1153.4" y="275" font-size="22" fill="#8a94a8" font-weight="700"></text><path d="M640 292H1500" stroke="#2a3345" stroke-width="2"/><g><text x="662" y="333" font-size="28" fill="#e9edf5" class="mono">wd-5</text><text x="866.8" y="333" font-size="28" fill="#68d391" class="mono">settled</text><text x="1153.4" y="333" font-size="28" fill="#e9edf5">ပြီးပြီ</text></g><g><path d="M656 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="662" y="395" font-size="28" fill="#e9edf5" class="mono">wd-6</text><text x="866.8" y="395" font-size="28" fill="#b794f6" class="mono">screened</text><text x="1153.4" y="395" font-size="28" fill="#e9edf5">manual review စောင့်</text></g><g><rect x="646" y="421" width="848" height="52" rx="10" fill="#f6ad55" opacity="0.14"/><path d="M656 416H1484" stroke="#2a3345" stroke-width="1.5"/><text x="662" y="457" font-size="28" fill="#e9edf5" class="mono">wd-7</text><text x="866.8" y="457" font-size="28" fill="#f6ad55" class="mono">screened</text><text x="1153.4" y="457" font-size="28" fill="#e9edf5">process သေသွားတယ်</text></g>
+        <path d="M509.7 287.4L626.4 315.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><circle cx="494" cy="266" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="480.2" y="252.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        </svg>
+    - id: driver-3
+      contentType: html
+      name: "Driver 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cpu" viewBox="0 0 48 48"><rect x="12" y="12" width="24" height="24" rx="3"/><path d="M19 6v6M29 6v6M19 36v6M29 36v6M6 19h6M6 29h6M36 19h6M36 29h6"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-clock" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M24 13v11l8 5"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DRIVER</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ရပ်နေတဲ့ flow ကို လွတ်လပ်တဲ့ driver က ဆက်တွန်း</text>
+        <rect x="100" y="260" width="400" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-cpu" x="122" y="293" width="64" height="64" style="color:#6cb2f5"/><text x="340" y="313.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Process</text><text x="340" y="357.7" font-size="24" text-anchor="middle" fill="#8a94a8">step တိုင်း commit</text>
+        <rect x="640" y="240" width="860" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="662" y="275" font-size="22" fill="#8a94a8" font-weight="700">flow</text><text x="866.8" y="275" font-size="22" fill="#8a94a8" font-weight="700">state</text><text x="1153.4" y="275" font-size="22" fill="#8a94a8" font-weight="700"></text><path d="M640 292H1500" stroke="#2a3345" stroke-width="2"/><g><text x="662" y="333" font-size="28" fill="#e9edf5" class="mono">wd-5</text><text x="866.8" y="333" font-size="28" fill="#68d391" class="mono">settled</text><text x="1153.4" y="333" font-size="28" fill="#e9edf5">ပြီးပြီ</text></g><g><path d="M656 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="662" y="395" font-size="28" fill="#e9edf5" class="mono">wd-6</text><text x="866.8" y="395" font-size="28" fill="#b794f6" class="mono">screened</text><text x="1153.4" y="395" font-size="28" fill="#e9edf5">manual review စောင့်</text></g><g><rect x="646" y="421" width="848" height="52" rx="10" fill="#f6ad55" opacity="0.14"/><path d="M656 416H1484" stroke="#2a3345" stroke-width="1.5"/><text x="662" y="457" font-size="28" fill="#e9edf5" class="mono">wd-7</text><text x="866.8" y="457" font-size="28" fill="#f6ad55" class="mono">screened</text><text x="1153.4" y="457" font-size="28" fill="#e9edf5">process သေသွားတယ်</text></g>
+        <path d="M509.7 287.4L626.4 315.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <circle cx="494" cy="266" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="480.2" y="252.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <g class="in"><rect x="100" y="470" width="400" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-clock" x="122" y="503" width="64" height="64" style="color:#68d391"/><text x="340" y="525.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Driver</text><text x="340" y="566.6" font-size="24" text-anchor="middle" fill="#8a94a8">scheduler · poller</text></g>
+        <path d="M506.2 587.2L631.3 430" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/><text x="648.8" y="550.4" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">resume</text>
+        </svg>
+    - id: driver-4
+      contentType: html
+      name: "Driver 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cpu" viewBox="0 0 48 48"><rect x="12" y="12" width="24" height="24" rx="3"/><path d="M19 6v6M29 6v6M19 36v6M29 36v6M6 19h6M6 29h6M36 19h6M36 29h6"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-clock" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M24 13v11l8 5"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">DRIVER</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ရပ်နေတဲ့ flow ကို လွတ်လပ်တဲ့ driver က ဆက်တွန်း</text>
+        <rect x="100" y="260" width="400" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-cpu" x="122" y="293" width="64" height="64" style="color:#6cb2f5"/><text x="340" y="313.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Process</text><text x="340" y="357.7" font-size="24" text-anchor="middle" fill="#8a94a8">step တိုင်း commit</text>
+        <rect x="640" y="240" width="860" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="662" y="275" font-size="22" fill="#8a94a8" font-weight="700">flow</text><text x="866.8" y="275" font-size="22" fill="#8a94a8" font-weight="700">state</text><text x="1153.4" y="275" font-size="22" fill="#8a94a8" font-weight="700"></text><path d="M640 292H1500" stroke="#2a3345" stroke-width="2"/><g><text x="662" y="333" font-size="28" fill="#e9edf5" class="mono">wd-5</text><text x="866.8" y="333" font-size="28" fill="#68d391" class="mono">settled</text><text x="1153.4" y="333" font-size="28" fill="#e9edf5">ပြီးပြီ</text></g><g><path d="M656 354H1484" stroke="#2a3345" stroke-width="1.5"/><text x="662" y="395" font-size="28" fill="#e9edf5" class="mono">wd-6</text><text x="866.8" y="395" font-size="28" fill="#b794f6" class="mono">screened</text><text x="1153.4" y="395" font-size="28" fill="#e9edf5">manual review စောင့်</text></g><g><rect x="646" y="421" width="848" height="52" rx="10" fill="#f6ad55" opacity="0.14"/><path d="M656 416H1484" stroke="#2a3345" stroke-width="1.5"/><text x="662" y="457" font-size="28" fill="#e9edf5" class="mono">wd-7</text><text x="866.8" y="457" font-size="28" fill="#f6ad55" class="mono">screened</text><text x="1153.4" y="457" font-size="28" fill="#e9edf5">process သေသွားတယ်</text></g>
+        <path d="M509.7 287.4L626.4 315.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <circle cx="494" cy="266" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="480.2" y="252.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="100" y="470" width="400" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-clock" x="122" y="503" width="64" height="64" style="color:#68d391"/><text x="340" y="525.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">Driver</text><text x="340" y="566.6" font-size="24" text-anchor="middle" fill="#8a94a8">scheduler · poller</text>
+        <path d="M506.2 587.2L631.3 430" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/><text x="648.8" y="550.4" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">resume</text>
+        <g class="in"><rect x="100" y="680" width="1170.5" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="100" y="680" width="1170.5" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="685.2" y="714.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">Temporal · AWS Step Functions · Camunda — engine က progress ကို သိမ်းပေးတယ်</text></g>
+        <g class="in"><rect x="100" y="770" width="909.3" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="100" y="770" width="909.3" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="554.7" y="804.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">Camunda: job ကို at least once ပို့ → worker code idempotent ဖြစ်ရ</text></g>
+        </svg>
+    - id: forward-1
+      contentType: html
+      name: "Saga 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SAGA</text>
+        <text x="80" y="150" font-size="48" fill="#e9edf5" font-weight="700">ပြန် undo လုပ်လို့ မရ — ရှေ့ဆက် ဒါမှမဟုတ် compensate</text>
+        <g class="in"><text x="100" y="240" font-size="32" fill="#4fd1c5" font-weight="700">Roll forward</text></g>
+        <g class="in"><rect x="100" y="280" width="660" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-retry" x="122" y="308" width="64" height="64" style="color:#4fd1c5"/><text x="470" y="330.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">send ကျ (timeout, 503)</text><text x="470" y="376.7" font-size="24" text-anchor="middle" fill="#8a94a8">key တူတူနဲ့ ပြီးတဲ့အထိ retry</text></g>
+        <g class="in"><rect x="100" y="430" width="660" height="120" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="430" y="478.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">settled</text><text x="430" y="522.7" font-size="24" text-anchor="middle" fill="#8a94a8">flow က ရှေ့ကို ပြီးသွား</text></g>
+        <path d="M430 410L430 416" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/>
+        </svg>
+    - id: forward-2
+      contentType: html
+      name: "Saga 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SAGA</text>
+        <text x="80" y="150" font-size="48" fill="#e9edf5" font-weight="700">ပြန် undo လုပ်လို့ မရ — ရှေ့ဆက် ဒါမှမဟုတ် compensate</text>
+        <text x="100" y="240" font-size="32" fill="#4fd1c5" font-weight="700">Roll forward</text>
+        <rect x="100" y="280" width="660" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-retry" x="122" y="308" width="64" height="64" style="color:#4fd1c5"/><text x="470" y="330.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">send ကျ (timeout, 503)</text><text x="470" y="376.7" font-size="24" text-anchor="middle" fill="#8a94a8">key တူတူနဲ့ ပြီးတဲ့အထိ retry</text>
+        <rect x="100" y="430" width="660" height="120" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="430" y="478.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">settled</text><text x="430" y="522.7" font-size="24" text-anchor="middle" fill="#8a94a8">flow က ရှေ့ကို ပြီးသွား</text>
+        <path d="M430 410L430 416" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/>
+        <g class="in"><text x="840" y="240" font-size="32" fill="#f6ad55" font-weight="700">Compensate</text></g>
+        <g class="in"><rect x="840" y="280" width="660" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="862" y="308" width="64" height="64" style="color:#b794f6"/><text x="1210" y="330.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">compliance က ငြင်း</text><text x="1210" y="376.7" font-size="24" text-anchor="middle" fill="#8a94a8">နောက် အဆင့် မရှိတော့</text></g>
+        <g class="in"><rect x="840" y="430" width="660" height="120" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-lock" x="862" y="458" width="64" height="64" style="color:#f6ad55"/><text x="1210" y="478.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">release the hold</text><text x="1210" y="522.7" font-size="24" text-anchor="middle" fill="#8a94a8">အရင် အဆင့်ကို ပြန်ဖြေတဲ့ action အသစ်</text></g>
+        <path d="M1170 410L1170 416" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: forward-3
+      contentType: html
+      name: "Saga 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SAGA</text>
+        <text x="80" y="150" font-size="48" fill="#e9edf5" font-weight="700">ပြန် undo လုပ်လို့ မရ — ရှေ့ဆက် ဒါမှမဟုတ် compensate</text>
+        <text x="100" y="240" font-size="32" fill="#4fd1c5" font-weight="700">Roll forward</text>
+        <rect x="100" y="280" width="660" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-retry" x="122" y="308" width="64" height="64" style="color:#4fd1c5"/><text x="470" y="330.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">send ကျ (timeout, 503)</text><text x="470" y="376.7" font-size="24" text-anchor="middle" fill="#8a94a8">key တူတူနဲ့ ပြီးတဲ့အထိ retry</text>
+        <rect x="100" y="430" width="660" height="120" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="430" y="478.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">settled</text><text x="430" y="522.7" font-size="24" text-anchor="middle" fill="#8a94a8">flow က ရှေ့ကို ပြီးသွား</text>
+        <path d="M430 410L430 416" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/>
+        <text x="840" y="240" font-size="32" fill="#f6ad55" font-weight="700">Compensate</text>
+        <rect x="840" y="280" width="660" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="862" y="308" width="64" height="64" style="color:#b794f6"/><text x="1210" y="330.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">compliance က ငြင်း</text><text x="1210" y="376.7" font-size="24" text-anchor="middle" fill="#8a94a8">နောက် အဆင့် မရှိတော့</text>
+        <rect x="840" y="430" width="660" height="120" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-lock" x="862" y="458" width="64" height="64" style="color:#f6ad55"/><text x="1210" y="478.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">release the hold</text><text x="1210" y="522.7" font-size="24" text-anchor="middle" fill="#8a94a8">အရင် အဆင့်ကို ပြန်ဖြေတဲ့ action အသစ်</text>
+        <path d="M1170 410L1170 416" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><rect x="100" y="640" width="779.5" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="100" y="640" width="779.5" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="489.8" y="674.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">database rollback က အပြင်ကို ခေါ်ပြီးသားကို မဖျက်ဘူး</text></g>
+        <g class="in"><rect x="100" y="730" width="1044.6" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="100" y="730" width="1044.6" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="622.3" y="764.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">compensation က ဖျက်တာ မဟုတ် — action အသစ်၊ မှတ်တမ်းထဲ ကျန်တယ်</text></g>
+        </svg>
+    - id: gap-1
+      contentType: html
+      name: "Effect vs record 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-teal" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#4fd1c5" stroke="#4fd1c5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cpu" viewBox="0 0 48 48"><rect x="12" y="12" width="24" height="24" rx="3"/><path d="M19 6v6M29 6v6M19 36v6M29 36v6M6 19h6M6 29h6M36 19h6M36 29h6"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">EFFECT VS RECORD</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1128.3" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အလုပ် ဖြစ်ပြီးမှ၊ မှတ်တမ်း မတင်ခင် သေရင်</text>
+        <g class="in"><path d="M245 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-cpu" x="140" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="271" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Process</text><path d="M800 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="695" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Database</text><path d="M1355 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-bank" x="1250" y="223" width="40" height="40" style="color:#9aa5b8"/><text x="1381" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank</text><g><path d="M253 356.2H788" fill="none" stroke="#4fd1c5" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-teal)"/><text x="522.5" y="343.2" font-size="25" text-anchor="middle" fill="#4fd1c5" font-weight="600" class="mono">wd-7 → screened</text></g><g><path d="M253 431H1343" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="800" y="418" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">payout 80.00</text></g><g><path d="M253 505.9H522.5" fill="none" stroke="#4fd1c5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M510.5 493.9l24 24M534.5 493.9l-24 24" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="383.8" y="492.9" font-size="25" text-anchor="middle" fill="#4fd1c5" font-weight="600" class="mono">state = sent</text></g></g>
+        </svg>
+    - id: gap-2
+      contentType: html
+      name: "Effect vs record 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-teal" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#4fd1c5" stroke="#4fd1c5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cpu" viewBox="0 0 48 48"><rect x="12" y="12" width="24" height="24" rx="3"/><path d="M19 6v6M29 6v6M19 36v6M29 36v6M6 19h6M6 29h6M36 19h6M36 29h6"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">EFFECT VS RECORD</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1128.3" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အလုပ် ဖြစ်ပြီးမှ၊ မှတ်တမ်း မတင်ခင် သေရင်</text>
+        <path d="M245 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-cpu" x="140" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="271" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Process</text><path d="M800 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="695" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Database</text><path d="M1355 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-bank" x="1250" y="223" width="40" height="40" style="color:#9aa5b8"/><text x="1381" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank</text><g><path d="M253 356.2H788" fill="none" stroke="#4fd1c5" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-teal)"/><text x="522.5" y="343.2" font-size="25" text-anchor="middle" fill="#4fd1c5" font-weight="600" class="mono">wd-7 → screened</text></g><g><path d="M253 431H1343" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="800" y="418" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">payout 80.00</text></g><g><path d="M253 505.9H522.5" fill="none" stroke="#4fd1c5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M510.5 493.9l24 24M534.5 493.9l-24 24" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="383.8" y="492.9" font-size="25" text-anchor="middle" fill="#4fd1c5" font-weight="600" class="mono">state = sent</text></g><g class="in"><path d="M253 580.7H788" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="522.5" y="567.7" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">restart → screened</text></g><g class="in"><path d="M253 655.6H1343" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-red)"/><text x="800" y="642.6" font-size="25" text-anchor="middle" fill="#fc8181" font-weight="600" class="mono">payout 80.00 again</text></g>
+        </svg>
+    - id: gap-3
+      contentType: html
+      name: "Effect vs record 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-teal" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#4fd1c5" stroke="#4fd1c5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cpu" viewBox="0 0 48 48"><rect x="12" y="12" width="24" height="24" rx="3"/><path d="M19 6v6M29 6v6M19 36v6M29 36v6M6 19h6M6 29h6M36 19h6M36 29h6"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">EFFECT VS RECORD</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1128.3" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အလုပ် ဖြစ်ပြီးမှ၊ မှတ်တမ်း မတင်ခင် သေရင်</text>
+        <path d="M245 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="120" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-cpu" x="140" y="223" width="40" height="40" style="color:#6cb2f5"/><text x="271" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Process</text><path d="M800 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="675" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="695" y="223" width="40" height="40" style="color:#4fd1c5"/><text x="826" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Database</text><path d="M1355 281V845" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1230" y="205" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-bank" x="1250" y="223" width="40" height="40" style="color:#9aa5b8"/><text x="1381" y="252.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Bank</text><g><path d="M253 356.2H788" fill="none" stroke="#4fd1c5" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-teal)"/><text x="522.5" y="343.2" font-size="25" text-anchor="middle" fill="#4fd1c5" font-weight="600" class="mono">wd-7 → screened</text></g><g><path d="M253 431H1343" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="800" y="418" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">payout 80.00</text></g><g><path d="M253 505.9H522.5" fill="none" stroke="#4fd1c5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9"/><path d="M510.5 493.9l24 24M534.5 493.9l-24 24" stroke="#fc8181" stroke-width="5" stroke-linecap="round"/><text x="383.8" y="492.9" font-size="25" text-anchor="middle" fill="#4fd1c5" font-weight="600" class="mono">state = sent</text></g><g><path d="M253 580.7H788" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="522.5" y="567.7" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">restart → screened</text></g><g class="in"><path d="M253 730.5H1343" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="800" y="717.5" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600" class="mono">payout  key=wd-7</text></g><g class="in"><rect x="1249.4" y="779.3" width="211.3" height="48" rx="12" fill="#0b0e14" stroke="#68d391" stroke-width="2"/><text x="1355" y="812.3" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600">key ရှိပြီ → မပို့</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Money flow က အလယ်မှာ crash ဖြစ်ရင် ဘာလုပ်မလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Money flow က အလယ်မှာ crash ဖြစ်ရင် ဘာလုပ်မလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Flow ကို state machine လုပ်ပြီး state ကို database မှာ သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">step တစ်ခု ပြီးတိုင်း commit လုပ်ပြီးမှ နောက် step ကို စ</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Money flow က အလယ်မှာ crash ဖြစ်ရင် ဘာလုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Flow ကို state machine လုပ်ပြီး state ကို database မှာ သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">step တစ်ခု ပြီးတိုင်း commit လုပ်ပြီးမှ နောက် step ကို စ</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#68d391"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Process နဲ့ မဆိုင်တဲ့ driver က ရပ်နေတဲ့ flow ကို resume</text><text x="188" y="443" font-size="26" fill="#8a94a8">scheduler · poller · durable-execution engine</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Money flow က အလယ်မှာ crash ဖြစ်ရင် ဘာလုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Flow ကို state machine လုပ်ပြီး state ကို database မှာ သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">step တစ်ခု ပြီးတိုင်း commit လုပ်ပြီးမှ နောက် step ကို စ</text></g><g><circle cx="138" cy="381" r="25" fill="#68d391"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Process နဲ့ မဆိုင်တဲ့ driver က ရပ်နေတဲ့ flow ကို resume</text><text x="188" y="443" font-size="26" fill="#8a94a8">scheduler · poller · durable-execution engine</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#f6c453"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Resume က step ကို ထပ် run မယ် — step တိုင်း idempotent</text><text x="188" y="575" font-size="26" fill="#8a94a8">internal: effect နဲ့ state ကို transaction တစ်ခုတည်း၊ external: idempotency key</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Money flow က အလယ်မှာ crash ဖြစ်ရင် ဘာလုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Flow ကို state machine လုပ်ပြီး state ကို database မှာ သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">step တစ်ခု ပြီးတိုင်း commit လုပ်ပြီးမှ နောက် step ကို စ</text></g><g><circle cx="138" cy="381" r="25" fill="#68d391"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Process နဲ့ မဆိုင်တဲ့ driver က ရပ်နေတဲ့ flow ကို resume</text><text x="188" y="443" font-size="26" fill="#8a94a8">scheduler · poller · durable-execution engine</text></g><g><circle cx="138" cy="513" r="25" fill="#f6c453"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Resume က step ကို ထပ် run မယ် — step တိုင်း idempotent</text><text x="188" y="575" font-size="26" fill="#8a94a8">internal: effect နဲ့ state ကို transaction တစ်ခုတည်း၊ external: idempotency key</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">Undo မရတဲ့ effect ပြီးရင် ရှေ့ဆက် retry ဒါမှမဟုတ် compensate</text><text x="188" y="707" font-size="26" fill="#8a94a8">crash ကို step တိုင်းမှာ inject လုပ်ပြီး test</text></g>
+        </svg>
+    - id: steps-1
+      contentType: html
+      name: "State machine 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">STATE MACHINE</text>
+        <text x="80" y="150" font-size="44" fill="#e9edf5" font-weight="700">Withdrawal က အဆင့် လေးဆင့်၊ ဘယ်ကြားမှာမဆို သေနိုင်တယ်</text>
+        <g class="in"><rect x="40" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="145" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">new</text></g>
+        <g class="in"><rect x="360" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="465" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">reserved</text></g>
+        <g class="in"><rect x="680" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="785" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">screened</text></g>
+        <g class="in"><rect x="1000" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1105" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">sent</text></g>
+        <g class="in"><rect x="1340" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><rect x="1340" y="300" width="210" height="120" rx="18" fill="#68d391" opacity="0.13"/><text x="1445" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">settled</text></g>
+        <path d="M260 360L346 360" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="303" y="343.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">reserve</text>
+        <path d="M580 360L666 360" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="623" y="343.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">screen</text>
+        <path d="M900 360L986 360" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="943" y="343.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600">send</text>
+        <path d="M1220 360L1326 360" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="1273" y="343.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">settle</text>
+        <g class="in"><rect x="560" y="470" width="461.9" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="560" y="470" width="461.9" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="791" y="504.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">manual review — ရက်ချီ ကြာနိုင်</text></g>
+        </svg>
+    - id: steps-2
+      contentType: html
+      name: "State machine 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">STATE MACHINE</text>
+        <text x="80" y="150" font-size="44" fill="#e9edf5" font-weight="700">Withdrawal က အဆင့် လေးဆင့်၊ ဘယ်ကြားမှာမဆို သေနိုင်တယ်</text>
+        <rect x="40" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="145" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">new</text>
+        <rect x="360" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="465" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">reserved</text>
+        <rect x="680" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="785" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">screened</text>
+        <rect x="1000" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1105" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">sent</text>
+        <rect x="1340" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><rect x="1340" y="300" width="210" height="120" rx="18" fill="#68d391" opacity="0.13"/><text x="1445" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">settled</text>
+        <path d="M260 360L346 360" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="303" y="343.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">reserve</text>
+        <path d="M580 360L666 360" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="623" y="343.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">screen</text>
+        <path d="M900 360L986 360" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><text x="943" y="343.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600">send</text>
+        <path d="M1220 360L1326 360" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="1273" y="343.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">settle</text>
+        <rect x="560" y="470" width="461.9" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="560" y="470" width="461.9" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="791" y="504.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">manual review — ရက်ချီ ကြာနိုင်</text>
+        <g class="in"><use href="#i-warn" x="283" y="228" width="44" height="44" style="color:#fc8181"/></g>
+        <g class="in"><use href="#i-warn" x="603" y="228" width="44" height="44" style="color:#fc8181"/></g>
+        <g class="in"><use href="#i-warn" x="923" y="228" width="44" height="44" style="color:#fc8181"/></g>
+        <g class="in"><use href="#i-warn" x="1253" y="228" width="44" height="44" style="color:#fc8181"/></g>
+        <g class="in"><rect x="40" y="580" width="973.5" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="40" y="580" width="973.5" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="526.8" y="614.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">crash · deploy · timeout — အဆင့်နှစ်ခုကြား တိုင်းမှာ သေမယ်လို့ ယူဆ</text></g>
+        </svg>
+    - id: steps-3
+      contentType: html
+      name: "State machine 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">STATE MACHINE</text>
+        <text x="80" y="150" font-size="44" fill="#e9edf5" font-weight="700">Withdrawal က အဆင့် လေးဆင့်၊ ဘယ်ကြားမှာမဆို သေနိုင်တယ်</text>
+        <rect x="40" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="145" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">new</text>
+        <rect x="360" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="465" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">reserved</text>
+        <rect x="680" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="785" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">screened</text>
+        <rect x="1000" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1105" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">sent</text>
+        <rect x="1340" y="300" width="210" height="120" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><rect x="1340" y="300" width="210" height="120" rx="18" fill="#68d391" opacity="0.13"/><text x="1445" y="370" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">settled</text>
+        <path d="M260 360L346 360" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="303" y="343.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">reserve</text>
+        <path d="M580 360L666 360" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="623" y="343.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">screen</text>
+        <path d="M900 360L986 360" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><text x="943" y="343.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600">send</text>
+        <path d="M1220 360L1326 360" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="1273" y="343.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">settle</text>
+        <rect x="560" y="470" width="461.9" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="560" y="470" width="461.9" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="791" y="504.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">manual review — ရက်ချီ ကြာနိုင်</text>
+        <use href="#i-warn" x="283" y="228" width="44" height="44" style="color:#fc8181"/>
+        <use href="#i-warn" x="603" y="228" width="44" height="44" style="color:#fc8181"/>
+        <use href="#i-warn" x="923" y="228" width="44" height="44" style="color:#fc8181"/>
+        <use href="#i-warn" x="1253" y="228" width="44" height="44" style="color:#fc8181"/>
+        <rect x="40" y="580" width="973.5" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="40" y="580" width="973.5" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="526.8" y="614.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">crash · deploy · timeout — အဆင့်နှစ်ခုကြား တိုင်းမှာ သေမယ်လို့ ယူဆ</text>
+        <g class="in"><rect x="986" y="286" width="238" height="148" rx="26" fill="none" stroke="#f6c453" stroke-width="10" opacity="0.18"/><rect x="986" y="286" width="238" height="148" rx="26" fill="none" stroke="#f6c453" stroke-width="3.5"/></g>
+        <g class="in"><rect x="40" y="670" width="844.9" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="40" y="670" width="844.9" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="462.4" y="704.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">send က အပြင်ကို ထွက်သွားပြီ — database rollback နဲ့ ပြန်မရ</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9522
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "process died after: sent\nwd-7: not stored   payouts sent: 2   on hold: 80.00\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "process died after: sent\nwd-7: settled   payouts sent: 2   on hold: 0.00\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "process died after: sent\nwd-7: settled   payouts sent: 1   on hold: 0.00\n"
+      run-4:
+        status: success
+        exitCode: 0
+        output: "process died after: sent\nwd-7: settled   payouts sent: 1   on hold: 0.00\nwd-8: released   payouts sent: 0   on hold: 0.00\n"
+
+scenes:
+  - id: hook
+    chapter: Withdrawal တစ်ခုရဲ့ အဆင့်တွေ
+    narration: >-
+      user တစ်ယောက် ငွေထုတ်တာက database write တစ်ခုတည်း မဟုတ်ပါဘူး။ [[mark:show-steps]] funds ကို
+      reserve လုပ်၊ compliance စစ်၊ ဘဏ်ကို ပို့ပြီးမှ settle လုပ်တဲ့ အဆင့် လေးဆင့် ရှိပါတယ်။
+      [[mark:pt-days]] compliance က manual review ထိ ရောက်ရင် နာရီ ဒါမှမဟုတ် ရက်ချီ ကြာနိုင်လို့ flow
+      တစ်ခုက process တစ်ခုရဲ့ သက်တမ်းထက် ရှည်ပါတယ်။ [[mark:steps-2]] ဒါကြောင့် အဆင့် နှစ်ခုကြား
+      တိုင်းမှာ process သေမယ်လို့ ယူဆရပါတယ်၊ crash ဖြစ်ဖြစ်၊ deploy ဖြစ်ဖြစ်၊ timeout ဖြစ်ဖြစ်ပါ။ တစ်ဝက်မှာ
+      ရပ်သွားတဲ့ flow က ပြန်ဆက်လို့ ရတဲ့ အခြေအနေမှာ အမြဲ ရှိရပြီး၊ မကိုက်တဲ့ အခြေအနေမှာ ဘယ်တော့မှ မရှိရပါဘူး။
+      [[mark:steps-3]] အထူးသဖြင့် send ပြီးသွားရင် ငွေက system အပြင်ကို ထွက်သွားပါပြီ၊ database rollback
+      နဲ့ ပြန်ယူလို့ မရပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: A crypto withdrawal (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: show-steps,
+          type: slide.show,
+          at: { mark: show-steps, offsetMs: -700 },
+          slideId: steps-1,
+        }
+      - {
+          id: pt-chain,
+          type: slide.point,
+          at: { afterAction: show-steps },
+          target: { x: 0.491, y: 0.476 },
+        }
+      - { id: pt-days, type: slide.point, at: { mark: pt-days }, target: { x: 0.488, y: 0.587 } }
+      - { id: steps-2, type: slide.show, at: { mark: steps-2 }, slideId: steps-2 }
+      - {
+          id: pt-assume,
+          type: slide.point,
+          at: { afterAction: steps-2 },
+          target: { x: 0.323, y: 0.709 },
+        }
+      - { id: steps-3, type: slide.show, at: { mark: steps-3 }, slideId: steps-3 }
+      - {
+          id: pt-ext,
+          type: slide.point,
+          at: { afterAction: steps-3 },
+          target: { x: 0.691, y: 0.476 },
+        }
+
+  - id: naive
+    chapter: Progress ကို memory ထဲ ထားရင်
+    narration: >-
+      [[mark:close-steps]] Code မှာ ဒီ အဆင့်တွေက state machine တစ်ခုပါ။ [[mark:sel-progress]] resume က
+      flow ကို ရောက်နေတဲ့ state ကနေ တစ်ဆင့်ချင်း ဆက်တွန်းပါတယ်။ ဒါပေမဲ့ ရောက်နေတဲ့ state ကို process ရဲ့
+      memory ထဲမှာပဲ မှတ်ထားပါတယ်။ [[mark:sel-crash]] step တစ်ခု ဖြစ်ပြီးတဲ့ ချက်ချင်း၊ မှတ်တမ်း မတင်ခင်
+      process သေနိုင်တဲ့ နေရာကို ဒီမှာ inject လုပ်ထားပါတယ်။ [[mark:sel-runs]] main ထဲမှာ process က ဘဏ်ကို
+      ပို့ပြီးတာနဲ့ သေသွားပြီး၊ restart ဖြစ်တော့ driver က အဲဒီ withdrawal ကို ပြန်ကောက်ပါတယ်။ user မှာ ယူရို
+      ၂၀၀ ရှိပြီး ယူရို ၈၀ ထုတ်တာပါ။ [[mark:run-1]] run လိုက်ရအောင်။ [[mark:pt-died]] process က payout
+      ပို့ပြီးတဲ့ နောက်မှာ သေသွားပါတယ်။ [[mark:pt-r1]] restart ပြီးတဲ့ process က ဒီ withdrawal ကို database
+      ထဲမှာ ရှာမတွေ့လို့ အစကနေ ပြန်စပါတယ်။ ဒါကြောင့် payout နှစ်ခါ ထွက်ပြီး ပထမ reservation ကလည်း ဘယ်
+      flow မှ မပိုင်ဘဲ ယူရို ၈၀ ကို ချုပ်ထားပါတယ်။ [[mark:dock-1]] memory ထဲက progress က process
+      နဲ့အတူ သေပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+      - {
+          title: "Go documentation — Defer, Panic, and Recover",
+          url: "https://go.dev/blog/defer-panic-and-recover",
+        }
+    actions:
+      - { id: close-steps, type: slide.close, at: { mark: close-steps } }
+      - id: sel-progress
+        type: editor.select
+        at: { mark: sel-progress }
+        target: { file: main.go, text: "progress := map[string]Flow{}", occurrence: 1 }
+      - id: sel-crash
+        type: editor.select
+        at: { mark: sel-crash }
+        target: { file: main.go, text: "s.crash(state)", occurrence: 1 }
+      - id: sel-runs
+        type: editor.select
+        at: { mark: sel-runs }
+        target: { file: main.go, text: 's.crashAt = "sent"', occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "wd-7: not stored   payouts sent: 2",
+          timeoutMs: 8000,
+        }
+      - id: pt-died
+        type: console.point
+        at: { mark: pt-died }
+        target: { text: "process died after: sent", occurrence: 1 }
+      - id: pt-r1
+        type: console.point
+        at: { mark: pt-r1 }
+        target: { text: "wd-7: not stored", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: persist
+    chapter: Step တိုင်းကို commit လုပ်
+    narration: >-
+      [[mark:type-store]] progress ကို database မှာ ထားလိုက်ပါမယ်။ အခု loop က step တစ်ခု ပြီးတိုင်း state ကို
+      database ထဲ ရေးပြီးမှ နောက် step ကို စပါတယ်၊ restart ဖြစ်တဲ့အခါ resume က အဲဒီ state ကနေ ဆက်ပါတယ်။
+      ဒီ store က code ထဲမှာ map တစ်ခုပဲ ဖြစ်ပေမဲ့ crash ကို ကျော်ပြီး ကျန်တဲ့ database ကို ကိုယ်စားပြုပါတယ်။
+      [[mark:predict]] reservation ကတော့ ပြေလည်သွားမှာပါ။ payout ဘယ်နှခါ ထွက်မလဲ၊ run မလုပ်ခင်
+      ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-r2]] flow က settled ထိ ရောက်ပြီး hold
+      လည်း မကျန်တော့ပါဘူး။ ဒါပေမဲ့ payout က နှစ်ခါ ထွက်နေတုန်းပါ။ [[mark:dock-2]] progress ကို သိမ်းတာ
+      မှန်ပေမဲ့ မလုံလောက်ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+    actions:
+      - id: type-store
+        type: editor.type
+        at: { mark: type-store }
+        target:
+          {
+            file: main.go,
+            after: "\tprogress := map[string]Flow{} // this process's memory: a crash wipes it\n",
+            occurrence: 1,
+          }
+        text: "\tprogress = store              // the database: it survives the crash\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "wd-7: settled   payouts sent: 2",
+          timeoutMs: 8000,
+        }
+      - id: pt-r2
+        type: console.point
+        at: { mark: pt-r2 }
+        target: { text: "wd-7: settled", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: gap
+    chapter: Effect နဲ့ မှတ်တမ်းကြားက ကွက်လပ်
+    narration: >-
+      [[mark:show-gap]] ဘာကြောင့်လဲဆိုတော့ process သေတဲ့ နေရာက ငွေ ပို့တာနဲ့ state ရေးတာ ကြားမှာ ဖြစ်လို့ပါ။
+      [[mark:pt-pay]] ဘဏ်က ငွေ ပို့ပြီးပါပြီ။ [[mark:pt-lost]] ဒါပေမဲ့ sent ဆိုတဲ့ state ကို database ထဲ ရေးခွင့်
+      မရလိုက်ပါဘူး။ [[mark:gap-2]] restart ဖြစ်တော့ database က screened လို့ပဲ ပြောတဲ့အတွက် resume က send
+      ကို ထပ် run ပါတယ်။ ဒီ ကွက်လပ်ကို ကျဉ်းအောင် လုပ်လို့ ရပေမဲ့ ပိတ်လို့ မရပါဘူး၊ ဘဏ်နဲ့ ကိုယ့် database
+      က transaction တစ်ခုတည်းထဲမှာ မရှိလို့ပါ။ [[mark:gap-3]] ဒါကြောင့် resume က ထပ် run မယ့် step တိုင်း
+      idempotent ဖြစ်ရပါမယ်။ external step အတွက် အဖြေကတော့ ပြီးခဲ့တဲ့ lesson နှစ်ခုက idempotency key ပါ။
+      [[mark:pt-dedupe]] flow ရဲ့ id ကို key အဖြစ် ပို့ရင်၊ idempotency key ကို လက်ခံတဲ့ ဘဏ်က ဒုတိယ request ကို ပို့ပြီးသားလို့ သိပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: show-gap, type: slide.show, at: { mark: show-gap, offsetMs: -700 }, slideId: gap-1 }
+      - {
+          id: pt-read,
+          type: slide.point,
+          at: { afterAction: show-gap },
+          target: { x: 0.302, y: 0.411 },
+        }
+      - { id: pt-pay, type: slide.point, at: { mark: pt-pay }, target: { x: 0.475, y: 0.494 } }
+      - { id: pt-lost, type: slide.point, at: { mark: pt-lost }, target: { x: 0.215, y: 0.578 } }
+      - { id: gap-2, type: slide.show, at: { mark: gap-2 }, slideId: gap-2 }
+      - {
+          id: pt-again,
+          type: slide.point,
+          at: { afterAction: gap-2 },
+          target: { x: 0.475, y: 0.744 },
+        }
+      - { id: gap-3, type: slide.show, at: { mark: gap-3 }, slideId: gap-3 }
+      - {
+          id: pt-key,
+          type: slide.point,
+          at: { afterAction: gap-3 },
+          target: { x: 0.475, y: 0.827 },
+        }
+      - { id: pt-dedupe, type: slide.point, at: { mark: pt-dedupe }, target: { x: 0.822, y: 0.91 } }
+
+  - id: key
+    narration: >-
+      [[mark:close-gap]] payout ကို ဘဏ်ဆီ ပို့တဲ့ step ကို ကြည့်ရအောင်။ [[mark:sel-send]] request မှာ ကိုယ့်
+      reference ပါပေမဲ့ idempotency key မပါသေးပါဘူး။ [[mark:type-key]] flow ရဲ့ id ကို key အဖြစ် ထည့်ပါမယ်။
+      retry လုပ်တိုင်း၊ process ဘယ်နှစ်ခါ restart ဖြစ်ဖြစ် key က အတူတူပဲ ဖြစ်နေရပါမယ်၊ attempt တစ်ခါစီမှာ key
+      အသစ် ထုတ်ရင် ဘာမှ မကာကွယ်ပါဘူး။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-r3]] process သေတာ၊
+      restart ဖြစ်တာ၊ send ကို နှစ်ခါ ခေါ်တာ အားလုံး ဖြစ်ခဲ့ပေမဲ့ payout က တစ်ခါပဲ ထွက်ပါတယ်။
+      [[mark:dock-3]] database ထဲက progress က No lost data ကို ထိန်းပါတယ်၊ ငွေနဲ့ ပတ်သက်ပြီး ဖြစ်ခဲ့သမျှ
+      မပျောက်ရဘူး ဆိုတာပါ။ ထပ် run လို့ရတဲ့ step တွေကတော့ No invented data ကို ထိန်းပါတယ်၊ ငွေကို မရှိဘဲ
+      မဖန်တီးရဘူး ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - { id: close-gap, type: slide.close, at: { mark: close-gap } }
+      - {
+          id: open-flow,
+          type: workspace.openFile,
+          at: { mark: sel-send, offsetMs: -700 },
+          path: flow.go,
+        }
+      - id: sel-send
+        type: editor.select
+        at: { mark: sel-send }
+        target: { file: flow.go, text: "req := Payout{Ref: f.ID, Amount: f.Amount}", occurrence: 1 }
+      - id: type-key
+        type: editor.type
+        at: { mark: type-key }
+        target:
+          {
+            file: flow.go,
+            after: "\t\treq := Payout{Ref: f.ID, Amount: f.Amount}\n",
+            occurrence: 1,
+          }
+        text: "\t\treq.Key = f.ID // the same key on every attempt\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "wd-7: settled   payouts sent: 1",
+          timeoutMs: 8000,
+        }
+      - id: pt-r3
+        type: console.point
+        at: { mark: pt-r3 }
+        target: { text: "payouts sent: 1", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+      - {
+          id: expect-file-key,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: flow.go,
+          contains: "req.Key = f.ID",
+        }
+
+  - id: driver
+    chapter: ရပ်နေတဲ့ flow ကို ဘယ်သူ နှိုးမလဲ
+    narration: >-
+      [[mark:show-driver]] code ထဲမှာ restart ပြီးရင် resume ကို ကိုယ်တိုင် ခေါ်ထားပါတယ်။ လက်တွေ့မှာ ဒီ
+      အလုပ်ကို ဘယ်သူ လုပ်မလဲ ဆိုတာ ဆုံးဖြတ်ရပါတယ်။ [[mark:pt-t]] flow တိုင်းရဲ့ state က database ထဲမှာ
+      ရှိပါတယ်။ [[mark:driver-2]] flow ကို run နေတဲ့ process သေသွားရင် အဲဒီ withdrawal က screened မှာ ရပ်နေပါမယ်၊
+      request ပို့ခဲ့တဲ့ client ကလည်း ပြန်လာမှာ မဟုတ်ပါဘူး။ [[mark:driver-3]] ဒါကြောင့် process နဲ့ မဆိုင်တဲ့
+      driver တစ်ခု၊ scheduler ဒါမှမဟုတ် poller တစ်ခုက final state မရောက်သေးတဲ့ flow တွေကို ပုံမှန် ရှာပြီး resume
+      လုပ်ရပါတယ်။ [[mark:pt-wait]] manual review စောင့်နေတဲ့ flow ကိုတော့ မထိရပါဘူး၊ ဆိုလိုတာက ရပ်နေတာနဲ့
+      စောင့်နေတာကို driver က ခွဲသိရပါမယ်။ [[mark:driver-4]] ဒါကို ကိုယ်တိုင် မရေးချင်ရင် durable
+      execution engine တွေ ရှိပါတယ်၊ Temporal၊ AWS Step Functions၊ Camunda တို့က progress ကို သိမ်းပြီး ဆက်
+      run ပေးပါတယ်။ [[mark:pt-camunda]] ဒါပေမဲ့ step ကို ထပ် run တာကတော့ မပျောက်ပါဘူး။ Camunda ဆိုရင်
+      job ကို အနည်းဆုံး တစ်ခါ ပို့လို့ worker code က idempotent ဖြစ်ရမယ်လို့ သူ့ docs မှာ ရေးထားပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+      - { title: "Temporal docs — What is Temporal?", url: "https://docs.temporal.io/temporal" }
+      - {
+          title: "Camunda 8 docs — Job workers",
+          url: "https://docs.camunda.io/docs/components/concepts/job-workers/",
+        }
+    actions:
+      - {
+          id: show-driver,
+          type: slide.show,
+          at: { mark: show-driver, offsetMs: -700 },
+          slideId: driver-1,
+        }
+      - {
+          id: pt-proc,
+          type: slide.point,
+          at: { afterAction: show-driver },
+          target: { x: 0.188, y: 0.442 },
+        }
+      - { id: pt-t, type: slide.point, at: { mark: pt-t }, target: { x: 0.669, y: 0.54 } }
+      - { id: driver-2, type: slide.show, at: { mark: driver-2 }, slideId: driver-2 }
+      - {
+          id: pt-stalled,
+          type: slide.point,
+          at: { afterAction: driver-2 },
+          target: { x: 0.465, y: 0.524 },
+        }
+      - { id: driver-3, type: slide.show, at: { mark: driver-3 }, slideId: driver-3 }
+      - {
+          id: pt-drv,
+          type: slide.point,
+          at: { afterAction: driver-3 },
+          target: { x: 0.188, y: 0.676 },
+        }
+      - { id: pt-wait, type: slide.point, at: { mark: pt-wait }, target: { x: 0.465, y: 0.456 } }
+      - { id: driver-4, type: slide.show, at: { mark: driver-4 }, slideId: driver-4 }
+      - {
+          id: pt-eng,
+          type: slide.point,
+          at: { afterAction: driver-4 },
+          target: { x: 0.422, y: 0.82 },
+        }
+      - {
+          id: pt-camunda,
+          type: slide.point,
+          at: { mark: pt-camunda },
+          target: { x: 0.34, y: 0.92 },
+        }
+
+  - id: forward
+    chapter: Roll forward ဒါမှမဟုတ် compensate
+    narration: >-
+      [[mark:show-forward]] external effect ကို rollback လုပ်လို့ မရတော့ flow တစ်ခု ကျသွားရင် လမ်း
+      နှစ်လမ်းပဲ ရှိပါတယ်။ [[mark:pt-f1]] ယာယီ ကျတာဆိုရင် key အတူတူနဲ့ ပြီးတဲ့အထိ ရှေ့ကို retry လုပ်ပါတယ်။
+      [[mark:forward-2]] နောက် အဆင့်ကို လုံးဝ မသွားနိုင်တော့ရင်တော့ အရင် အဆင့်တွေကို ပြန်ဖြေတဲ့ action အသစ်တွေ
+      လုပ်ရပါတယ်။ ဒါကို saga pattern လို့ ခေါ်ပြီး၊ ဥပမာ compliance က ငြင်းရင် reservation ကို release
+      လုပ်တာပါ။ [[mark:forward-3]] သတိထားရမှာက compensation က ဖျက်တာ မဟုတ်ဘဲ action အသစ်ပါ၊ ဖြစ်ခဲ့တာ
+      အားလုံး audit trail ထဲမှာ ကျန်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+    actions:
+      - {
+          id: show-forward,
+          type: slide.show,
+          at: { mark: show-forward, offsetMs: -700 },
+          slideId: forward-1,
+        }
+      - { id: pt-f1, type: slide.point, at: { mark: pt-f1 }, target: { x: 0.269, y: 0.453 } }
+      - { id: forward-2, type: slide.show, at: { mark: forward-2 }, slideId: forward-2 }
+      - {
+          id: pt-c2,
+          type: slide.point,
+          at: { afterAction: forward-2 },
+          target: { x: 0.731, y: 0.62 },
+        }
+      - { id: forward-3, type: slide.show, at: { mark: forward-3 }, slideId: forward-3 }
+      - {
+          id: pt-saga,
+          type: slide.point,
+          at: { afterAction: forward-3 },
+          target: { x: 0.383, y: 0.876 },
+        }
+
+  - id: compensate
+    narration: >-
+      [[mark:close-forward]] state machine ထဲမှာ အဲဒီ လမ်းက ရှိပြီးသားပါ။ [[mark:sel-comp]] rejected state
+      ကနေ ထွက်တဲ့ step က hold ကို ပြန်လွှတ်ပြီး released ဆိုတဲ့ final state ကို ရောက်ပါတယ်။ ဒီ step လည်း
+      တခြား step တွေလိုပဲ state ကို commit လုပ်ပြီးမှ ဆက်သွားပါတယ်။ [[mark:type-reject]] compliance က
+      ငြင်းမယ့် withdrawal တစ်ခု ထပ်ထည့်ပါမယ်။ ယူရို ၈၀ အတွက်ပဲ ဖြစ်ပြီး၊ ပထမ တစ်ခုလို process မသေပါဘူး။
+      [[mark:run-4]] run လိုက်ရအောင်။ [[mark:pt-r4]] ဒုတိယ withdrawal က released မှာ ပြီးပြီး payout မထွက်ပါဘူး၊
+      hold ထဲမှာလည်း ဘာမှ မကျန်ပါဘူး။ [[mark:dock-4]] flow တိုင်းက နောက်ဆုံးမှာ final state တစ်ခုခုကို ရောက်ရပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+    actions:
+      - { id: close-forward, type: slide.close, at: { mark: close-forward } }
+      - id: sel-comp
+        type: editor.select
+        at: { mark: sel-comp }
+        target:
+          {
+            file: flow.go,
+            text: "s.held -= f.Amount // compensate: release the reservation",
+            occurrence: 1,
+          }
+      - {
+          id: open-main-2,
+          type: workspace.openFile,
+          at: { mark: type-reject, offsetMs: -700 },
+          path: main.go,
+        }
+      - id: type-reject
+        type: editor.type
+        at: { mark: type-reject }
+        target: { file: main.go, after: "\tfmt.Println(s.report(\"wd-7\"))\n", occurrence: 1 }
+        text: "\n\ts.reject = \"wd-8\" // compliance will block this one\n\trun(func() { resume(s, \"wd-8\") })\n\tfmt.Println(s.report(\"wd-8\"))\n"
+        cadence: line-by-line
+      - { id: run-4, type: runtime.run, at: { mark: run-4, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-4,
+          type: expect.output,
+          at: { afterAction: run-4 },
+          contains: "wd-8: released   payouts sent: 0",
+          timeoutMs: 8000,
+        }
+      - id: pt-r4
+        type: console.point
+        at: { mark: pt-r4 }
+        target: { text: "wd-8: released", occurrence: 1 }
+      - { id: dock-4, type: runtime.collapseDock, at: { mark: dock-4 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] အဆင့်များတဲ့ money flow က အလယ်မှာ crash ဖြစ်ရင် ဘယ်လို ကိုင်တွယ်မလဲ ဆိုတာ
+      မေးလေ့ရှိပါတယ်။ transaction နဲ့ rollback လုပ်မယ် လို့ ဖြေရင် မှားပါတယ်၊ ဘဏ်ကို ပို့ပြီးသားကို rollback
+      မလုပ်နိုင်လို့ပါ။ အချက် သုံးချက်နဲ့ ဖြေပါ။ [[mark:iv-a]] ပထမ၊ flow ကို state machine အဖြစ် database မှာ
+      သိမ်းပြီး step တစ်ခု ပြီးတိုင်း commit လုပ်ပြီးမှ နောက် step ကို စမယ်။ [[mark:iv-b]] ဒုတိယ၊ process နဲ့
+      မဆိုင်တဲ့ driver က ရပ်နေတဲ့ flow တွေကို ရှာပြီး resume လုပ်မယ်။ [[mark:iv-c]] တတိယ၊ resume က step ကို
+      ထပ် run မှာမို့ step တိုင်း idempotent ဖြစ်ရမယ်၊ internal step ဆိုရင် effect နဲ့ state ကို transaction
+      တစ်ခုတည်းထဲ ထည့်ပြီး external step ဆိုရင် idempotency key ပို့မယ်။ [[mark:iv-d]] ပြီးရင် undo မရတဲ့
+      effect ပြီးသွားရင် ရှေ့ဆက် retry လုပ်မလား compensate လုပ်မလား ဆိုတာနဲ့၊ step တိုင်းမှာ crash ကို
+      inject လုပ်ပြီး test လုပ်မယ် ဆိုတာ ဆက်ပြောပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ဒီ line က process သေမယ့်
+      နေရာပါ။ sent ကို reserved လို့ ပြောင်းပြီး run ကြည့်ပါ။ payout က တစ်ခါပဲ ထွက်ပေမဲ့ ယူရို ၈၀ က hold
+      ထဲမှာ ကျန်နေပါလိမ့်မယ်၊ reserve step က ထပ် run တာကို မခံနိုင်လို့ပါ။ internal step ဆိုရင် hold နဲ့ state
+      ကို database transaction တစ်ခုတည်းထဲမှာ commit လုပ်တာက အဖြေပါ။ step တိုင်းမှာ crash ကို inject လုပ်ပြီး
+      test လုပ်ရတာ ဒါကြောင့်ပါ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ money flow က step နှစ်ခုကြား ဘယ်နေရာမှာမဆို
+      သေမယ်လို့ ယူဆပြီး၊ progress ကို database မှာ သိမ်း၊ driver နဲ့ ပြန်နှိုး၊ step တိုင်းကို ထပ် run လို့ရအောင်
+      လုပ်ရပါတယ်။ နောက် lesson မှာတော့ ဒီ flow တွေ ခေါ်နေရတဲ့ provider API တွေကို ဘာကြောင့် မယုံရလဲ၊
+      ဘယ်လို ကာကွယ်ပြီး သုံးမလဲ ဆိုတာ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: 's.crashAt = "sent"', occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

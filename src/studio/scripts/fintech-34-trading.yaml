@@ -1,0 +1,857 @@
+# Fintech Engineering, lesson 34: order books and trading terms (Burmese).
+#
+# Source: Fintech Engineering Handbook, Appendix A "Trading & markets" (CC BY 4.0, Voytek Pitula).
+# Facts: B19, B20.
+# Start state: book.go holds the order book (levels oldest first), take (fill from the best level
+# down) and addBid; main.go builds a book of three ask and three bid levels, prices in cents,
+# quantities in units, and prints both sides and the spread.
+# Edits, all insert-only (main.go):
+#   1. a market buy of 10 that walks two ask levels  -> run-2 cost: 1001.50 slippage: 0.50
+#   2. a limit buy resting behind two older bids at 99.90, then a market sell of 5
+#                                                     -> run-3 fills b1, b2, then b5
+# Figures: book (the ladder: asks, bids, spread, price-time priority), walk (a market order
+# eating two levels: maker / taker, slippage, depth), terms (spot to liquidation, one line each),
+# iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-34-trading
+  title: "Fintech Engineering 34: Order book နဲ့ trading"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      book.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"slices"
+        )
+
+        // Order is one resting order: who placed it and how many units are still open.
+        type Order struct {
+        	ID  string
+        	Qty int64
+        }
+
+        // Level is every order at one price, oldest first: that order is time priority.
+        type Level struct {
+        	Price  int64 // cents
+        	Orders []Order
+        }
+
+        // Book keeps each side best price first: asks from the lowest, bids from the highest.
+        type Book struct {
+        	Asks, Bids []Level
+        }
+
+        // take fills qty from the best level down, oldest order first, and removes what it used up.
+        func take(levels *[]Level, qty int64) (fills []string, cost int64) {
+        	for qty > 0 && len(*levels) > 0 {
+        		lv := &(*levels)[0]
+        		o := &lv.Orders[0]
+        		n := min(qty, o.Qty)
+        		fills = append(fills, fmt.Sprintf("%d@%s %s", n, cents(lv.Price), o.ID))
+        		cost, qty, o.Qty = cost+n*lv.Price, qty-n, o.Qty-n
+        		if o.Qty == 0 {
+        			lv.Orders = lv.Orders[1:]
+        		}
+        		if len(lv.Orders) == 0 {
+        			*levels = (*levels)[1:]
+        		}
+        	}
+        	return fills, cost
+        }
+
+        // addBid rests a limit buy at its price level, behind every order already there.
+        func (b *Book) addBid(price int64, o Order) {
+        	i := 0
+        	for i < len(b.Bids) && b.Bids[i].Price > price {
+        		i++
+        	}
+        	if i < len(b.Bids) && b.Bids[i].Price == price {
+        		b.Bids[i].Orders = append(b.Bids[i].Orders, o)
+        		return
+        	}
+        	b.Bids = slices.Insert(b.Bids, i, Level{price, []Order{o}})
+        }
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        func main() {
+        	book := Book{
+        		Asks: []Level{
+        			{10010, []Order{{"a1", 5}}},
+        			{10020, []Order{{"a2", 8}}},
+        			{10040, []Order{{"a3", 10}}},
+        		},
+        		Bids: []Level{
+        			{9990, []Order{{"b1", 2}, {"b2", 2}}},
+        			{9980, []Order{{"b3", 6}}},
+        			{9950, []Order{{"b4", 10}}},
+        		},
+        	}
+        	fmt.Println("asks:", side(book.Asks))
+        	fmt.Println("bids:", side(book.Bids))
+        	fmt.Println("spread:", cents(book.Asks[0].Price-book.Bids[0].Price))
+        }
+
+        // side prints one side as price x open quantity per level, best first.
+        func side(levels []Level) string {
+        	parts := []string{}
+        	for _, lv := range levels {
+        		var q int64
+        		for _, o := range lv.Orders {
+        			q += o.Qty
+        		}
+        		parts = append(parts, fmt.Sprintf("%sx%d", cents(lv.Price), q))
+        	}
+        	return strings.Join(parts, " ")
+        }
+
+        // queue prints the orders of one level in time priority.
+        func queue(lv Level) string {
+        	parts := []string{}
+        	for _, o := range lv.Orders {
+        		parts = append(parts, fmt.Sprintf("%sx%d", o.ID, o.Qty))
+        	}
+        	return strings.Join(parts, " ")
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+  slides:
+    - id: book-1
+      contentType: html
+      name: "Order book 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">ORDER BOOK</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ask တွေ အပေါ်၊ bid တွေ အောက်၊ ကြားမှာ spread</text>
+        <g class="in"><text x="330" y="300" font-size="26" text-anchor="end" fill="#f6ad55" font-weight="700">SELL</text><text x="330" y="334.3" font-size="26" text-anchor="end" fill="#f6ad55" font-weight="700">(asks)</text></g>
+        <g class="in"><rect x="360" y="200" width="880" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="631.3" y="235" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">price</text><text x="826.9" y="235" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">size</text><text x="870.9" y="235" font-size="22" fill="#8a94a8" font-weight="700">orders (oldest first)</text><path d="M360 252H1240" stroke="#2a3345" stroke-width="2"/><g><text x="631.3" y="293" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.40</text><text x="826.9" y="293" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">10</text><text x="870.9" y="293" font-size="28" fill="#9aa5b8" class="mono">a3×10</text></g><g><path d="M376 314H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="355" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.20</text><text x="826.9" y="355" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">8</text><text x="870.9" y="355" font-size="28" fill="#9aa5b8" class="mono">a2×8</text></g><g><rect x="366" y="381" width="868" height="52" rx="10" fill="#f6ad55" opacity="0.14"/><path d="M376 376H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="417" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.10</text><text x="826.9" y="417" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">5</text><text x="870.9" y="417" font-size="28" fill="#9aa5b8" class="mono">a1×5</text></g></g>
+        </svg>
+    - id: book-2
+      contentType: html
+      name: "Order book 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">ORDER BOOK</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ask တွေ အပေါ်၊ bid တွေ အောက်၊ ကြားမှာ spread</text>
+        <text x="330" y="300" font-size="26" text-anchor="end" fill="#f6ad55" font-weight="700">SELL</text><text x="330" y="334.3" font-size="26" text-anchor="end" fill="#f6ad55" font-weight="700">(asks)</text>
+        <rect x="360" y="200" width="880" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="631.3" y="235" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">price</text><text x="826.9" y="235" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">size</text><text x="870.9" y="235" font-size="22" fill="#8a94a8" font-weight="700">orders (oldest first)</text><path d="M360 252H1240" stroke="#2a3345" stroke-width="2"/><g><text x="631.3" y="293" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.40</text><text x="826.9" y="293" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">10</text><text x="870.9" y="293" font-size="28" fill="#9aa5b8" class="mono">a3×10</text></g><g><path d="M376 314H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="355" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.20</text><text x="826.9" y="355" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">8</text><text x="870.9" y="355" font-size="28" fill="#9aa5b8" class="mono">a2×8</text></g><g><rect x="366" y="381" width="868" height="52" rx="10" fill="#f6ad55" opacity="0.14"/><path d="M376 376H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="417" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.10</text><text x="826.9" y="417" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">5</text><text x="870.9" y="417" font-size="28" fill="#9aa5b8" class="mono">a1×5</text></g>
+        <g class="in"><text x="330" y="620" font-size="26" text-anchor="end" fill="#6cb2f5" font-weight="700">BUY</text><text x="330" y="654.3" font-size="26" text-anchor="end" fill="#6cb2f5" font-weight="700">(bids)</text></g>
+        <g class="in"><rect x="360" y="510" width="880" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="631.3" y="545" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">price</text><text x="826.9" y="545" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">size</text><text x="870.9" y="545" font-size="22" fill="#8a94a8" font-weight="700">orders (oldest first)</text><path d="M360 562H1240" stroke="#2a3345" stroke-width="2"/><g><rect x="366" y="567" width="868" height="52" rx="10" fill="#6cb2f5" opacity="0.14"/><text x="631.3" y="603" font-size="28" text-anchor="end" fill="#6cb2f5" class="mono">99.90</text><text x="826.9" y="603" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">4</text><text x="870.9" y="603" font-size="28" fill="#9aa5b8" class="mono">b1×2  b2×2</text></g><g><path d="M376 624H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="665" font-size="28" text-anchor="end" fill="#6cb2f5" class="mono">99.80</text><text x="826.9" y="665" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">6</text><text x="870.9" y="665" font-size="28" fill="#9aa5b8" class="mono">b3×6</text></g><g><path d="M376 686H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="727" font-size="28" text-anchor="end" fill="#6cb2f5" class="mono">99.50</text><text x="826.9" y="727" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">10</text><text x="870.9" y="727" font-size="28" fill="#9aa5b8" class="mono">b4×10</text></g></g>
+        </svg>
+    - id: book-3
+      contentType: html
+      name: "Order book 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">ORDER BOOK</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ask တွေ အပေါ်၊ bid တွေ အောက်၊ ကြားမှာ spread</text>
+        <text x="330" y="300" font-size="26" text-anchor="end" fill="#f6ad55" font-weight="700">SELL</text><text x="330" y="334.3" font-size="26" text-anchor="end" fill="#f6ad55" font-weight="700">(asks)</text>
+        <rect x="360" y="200" width="880" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="631.3" y="235" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">price</text><text x="826.9" y="235" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">size</text><text x="870.9" y="235" font-size="22" fill="#8a94a8" font-weight="700">orders (oldest first)</text><path d="M360 252H1240" stroke="#2a3345" stroke-width="2"/><g><text x="631.3" y="293" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.40</text><text x="826.9" y="293" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">10</text><text x="870.9" y="293" font-size="28" fill="#9aa5b8" class="mono">a3×10</text></g><g><path d="M376 314H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="355" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.20</text><text x="826.9" y="355" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">8</text><text x="870.9" y="355" font-size="28" fill="#9aa5b8" class="mono">a2×8</text></g><g><rect x="366" y="381" width="868" height="52" rx="10" fill="#f6ad55" opacity="0.14"/><path d="M376 376H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="417" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.10</text><text x="826.9" y="417" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">5</text><text x="870.9" y="417" font-size="28" fill="#9aa5b8" class="mono">a1×5</text></g>
+        <g class="in"><rect x="513.4" y="448" width="573.2" height="50" rx="25" fill="#f6c453" opacity="1"/><text x="800" y="482.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">spread 0.20 = best ask − best bid</text></g>
+        <text x="330" y="620" font-size="26" text-anchor="end" fill="#6cb2f5" font-weight="700">BUY</text><text x="330" y="654.3" font-size="26" text-anchor="end" fill="#6cb2f5" font-weight="700">(bids)</text>
+        <rect x="360" y="510" width="880" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="631.3" y="545" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">price</text><text x="826.9" y="545" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">size</text><text x="870.9" y="545" font-size="22" fill="#8a94a8" font-weight="700">orders (oldest first)</text><path d="M360 562H1240" stroke="#2a3345" stroke-width="2"/><g><rect x="366" y="567" width="868" height="52" rx="10" fill="#6cb2f5" opacity="0.14"/><text x="631.3" y="603" font-size="28" text-anchor="end" fill="#6cb2f5" class="mono">99.90</text><text x="826.9" y="603" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">4</text><text x="870.9" y="603" font-size="28" fill="#9aa5b8" class="mono">b1×2  b2×2</text></g><g><path d="M376 624H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="665" font-size="28" text-anchor="end" fill="#6cb2f5" class="mono">99.80</text><text x="826.9" y="665" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">6</text><text x="870.9" y="665" font-size="28" fill="#9aa5b8" class="mono">b3×6</text></g><g><path d="M376 686H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="727" font-size="28" text-anchor="end" fill="#6cb2f5" class="mono">99.50</text><text x="826.9" y="727" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">10</text><text x="870.9" y="727" font-size="28" fill="#9aa5b8" class="mono">b4×10</text></g>
+        <g class="in"><text x="1270" y="416" font-size="26" fill="#f6ad55">best ask</text></g>
+        <g class="in"><text x="1270" y="602" font-size="26" fill="#6cb2f5">best bid</text></g>
+        </svg>
+    - id: book-4
+      contentType: html
+      name: "Order book 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">ORDER BOOK</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Ask တွေ အပေါ်၊ bid တွေ အောက်၊ ကြားမှာ spread</text>
+        <text x="330" y="300" font-size="26" text-anchor="end" fill="#f6ad55" font-weight="700">SELL</text><text x="330" y="334.3" font-size="26" text-anchor="end" fill="#f6ad55" font-weight="700">(asks)</text>
+        <rect x="360" y="200" width="880" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="631.3" y="235" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">price</text><text x="826.9" y="235" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">size</text><text x="870.9" y="235" font-size="22" fill="#8a94a8" font-weight="700">orders (oldest first)</text><path d="M360 252H1240" stroke="#2a3345" stroke-width="2"/><g><text x="631.3" y="293" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.40</text><text x="826.9" y="293" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">10</text><text x="870.9" y="293" font-size="28" fill="#9aa5b8" class="mono">a3×10</text></g><g><path d="M376 314H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="355" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.20</text><text x="826.9" y="355" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">8</text><text x="870.9" y="355" font-size="28" fill="#9aa5b8" class="mono">a2×8</text></g><g><rect x="366" y="381" width="868" height="52" rx="10" fill="#f6ad55" opacity="0.14"/><path d="M376 376H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="417" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">100.10</text><text x="826.9" y="417" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">5</text><text x="870.9" y="417" font-size="28" fill="#9aa5b8" class="mono">a1×5</text></g>
+        <rect x="513.4" y="448" width="573.2" height="50" rx="25" fill="#f6c453" opacity="1"/><text x="800" y="482.1" font-size="26" text-anchor="middle" fill="#0b0e14" font-weight="700" class="mono">spread 0.20 = best ask − best bid</text>
+        <text x="330" y="620" font-size="26" text-anchor="end" fill="#6cb2f5" font-weight="700">BUY</text><text x="330" y="654.3" font-size="26" text-anchor="end" fill="#6cb2f5" font-weight="700">(bids)</text>
+        <rect x="360" y="510" width="880" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="631.3" y="545" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">price</text><text x="826.9" y="545" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">size</text><text x="870.9" y="545" font-size="22" fill="#8a94a8" font-weight="700">orders (oldest first)</text><path d="M360 562H1240" stroke="#2a3345" stroke-width="2"/><g><rect x="366" y="567" width="868" height="52" rx="10" fill="#6cb2f5" opacity="0.14"/><text x="631.3" y="603" font-size="28" text-anchor="end" fill="#6cb2f5" class="mono">99.90</text><text x="826.9" y="603" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">4</text><text x="870.9" y="603" font-size="28" fill="#9aa5b8" class="mono">b1×2  b2×2</text></g><g><path d="M376 624H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="665" font-size="28" text-anchor="end" fill="#6cb2f5" class="mono">99.80</text><text x="826.9" y="665" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">6</text><text x="870.9" y="665" font-size="28" fill="#9aa5b8" class="mono">b3×6</text></g><g><path d="M376 686H1224" stroke="#2a3345" stroke-width="1.5"/><text x="631.3" y="727" font-size="28" text-anchor="end" fill="#6cb2f5" class="mono">99.50</text><text x="826.9" y="727" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">10</text><text x="870.9" y="727" font-size="28" fill="#9aa5b8" class="mono">b4×10</text></g>
+        <text x="1270" y="416" font-size="26" fill="#f6ad55">best ask</text>
+        <text x="1270" y="602" font-size="26" fill="#6cb2f5">best bid</text>
+        <g class="in"><rect x="406.4" y="820" width="787.2" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="406.4" y="820" width="787.2" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="800" y="854.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">match: best price first, then the oldest order at that price</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Matching engine အတွက် data structure</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Matching engine အတွက် data structure</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Side တစ်ခုစီ price level တွေကို sort — best ကို ချက်ချင်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">sorted tree / map · price range ကန့်သတ်ရင် tick index array</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Matching engine အတွက် data structure</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Side တစ်ခုစီ price level တွေကို sort — best ကို ချက်ချင်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">sorted tree / map · price range ကန့်သတ်ရင် tick index array</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#6cb2f5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Level တစ်ခုစီက FIFO queue + order id → node map</text><text x="188" y="443" font-size="26" fill="#8a94a8">time priority ကို ထိန်း · cancel က O(1)</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Matching engine အတွက် data structure</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Side တစ်ခုစီ price level တွေကို sort — best ကို ချက်ချင်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">sorted tree / map · price range ကန့်သတ်ရင် tick index array</text></g><g><circle cx="138" cy="381" r="25" fill="#6cb2f5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Level တစ်ခုစီက FIFO queue + order id → node map</text><text x="188" y="443" font-size="26" fill="#8a94a8">time priority ကို ထိန်း · cancel က O(1)</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Instrument တစ်ခုကို thread တစ်ခု၊ event တိုင်း sequence</text><text x="188" y="575" font-size="26" fill="#8a94a8">deterministic · log ကနေ book ကို replay ပြန်ရ</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Matching engine အတွက် data structure</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Side တစ်ခုစီ price level တွေကို sort — best ကို ချက်ချင်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">sorted tree / map · price range ကန့်သတ်ရင် tick index array</text></g><g><circle cx="138" cy="381" r="25" fill="#6cb2f5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Level တစ်ခုစီက FIFO queue + order id → node map</text><text x="188" y="443" font-size="26" fill="#8a94a8">time priority ကို ထိန်း · cancel က O(1)</text></g><g><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Instrument တစ်ခုကို thread တစ်ခု၊ event တိုင်း sequence</text><text x="188" y="575" font-size="26" fill="#8a94a8">deterministic · log ကနေ book ကို replay ပြန်ရ</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">fill တိုင်း = balanced ledger transaction</text><text x="188" y="707" font-size="26" fill="#8a94a8">price · qty ကို integer နဲ့ · resting qty ထက် ပို fill မရ</text></g>
+        </svg>
+    - id: terms-1
+      contentType: html
+      name: "Trading vocabulary 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">TRADING VOCABULARY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Spot ကနေ liquidation အထိ</text>
+        <g class="in"><rect x="90" y="200" width="1420" height="610" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="235" font-size="22" fill="#8a94a8" font-weight="700">term</text><text x="478" y="235" font-size="22" fill="#8a94a8" font-weight="700">ဆိုလိုတာ</text><path d="M90 252H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="293" font-size="26" fill="#6cb2f5" class="mono">spot</text><text x="478" y="293" font-size="26" fill="#e9edf5">asset ကိုယ်တိုင်ကို ဝယ်/ရောင်း၊ ချက်ချင်း လွှဲ</text></g><g><path d="M106 314H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="355" font-size="26" fill="#6cb2f5" class="mono">futures</text><text x="478" y="355" font-size="26" fill="#e9edf5">နောက်ရက်တစ်ရက်မှာ ဝယ်/ရောင်းမယ့် contract (derivative)</text></g><g><path d="M106 376H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="417" font-size="26" fill="#6cb2f5" class="mono">perpetual</text><text x="478" y="417" font-size="26" fill="#e9edf5">expiry မရှိ · funding rate က spot နား ထိန်း (+ → longs pay shorts)</text></g></g>
+        </svg>
+    - id: terms-2
+      contentType: html
+      name: "Trading vocabulary 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">TRADING VOCABULARY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Spot ကနေ liquidation အထိ</text>
+        <rect x="90" y="200" width="1420" height="610" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="235" font-size="22" fill="#8a94a8" font-weight="700">term</text><text x="478" y="235" font-size="22" fill="#8a94a8" font-weight="700">ဆိုလိုတာ</text><path d="M90 252H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="293" font-size="26" fill="#6cb2f5" class="mono">spot</text><text x="478" y="293" font-size="26" fill="#e9edf5">asset ကိုယ်တိုင်ကို ဝယ်/ရောင်း၊ ချက်ချင်း လွှဲ</text></g><g><path d="M106 314H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="355" font-size="26" fill="#6cb2f5" class="mono">futures</text><text x="478" y="355" font-size="26" fill="#e9edf5">နောက်ရက်တစ်ရက်မှာ ဝယ်/ရောင်းမယ့် contract (derivative)</text></g><g><path d="M106 376H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="417" font-size="26" fill="#6cb2f5" class="mono">perpetual</text><text x="478" y="417" font-size="26" fill="#e9edf5">expiry မရှိ · funding rate က spot နား ထိန်း (+ → longs pay shorts)</text></g><g class="in"><path d="M106 438H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="479" font-size="26" fill="#f6c453" class="mono">long / short</text><text x="478" y="479" font-size="26" fill="#e9edf5">ဈေး တက်ရင် အမြတ် / ဈေး ကျရင် အမြတ်</text></g><g class="in"><path d="M106 500H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="541" font-size="26" fill="#f6c453" class="mono">leverage / margin</text><text x="478" y="541" font-size="26" fill="#e9edf5">ကိုယ့်ငွေထက် ကြီးတဲ့ position / အဲဒါအတွက် တင်ထားတဲ့ collateral</text></g><g class="in"><path d="M106 562H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="603" font-size="26" fill="#fc8181" class="mono">liquidation</text><text x="478" y="603" font-size="26" fill="#e9edf5">margin က maintenance အောက် ရောက်ရင် အတင်း ပိတ်</text></g>
+        </svg>
+    - id: terms-3
+      contentType: html
+      name: "Trading vocabulary 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">TRADING VOCABULARY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Spot ကနေ liquidation အထိ</text>
+        <rect x="90" y="200" width="1420" height="610" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="235" font-size="22" fill="#8a94a8" font-weight="700">term</text><text x="478" y="235" font-size="22" fill="#8a94a8" font-weight="700">ဆိုလိုတာ</text><path d="M90 252H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="293" font-size="26" fill="#6cb2f5" class="mono">spot</text><text x="478" y="293" font-size="26" fill="#e9edf5">asset ကိုယ်တိုင်ကို ဝယ်/ရောင်း၊ ချက်ချင်း လွှဲ</text></g><g><path d="M106 314H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="355" font-size="26" fill="#6cb2f5" class="mono">futures</text><text x="478" y="355" font-size="26" fill="#e9edf5">နောက်ရက်တစ်ရက်မှာ ဝယ်/ရောင်းမယ့် contract (derivative)</text></g><g><path d="M106 376H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="417" font-size="26" fill="#6cb2f5" class="mono">perpetual</text><text x="478" y="417" font-size="26" fill="#e9edf5">expiry မရှိ · funding rate က spot နား ထိန်း (+ → longs pay shorts)</text></g><g><path d="M106 438H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="479" font-size="26" fill="#f6c453" class="mono">long / short</text><text x="478" y="479" font-size="26" fill="#e9edf5">ဈေး တက်ရင် အမြတ် / ဈေး ကျရင် အမြတ်</text></g><g><path d="M106 500H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="541" font-size="26" fill="#f6c453" class="mono">leverage / margin</text><text x="478" y="541" font-size="26" fill="#e9edf5">ကိုယ့်ငွေထက် ကြီးတဲ့ position / အဲဒါအတွက် တင်ထားတဲ့ collateral</text></g><g><path d="M106 562H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="603" font-size="26" fill="#fc8181" class="mono">liquidation</text><text x="478" y="603" font-size="26" fill="#e9edf5">margin က maintenance အောက် ရောက်ရင် အတင်း ပိတ်</text></g><g class="in"><path d="M106 624H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="665" font-size="26" fill="#4fd1c5" class="mono">haircut</text><text x="478" y="665" font-size="26" fill="#e9edf5">collateral တန်ဖိုးကို ဈေး ပြောင်းမှာ စိုးလို့ လျှော့တွက်</text></g><g class="in"><path d="M106 686H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="727" font-size="26" fill="#4fd1c5" class="mono">counterparty</text><text x="478" y="727" font-size="26" fill="#e9edf5">trade ရဲ့ တစ်ဖက် · risk = သူ မပေးနိုင်တာ</text></g><g class="in"><path d="M106 748H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="789" font-size="26" fill="#4fd1c5" class="mono">AUM / AUC</text><text x="478" y="789" font-size="26" fill="#e9edf5">စီမံပေးတဲ့ asset (usually fee-bearing) / သိမ်းပေးရုံ asset</text></g>
+        </svg>
+    - id: walk-1
+      contentType: html
+      name: "Slippage 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">SLIPPAGE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Market order က book ကို ဆင်းစားတယ်</text>
+        <g class="in"><rect x="90" y="305" width="330" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="112" y="338" width="64" height="64" style="color:#6cb2f5"/><text x="295" y="356.2" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">market buy 10</text><text x="295" y="398.2" font-size="24" text-anchor="middle" fill="#8a94a8">taker · ချက်ချင်း</text></g>
+        <g class="in"><rect x="760" y="220" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="265.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.10 × 5</text><text x="970" y="306.6" font-size="24" text-anchor="middle" fill="#8a94a8">a1</text></g>
+        <g class="in"><rect x="760" y="410" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="455.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.20 × 8</text><text x="970" y="496.6" font-size="24" text-anchor="middle" fill="#8a94a8">a2</text></g>
+        <g class="in"><rect x="760" y="600" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="645.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.40 × 10</text><text x="970" y="686.6" font-size="24" text-anchor="middle" fill="#8a94a8">a3</text></g>
+        <g class="in"><text x="760" y="760" font-size="23" fill="#8a94a8">asks = makers (resting limit orders)</text></g>
+        </svg>
+    - id: walk-2
+      contentType: html
+      name: "Slippage 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">SLIPPAGE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Market order က book ကို ဆင်းစားတယ်</text>
+        <rect x="90" y="305" width="330" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="112" y="338" width="64" height="64" style="color:#6cb2f5"/><text x="295" y="356.2" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">market buy 10</text><text x="295" y="398.2" font-size="24" text-anchor="middle" fill="#8a94a8">taker · ချက်ချင်း</text>
+        <rect x="760" y="220" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="265.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.10 × 5</text><text x="970" y="306.6" font-size="24" text-anchor="middle" fill="#8a94a8">a1</text>
+        <rect x="760" y="410" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="455.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.20 × 8</text><text x="970" y="496.6" font-size="24" text-anchor="middle" fill="#8a94a8">a2</text>
+        <rect x="760" y="600" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="645.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.40 × 10</text><text x="970" y="686.6" font-size="24" text-anchor="middle" fill="#8a94a8">a3</text>
+        <text x="760" y="760" font-size="23" fill="#8a94a8">asks = makers (resting limit orders)</text>
+        <path d="M429.6 367.3L746.5 278.8" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="548.1" y="286.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">5 @ 100.10</text>
+        <g class="in"><circle cx="1174" cy="226" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="1160.2" y="212.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/></g>
+        </svg>
+    - id: walk-3
+      contentType: html
+      name: "Slippage 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">SLIPPAGE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Market order က book ကို ဆင်းစားတယ်</text>
+        <rect x="90" y="305" width="330" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="112" y="338" width="64" height="64" style="color:#6cb2f5"/><text x="295" y="356.2" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">market buy 10</text><text x="295" y="398.2" font-size="24" text-anchor="middle" fill="#8a94a8">taker · ချက်ချင်း</text>
+        <rect x="760" y="220" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="265.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.10 × 5</text><text x="970" y="306.6" font-size="24" text-anchor="middle" fill="#8a94a8">a1</text>
+        <rect x="760" y="410" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="455.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.20 × 8</text><text x="970" y="496.6" font-size="24" text-anchor="middle" fill="#8a94a8">a2</text>
+        <rect x="760" y="600" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="645.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.40 × 10</text><text x="970" y="686.6" font-size="24" text-anchor="middle" fill="#8a94a8">a3</text>
+        <text x="760" y="760" font-size="23" fill="#8a94a8">asks = makers (resting limit orders)</text>
+        <path d="M429.6 367.3L746.5 278.8" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><text x="548.1" y="286.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">5 @ 100.10</text>
+        <circle cx="1174" cy="226" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="1160.2" y="212.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/>
+        <path d="M429.6 372.7L746.5 461.2" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><text x="588.1" y="464.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">5 @ 100.20</text>
+        <g class="in"><rect x="1210" y="442" width="133.7" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="1210" y="442" width="133.7" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="1276.8" y="476.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700" class="mono">3 left</text></g>
+        </svg>
+    - id: walk-4
+      contentType: html
+      name: "Slippage 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">SLIPPAGE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Market order က book ကို ဆင်းစားတယ်</text>
+        <rect x="90" y="305" width="330" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="112" y="338" width="64" height="64" style="color:#6cb2f5"/><text x="295" y="356.2" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">market buy 10</text><text x="295" y="398.2" font-size="24" text-anchor="middle" fill="#8a94a8">taker · ချက်ချင်း</text>
+        <rect x="760" y="220" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="265.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.10 × 5</text><text x="970" y="306.6" font-size="24" text-anchor="middle" fill="#8a94a8">a1</text>
+        <rect x="760" y="410" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="455.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.20 × 8</text><text x="970" y="496.6" font-size="24" text-anchor="middle" fill="#8a94a8">a2</text>
+        <rect x="760" y="600" width="420" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="970" y="645.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">100.40 × 10</text><text x="970" y="686.6" font-size="24" text-anchor="middle" fill="#8a94a8">a3</text>
+        <text x="760" y="760" font-size="23" fill="#8a94a8">asks = makers (resting limit orders)</text>
+        <path d="M429.6 367.3L746.5 278.8" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><text x="548.1" y="286.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">5 @ 100.10</text>
+        <circle cx="1174" cy="226" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="1160.2" y="212.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/>
+        <path d="M429.6 372.7L746.5 461.2" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><text x="588.1" y="464.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">5 @ 100.20</text>
+        <rect x="1210" y="442" width="133.7" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="1210" y="442" width="133.7" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="1276.8" y="476.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700" class="mono">3 left</text>
+        <g class="in"><rect x="90" y="815" width="866.2" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="90" y="815" width="866.2" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="523.1" y="849.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">cost 1001.50 vs 1001.00 at best ask → slippage 0.50</text></g>
+        <g class="in"><rect x="1104.8" y="815" width="405.2" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="1104.8" y="815" width="405.2" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="1307.4" y="849.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">thin book → bigger slippage</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9534
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "asks: 100.10x5 100.20x8 100.40x10\nbids: 99.90x4 99.80x6 99.50x10\nspread: 0.20\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "asks: 100.10x5 100.20x8 100.40x10\nbids: 99.90x4 99.80x6 99.50x10\nspread: 0.20\nmarket buy 10 -> 5@100.10 a1, 5@100.20 a2\ncost: 1001.50 slippage: 0.50\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "asks: 100.10x5 100.20x8 100.40x10\nbids: 99.90x4 99.80x6 99.50x10\nspread: 0.20\nmarket buy 10 -> 5@100.10 a1, 5@100.20 a2\ncost: 1001.50 slippage: 0.50\nbids at 99.90: b1x2 b2x2 b5x3\nmarket sell 5 -> 2@99.90 b1, 2@99.90 b2, 1@99.90 b5\n"
+
+scenes:
+  - id: hook
+    chapter: Order book
+    narration: >-
+      exchange တစ်ခုမှာ asset တစ်ခုရဲ့ ဈေးဆိုတာ ဂဏန်း တစ်ခုတည်း မဟုတ်ပါဘူး။ ဝယ်ချင်သူတွေ ပေးမယ့် ဈေးတွေနဲ့
+      ရောင်းချင်သူတွေ တောင်းတဲ့ ဈေးတွေ စာရင်း ရှိပြီး၊ ကိုယ် ဘယ်ဈေးနဲ့ ရမလဲ ဆိုတာ အဲဒီ စာရင်းနဲ့ ကိုယ့်
+      order ရဲ့ အရွယ်အစားပေါ် မူတည်ပါတယ်။ အဲဒီ စာရင်းကို order book လို့ ခေါ်ပါတယ်၊ ဈေး level
+      တစ်ခုချင်းမှာ မပြီးသေးတဲ့ buy order နဲ့ sell order တွေကို စုထားတဲ့ live စာရင်းပါ။ [[mark:sel-asks]] lesson ၇ က ask နဲ့ bid ဟာ ဒီမှာ ဈေး နှစ်ခုတည်း မဟုတ်ဘဲ စောင့်နေတဲ့ order တွေပါ။
+      ask တွေက ရောင်းဖို့ စောင့်နေတာပါ။ ဈေး level သုံးခု ရှိပြီး၊ ဈေးကို ဆင့်နဲ့၊ ပမာဏကို unit
+      နဲ့ ကိန်းပြည့် ထားပါတယ်။ [[mark:sel-bids]] bid တွေကတော့ ဝယ်ဖို့ စောင့်နေတာပါ။ ထိပ်ဆုံး bid
+      level မှာ order နှစ်ခု ရှိပြီး၊ အရင် ရောက်တဲ့ order က ရှေ့မှာ ရှိပါတယ်။ [[mark:run-1]] run
+      လိုက်ရအောင်။ [[mark:pt-asks]] ask တွေကို အနိမ့်ဆုံး ဈေးကနေ စီပြီး၊ bid တွေကို အမြင့်ဆုံး ဈေးကနေ
+      စီထားပါတယ်။ [[mark:pt-spread]] အကောင်းဆုံး ask နဲ့ အကောင်းဆုံး bid ကြား ကွာခြားချက်၊ ဆိုလိုတာက spread က ဆင့် ၂၀ ပါ။ [[mark:dock-1]] ask နဲ့ bid ကို ဈေးအလိုက် တန်းစီကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Trading & markets (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#trading-markets",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-asks
+        type: editor.select
+        at: { mark: sel-asks }
+        target:
+          {
+            file: main.go,
+            text: "\t\t\t{10010, []Order{{\"a1\", 5}}},\n\t\t\t{10020, []Order{{\"a2\", 8}}},\n\t\t\t{10040, []Order{{\"a3\", 10}}},",
+            occurrence: 1,
+          }
+      - id: sel-bids
+        type: editor.select
+        at: { mark: sel-bids }
+        target:
+          {
+            file: main.go,
+            text: "\t\t\t{9990, []Order{{\"b1\", 2}, {\"b2\", 2}}},\n\t\t\t{9980, []Order{{\"b3\", 6}}},\n\t\t\t{9950, []Order{{\"b4\", 10}}},",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "spread: 0.20",
+          timeoutMs: 8000,
+        }
+      - id: pt-asks
+        type: console.point
+        at: { mark: pt-asks }
+        target: { text: "asks: 100.10x5 100.20x8 100.40x10", occurrence: 1 }
+      - id: pt-spread
+        type: console.point
+        at: { mark: pt-spread }
+        target: { text: "spread: 0.20", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: ladder
+    chapter: Bid၊ ask နဲ့ spread
+    narration: >-
+      [[mark:show-book]] order book ကို ladder လို ပုံဖော်လေ့ ရှိပါတယ်။ ask တွေက အပေါ်မှာ ရှိပြီး ဈေး
+      နိမ့်လေ အောက်ကို ဆင်းလေပါ။ [[mark:pt-bestask]] အောက်ဆုံး ask က best ask ပါ၊ ချက်ချင်း ဝယ်ရင်
+      ပေးရမယ့် အနိမ့်ဆုံး ဈေးပါ။ [[mark:book-2]] bid တွေက အောက်မှာ ရှိပြီး၊ အပေါ်ဆုံး bid က best bid ပါ၊
+      ချက်ချင်း ရောင်းရင် ရမယ့် အမြင့်ဆုံး ဈေးပါ။ [[mark:book-3]] နှစ်ခုကြားက ကွာဟချက်က spread ပါ။ spread
+      ကျဉ်းလေ ဝယ်ပြီး ချက်ချင်း ပြန်ရောင်းရင် ဆုံးတာ နည်းလေပါ။ [[mark:book-4]] buy order နဲ့ sell order
+      ကိုက်တာကို matching လို့ ခေါ်ပါတယ်။ order book သုံးတဲ့ exchange အများစုက ဈေး အကောင်းဆုံးကို အရင်
+      ပေးပြီး၊ ဈေးတူရင် အရင် ရောက်တဲ့ order ကို အရင် ပေးပါတယ်၊ ဒါကို price-time priority လို့ ခေါ်ပါတယ်။
+      [[mark:pt-queue]] ဒါကြောင့် ဒီ level မှာ အရင် ရောက်တဲ့ order က အရင် fill ဖြစ်ပါတယ်။ Nasdaq က ဈေးတူတဲ့ displayed order တွေကို အချိန်အလိုက် စီပြီး၊ CME Globex ရဲ့ FIFO algorithm ကလည်း
+      ဈေးနဲ့ အချိန်ကိုပဲ သုံးပါတယ်။ ဒါပေမဲ့ product အားလုံး ဒီလို မဟုတ်ပါဘူး၊
+      CME မှာ product တချို့က ပမာဏ အချိုးအလိုက် ခွဲပေးတဲ့ pro-rata algorithm ကို သုံးပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Trading & markets (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#trading-markets",
+        }
+      - {
+          title: "CME Group — Matching Algorithm Overview",
+          url: "https://www.cmegroup.com/education/matching-algorithm-overview.html",
+        }
+      - {
+          title: "Nasdaq Rule 4757 (Book Processing), in SEC filing SR-NASDAQ-2025-027",
+          url: "https://listingcenter.nasdaqomx.com/assets/rulebook/nasdaq/filings/SR-NASDAQ-2025-027.pdf",
+        }
+    actions:
+      - {
+          id: show-book,
+          type: slide.show,
+          at: { mark: show-book, offsetMs: -700 },
+          slideId: book-1,
+        }
+      - {
+          id: pt-bestask,
+          type: slide.point,
+          at: { mark: pt-bestask },
+          target: { x: 0.291, y: 0.48 },
+        }
+      - { id: book-2, type: slide.show, at: { mark: book-2 }, slideId: book-2 }
+      - {
+          id: pt-bestbid,
+          type: slide.point,
+          at: { afterAction: book-2 },
+          target: { x: 0.291, y: 0.687 },
+        }
+      - { id: book-3, type: slide.show, at: { mark: book-3 }, slideId: book-3 }
+      - {
+          id: pt-spread-fig,
+          type: slide.point,
+          at: { afterAction: book-3 },
+          target: { x: 0.494, y: 0.562 },
+        }
+      - { id: book-4, type: slide.show, at: { mark: book-4 }, slideId: book-4 }
+      - {
+          id: pt-prio,
+          type: slide.point,
+          at: { afterAction: book-4 },
+          target: { x: 0.494, y: 0.967 },
+        }
+      - { id: pt-queue, type: slide.point, at: { mark: pt-queue }, target: { x: 0.291, y: 0.687 } }
+
+  - id: market
+    chapter: Market order နဲ့ slippage
+    narration: >-
+      [[mark:close-book]] book ထဲက ask တွေကို စားမယ့် order တစ်ခု ပို့ကြည့်ရအောင်။ [[mark:type-buy]]
+      market order ဆိုတာ ဈေး မသတ်မှတ်ဘဲ ရှိတဲ့ အကောင်းဆုံး ဈေးနဲ့ ချက်ချင်း execute လုပ်တဲ့ order ပါ။ unit
+      ဆယ်ခု ဝယ်ပါမယ်။ မဝယ်ခင် best ask ကို မှတ်ထားပြီး၊ take က ask တွေကို အကောင်းဆုံး level ကနေ စားပါတယ်။
+      slippage ကိုတော့ best ask နဲ့ အကုန် ဝယ်ရရင် ကုန်မယ့် ငွေနဲ့ တကယ် ကုန်တဲ့ ငွေ ကွာခြားချက်အဖြစ်
+      တွက်ပါတယ်။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-fills]] ပထမ level မှာ ငါးခုပဲ ရှိလို့ ကျန်တဲ့
+      ငါးခုကို နောက် level ကနေ ယူရပါတယ်။ [[mark:pt-slip]] ပျမ်းမျှ ဈေးက တစ်ရာ ဒသမ တစ်ငါး ဖြစ်ပြီး၊ best
+      ask နဲ့ ယှဉ်ရင် စုစုပေါင်း သုည ဒသမ ငါး ပိုပေးရပါတယ်။ ဒါက slippage ပါ၊ မျှော်လင့်တဲ့ ဈေးနဲ့ တကယ် fill
+      ဖြစ်တဲ့ ဈေး ကွာခြားချက်ပါ။ [[mark:dock-2]] ဘာကြောင့် ဒီလို ဖြစ်လဲ ဆိုတာ book ပေါ်မှာ ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Trading & markets (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#trading-markets",
+        }
+    actions:
+      - { id: close-book, type: slide.close, at: { mark: close-book } }
+      - id: type-buy
+        type: editor.type
+        at: { mark: type-buy }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"spread:\", cents(book.Asks[0].Price-book.Bids[0].Price))\n",
+            occurrence: 1,
+          }
+        text: "\n\tqty, best := int64(10), book.Asks[0].Price\n\tfills, cost := take(&book.Asks, qty)\n\tfmt.Println(\"market buy\", qty, \"->\", strings.Join(fills, \", \"))\n\tfmt.Println(\"cost:\", cents(cost), \"slippage:\", cents(cost-qty*best))\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "cost: 1001.50 slippage: 0.50",
+          timeoutMs: 8000,
+        }
+      - id: pt-fills
+        type: console.point
+        at: { mark: pt-fills }
+        target: { text: "market buy 10 -> 5@100.10 a1, 5@100.20 a2", occurrence: 1 }
+      - id: pt-slip
+        type: console.point
+        at: { mark: pt-slip }
+        target: { text: "cost: 1001.50 slippage: 0.50", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+      - {
+          id: expect-file-take,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "fills, cost := take(&book.Asks, qty)",
+        }
+
+  - id: walk
+    narration: >-
+      [[mark:show-walk]] ဒီ market order က taker ပါ၊ spread ကို ဖြတ်ပြီး book ထဲက order တွေကို
+      ဖယ်ထုတ်သွားလို့ပါ။ [[mark:pt-makers]] book ထဲမှာ စောင့်နေတဲ့ limit order တွေကတော့ maker ပါ။ limit
+      order ဆိုတာ သတ်မှတ်ဈေး ဒါမှမဟုတ် အဲဒီထက် ကောင်းတဲ့ ဈေးနဲ့ပဲ execute လုပ်တဲ့ order ဖြစ်ပြီး၊ book
+      ထဲမှာ နေပြီး liquidity ထည့်ပေးပါတယ်။ exchange တွေက maker နဲ့ taker ဆီက fee ကို မတူအောင် ယူလေ့
+      ရှိပါတယ်။ [[mark:walk-2]] taker က ပထမ level ကို အကုန် ယူပါတယ်။ [[mark:walk-3]] မလောက်လို့ ဒုတိယ
+      level ကို ဆက်ဆင်းပြီး၊ အဲဒီမှာ သုံးခု ကျန်ခဲ့ပါတယ်။ [[mark:walk-4]] order ကြီးလေ level တွေ
+      ပိုဆင်းရလေ ဖြစ်လို့ slippage များလေပါ။ [[mark:pt-depth]] ဈေး မရွေ့ခင် ဘယ်လောက် trade လုပ်နိုင်လဲ
+      ဆိုတာကို liquidity ဒါမှမဟုတ် depth လို့ ခေါ်ပါတယ်။ book ပါးရင် order သေးသေးနဲ့တောင် ဈေး အများကြီး
+      ရွေ့ပါတယ်။ ဒါကြောင့် market order ကို လက်ခံတဲ့ system က slippage ဘယ်လောက်အထိ ခံမလဲ ဆိုတဲ့ limit ကို
+      user ဆီက ယူထားသင့်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Trading & markets (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#trading-markets",
+        }
+    actions:
+      - {
+          id: show-walk,
+          type: slide.show,
+          at: { mark: show-walk, offsetMs: -700 },
+          slideId: walk-1,
+        }
+      - {
+          id: pt-order,
+          type: slide.point,
+          at: { afterAction: show-walk },
+          target: { x: 0.159, y: 0.492 },
+        }
+      - {
+          id: pt-makers,
+          type: slide.point,
+          at: { mark: pt-makers },
+          target: { x: 0.513, y: 0.858 },
+        }
+      - { id: walk-2, type: slide.show, at: { mark: walk-2 }, slideId: walk-2 }
+      - {
+          id: pt-t1,
+          type: slide.point,
+          at: { afterAction: walk-2 },
+          target: { x: 0.318, y: 0.332 },
+        }
+      - { id: walk-3, type: slide.show, at: { mark: walk-3 }, slideId: walk-3 }
+      - {
+          id: pt-t2,
+          type: slide.point,
+          at: { afterAction: walk-3 },
+          target: { x: 0.792, y: 0.556 },
+        }
+      - { id: walk-4, type: slide.show, at: { mark: walk-4 }, slideId: walk-4 }
+      - {
+          id: pt-slip-fig,
+          type: slide.point,
+          at: { afterAction: walk-4 },
+          target: { x: 0.321, y: 0.967 },
+        }
+      - { id: pt-depth, type: slide.point, at: { mark: pt-depth }, target: { x: 0.811, y: 0.967 } }
+
+  - id: priority
+    chapter: Price-time priority
+    narration: >-
+      [[mark:close-walk]] price-time priority ကို code နဲ့ ကြည့်ရအောင်။ [[mark:type-limit]] ထိပ်ဆုံး bid
+      level မှာ unit သုံးခု ဝယ်မယ့် limit order အသစ် တစ်ခု ထည့်ပါတယ်။ best ask ထက် နိမ့်လို့ ချက်ချင်း
+      မကိုက်ဘဲ book ထဲမှာ နေပါတယ်။ အဲဒီ level မှာ အရင်ကတည်းက order နှစ်ခု ရှိနေပါပြီ။ ပြီးရင် unit
+      ငါးခုကို market sell လုပ်ပါတယ်။ order အသစ်က ဘယ်လောက် fill ဖြစ်မလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-3]]
+      run လိုက်ရအောင်။ [[mark:pt-queue-out]] order အသစ်က queue ရဲ့ နောက်ဆုံးကို ရောက်ပါတယ်။
+      [[mark:pt-sell]] sell က အရင် ရောက်တဲ့ order နှစ်ခုကို အပြည့် ပေးပြီးမှ order အသစ်ကို တစ်ခုပဲ
+      ပေးပါတယ်။ ဈေး အတူတူ ဖြစ်ပေမဲ့ အစဉ်ကို အချိန်က ဆုံးဖြတ်တာပါ။ [[mark:dock-3]] ဒါကြောင့် matching
+      engine မှာ order တိုင်း ရောက်တဲ့ အစဉ်ကို မှန်မှန် သိမ်းထားရပါတယ်၊ အစဉ် လွဲရင် တခြားသူ ရရမယ့် fill
+      ကို တစ်ယောက်က ယူသွားတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Trading & markets (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#trading-markets",
+        }
+      - {
+          title: "CME Group — Matching Algorithm Overview",
+          url: "https://www.cmegroup.com/education/matching-algorithm-overview.html",
+        }
+    actions:
+      - { id: close-walk, type: slide.close, at: { mark: close-walk } }
+      - id: type-limit
+        type: editor.type
+        at: { mark: type-limit }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"cost:\", cents(cost), \"slippage:\", cents(cost-qty*best))\n",
+            occurrence: 1,
+          }
+        text: "\n\tbook.addBid(9990, Order{\"b5\", 3})\n\tfmt.Println(\"bids at 99.90:\", queue(book.Bids[0]))\n\tfills, _ = take(&book.Bids, 5)\n\tfmt.Println(\"market sell 5 ->\", strings.Join(fills, \", \"))\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "market sell 5 -> 2@99.90 b1, 2@99.90 b2, 1@99.90 b5",
+          timeoutMs: 8000,
+        }
+      - id: pt-queue-out
+        type: console.point
+        at: { mark: pt-queue-out }
+        target: { text: "bids at 99.90: b1x2 b2x2 b5x3", occurrence: 1 }
+      - id: pt-sell
+        type: console.point
+        at: { mark: pt-sell }
+        target: { text: "market sell 5 -> 2@99.90 b1, 2@99.90 b2, 1@99.90 b5", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: terms
+    chapter: Spot၊ derivative နဲ့ margin
+    narration: >-
+      [[mark:show-terms]] ဒီ code က spot market ပါ၊ spot ဆိုတာ asset ကိုယ်တိုင်ကို ဝယ်ရောင်းပြီး ချက်ချင်း
+      လွှဲတာပါ။ [[mark:pt-fut]] derivative ကတော့ asset ကိုယ်တိုင် မဟုတ်ဘဲ asset ရဲ့ ဈေးကနေ တန်ဖိုး ရတဲ့
+      contract ပါ၊ futures က နောက်ရက်တစ်ရက်မှာ ဝယ်ရောင်းမယ့် contract ပါ။ [[mark:pt-perp]] perpetual ကတော့
+      expiry မရှိတဲ့ futures ပါ။ ဈေးကို spot နားမှာ ထိန်းဖို့ long နဲ့ short ကြား funding ပေးပြီး၊ rate
+      အပေါင်းဆိုရင် long က short ကို၊ အနုတ်ဆိုရင် short က long ကို ပေးပါတယ်၊ exchange က အဲဒီ ငွေကို
+      မယူပါဘူး။ Binance ရဲ့ default က ရှစ်နာရီ တစ်ခါ ဖြစ်ပေမဲ့ contract တချို့မှာ ပိုခဏခဏ ပေးပါတယ်။
+      [[mark:terms-2]] long ဆိုတာ ဈေး တက်ရင် အမြတ်ရတဲ့ position၊ short က ဈေး ကျရင် အမြတ်ရတဲ့ position ပါ။
+      [[mark:pt-lev]] leverage က ကိုယ့်ငွေထက် ကြီးတဲ့ position ကို ထိန်းတာ ဖြစ်ပြီး၊ margin က အဲဒါကို
+      ဖွင့်ဖို့၊ ဆက်ထိန်းဖို့ တင်ထားတဲ့ collateral ပါ။ [[mark:pt-liq]] margin က maintenance requirement
+      အောက် ကျသွားရင် position ကို အတင်း ပိတ်တာကို liquidation လို့ ခေါ်ပါတယ်။ [[mark:terms-3]] haircut
+      ဆိုတာ collateral ရဲ့ တန်ဖိုးကို ဈေး ပြောင်းနိုင်လို့ လျှော့တွက်တာပါ။ [[mark:pt-cp]] counterparty က
+      trade ရဲ့ တစ်ဖက် ဖြစ်ပြီး၊ counterparty risk က သူ မပေးနိုင်မှာပါ။ [[mark:pt-aum]] AUM နဲ့ AUC ကတော့ များသောအားဖြင့် fee ယူပြီး စီမံပေးတဲ့ client asset နဲ့ သိမ်းပေးရုံ client asset ကို
+      ခွဲခေါ်တာ ဖြစ်ပြီး၊ asset
+      တစ်ခုတည်းက နှစ်မျိုးလုံး ဖြစ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Trading & markets (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#trading-markets",
+        }
+      - {
+          title: "Binance — Introduction to Binance Futures Funding Rates",
+          url: "https://www.binance.com/en/support/faq/introduction-to-binance-futures-funding-rates-360033525031",
+        }
+    actions:
+      - {
+          id: show-terms,
+          type: slide.show,
+          at: { mark: show-terms, offsetMs: -700 },
+          slideId: terms-1,
+        }
+      - {
+          id: pt-spot,
+          type: slide.point,
+          at: { afterAction: show-terms },
+          target: { x: 0.131, y: 0.342 },
+        }
+      - { id: pt-fut, type: slide.point, at: { mark: pt-fut }, target: { x: 0.131, y: 0.411 } }
+      - { id: pt-perp, type: slide.point, at: { mark: pt-perp }, target: { x: 0.131, y: 0.48 } }
+      - { id: terms-2, type: slide.show, at: { mark: terms-2 }, slideId: terms-2 }
+      - {
+          id: pt-ls,
+          type: slide.point,
+          at: { afterAction: terms-2 },
+          target: { x: 0.131, y: 0.549 },
+        }
+      - { id: pt-lev, type: slide.point, at: { mark: pt-lev }, target: { x: 0.131, y: 0.618 } }
+      - { id: pt-liq, type: slide.point, at: { mark: pt-liq }, target: { x: 0.131, y: 0.687 } }
+      - { id: terms-3, type: slide.show, at: { mark: terms-3 }, slideId: terms-3 }
+      - {
+          id: pt-hc,
+          type: slide.point,
+          at: { afterAction: terms-3 },
+          target: { x: 0.131, y: 0.756 },
+        }
+      - { id: pt-cp, type: slide.point, at: { mark: pt-cp }, target: { x: 0.131, y: 0.824 } }
+      - { id: pt-aum, type: slide.point, at: { mark: pt-aum }, target: { x: 0.131, y: 0.893 } }
+
+  - id: senior
+    chapter: ခက်တဲ့ အပိုင်း
+    narration: >-
+      [[mark:close-terms]] engineer အတွက် ခက်တဲ့ အပိုင်းက matching ကိုယ်တိုင်ထက် အဲဒီ နောက်က ငွေပါ။
+      [[mark:open-book]] fill တစ်ခု ဖြစ်တိုင်း ledger မှာ transaction တစ်ခု ဖြစ်ပါတယ်။ ဝယ်သူရဲ့ ငွေ လျော့၊
+      ရောင်းသူရဲ့ ငွေ တိုး၊ asset က ပြောင်းပြန် ရွှေ့ပြီး၊ maker fee နဲ့ taker fee ယူရင်လည်း revenue အဖြစ် ဝင်ပါတယ်၊ ဒါတွေ အားလုံး တစ်ပြိုင်နက် post ဖြစ်ရပါမယ်။ [[mark:sel-min]] ဒီ line က fill ပမာဏကို
+      resting order မှာ ကျန်တာထက် ဘယ်တော့မှ မကျော်အောင် ကန့်ထားပါတယ်။ ဒီ line မှားရင် မရှိတဲ့ asset ကို
+      ရောင်းလိုက်တာ ဖြစ်ပြီး၊ No invented data ကို ချိုးတာပါ၊ ငွေကို မရှိဘဲ မဖန်တီးရဘူး ဆိုတဲ့ မူပါ။
+      [[mark:sel-fifo]] ပြီးသွားတဲ့ order ကို queue ရဲ့ ရှေ့ကနေ ဖယ်တာက time priority ကို ထိန်းတာပါ။
+      [[mark:design]] ဒီ အစဉ် တစ်ခုတည်း ဖြစ်ဖို့ instrument တစ်ခုကို thread တစ်ခုတည်းနဲ့ match လုပ်ပြီး၊
+      ရောက်လာတဲ့ order တိုင်းကို sequence နံပါတ်နဲ့ log ထားတဲ့ design က ရိုးရှင်းပါတယ်။ အဲဒီ log ကနေ
+      replay လုပ်ရင် book အတိအကျ ပြန်ရလို့ lesson ၁၃ က event sourcing နဲ့ ကိုက်ပါတယ်။ funding ကလည်း user တွေကြား ငွေ ရွှေ့တဲ့ ledger event ဖြစ်ပြီး၊ liquidation ကလည်း ledger ထဲ ရောက်ရမယ့် event ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - { id: close-terms, type: slide.close, at: { mark: close-terms } }
+      - { id: open-book, type: workspace.openFile, at: { mark: open-book }, path: book.go }
+      - id: sel-min
+        type: editor.select
+        at: { mark: sel-min }
+        target: { file: book.go, text: "n := min(qty, o.Qty)", occurrence: 1 }
+      - id: sel-fifo
+        type: editor.select
+        at: { mark: sel-fifo }
+        target: { file: book.go, text: "lv.Orders = lv.Orders[1:]", occurrence: 1 }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] interview မှာ matching engine တစ်ခုအတွက် data structure ဘယ်လို ရွေးမလဲ လို့
+      မေးတတ်ပါတယ်။ [[mark:iv-a]] ပထမ၊ side တစ်ခုစီမှာ price level တွေကို ဈေးအလိုက် sort ထားပါမယ်၊ best
+      price ကို ချက်ချင်း ယူနိုင်ဖို့ပါ။ sorted tree သုံးနိုင်ပြီး၊ ဈေး range ကန့်သတ်ထားရင် tick တစ်ခုကို
+      index တစ်ခုနဲ့ array သုံးနိုင်ပါတယ်။ [[mark:iv-b]] ဒုတိယ၊ level တစ်ခုစီက FIFO queue ဖြစ်ပြီး time
+      priority ကို ထိန်းပါတယ်။ order id ကနေ queue ထဲက node ကို တိုက်ရိုက် ရှာနိုင်တဲ့ map ထားရင် cancel
+      ကို ချက်ချင်း လုပ်နိုင်ပါတယ်။ [[mark:iv-c]] တတိယ၊ instrument တစ်ခုကို thread တစ်ခုနဲ့ match လုပ်ပြီး
+      event တိုင်းကို sequence ထားလို့ result က deterministic ဖြစ်ပြီး log ကနေ replay လုပ်နိုင်ပါတယ်။
+      [[mark:iv-d]] ပြီးရင် ငွေဘက်ကို ဆက်ပြောပါ။ ဈေးနဲ့ ပမာဏကို ကိန်းပြည့်နဲ့ ထားမယ်၊ fill တိုင်းကို
+      balanced ledger transaction အဖြစ် post လုပ်မယ်၊ resting quantity ထက် ပို fill မဖြစ်အောင် invariant
+      နဲ့ စစ်မယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Trading & markets (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#trading-markets",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:open-main-2]] market buy ရဲ့
+      ပမာဏကို ပြောင်းကြည့်ပါ။ [[mark:sel-try]] ဆယ်ကနေ နှစ်ဆယ် လို့ ပြောင်းပြီး run ကြည့်ရင် level
+      သုံးခုလုံးကို ဆင်းစားပြီး slippage က သုည ဒသမ ငါး ကနေ နှစ် ဒသမ ကိုး အထိ တက်ပါလိမ့်မယ်။ ပမာဏ နှစ်ဆ
+      ဖြစ်ပေမဲ့ slippage က နှစ်ဆထက် အများကြီး ပိုပါတယ်။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ order book က ask နဲ့
+      bid တွေကို ဈေး level အလိုက် စီထားပြီး၊ matching က ဈေး အကောင်းဆုံးကို အရင်၊ ဈေးတူရင် အရင် ရောက်တာကို
+      အရင် ပေးပါတယ်။ market order ကြီးလေ book ကို ဆင်းစားလေ slippage များလေပါ။ နောက် lesson မှာတော့
+      custody နဲ့ crypto ကို ကြည့်ပါမယ်၊ key တွေကို ဘယ်သူ ကိုင်လဲ၊ on-chain deposit တစ်ခုကို ဘယ်အချိန်မှာ
+      credit လုပ်လို့ ရလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Trading & markets (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#trading-markets",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "int64(10)", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

@@ -1,0 +1,883 @@
+# Fintech Engineering, lesson 25: the outbox and CDC (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Notifying reliably (Outbox and CDC)" (CC BY 4.0, Voytek Pitula).
+# Start state: store.go holds a tiny transactional DB (postings + outbox tables), Event with a
+# stable id, and a scripted Broker ("ok" / "timeout" = delivered but an error / "down"); consumer.go
+# a Consumer that applies every event; main.go the two dual writes and relay().
+# Edits, all insert-only:
+#   1. withOutbox(): the posting and its outbox row in one transaction
+#   2. two postings through the outbox, a relay that crashes after one publish, a second relay
+#                                         -> run-2: nothing lost, but p3 applied twice
+#   3. the consumer dedupes on the event id   -> run-3: got 3, applied [p3 p4]
+# Figures: dual (the two failure orders), outbox (one transaction, the relay, at-least-once),
+# cdc (tail the log; row-shaped events), options (four ways to publish), iv.
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-25-outbox-cdc
+  title: "Fintech Engineering 25: Outbox နဲ့ CDC"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      consumer.go: |
+        package main
+
+        import "fmt"
+
+        // Consumer applies the events it receives.
+        type Consumer struct {
+        	seen    map[string]bool
+        	got     int
+        	applied []string
+        }
+
+        func (c *Consumer) Handle(e Event) {
+        	c.got++
+        	c.applied = append(c.applied, e.Posting)
+        }
+
+        func (c *Consumer) String() string {
+        	return fmt.Sprintf("consumer got %d, applied %v", c.got, c.applied)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // publishThenCommit: the publish times out, so we roll back. The broker had it already.
+        func publishThenCommit(db *DB, b *Broker, id string) {
+        	tx := db.Begin()
+        	tx.Post(id)
+        	if err := b.Publish(event(id)); err != nil {
+        		tx.Rollback()
+        		return
+        	}
+        	tx.Commit()
+        }
+
+        // commitThenPublish: the commit lands, then the publish fails, and nothing retries it.
+        func commitThenPublish(db *DB, b *Broker, id string) {
+        	tx := db.Begin()
+        	tx.Post(id)
+        	tx.Commit()
+        	_ = b.Publish(event(id)) // the error is logged; nothing publishes it again
+        }
+
+        // relay publishes unsent outbox rows in order and marks each one sent. A failed publish
+        // stops it until its next run. crashAfter kills it after that publish, before the mark.
+        func (db *DB) relay(b *Broker, crashAfter string) {
+        	for i := range db.outbox {
+        		r := &db.outbox[i]
+        		if r.Sent {
+        			continue
+        		}
+        		if b.Publish(r.Event) != nil || r.Event.ID == crashAfter {
+        			return
+        		}
+        		r.Sent = true
+        	}
+        }
+
+        func main() {
+        	db, c, b := setup("timeout", "down")
+        	publishThenCommit(db, b, "p1")
+        	commitThenPublish(db, b, "p2")
+        	fmt.Println("dual write:", db, "|", c)
+        }
+      store.go: |
+        package main
+
+        import "fmt"
+
+        // Event is what we publish when a posting commits. Its ID is stable: one posting, one ID.
+        type Event struct {
+        	ID      string
+        	Posting string
+        }
+
+        func event(posting string) Event { return Event{"evt-" + posting, posting} }
+
+        // DB is a tiny database with two tables, changed only through a transaction.
+        type DB struct {
+        	postings []string
+        	outbox   []Row
+        }
+
+        // Row is one outbox row: an event to publish and whether the relay has marked it sent.
+        type Row struct {
+        	Event Event
+        	Sent  bool
+        }
+
+        // Tx buffers writes: Commit applies all of them, Rollback none.
+        type Tx struct {
+        	db       *DB
+        	postings []string
+        	outbox   []Row
+        }
+
+        func (db *DB) Begin() *Tx     { return &Tx{db: db} }
+        func (tx *Tx) Post(id string) { tx.postings = append(tx.postings, id) }
+        func (tx *Tx) Outbox(e Event) { tx.outbox = append(tx.outbox, Row{Event: e}) }
+        func (tx *Tx) Rollback()      {}
+        func (tx *Tx) Commit() {
+        	tx.db.postings = append(tx.db.postings, tx.postings...)
+        	tx.db.outbox = append(tx.db.outbox, tx.outbox...)
+        }
+
+        func (db *DB) String() string { return fmt.Sprint("db ", db.postings) }
+
+        // Broker hands each published event to the consumer. Its script decides each publish:
+        // "ok", "timeout" (delivered, but the caller gets an error) or "down" (not delivered).
+        type Broker struct {
+        	to     *Consumer
+        	script []string
+        }
+
+        func (b *Broker) Publish(e Event) error {
+        	outcome := "ok"
+        	if len(b.script) > 0 {
+        		outcome, b.script = b.script[0], b.script[1:]
+        	}
+        	if outcome != "down" {
+        		b.to.Handle(e)
+        	}
+        	if outcome != "ok" {
+        		return fmt.Errorf("publish %s: %s", e.ID, outcome)
+        	}
+        	return nil
+        }
+
+        func setup(script ...string) (*DB, *Consumer, *Broker) {
+        	c := &Consumer{seen: map[string]bool{}}
+        	return &DB{}, c, &Broker{to: c, script: script}
+        }
+  slides:
+    - id: cdc-1
+      contentType: html
+      name: "Change data capture 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">CHANGE DATA CAPTURE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Database ရဲ့ log ကိုယ်တိုင်ကို ဖတ်တာ</text>
+        <g class="in"><rect x="80" y="260" width="300" height="140" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="102" y="298" width="64" height="64" style="color:#4fd1c5"/><text x="270" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">database</text><text x="270" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">commit</text></g>
+        <g class="in"><rect x="450" y="230" width="560" height="199" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="474" y="264" font-size="22" fill="#8a94a8" font-weight="700" class="mono">write-ahead log / binlog</text><path d="M450 276H1010" stroke="#2a3345" stroke-width="2"/><g><text x="474" y="322.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT postings p5</text></g><g><text x="474" y="361.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT outbox evt-p5</text></g><g><text x="474" y="400.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT postings p6</text></g></g>
+        <path d="M390 329.9L436 329.6" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <g class="in"><rect x="1090" y="260" width="430" height="140" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-gear" x="1112" y="298" width="64" height="64" style="color:#b794f6"/><text x="1345" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">CDC connector</text><text x="1345" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">Debezium, AWS DMS</text></g>
+        <path d="M1020 329.6L1076 329.9" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="1048" y="313.5" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">tail</text>
+        </svg>
+    - id: cdc-2
+      contentType: html
+      name: "Change data capture 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">CHANGE DATA CAPTURE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Database ရဲ့ log ကိုယ်တိုင်ကို ဖတ်တာ</text>
+        <rect x="80" y="260" width="300" height="140" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="102" y="298" width="64" height="64" style="color:#4fd1c5"/><text x="270" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">database</text><text x="270" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">commit</text>
+        <rect x="450" y="230" width="560" height="199" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="474" y="264" font-size="22" fill="#8a94a8" font-weight="700" class="mono">write-ahead log / binlog</text><path d="M450 276H1010" stroke="#2a3345" stroke-width="2"/><g><text x="474" y="322.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT postings p5</text></g><g><text x="474" y="361.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT outbox evt-p5</text></g><g><text x="474" y="400.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT postings p6</text></g>
+        <path d="M390 329.9L436 329.6" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <rect x="1090" y="260" width="430" height="140" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-gear" x="1112" y="298" width="64" height="64" style="color:#b794f6"/><text x="1345" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">CDC connector</text><text x="1345" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">Debezium, AWS DMS</text>
+        <path d="M1020 329.6L1076 329.9" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="1048" y="313.5" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">tail</text>
+        <g class="in"><rect x="80" y="520" width="645.6" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="80" y="520" width="645.6" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="402.8" y="554.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">every committed change · no publishing code</text></g>
+        </svg>
+    - id: cdc-3
+      contentType: html
+      name: "Change data capture 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">CHANGE DATA CAPTURE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Database ရဲ့ log ကိုယ်တိုင်ကို ဖတ်တာ</text>
+        <rect x="80" y="260" width="300" height="140" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="102" y="298" width="64" height="64" style="color:#4fd1c5"/><text x="270" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">database</text><text x="270" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">commit</text>
+        <rect x="450" y="230" width="560" height="199" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="474" y="264" font-size="22" fill="#8a94a8" font-weight="700" class="mono">write-ahead log / binlog</text><path d="M450 276H1010" stroke="#2a3345" stroke-width="2"/><g><text x="474" y="322.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT postings p5</text></g><g><text x="474" y="361.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT outbox evt-p5</text></g><g><text x="474" y="400.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">INSERT postings p6</text></g>
+        <path d="M390 329.9L436 329.6" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <rect x="1090" y="260" width="430" height="140" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-gear" x="1112" y="298" width="64" height="64" style="color:#b794f6"/><text x="1345" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">CDC connector</text><text x="1345" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">Debezium, AWS DMS</text>
+        <path d="M1020 329.6L1076 329.9" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="1048" y="313.5" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">tail</text>
+        <rect x="80" y="520" width="645.6" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="80" y="520" width="645.6" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="402.8" y="554.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">every committed change · no publishing code</text>
+        <g class="in"><rect x="80" y="610" width="930" height="160" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="104" y="644" font-size="22" fill="#8a94a8" font-weight="700" class="mono">raw CDC event = a table row</text><path d="M80 656H1010" stroke="#2a3345" stroke-width="2"/><g><text x="104" y="702.1" font-size="26" class="mono" xml:space="preserve" fill="#f6ad55">{"table":"postings","op":"insert","row":{"id":"p5",</text></g><g><text x="104" y="741.1" font-size="26" class="mono" xml:space="preserve" fill="#f6ad55">  "acct_dr":"asset:bank","amt_minor":10000,"v":7}}</text></g></g>
+        <g class="in"><rect x="1090" y="610" width="430" height="140" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-shield" x="1112" y="648" width="64" height="64" style="color:#f6ad55"/><text x="1345" y="670.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">postprocess</text><text x="1345" y="711.6" font-size="24" text-anchor="middle" fill="#8a94a8">don't leak the schema</text></g>
+        <path d="M1019.9 688.8L1076.1 681.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: dual-1
+      contentType: html
+      name: "Dual write 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-queue" viewBox="0 0 48 48"><rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">DUAL WRITE</text>
+        <text x="80" y="150" font-size="49" fill="#e9edf5" font-weight="700">Commit နဲ့ publish က transaction တစ်ခုတည်း မဟုတ်ဘူး</text>
+        <g class="in"><text x="90" y="250" font-size="32" fill="#fc8181" class="mono">publish → rollback</text></g>
+        <g class="in"><rect x="90" y="290" width="640" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-queue" x="112" y="313" width="64" height="64" style="color:#6cb2f5"/><text x="450" y="335.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">publish evt-p1</text><text x="450" y="376.6" font-size="24" text-anchor="middle" fill="#8a94a8">broker has it · we get a timeout</text></g>
+        <g class="in"><rect x="90" y="440" width="640" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="112" y="463" width="64" height="64" style="color:#4fd1c5"/><text x="450" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">rollback p1</text><text x="450" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">db has no p1</text></g>
+        <path d="M410 410L410 426" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <g class="in"><rect x="90" y="600" width="640" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><rect x="90" y="600" width="640" height="120" rx="18" fill="#fc8181" opacity="0.13"/><use href="#i-warn" x="112" y="628" width="64" height="64" style="color:#fc8181"/><text x="450" y="652.1" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">phantom event</text><text x="450" y="690.9" font-size="22" text-anchor="middle" fill="#8a94a8">consumer acts on a posting that never happened</text></g>
+        <path d="M410 560L410 586" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        </svg>
+    - id: dual-2
+      contentType: html
+      name: "Dual write 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-queue" viewBox="0 0 48 48"><rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/></symbol><symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">DUAL WRITE</text>
+        <text x="80" y="150" font-size="49" fill="#e9edf5" font-weight="700">Commit နဲ့ publish က transaction တစ်ခုတည်း မဟုတ်ဘူး</text>
+        <text x="90" y="250" font-size="32" fill="#fc8181" class="mono">publish → rollback</text>
+        <rect x="90" y="290" width="640" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-queue" x="112" y="313" width="64" height="64" style="color:#6cb2f5"/><text x="450" y="335.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">publish evt-p1</text><text x="450" y="376.6" font-size="24" text-anchor="middle" fill="#8a94a8">broker has it · we get a timeout</text>
+        <rect x="90" y="440" width="640" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="112" y="463" width="64" height="64" style="color:#4fd1c5"/><text x="450" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">rollback p1</text><text x="450" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">db has no p1</text>
+        <path d="M410 410L410 426" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <rect x="90" y="600" width="640" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><rect x="90" y="600" width="640" height="120" rx="18" fill="#fc8181" opacity="0.13"/><use href="#i-warn" x="112" y="628" width="64" height="64" style="color:#fc8181"/><text x="450" y="652.1" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">phantom event</text><text x="450" y="690.9" font-size="22" text-anchor="middle" fill="#8a94a8">consumer acts on a posting that never happened</text>
+        <path d="M410 560L410 586" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <g class="in"><text x="870" y="250" font-size="32" fill="#fc8181" class="mono">commit → publish</text></g>
+        <g class="in"><rect x="870" y="290" width="640" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-db" x="892" y="313" width="64" height="64" style="color:#4fd1c5"/><text x="1230" y="335.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">commit p2</text><text x="1230" y="376.6" font-size="24" text-anchor="middle" fill="#8a94a8">db has p2</text></g>
+        <g class="in"><rect x="870" y="440" width="640" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-queue" x="892" y="463" width="64" height="64" style="color:#6cb2f5"/><text x="1230" y="485.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">publish evt-p2</text><text x="1230" y="526.6" font-size="24" text-anchor="middle" fill="#8a94a8">broker down · nobody retries</text></g>
+        <path d="M1190 410L1190 426" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <g class="in"><rect x="870" y="600" width="640" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><rect x="870" y="600" width="640" height="120" rx="18" fill="#fc8181" opacity="0.13"/><use href="#i-warn" x="892" y="628" width="64" height="64" style="color:#fc8181"/><text x="1230" y="650.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">missing event</text><text x="1230" y="691.6" font-size="24" text-anchor="middle" fill="#8a94a8">a change nobody hears about</text></g>
+        <path d="M1190 560L1190 586" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <g class="in"><rect x="90" y="770" width="710.1" height="50" rx="25" fill="#9aa5b8" opacity="0.16"/><rect x="90" y="770" width="710.1" height="50" rx="25" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="445.1" y="804.1" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="700">2-phase commit: the textbook answer, rarely used</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">DB update နဲ့ Kafka publish ကို ဘယ်လို စိတ်ချရအောင် လုပ်မလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">DB update နဲ့ Kafka publish ကို ဘယ်လို စိတ်ချရအောင် လုပ်မလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Dual write က မစိတ်ချရ — အစဉ် နှစ်မျိုးလုံး fail နိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">publish → rollback = phantom၊ commit → publish fail = missing</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">DB update နဲ့ Kafka publish ကို ဘယ်လို စိတ်ချရအောင် လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Dual write က မစိတ်ချရ — အစဉ် နှစ်မျိုးလုံး fail နိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">publish → rollback = phantom၊ commit → publish fail = missing</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Outbox — state နဲ့ event ကို transaction တစ်ခုတည်းမှာ</text><text x="188" y="443" font-size="26" fill="#8a94a8">relay က unsent row တွေကို retry လုပ်ပြီး publish</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">DB update နဲ့ Kafka publish ကို ဘယ်လို စိတ်ချရအောင် လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Dual write က မစိတ်ချရ — အစဉ် နှစ်မျိုးလုံး fail နိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">publish → rollback = phantom၊ commit → publish fail = missing</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Outbox — state နဲ့ event ကို transaction တစ်ခုတည်းမှာ</text><text x="188" y="443" font-size="26" fill="#8a94a8">relay က unsent row တွေကို retry လုပ်ပြီး publish</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">At-least-once — consumer က event id နဲ့ dedupe</text><text x="188" y="575" font-size="26" fill="#8a94a8">relay က publish ပြီး mark မလုပ်ခင် crash ဖြစ်နိုင်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">DB update နဲ့ Kafka publish ကို ဘယ်လို စိတ်ချရအောင် လုပ်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#fc8181"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Dual write က မစိတ်ချရ — အစဉ် နှစ်မျိုးလုံး fail နိုင်တယ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">publish → rollback = phantom၊ commit → publish fail = missing</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Outbox — state နဲ့ event ကို transaction တစ်ခုတည်းမှာ</text><text x="188" y="443" font-size="26" fill="#8a94a8">relay က unsent row တွေကို retry လုပ်ပြီး publish</text></g><g><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">At-least-once — consumer က event id နဲ့ dedupe</text><text x="188" y="575" font-size="26" fill="#8a94a8">relay က publish ပြီး mark မလုပ်ခင် crash ဖြစ်နိုင်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">outbox + relay + dedupe၊ ဒါမှမဟုတ် CDC</text><text x="188" y="707" font-size="26" fill="#8a94a8">CDC ဆို row event ကို public event အဖြစ် ပြောင်းပြီးမှ ထုတ်</text></g>
+        </svg>
+    - id: options-1
+      contentType: html
+      name: "Notifying reliably 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">NOTIFYING RELIABLY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Publish လုပ်နည်း လေးမျိုး</text>
+        <g class="in"><rect x="90" y="205" width="1420" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="240" font-size="22" fill="#8a94a8" font-weight="700">pattern</text><text x="459.1" y="240" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်လို</text><text x="995.6" y="240" font-size="22" fill="#8a94a8" font-weight="700">ပေးရတဲ့ အဖိုး</text><path d="M90 257H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="313" font-size="28" fill="#4fd1c5" class="mono">outbox</text><text x="459.1" y="313" font-size="28" fill="#e9edf5">intent ကို transaction ထဲ သိမ်း</text><text x="995.6" y="313" font-size="28" fill="#e9edf5">relay ကို ကိုယ်တိုင် run</text></g><g><path d="M106 349H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="405" font-size="28" fill="#6cb2f5" class="mono">CDC</text><text x="459.1" y="405" font-size="28" fill="#e9edf5">database log ကို tail</text><text x="995.6" y="405" font-size="28" fill="#e9edf5">table shape နဲ့ coupling</text></g></g>
+        </svg>
+    - id: options-2
+      contentType: html
+      name: "Notifying reliably 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">NOTIFYING RELIABLY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Publish လုပ်နည်း လေးမျိုး</text>
+        <rect x="90" y="205" width="1420" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="240" font-size="22" fill="#8a94a8" font-weight="700">pattern</text><text x="459.1" y="240" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်လို</text><text x="995.6" y="240" font-size="22" fill="#8a94a8" font-weight="700">ပေးရတဲ့ အဖိုး</text><path d="M90 257H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="313" font-size="28" fill="#4fd1c5" class="mono">outbox</text><text x="459.1" y="313" font-size="28" fill="#e9edf5">intent ကို transaction ထဲ သိမ်း</text><text x="995.6" y="313" font-size="28" fill="#e9edf5">relay ကို ကိုယ်တိုင် run</text></g><g><path d="M106 349H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="405" font-size="28" fill="#6cb2f5" class="mono">CDC</text><text x="459.1" y="405" font-size="28" fill="#e9edf5">database log ကို tail</text><text x="995.6" y="405" font-size="28" fill="#e9edf5">table shape နဲ့ coupling</text></g><g class="in"><path d="M106 441H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="497" font-size="26" fill="#b794f6" class="mono">listen-to-yourself</text><text x="459.1" y="497" font-size="28" fill="#e9edf5">publish အရင်၊ state ကို event ကနေ</text><text x="995.6" y="497" font-size="28" fill="#e9edf5">ကိုယ့် state က နောက်ကျ</text></g>
+        </svg>
+    - id: options-3
+      contentType: html
+      name: "Notifying reliably 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">NOTIFYING RELIABLY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Publish လုပ်နည်း လေးမျိုး</text>
+        <rect x="90" y="205" width="1420" height="420" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="240" font-size="22" fill="#8a94a8" font-weight="700">pattern</text><text x="459.1" y="240" font-size="22" fill="#8a94a8" font-weight="700">ဘယ်လို</text><text x="995.6" y="240" font-size="22" fill="#8a94a8" font-weight="700">ပေးရတဲ့ အဖိုး</text><path d="M90 257H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="313" font-size="28" fill="#4fd1c5" class="mono">outbox</text><text x="459.1" y="313" font-size="28" fill="#e9edf5">intent ကို transaction ထဲ သိမ်း</text><text x="995.6" y="313" font-size="28" fill="#e9edf5">relay ကို ကိုယ်တိုင် run</text></g><g><path d="M106 349H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="405" font-size="28" fill="#6cb2f5" class="mono">CDC</text><text x="459.1" y="405" font-size="28" fill="#e9edf5">database log ကို tail</text><text x="995.6" y="405" font-size="28" fill="#e9edf5">table shape နဲ့ coupling</text></g><g><path d="M106 441H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="497" font-size="26" fill="#b794f6" class="mono">listen-to-yourself</text><text x="459.1" y="497" font-size="28" fill="#e9edf5">publish အရင်၊ state ကို event ကနေ</text><text x="995.6" y="497" font-size="28" fill="#e9edf5">ကိုယ့် state က နောက်ကျ</text></g><g class="in"><path d="M106 533H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="589" font-size="28" fill="#f6c453" class="mono">event sourcing</text><text x="459.1" y="589" font-size="26" fill="#e9edf5">event log က database ထဲမှာ ရှိပြီးသား</text><text x="995.6" y="589" font-size="28" fill="#e9edf5">model တစ်ခုလုံး ပြောင်း</text></g>
+        <g class="in"><rect x="90" y="700" width="981.5" height="54" rx="27" fill="#f6ad55" opacity="0.16"/><rect x="90" y="700" width="981.5" height="54" rx="27" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="580.8" y="737.5" font-size="30" text-anchor="middle" fill="#f6ad55" font-weight="700">ဘာရွေးရွေး at-least-once  →  consumer က event id နဲ့ dedupe</text></g>
+        </svg>
+    - id: outbox-1
+      contentType: html
+      name: "Outbox pattern 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">OUTBOX PATTERN</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1128.3" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Publish လုပ်မယ့် intent ကို transaction ထဲမှာ သိမ်း</text>
+        <g class="in"><rect x="70" y="215" width="620" height="470" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75"/><text x="92" y="251" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">ONE DB TRANSACTION</text></g>
+        <g class="in"><rect x="115" y="280" width="530" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="137" y="308" width="64" height="64" style="color:#4fd1c5"/><text x="420" y="330.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">postings</text><text x="420" y="371.6" font-size="24" text-anchor="middle" fill="#8a94a8">INSERT p3</text></g>
+        </svg>
+    - id: outbox-2
+      contentType: html
+      name: "Outbox pattern 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">OUTBOX PATTERN</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1128.3" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Publish လုပ်မယ့် intent ကို transaction ထဲမှာ သိမ်း</text>
+        <rect x="70" y="215" width="620" height="470" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75"/><text x="92" y="251" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">ONE DB TRANSACTION</text>
+        <rect x="115" y="280" width="530" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="137" y="308" width="64" height="64" style="color:#4fd1c5"/><text x="420" y="330.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">postings</text><text x="420" y="371.6" font-size="24" text-anchor="middle" fill="#8a94a8">INSERT p3</text>
+        <g class="in"><rect x="115" y="510" width="530" height="130" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="115" y="510" width="530" height="130" rx="18" fill="#f6c453" opacity="0.13"/><use href="#i-doc" x="137" y="543" width="64" height="64" style="color:#f6c453"/><text x="420" y="565.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">outbox</text><text x="420" y="606.6" font-size="24" text-anchor="middle" fill="#8a94a8">INSERT evt-p3 · sent=false</text></g>
+        </svg>
+    - id: outbox-3
+      contentType: html
+      name: "Outbox pattern 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol><symbol id="i-queue" viewBox="0 0 48 48"><rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">OUTBOX PATTERN</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1128.3" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Publish လုပ်မယ့် intent ကို transaction ထဲမှာ သိမ်း</text>
+        <rect x="70" y="215" width="620" height="470" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75"/><text x="92" y="251" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">ONE DB TRANSACTION</text>
+        <rect x="115" y="280" width="530" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="137" y="308" width="64" height="64" style="color:#4fd1c5"/><text x="420" y="330.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">postings</text><text x="420" y="371.6" font-size="24" text-anchor="middle" fill="#8a94a8">INSERT p3</text>
+        <rect x="115" y="510" width="530" height="130" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="115" y="510" width="530" height="130" rx="18" fill="#f6c453" opacity="0.13"/><use href="#i-doc" x="137" y="543" width="64" height="64" style="color:#f6c453"/><text x="420" y="565.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">outbox</text><text x="420" y="606.6" font-size="24" text-anchor="middle" fill="#8a94a8">INSERT evt-p3 · sent=false</text>
+        <g class="in"><rect x="800" y="510" width="280" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-retry" x="822" y="543" width="64" height="64" style="color:#f6ad55"/><text x="980" y="565.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">relay</text><text x="980" y="606.6" font-size="24" text-anchor="middle" fill="#8a94a8">retry until ok</text></g>
+        <g class="in"><rect x="1230" y="510" width="300" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-queue" x="1252" y="543" width="64" height="64" style="color:#6cb2f5"/><text x="1420" y="565.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">broker</text><text x="1420" y="606.6" font-size="24" text-anchor="middle" fill="#8a94a8">Kafka, queue…</text></g>
+        <path d="M655 575L786 575" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="720.5" y="558.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">unsent rows</text>
+        <path d="M1090 575L1216 575" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1153" y="558.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">publish</text>
+        <path d="M930 510Q662 450 394 510" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="662" y="463.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">sent=true</text>
+        </svg>
+    - id: outbox-4
+      contentType: html
+      name: "Outbox pattern 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-retry" viewBox="0 0 48 48"><path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/></symbol><symbol id="i-queue" viewBox="0 0 48 48"><rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">OUTBOX PATTERN</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1128.3" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Publish လုပ်မယ့် intent ကို transaction ထဲမှာ သိမ်း</text>
+        <rect x="70" y="215" width="620" height="470" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75"/><text x="92" y="251" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">ONE DB TRANSACTION</text>
+        <rect x="115" y="280" width="530" height="120" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="137" y="308" width="64" height="64" style="color:#4fd1c5"/><text x="420" y="330.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">postings</text><text x="420" y="371.6" font-size="24" text-anchor="middle" fill="#8a94a8">INSERT p3</text>
+        <rect x="115" y="510" width="530" height="130" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="115" y="510" width="530" height="130" rx="18" fill="#f6c453" opacity="0.13"/><use href="#i-doc" x="137" y="543" width="64" height="64" style="color:#f6c453"/><text x="420" y="565.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">outbox</text><text x="420" y="606.6" font-size="24" text-anchor="middle" fill="#8a94a8">INSERT evt-p3 · sent=false</text>
+        <rect x="800" y="510" width="280" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-retry" x="822" y="543" width="64" height="64" style="color:#f6ad55"/><text x="980" y="565.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">relay</text><text x="980" y="606.6" font-size="24" text-anchor="middle" fill="#8a94a8">retry until ok</text>
+        <rect x="1230" y="510" width="300" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-queue" x="1252" y="543" width="64" height="64" style="color:#6cb2f5"/><text x="1420" y="565.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">broker</text><text x="1420" y="606.6" font-size="24" text-anchor="middle" fill="#8a94a8">Kafka, queue…</text>
+        <path d="M655 575L786 575" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="720.5" y="558.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">unsent rows</text>
+        <path d="M1090 575L1216 575" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1153" y="558.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">publish</text>
+        <path d="M930 510Q662 450 394 510" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="662" y="463.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">sent=true</text>
+        <g class="in"><rect x="1230" y="270" width="300" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-server" x="1252" y="303" width="64" height="64" style="color:#68d391"/><text x="1420" y="325.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">consumer</text><text x="1420" y="366.6" font-size="24" text-anchor="middle" fill="#8a94a8">dedupe by id</text></g>
+        <path d="M1380 500L1380 414" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <g class="in"><rect x="70" y="750" width="1061.5" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="70" y="750" width="1061.5" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="600.8" y="784.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">publish ✓ → crash → mark lost → publish again  =  at-least-once</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9525
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "dual write: db [p2] | consumer got 1, applied [p1]\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "dual write: db [p2] | consumer got 1, applied [p1]\noutbox:     db [p3 p4] | consumer got 3, applied [p3 p3 p4]\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "dual write: db [p2] | consumer got 1, applied [p1]\noutbox:     db [p3 p4] | consumer got 3, applied [p3 p4]\n"
+
+scenes:
+  - id: hook
+    chapter: Dual write
+    narration: >-
+      ledger မှာ posting တစ်ခု commit ဖြစ်တိုင်း အဲဒါကို သိဖို့ လိုတဲ့ system တွေ ရှိပါတယ်။ user ကို
+      notification ပို့တဲ့ service၊ risk စစ်တဲ့ service၊ reporting လိုမျိုးပါ။ Kafka ကို event publish လုပ်တာ၊ webhook ခေါ်တာ စတဲ့ နည်းတွေနဲ့ အသိပေးကြပါတယ်။ ပြဿနာက database commit နဲ့ publish ဟာ transaction
+      တစ်ခုတည်း ထဲမှာ မရှိတာပါ။ [[mark:sel-ptc]] ဒီ function က အရင် publish လုပ်ပြီးမှ commit လုပ်ပါတယ်။
+      publish က timeout ဖြစ်ရင် fail တယ်လို့ ယူပြီး rollback လုပ်ပါတယ်။ [[mark:sel-ctp]] ဒီ function
+      ကတော့ အရင် commit လုပ်ပြီးမှ publish လုပ်ပါတယ်၊ publish fail ရင် log ပဲ ထားခဲ့ပါတယ်။
+      [[mark:sel-setup]] broker က ပထမ publish မှာ timeout ပြန်ပြီး ဒုတိယ publish မှာ down နေပါမယ်။
+      ဒီ demo ရဲ့ timeout က message က broker ဆီ ရောက်ပြီးမှ ack ပျောက်တဲ့ ကိစ္စပါ။ posting နှစ်ခုအတွက် database
+      ထဲမှာ ဘာရှိပြီး consumer က ဘာရမလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-ptc
+        type: editor.select
+        at: { mark: sel-ptc }
+        target:
+          {
+            file: main.go,
+            text: "\tif err := b.Publish(event(id)); err != nil {\n\t\ttx.Rollback()",
+            occurrence: 1,
+          }
+      - id: sel-ctp
+        type: editor.select
+        at: { mark: sel-ctp }
+        target: { file: main.go, text: "\ttx.Commit()\n\t_ = b.Publish(event(id))", occurrence: 1 }
+      - id: sel-setup
+        type: editor.select
+        at: { mark: sel-setup }
+        target: { file: main.go, text: 'setup("timeout", "down")', occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "dual write: db [p2] | consumer got 1, applied [p1]",
+          timeoutMs: 8000,
+        }
+
+  - id: dual
+    chapter: Phantom နဲ့ missing event
+    narration: >-
+      [[mark:pt-dual]] database ထဲမှာ ဒုတိယ posting ပဲ ရှိပြီး၊ consumer ကတော့ ပထမ posting ကိုပဲ
+      ရထားပါတယ်။ နှစ်ခုလုံး မှားနေပါတယ်။ [[mark:show-dual]] ပထမ အစဉ်မှာ broker က message ကို
+      ရထားပြီးပြီ ဖြစ်ပေမဲ့ ကိုယ်က response မရလို့ rollback လုပ်လိုက်ပါတယ်။ ဒါကြောင့် consumer က
+      မဖြစ်ခဲ့တဲ့ posting တစ်ခုအတွက် အလုပ်လုပ်ပါတယ်။ ဒါက No invented data ကို ချိုးတာပါ၊ ငွေကို
+      မရှိဘဲ မဖန်တီးရဘူး ဆိုတဲ့ မူပါ။ [[mark:dual-2]] ဒုတိယ အစဉ်မှာ commit ဖြစ်သွားပေမဲ့ publish fail
+      လို့ ဘယ်သူမှ မကြားရပါဘူး။ ဒါက No lost data ကို ချိုးတာပါ၊ ငွေနဲ့ ပတ်သက်ပြီး ဖြစ်ခဲ့သမျှ
+      မပျောက်ရဘူး ဆိုတဲ့ မူပါ။ ဘယ်အစဉ်နဲ့ ရေးရေး ပြဿနာ တစ်ခု ကျန်ပါတယ်၊ database နဲ့ broker ကို
+      transaction တစ်ခုတည်း ထဲ ထည့်လို့ မရလို့ပါ။ [[mark:pt-tpc]] textbook အဖြေကတော့ distributed transaction ဖြစ်တဲ့ two-phase commit ပါ။ ဒါပေမဲ့ ရှုပ်ထွေးလွန်းပြီး standard လုပ်ပြီး ပြန်သုံးဖို့ ကောင်းတဲ့
+      နည်းလမ်း မရှိလို့ လက်တွေ့မှာ သုံးတာ ရှားပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - id: pt-dual
+        type: console.point
+        at: { mark: pt-dual }
+        target: { text: "dual write: db [p2] | consumer got 1, applied [p1]", occurrence: 1 }
+      - {
+          id: show-dual,
+          type: slide.show,
+          at: { mark: show-dual, offsetMs: -700 },
+          slideId: dual-1,
+        }
+      - {
+          id: pt-a3,
+          type: slide.point,
+          at: { afterAction: show-dual },
+          target: { x: 0.256, y: 0.809 },
+        }
+      - { id: dual-2, type: slide.show, at: { mark: dual-2 }, slideId: dual-2 }
+      - {
+          id: pt-b3,
+          type: slide.point,
+          at: { afterAction: dual-2 },
+          target: { x: 0.744, y: 0.809 },
+        }
+      - { id: pt-tpc, type: slide.point, at: { mark: pt-tpc }, target: { x: 0.272, y: 0.92 } }
+
+  - id: outbox
+    chapter: Outbox pattern
+    narration: >-
+      [[mark:show-outbox]] လက်တွေ့မှာ သုံးတဲ့ အဖြေ တစ်ခုက outbox pattern ပါ။ posting ကို ရေးတဲ့
+      transaction ထဲမှာပဲ နောက်ထပ် row တစ်ခု ထည့်ရေးပါတယ်။ [[mark:outbox-2]] အဲဒါက outbox table ထဲက
+      row ပါ၊ event ကို publish မလုပ်သေးဘဲ publish လုပ်မယ့် intent ကို သိမ်းထားတာပါ။ commit ဖြစ်ရင်
+      နှစ်ခုလုံး ရှိပြီး၊ rollback ဖြစ်ရင် နှစ်ခုလုံး မရှိပါဘူး။ [[mark:outbox-3]] ပြီးရင် relay ဆိုတဲ့ သီးခြား
+      process က sent မဖြစ်သေးတဲ့ row တွေကို ယူပြီး broker ကို publish လုပ်ပါတယ်။ အောင်မြင်ရင် sent
+      လို့ မှတ်ပြီး၊ fail ရင် နောက်တစ်ခါ ထပ်ကြိုးစားပါတယ်၊ အောင်မြင်တဲ့အထိပါ။ [[mark:outbox-4]] ဒီမှာ
+      ကျန်နေတဲ့ ပြဿနာ တစ်ခု ရှိပါတယ်။ relay က publish လုပ်ပြီးမှ sent လို့ မမှတ်ရခင် crash ဖြစ်ရင်၊
+      ပြန်စတဲ့အခါ အဲဒီ row ကို ထပ် publish လုပ်ပါတယ်။ ဒါကြောင့် delivery က at-least-once ပဲ ဖြစ်ပြီး၊
+      consumer က event id နဲ့ dedupe လုပ်ရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+    actions:
+      - {
+          id: show-outbox,
+          type: slide.show,
+          at: { mark: show-outbox, offsetMs: -700 },
+          slideId: outbox-1,
+        }
+      - {
+          id: pt-txb,
+          type: slide.point,
+          at: { afterAction: show-outbox },
+          target: { x: 0.069, y: 0.292 },
+        }
+      - { id: outbox-2, type: slide.show, at: { mark: outbox-2 }, slideId: outbox-2 }
+      - {
+          id: pt-row,
+          type: slide.point,
+          at: { afterAction: outbox-2 },
+          target: { x: 0.238, y: 0.72 },
+        }
+      - { id: outbox-3, type: slide.show, at: { mark: outbox-3 }, slideId: outbox-3 }
+      - {
+          id: pt-relay,
+          type: slide.point,
+          at: { afterAction: outbox-3 },
+          target: { x: 0.588, y: 0.72 },
+        }
+      - { id: outbox-4, type: slide.show, at: { mark: outbox-4 }, slideId: outbox-4 }
+      - {
+          id: pt-crash,
+          type: slide.point,
+          at: { afterAction: outbox-4 },
+          target: { x: 0.369, y: 0.898 },
+        }
+
+  - id: relay
+    chapter: Relay နဲ့ dedupe
+    narration: >-
+      [[mark:close-outbox]] code နဲ့ စမ်းကြည့်ရအောင်။ [[mark:sel-relay]] relay က sent မဖြစ်သေးတဲ့ row
+      တွေကို အစဉ်အတိုင်း publish လုပ်ပြီး တစ်ခုချင်း sent လို့ မှတ်ပါတယ်။ publish fail ရင် ရပ်ပြီး နောက်တစ်ကြိမ်
+      run မှ ဆက်လုပ်တာမို့ event တွေက outbox ထဲ ရေးထားတဲ့ အစဉ်အတိုင်း ထွက်ပါတယ်။ နောက်ဆုံး parameter က event
+      တစ်ခုကို publish လုပ်ပြီးတာနဲ့ မမှတ်ရခင် process သေသွားတာကို ပုံဖော်ပါတယ်။ [[mark:type-outbox]] ဒီ
+      function က posting နဲ့ outbox row ကို transaction တစ်ခုတည်းမှာ ရေးပါတယ်။ publish လုပ်တဲ့ code
+      ဒီမှာ မပါတော့ပါဘူး။ [[mark:type-main]] main မှာ posting နှစ်ခုကို outbox နဲ့ ရေးပြီး relay ကို နှစ်ကြိမ်
+      run ပါမယ်။ ပထမ run က ပထမ event ကို publish လုပ်ပြီးတာနဲ့ crash ဖြစ်ပါတယ်။ ဒုတိယ run က process
+      ပြန်တက်လာပြီးနောက် run တာပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-out]] database မှာ posting
+      နှစ်ခုလုံး ရှိပြီး consumer ဆီလည်း နှစ်ခုလုံး ရောက်ပါတယ်၊ ဘာမှ မပျောက်ပါဘူး။ ဒါပေမဲ့ consumer
+      က message သုံးခု ရပြီး ပထမ posting ကို နှစ်ခါ apply လုပ်ထားပါတယ်။ [[mark:dock-2]] user ကို notification နှစ်ခါ
+      ပို့တာ၊ credit နှစ်ခါ လုပ်တာမျိုး ဖြစ်နိုင်ပါတယ်။ [[mark:open-cons]] consumer ကို ပြင်ရအောင်။
+      [[mark:type-dedupe]] event id ကို မြင်ဖူးရင် ကျော်ပြီး၊ မမြင်ဖူးရင် မှတ်ပြီးမှ apply လုပ်ပါမယ်။ ဒါ
+      အလုပ်လုပ်ဖို့ event id က stable ဖြစ်ရပါမယ်၊ posting တစ်ခုကို ဘယ်နှခါ publish လုပ်လုပ် id တူရပါမယ်။
+      [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-dedupe]] message သုံးခု ရပေမဲ့ posting တစ်ခုကို
+      တစ်ခါပဲ apply လုပ်ပါတယ်။ publish က နှစ်ခါ ဖြစ်ပေမဲ့ effect က တစ်ခါပဲ ဖြစ်ပါတယ်။ တကယ့် consumer မှာတော့ event id ကို မှတ်တာနဲ့ effect ကို transaction တစ်ခုတည်းမှာ commit လုပ်ရပါမယ်၊ မဟုတ်ရင် ကြားမှာ crash ဖြစ်တဲ့အခါ event တစ်ခု ပျောက်သွားနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: close-outbox, type: slide.close, at: { mark: close-outbox } }
+      - id: sel-relay
+        type: editor.select
+        at: { mark: sel-relay }
+        target:
+          {
+            file: main.go,
+            text: "func (db *DB) relay(b *Broker, crashAfter string) {",
+            occurrence: 1,
+          }
+      - id: type-outbox
+        type: editor.type
+        at: { mark: type-outbox }
+        target: { file: main.go, after: "\t\tr.Sent = true\n\t}\n}\n", occurrence: 1 }
+        text: "\nfunc withOutbox(db *DB, id string) {\n\ttx := db.Begin()\n\ttx.Post(id)\n\ttx.Outbox(event(id))\n\ttx.Commit()\n}\n"
+        cadence: line-by-line
+      - id: type-main
+        type: editor.type
+        at: { mark: type-main }
+        target:
+          { file: main.go, after: "\tfmt.Println(\"dual write:\", db, \"|\", c)\n", occurrence: 1 }
+        text: "\n\tdb, c, b = setup()\n\twithOutbox(db, \"p3\")\n\twithOutbox(db, \"p4\")\n\tdb.relay(b, \"evt-p3\")\n\tdb.relay(b, \"\")\n\tfmt.Println(\"outbox:    \", db, \"|\", c)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "applied [p3 p3 p4]",
+          timeoutMs: 8000,
+        }
+      - id: pt-out
+        type: console.point
+        at: { mark: pt-out }
+        target: { text: "outbox:     db [p3 p4]", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+      - { id: open-cons, type: workspace.openFile, at: { mark: open-cons }, path: consumer.go }
+      - id: type-dedupe
+        type: editor.type
+        at: { mark: type-dedupe }
+        target: { file: consumer.go, after: "\tc.got++\n", occurrence: 1 }
+        text: "\tif c.seen[e.ID] {\n\t\treturn\n\t}\n\tc.seen[e.ID] = true\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "consumer got 3, applied [p3 p4]",
+          timeoutMs: 8000,
+        }
+      - id: pt-dedupe
+        type: console.point
+        at: { mark: pt-dedupe }
+        target: { text: "consumer got 3, applied [p3 p4]", occurrence: 1 }
+      - {
+          id: expect-file-dedupe,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: consumer.go,
+          contains: "c.seen[e.ID] = true",
+        }
+
+  - id: cdc
+    chapter: "CDC: database log ကို ဖတ်"
+    narration: >-
+      [[mark:show-cdc]] ဒုတိယ နည်းက change data capture ပါ၊ CDC လို့ ခေါ်ပါတယ်။ database က commit
+      တိုင်းကို write-ahead log ဒါမှမဟုတ် replication log ထဲ ရေးပြီးသားမို့ အဲဒီ log ကို tail လုပ်ပြီး event
+      stream အဖြစ် ပြောင်းတာပါ။ [[mark:pt-conn]] Debezium က CDC အတွက် open source platform တစ်ခုပါ။ သူ့ရဲ့
+      PostgreSQL connector က logical decoding ကနေ၊ MySQL connector က binlog ကနေ commit ဖြစ်ပြီးသား
+      ပြောင်းလဲမှုတွေကို ဖတ်ပြီး row တစ်ခုချင်းအတွက် change event ထုတ်ပေးပါတယ်။ AWS DMS လို service
+      တွေလည်း ရှိပါတယ်။ [[mark:cdc-2]] log ကနေ တိုက်ရိုက် ဖတ်တာမို့ commit ဖြစ်တဲ့ ပြောင်းလဲမှု တစ်ခုမှ
+      မလွတ်ပါဘူး၊ application ထဲမှာ publish လုပ်တဲ့ code လည်း မလိုပါဘူး။ [[mark:cdc-3]] ပေးရတဲ့ အဖိုးကတော့
+      coupling နဲ့ operation ပိုင်း ဝန်ပါ။ raw CDC event က ကိုယ့် table ရဲ့ row ပုံစံ အတိုင်း ထွက်လာလို့
+      column တစ်ခု နာမည် ပြောင်းတာနဲ့ consumer တွေ ပျက်နိုင်ပါတယ်။ ဒါကြောင့် internal schema ကို အပြင်
+      မပေါက်အောင် ပြန်ပြင်ပြီးမှ ထုတ်ရပါတယ်။ [[mark:pt-router]] Debezium မှာ outbox pattern အတွက် Outbox
+      Event Router ဆိုတဲ့ transformation တောင် ပါပါတယ်။ ဆိုလိုတာက outbox table ကို CDC နဲ့ ဖတ်ရင် relay
+      ကိုယ်တိုင် မရေးဘဲ၊ public event ပုံစံကိုလည်း ကိုယ်တိုင် ထိန်းနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+      - { title: "Debezium", url: "https://debezium.io/" }
+      - {
+          title: "Debezium connector for PostgreSQL",
+          url: "https://debezium.io/documentation/reference/stable/connectors/postgresql.html",
+        }
+    actions:
+      - { id: show-cdc, type: slide.show, at: { mark: show-cdc, offsetMs: -700 }, slideId: cdc-1 }
+      - {
+          id: pt-wal,
+          type: slide.point,
+          at: { afterAction: show-cdc },
+          target: { x: 0.456, y: 0.486 },
+        }
+      - { id: pt-conn, type: slide.point, at: { mark: pt-conn }, target: { x: 0.816, y: 0.453 } }
+      - { id: cdc-2, type: slide.show, at: { mark: cdc-2 }, slideId: cdc-2 }
+      - {
+          id: pt-good,
+          type: slide.point,
+          at: { afterAction: cdc-2 },
+          target: { x: 0.246, y: 0.642 },
+        }
+      - { id: cdc-3, type: slide.show, at: { mark: cdc-3 }, slideId: cdc-3 }
+      - {
+          id: pt-evt,
+          type: slide.point,
+          at: { afterAction: cdc-3 },
+          target: { x: 0.115, y: 0.837 },
+        }
+      - {
+          id: pt-router,
+          type: slide.point,
+          at: { mark: pt-router },
+          target: { x: 0.816, y: 0.842 },
+        }
+
+  - id: options
+    narration: >-
+      [[mark:show-opt]] outbox နဲ့ CDC အပြင် နောက်ထပ် နည်း နှစ်မျိုး ရှိပါတယ်။ [[mark:opt-2]] listen-to-yourself
+      မှာ အစဉ်ကို ပြောင်းပြန် လုပ်ပါတယ်။ event ကို Kafka ကို အရင် publish လုပ်ပြီး၊ ကိုယ့် state ကိုလည်း
+      အဲဒီ event ကနေ ပြန်တည်ဆောက်ပါတယ်။ ဒါကြောင့် ကိုယ့် state က event stream ထက် နောက်ကျပါတယ်။
+      [[mark:opt-3]] event sourcing သုံးထားရင်တော့ event log က database ထဲမှာ ရှိပြီးသားမို့ publish လုပ်တာက
+      အဲဒီ log ကို ဖတ်ရုံပါပဲ။ [[mark:pt-alo]] ဘယ်နည်းကို ရွေးရွေး delivery က at-least-once ပါ။ relay ဖြစ်ဖြစ်
+      connector ဖြစ်ဖြစ်၊ publish လုပ်ပြီး မှတ်မထားရခင် crash ဖြစ်နိုင်လို့ပါ။ ဒါကြောင့် consumer တိုင်းက
+      stable event id နဲ့ dedupe လုပ်ရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Event sourcing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#event-sourcing",
+        }
+    actions:
+      - {
+          id: show-opt,
+          type: slide.show,
+          at: { mark: show-opt, offsetMs: -700 },
+          slideId: options-1,
+        }
+      - {
+          id: pt-opt1,
+          type: slide.point,
+          at: { afterAction: show-opt },
+          target: { x: 0.131, y: 0.381 },
+        }
+      - { id: opt-2, type: slide.show, at: { mark: opt-2 }, slideId: options-2 }
+      - {
+          id: pt-opt2,
+          type: slide.point,
+          at: { afterAction: opt-2 },
+          target: { x: 0.131, y: 0.586 },
+        }
+      - { id: opt-3, type: slide.show, at: { mark: opt-3 }, slideId: options-3 }
+      - {
+          id: pt-opt3,
+          type: slide.point,
+          at: { afterAction: opt-3 },
+          target: { x: 0.131, y: 0.688 },
+        }
+      - { id: pt-alo, type: slide.point, at: { mark: pt-alo }, target: { x: 0.357, y: 0.847 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ database update နဲ့ Kafka publish ကို ဘယ်လို စိတ်ချရအောင်
+      လုပ်မလဲ လို့ မေးလေ့ရှိပါတယ်။ commit ပြီးမှ publish လုပ်မယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး။ အချက်
+      သုံးချက်နဲ့ ဖြေပါ။ [[mark:iv-a]] ပထမ၊ dual write ဘာကြောင့် မရလဲ ဆိုတာပါ။ publish ပြီးမှ rollback
+      ဖြစ်ရင် phantom event၊ commit ပြီးမှ publish fail ရင် missing event ဖြစ်ပါတယ်။ [[mark:iv-b]] ဒုတိယ၊
+      outbox ပါ။ state နဲ့ event ကို transaction တစ်ခုတည်းမှာ ရေးပြီး၊ relay က sent မဖြစ်သေးတဲ့ row တွေကို
+      retry လုပ်ပြီး publish လုပ်ပါတယ်။ [[mark:iv-c]] တတိယ၊ at-least-once ပါ။ relay က publish ပြီး mark
+      မလုပ်ခင် crash ဖြစ်နိုင်လို့ consumer က stable event id နဲ့ dedupe လုပ်ရပါတယ်။ [[mark:iv-d]] ပြီးရင်
+      ကိုယ် ဘာရွေးမလဲ ဆက်ပြောပါ။ outbox နဲ့ relay နဲ့ dedupe ကို ရွေးမယ်၊ ဒါမှမဟုတ် CDC ကို သုံးမယ်ဆိုရင်
+      row event ကို public event အဖြစ် ပြောင်းပြီးမှ ထုတ်မယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] consumer ထဲက dedupe
+      လုပ်တဲ့ line လေးကြောင်းကို ဖျက်ပြီး run ကြည့်ပါ။ message သုံးခု ရောက်တာ အတူတူပဲ ဖြစ်ပေမဲ့ ပထမ
+      posting ကို နှစ်ခါ apply လုပ်တာ ပြန်ပေါ်လာပါမယ်။ outbox က ဘာမှ မပျောက်အောင် ကာကွယ်ပေးပြီး၊ dedupe
+      က နှစ်ခါ မဖြစ်အောင် ကာကွယ်ပေးတာမို့ နှစ်ခုလုံး လိုပါတယ်။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ publish လုပ်မယ့်
+      intent ကို state နဲ့ transaction တစ်ခုတည်းမှာ သိမ်းပြီး၊ relay ဒါမှမဟုတ် log က ထုတ်ပေးပါစေ။ consumer
+      ဘက်က အမြဲ dedupe လုပ်ပါ။ နောက် lesson မှာတော့ ဒီလောက် ကာကွယ်ထားတာတောင် ကိုယ့် ledger နဲ့ provider
+      ရဲ့ record တွေ ကွဲလာတဲ့အခါ ဘယ်လို ရှာပြီး ပြင်မလဲ ဆိုတဲ့ reconciliation ကို ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target:
+          {
+            file: consumer.go,
+            text: "\tif c.seen[e.ID] {\n\t\treturn\n\t}\n\tc.seen[e.ID] = true",
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

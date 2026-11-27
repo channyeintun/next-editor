@@ -1,0 +1,731 @@
+# Fintech Engineering, lesson 28: access control (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Access control" (CC BY 4.0, Voytek Pitula).
+# Start state: access.go holds roles → permissions (RBAC), the current role table, an append-only
+# change log of grants and revokes (who, by whom, why), the subjects and when each last used
+# funds.move; main.go answers can(who, perm) from the current table only.
+# Edits, all insert-only:
+#   1. canAt: replay the change log up to a day                } run-2: u-42 could move funds
+#   2. main asks for u-42 on 2026-03-03 and on 2026-04-03      }   on 3 March, not on 3 April
+#   3. the access review: funds.move holders idle over 90 days -> run-3: u-91 and svc-recon
+# Runs: run-1, run-2, run-3.
+# Figures: rbac (per-person grants vs roles; least privilege), history (grant and revoke on a
+# timeline, "who could on this day?"), review (stale access found), iv (the interview answer).
+# Facts: none (the handbook and the program's output only).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-28-access-control
+  title: "Fintech Engineering 28: Access control"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      access.go: |
+        package main
+
+        import (
+        	"slices"
+        	"time"
+        )
+
+        const today = "2026-04-20"
+
+        // roles says what each role may do. People and services get roles, never single permissions.
+        var roles = map[string][]string{
+        	"support":  {"ledger.read"},
+        	"ops":      {"ledger.read", "payout.approve"},
+        	"treasury": {"ledger.read", "funds.move"},
+        }
+
+        // members is the current role table: what many systems store, and all it can answer.
+        var members = map[string][]string{
+        	"u-17": {"ops"}, "u-42": {"support"}, "u-91": {"treasury"}, "svc-recon": {"treasury"},
+        }
+
+        // Change is one grant or revoke: an append-only event that says who made it and why.
+        type Change struct {
+        	Day, Who, Role string
+        	Grant          bool
+        	By, Why        string
+        }
+
+        var changes = []Change{
+        	{"2025-12-01", "svc-recon", "treasury", true, "u-07", "debug payouts"},
+        	{"2026-01-10", "u-42", "treasury", true, "u-07", "treasury rota"},
+        	{"2026-01-15", "u-91", "treasury", true, "u-07", "treasury team"},
+        	{"2026-02-02", "u-17", "ops", true, "u-07", "ops on-call"},
+        	{"2026-04-01", "u-42", "treasury", false, "u-07", "moved to support"},
+        	{"2026-04-01", "u-42", "support", true, "u-07", "moved to support"},
+        }
+
+        // subjects are every actor the review looks at, people and services alike.
+        var subjects = []string{"u-17", "u-42", "u-91", "svc-recon"}
+
+        // lastUsed is the last day each subject used funds.move.
+        var lastUsed = map[string]string{"u-42": "2026-03-28", "u-91": "2026-01-15", "svc-recon": "2025-12-02"}
+
+        func gives(role, perm string) bool { return slices.Contains(roles[role], perm) }
+
+        // idle counts the days from s's last use of funds.move to today.
+        func idle(s string) int {
+        	from, _ := time.Parse(time.DateOnly, lastUsed[s])
+        	to, _ := time.Parse(time.DateOnly, today)
+        	return int(to.Sub(from).Hours() / 24)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // can answers from the current table only: does who hold a role that gives perm today?
+        func can(who, perm string) bool {
+        	for _, role := range members[who] {
+        		if gives(role, perm) {
+        			return true
+        		}
+        	}
+        	return false
+        }
+
+        func main() {
+        	fmt.Println("u-17 payout.approve:", can("u-17", "payout.approve"))
+        	fmt.Println("u-42 funds.move:", can("u-42", "funds.move"))
+        	fmt.Println("u-91 funds.move:", can("u-91", "funds.move"))
+        }
+  slides:
+    - id: history-1
+      contentType: html
+      name: "Access history 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">ACCESS HISTORY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Grant နဲ့ revoke ကလည်း event ပဲ</text>
+        <g class="in"><rect x="100" y="215" width="1400" height="160" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">changes (append-only)</text><path d="M100 261H1500" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#68d391">2026-01-10  grant   u-42  treasury  by u-07  "treasury rota"</text></g></g>
+        <g class="in"><path d="M140 600H1440" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><circle cx="270" cy="600" r="10" fill="#68d391"/><path d="M270 600V646" stroke="#68d391" stroke-width="2.5"/><text x="270" y="682" font-size="28" text-anchor="middle" fill="#68d391" font-weight="700">Jan 10</text><text x="270" y="714" font-size="23" text-anchor="middle" fill="#8a94a8">grant</text></g></g>
+        </svg>
+    - id: history-2
+      contentType: html
+      name: "Access history 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">ACCESS HISTORY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Grant နဲ့ revoke ကလည်း event ပဲ</text>
+        <rect x="100" y="215" width="1400" height="160" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">changes (append-only)</text><path d="M100 261H1500" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#68d391">2026-01-10  grant   u-42  treasury  by u-07  "treasury rota"</text></g><g class="in"><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">2026-04-01  revoke  u-42  treasury  by u-07  "moved to support"</text></g>
+        <path d="M140 600H1440" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g class="in"><path d="M270 582H1206" stroke="#f6c453" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="738" y="566" font-size="24" text-anchor="middle" fill="#f6c453" font-weight="600">u-42 holds funds.move</text></g><g><circle cx="270" cy="600" r="10" fill="#68d391"/><path d="M270 600V646" stroke="#68d391" stroke-width="2.5"/><text x="270" y="682" font-size="28" text-anchor="middle" fill="#68d391" font-weight="700">Jan 10</text><text x="270" y="714" font-size="23" text-anchor="middle" fill="#8a94a8">grant</text></g><g class="in"><circle cx="1206" cy="600" r="10" fill="#fc8181"/><path d="M1206 600V646" stroke="#fc8181" stroke-width="2.5"/><text x="1206" y="682" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700">Apr 1</text><text x="1206" y="714" font-size="23" text-anchor="middle" fill="#8a94a8">revoke</text></g>
+        </svg>
+    - id: history-3
+      contentType: html
+      name: "Access history 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">ACCESS HISTORY</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Grant နဲ့ revoke ကလည်း event ပဲ</text>
+        <rect x="100" y="215" width="1400" height="160" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="249" font-size="22" fill="#8a94a8" font-weight="700" class="mono">changes (append-only)</text><path d="M100 261H1500" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="307.1" font-size="26" class="mono" xml:space="preserve" fill="#68d391">2026-01-10  grant   u-42  treasury  by u-07  "treasury rota"</text></g><g><text x="124" y="346.1" font-size="26" class="mono" xml:space="preserve" fill="#fc8181">2026-04-01  revoke  u-42  treasury  by u-07  "moved to support"</text></g>
+        <path d="M140 600H1440" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M270 582H1206" stroke="#f6c453" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="738" y="566" font-size="24" text-anchor="middle" fill="#f6c453" font-weight="600">u-42 holds funds.move</text></g><g><circle cx="270" cy="600" r="10" fill="#68d391"/><path d="M270 600V646" stroke="#68d391" stroke-width="2.5"/><text x="270" y="682" font-size="28" text-anchor="middle" fill="#68d391" font-weight="700">Jan 10</text><text x="270" y="714" font-size="23" text-anchor="middle" fill="#8a94a8">grant</text></g><g class="in"><circle cx="972" cy="600" r="10" fill="#b794f6"/><path d="M972 600V554" stroke="#b794f6" stroke-width="2.5"/><text x="972" y="506" font-size="28" text-anchor="middle" fill="#b794f6" font-weight="700">Mar 3 ?</text><text x="972" y="538" font-size="23" text-anchor="middle" fill="#8a94a8">true</text></g><g><circle cx="1206" cy="600" r="10" fill="#fc8181"/><path d="M1206 600V646" stroke="#fc8181" stroke-width="2.5"/><text x="1206" y="682" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700">Apr 1</text><text x="1206" y="714" font-size="23" text-anchor="middle" fill="#8a94a8">revoke</text></g><g class="in"><circle cx="1310" cy="600" r="10" fill="#b794f6"/><path d="M1310 600V554" stroke="#b794f6" stroke-width="2.5"/><text x="1310" y="506" font-size="28" text-anchor="middle" fill="#b794f6" font-weight="700">Apr 3 ?</text><text x="1310" y="538" font-size="23" text-anchor="middle" fill="#8a94a8">false</text></g>
+        <g class="in"><rect x="100" y="780" width="746.8" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="100" y="780" width="746.8" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="473.4" y="814.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">X နေ့က ဘယ်သူ လုပ်နိုင်ခဲ့လဲ = log ကို X နေ့အထိ replay</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">မတ်လ 3 ရက်က ဘယ်သူတွေ fund ရွှေ့နိုင်ခဲ့လဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">မတ်လ 3 ရက်က ဘယ်သူတွေ fund ရွှေ့နိုင်ခဲ့လဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Access ကို current state တင် မဟုတ်ဘဲ event log နဲ့ပါ သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">grant / revoke တိုင်းမှာ who, by whom, why, when</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">မတ်လ 3 ရက်က ဘယ်သူတွေ fund ရွှေ့နိုင်ခဲ့လဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Access ကို current state တင် မဟုတ်ဘဲ event log နဲ့ပါ သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">grant / revoke တိုင်းမှာ who, by whom, why, when</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Log ကို အဲဒီနေ့အထိ replay — role ကနေ permission ကို ဆင့်တွက်</text><text x="188" y="443" font-size="26" fill="#8a94a8">role definition ပြောင်းတာလည်း event ပဲ</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">မတ်လ 3 ရက်က ဘယ်သူတွေ fund ရွှေ့နိုင်ခဲ့လဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Access ကို current state တင် မဟုတ်ဘဲ event log နဲ့ပါ သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">grant / revoke တိုင်းမှာ who, by whom, why, when</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Log ကို အဲဒီနေ့အထိ replay — role ကနေ permission ကို ဆင့်တွက်</text><text x="188" y="443" font-size="26" fill="#8a94a8">role definition ပြောင်းတာလည်း event ပဲ</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">ဘယ်လို ရလာလဲ ပါ ပြ — grant ကို ဘယ်သူ approve လုပ်လဲ</text><text x="188" y="575" font-size="26" fill="#8a94a8">service account တွေလည်း စာရင်းထဲ ပါ</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">မတ်လ 3 ရက်က ဘယ်သူတွေ fund ရွှေ့နိုင်ခဲ့လဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Access ကို current state တင် မဟုတ်ဘဲ event log နဲ့ပါ သိမ်း</text><text x="188" y="311" font-size="26" fill="#8a94a8">grant / revoke တိုင်းမှာ who, by whom, why, when</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Log ကို အဲဒီနေ့အထိ replay — role ကနေ permission ကို ဆင့်တွက်</text><text x="188" y="443" font-size="26" fill="#8a94a8">role definition ပြောင်းတာလည်း event ပဲ</text></g><g><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">ဘယ်လို ရလာလဲ ပါ ပြ — grant ကို ဘယ်သူ approve လုပ်လဲ</text><text x="188" y="575" font-size="26" fill="#8a94a8">service account တွေလည်း စာရင်းထဲ ပါ</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">Least privilege + RBAC + recertification ကို schedule နဲ့</text><text x="188" y="707" font-size="26" fill="#8a94a8">temporary grant တွေ အလိုလို expire</text></g>
+        </svg>
+    - id: rbac-1
+      contentType: html
+      name: "RBAC 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">RBAC</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">လူကို permission မပေးဘဲ role ပေး</text>
+        <g class="in"><rect x="100" y="230" width="300" height="90" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="122" y="248" width="54" height="54" style="color:#6cb2f5"/><text x="285" y="285" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">u-17</text></g>
+        <g class="in"><rect x="100" y="360" width="300" height="90" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="122" y="378" width="54" height="54" style="color:#6cb2f5"/><text x="285" y="415" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">u-42</text></g>
+        <g class="in"><rect x="100" y="490" width="300" height="90" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="122" y="508" width="54" height="54" style="color:#6cb2f5"/><text x="285" y="545" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">u-91</text></g>
+        <g class="in"><rect x="100" y="620" width="300" height="90" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-server" x="122" y="638" width="54" height="54" style="color:#9aa5b8"/><text x="285" y="675" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">svc-recon</text></g>
+        <g class="in"><rect x="1180" y="300" width="330" height="90" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1345" y="355" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">ledger.read</text></g>
+        <g class="in"><rect x="1180" y="430" width="330" height="90" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1345" y="485" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">payout.approve</text></g>
+        <g class="in"><rect x="1180" y="560" width="330" height="90" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="1180" y="560" width="330" height="90" rx="18" fill="#f6c453" opacity="0.13"/><text x="1345" y="615" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">funds.move</text></g>
+        <path d="M410 275.9L1166.1 343.7" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M409.7 277.5L1166.4 471.5" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M410 404.2L1166 346.1" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M409.7 407.5L1166.4 601.5" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M409.7 532.6L1166.4 348.3" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M410 535.9L1166.1 603.7" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M409.3 661.2L1167 350.3" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M410 664.2L1166 606.1" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <g class="in"><rect x="470" y="760" width="858" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="470" y="760" width="858" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="899" y="794.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">per-person grants — ဘယ်သူ့ကို ဘာကြောင့် ပေးလဲ ပြန်မစစ်နိုင်</text></g>
+        </svg>
+    - id: rbac-2
+      contentType: html
+      name: "RBAC 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">RBAC</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">လူကို permission မပေးဘဲ role ပေး</text>
+        <rect x="100" y="230" width="300" height="90" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="122" y="248" width="54" height="54" style="color:#6cb2f5"/><text x="285" y="285" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">u-17</text>
+        <rect x="100" y="360" width="300" height="90" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="122" y="378" width="54" height="54" style="color:#6cb2f5"/><text x="285" y="415" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">u-42</text>
+        <rect x="100" y="490" width="300" height="90" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="122" y="508" width="54" height="54" style="color:#6cb2f5"/><text x="285" y="545" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">u-91</text>
+        <rect x="100" y="620" width="300" height="90" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-server" x="122" y="638" width="54" height="54" style="color:#9aa5b8"/><text x="285" y="675" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">svc-recon</text>
+        <rect x="1180" y="300" width="330" height="90" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1345" y="355" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">ledger.read</text>
+        <rect x="1180" y="430" width="330" height="90" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1345" y="485" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">payout.approve</text>
+        <rect x="1180" y="560" width="330" height="90" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="1180" y="560" width="330" height="90" rx="18" fill="#f6c453" opacity="0.13"/><text x="1345" y="615" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">funds.move</text>
+        <g class="in"><rect x="640" y="260" width="320" height="100" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="662" y="278" width="64" height="64" style="color:#b794f6"/><text x="840" y="320" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">support</text></g>
+        <g class="in"><rect x="640" y="420" width="320" height="100" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="662" y="438" width="64" height="64" style="color:#b794f6"/><text x="840" y="480" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ops</text></g>
+        <g class="in"><rect x="640" y="580" width="320" height="100" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="640" y="580" width="320" height="100" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-shield" x="662" y="598" width="64" height="64" style="color:#b794f6"/><text x="840" y="640" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">treasury</text></g>
+        <path d="M407.8 281.3L629.1 461.2" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M409.3 401.3L627 315.2" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M409.3 538.7L627 624.8" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M409.9 663.6L626.1 632" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M969.9 311.6L1166.2 342.8" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M970 470.2L1166 474.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M969.9 628.9L1166.1 606.6" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/>
+        </svg>
+    - id: rbac-3
+      contentType: html
+      name: "RBAC 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">RBAC</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">လူကို permission မပေးဘဲ role ပေး</text>
+        <rect x="100" y="230" width="300" height="90" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="122" y="248" width="54" height="54" style="color:#6cb2f5"/><text x="285" y="285" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">u-17</text>
+        <rect x="100" y="360" width="300" height="90" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="122" y="378" width="54" height="54" style="color:#6cb2f5"/><text x="285" y="415" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">u-42</text>
+        <rect x="100" y="490" width="300" height="90" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="122" y="508" width="54" height="54" style="color:#6cb2f5"/><text x="285" y="545" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">u-91</text>
+        <rect x="100" y="620" width="300" height="90" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-server" x="122" y="638" width="54" height="54" style="color:#9aa5b8"/><text x="285" y="675" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">svc-recon</text>
+        <rect x="1180" y="300" width="330" height="90" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1345" y="355" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">ledger.read</text>
+        <rect x="1180" y="430" width="330" height="90" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="1345" y="485" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">payout.approve</text>
+        <rect x="1180" y="560" width="330" height="90" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><rect x="1180" y="560" width="330" height="90" rx="18" fill="#f6c453" opacity="0.13"/><text x="1345" y="615" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">funds.move</text>
+        <rect x="640" y="260" width="320" height="100" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="662" y="278" width="64" height="64" style="color:#b794f6"/><text x="840" y="320" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">support</text>
+        <rect x="640" y="420" width="320" height="100" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-shield" x="662" y="438" width="64" height="64" style="color:#b794f6"/><text x="840" y="480" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ops</text>
+        <rect x="640" y="580" width="320" height="100" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="640" y="580" width="320" height="100" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-shield" x="662" y="598" width="64" height="64" style="color:#b794f6"/><text x="840" y="640" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">treasury</text>
+        <path d="M407.8 281.3L629.1 461.2" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M409.3 401.3L627 315.2" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M409.3 538.7L627 624.8" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M409.9 663.6L626.1 632" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M969.9 311.6L1166.2 342.8" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M970 470.2L1166 474.7" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M969.9 628.9L1166.1 606.6" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <g class="in"><rect x="470" y="760" width="674.6" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="470" y="760" width="674.6" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="807.3" y="794.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">least privilege — svc-recon က ledger.read ပဲ လို</text></g>
+        <g class="in"><rect x="86" y="606" width="328" height="118" rx="26" fill="none" stroke="#f6ad55" stroke-width="10" opacity="0.18"/><rect x="86" y="606" width="328" height="118" rx="26" fill="none" stroke="#f6ad55" stroke-width="3.5"/></g>
+        </svg>
+    - id: review-1
+      contentType: html
+      name: "Access review 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">ACCESS REVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Access က တဖြည်းဖြည်း ဟောင်းလာတယ်</text>
+        <g class="in"><text x="100" y="250" font-size="26" fill="#8a94a8">funds.move ကိုင်ထားသူ အားလုံး · today 2026-04-20 · idle &gt; 90 days</text></g>
+        <g class="in"><rect x="100" y="290" width="1400" height="272" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="325" font-size="22" fill="#8a94a8" font-weight="700">subject</text><text x="385.8" y="325" font-size="22" fill="#8a94a8" font-weight="700">role</text><text x="609" y="325" font-size="22" fill="#8a94a8" font-weight="700">last used</text><text x="872.7" y="325" font-size="22" fill="#8a94a8" font-weight="700">granted for</text><text x="1197.4" y="325" font-size="22" fill="#8a94a8" font-weight="700">verdict</text><path d="M100 342H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="407" font-size="28" fill="#e9edf5" class="mono">u-91</text><text x="385.8" y="407" font-size="28" fill="#e9edf5" class="mono">treasury</text><text x="609" y="407" font-size="28" fill="#e9edf5" class="mono">2026-01-15</text><text x="872.7" y="407" font-size="28" fill="#e9edf5">treasury team</text><text x="1197.4" y="407" font-size="26" fill="#f6ad55">owner ကို confirm ခိုင်း</text></g><g><rect x="106" y="457" width="1388" height="100" rx="10" fill="#fc8181" opacity="0.14"/><path d="M116 452H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="517" font-size="28" fill="#e9edf5" class="mono">svc-recon</text><text x="385.8" y="517" font-size="28" fill="#e9edf5" class="mono">treasury</text><text x="609" y="517" font-size="28" fill="#e9edf5" class="mono">2025-12-02</text><text x="872.7" y="517" font-size="28" fill="#e9edf5">debug payouts</text><text x="1197.4" y="517" font-size="28" fill="#fc8181">revoke — read ပဲ လို</text></g></g>
+        </svg>
+    - id: review-2
+      contentType: html
+      name: "Access review 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">ACCESS REVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Access က တဖြည်းဖြည်း ဟောင်းလာတယ်</text>
+        <text x="100" y="250" font-size="26" fill="#8a94a8">funds.move ကိုင်ထားသူ အားလုံး · today 2026-04-20 · idle &gt; 90 days</text>
+        <rect x="100" y="290" width="1400" height="272" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="325" font-size="22" fill="#8a94a8" font-weight="700">subject</text><text x="385.8" y="325" font-size="22" fill="#8a94a8" font-weight="700">role</text><text x="609" y="325" font-size="22" fill="#8a94a8" font-weight="700">last used</text><text x="872.7" y="325" font-size="22" fill="#8a94a8" font-weight="700">granted for</text><text x="1197.4" y="325" font-size="22" fill="#8a94a8" font-weight="700">verdict</text><path d="M100 342H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="407" font-size="28" fill="#e9edf5" class="mono">u-91</text><text x="385.8" y="407" font-size="28" fill="#e9edf5" class="mono">treasury</text><text x="609" y="407" font-size="28" fill="#e9edf5" class="mono">2026-01-15</text><text x="872.7" y="407" font-size="28" fill="#e9edf5">treasury team</text><text x="1197.4" y="407" font-size="26" fill="#f6ad55">owner ကို confirm ခိုင်း</text></g><g><rect x="106" y="457" width="1388" height="100" rx="10" fill="#fc8181" opacity="0.14"/><path d="M116 452H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="517" font-size="28" fill="#e9edf5" class="mono">svc-recon</text><text x="385.8" y="517" font-size="28" fill="#e9edf5" class="mono">treasury</text><text x="609" y="517" font-size="28" fill="#e9edf5" class="mono">2025-12-02</text><text x="872.7" y="517" font-size="28" fill="#e9edf5">debug payouts</text><text x="1197.4" y="517" font-size="28" fill="#fc8181">revoke — read ပဲ လို</text></g>
+        <g class="in"><rect x="100" y="660" width="989.1" height="54" rx="27" fill="#b794f6" opacity="0.16"/><rect x="100" y="660" width="989.1" height="54" rx="27" fill="none" stroke="#b794f6" stroke-width="2"/><text x="594.6" y="697.5" font-size="30" text-anchor="middle" fill="#b794f6" font-weight="700">access က တိတ်တိတ် စုလာ → least privilege + periodic review</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9528
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "u-17 payout.approve: true\nu-42 funds.move: false\nu-91 funds.move: true\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "u-17 payout.approve: true\nu-42 funds.move: false\nu-91 funds.move: true\nfunds.move on 2026-03-03: true, last change by u-07: treasury rota\nfunds.move on 2026-04-03: false, last change by u-07: moved to support\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "u-17 payout.approve: true\nu-42 funds.move: false\nu-91 funds.move: true\nfunds.move on 2026-03-03: true, last change by u-07: treasury rota\nfunds.move on 2026-04-03: false, last change by u-07: moved to support\nreview: u-91 treasury idle 95 days, granted for: treasury team\nreview: svc-recon treasury idle 139 days, granted for: debug payouts\n"
+
+scenes:
+  - id: hook
+    chapter: Access ကလည်း system ရဲ့ state
+    narration: >-
+      ငွေကို ဘယ်သူ ရွှေ့ခွင့် ရှိလဲ ဆိုတာ ကိုယ်တိုင်က system ရဲ့ state တစ်ခုပါ။ လူတွေ ဝင်လာတယ်၊
+      team ပြောင်းတယ်၊ ထွက်သွားတယ်၊ ဒါကြောင့် အဲဒီ state က အချိန်နဲ့အမျှ ပြောင်းနေပါတယ်။ auditor က ဒီနေ့
+      ဘယ်သူ fund ကို ထိနိုင်လဲ ဆိုတာတင် မဟုတ်ဘဲ၊ အဲဒီ access ကို ဘယ်လို ရလာခဲ့လဲ ဆိုတာကိုပါ
+      မေးပါတယ်။ [[mark:sel-roles]] ဒီမှာ role သုံးခုနဲ့ role တစ်ခုချင်း လုပ်ခွင့်ရှိတဲ့ permission တွေ
+      ရှိပါတယ်။ fund ရွှေ့ခွင့်က treasury role မှာပဲ ပါပါတယ်။ [[mark:sel-members]] အောက်က table က
+      အခု ဘယ်သူ ဘယ် role ကိုင်ထားလဲ ဆိုတာပါ၊ system တော်တော်များများက ဒါကိုပဲ သိမ်းထားပါတယ်။ လူ သုံးယောက်နဲ့
+      reconciliation job ရဲ့ service account တစ်ခု ပါပါတယ်။ [[mark:open-main]] အဲဒီ table ကို
+      မေးကြည့်ရအောင်။ [[mark:sel-can]] can function က user ကိုင်ထားတဲ့ role တွေထဲမှာ အဲဒီ permission
+      ပါသလား ကြည့်ပါတယ်။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Access control (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#access-control",
+        }
+    actions:
+      - { id: open-access, type: workspace.openFile, at: { scene: start }, path: access.go }
+      - id: sel-roles
+        type: editor.select
+        at: { mark: sel-roles }
+        target: { file: access.go, text: "var roles = map[string][]string{", occurrence: 1 }
+      - id: sel-members
+        type: editor.select
+        at: { mark: sel-members }
+        target: { file: access.go, text: "var members = map[string][]string{", occurrence: 1 }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: main.go }
+      - id: sel-can
+        type: editor.select
+        at: { mark: sel-can }
+        target: { file: main.go, text: "func can(who, perm string) bool {", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "u-91 funds.move: true",
+          timeoutMs: 8000,
+        }
+
+  - id: rbac
+    chapter: Role နဲ့ least privilege
+    narration: >-
+      [[mark:pt-r1]] ops role ရှိတဲ့ user က payout ကို approve လုပ်နိုင်ပါတယ်။ [[mark:pt-r3]] treasury role
+      ရှိတဲ့ user ကတော့ fund ရွှေ့နိုင်ပါတယ်။ [[mark:show-rbac]] permission ကို user ဆီ တိုက်ရိုက်
+      မပေးဘဲ role ကနေ ဘာလို့ ပေးလဲ ဆိုတာ ကြည့်ရအောင်။ လူ တစ်ယောက်ချင်းကို permission တစ်ခုချင်း
+      ပေးရင် ချိတ်ဆက်မှုတွေက လူ အရေအတွက်နဲ့ permission အရေအတွက် မြှောက်လဒ်လောက်ထိ များလာပါတယ်။
+      [[mark:pt-tangle]] ဘယ်ဟာကို ဘာကြောင့် ပေးခဲ့လဲ ဆိုတာ review လုပ်ဖို့ အရမ်း ခက်လာပါတယ်။
+      [[mark:rbac-2]] RBAC ဆိုတာ role based access control ပါ၊ permission တွေကို role ထဲ စုထားပြီး လူကို
+      role ပေးတာပါ။ ဒါဆိုရင် review လုပ်ရမှာက role သုံးခုရဲ့ အဓိပ္ပာယ်နဲ့ role တစ်ခုချင်းမှာ ဘယ်သူ
+      ပါလဲ ဆိုတာပဲ ကျန်ပါတယ်။ [[mark:rbac-3]] least privilege ဆိုတာ actor တိုင်းကို လိုတာ အနည်းဆုံးပဲ
+      ပေးတာပါ၊ လူသာမက service တွေပါ ပါပါတယ်။ reconciliation job က ledger ကို ဖတ်ဖို့ပဲ လိုပေမဲ့ ဒီမှာ
+      treasury role ကိုင်ထားပါတယ်၊ ဒါကို ခဏနေရင် ပြန်တွေ့ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Access control (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#access-control",
+        }
+    actions:
+      - id: pt-r1
+        type: console.point
+        at: { mark: pt-r1 }
+        target: { text: "u-17 payout.approve: true", occurrence: 1 }
+      - id: pt-r3
+        type: console.point
+        at: { mark: pt-r3 }
+        target: { text: "u-91 funds.move: true", occurrence: 1 }
+      - {
+          id: show-rbac,
+          type: slide.show,
+          at: { mark: show-rbac, offsetMs: -700 },
+          slideId: rbac-1,
+        }
+      - {
+          id: pt-tangle,
+          type: slide.point,
+          at: { mark: pt-tangle },
+          target: { x: 0.556, y: 0.909 },
+        }
+      - { id: rbac-2, type: slide.show, at: { mark: rbac-2 }, slideId: rbac-2 }
+      - {
+          id: pt-r3role,
+          type: slide.point,
+          at: { afterAction: rbac-2 },
+          target: { x: 0.5, y: 0.764 },
+        }
+      - { id: rbac-3, type: slide.show, at: { mark: rbac-3 }, slideId: rbac-3 }
+      - {
+          id: pt-least,
+          type: slide.point,
+          at: { afterAction: rbac-3 },
+          target: { x: 0.156, y: 0.798 },
+        }
+
+  - id: history
+    chapter: ဒီနေ့ မဟုတ်ဘဲ မတ်လ ၃ ရက်က
+    narration: >-
+      [[mark:show-history]] auditor က မတ်လ သုံးရက်နေ့မှာ ဒုတိယ user က fund ရွှေ့နိုင်ခဲ့သလား လို့ မေးတယ်
+      ဆိုပါစို့။ table က ဒီနေ့ကိုပဲ သိလို့ ဒီနေ့ မရဘူး လို့ပဲ ဖြေနိုင်ပါတယ်။ အဖြေ ရဖို့ access
+      ပြောင်းတာတိုင်းကို event အဖြစ် သိမ်းထားရပါမယ်။ [[mark:pt-grant]] ဇန်နဝါရီ ဆယ်ရက်နေ့မှာ treasury
+      role ကို ပေးခဲ့ပြီး၊ ဘယ်သူ ပေးလဲ၊ ဘာကြောင့် ပေးလဲ ပါပါတယ်။ [[mark:history-2]] ဧပြီလ တစ်ရက်နေ့မှာ
+      support team ကို ပြောင်းသွားလို့ ပြန်ရုပ်သိမ်းခဲ့ပါတယ်။ grant နဲ့ revoke ဆိုတာ ငွေ ရွှေ့တာလိုပဲ
+      sensitive event ပါ။ ledger ရဲ့ audit trail စည်းကမ်းကို ဒီမှာလည်း သုံးပြီး ဘာ ပြောင်းလဲ၊ ဘယ်သူ
+      ပြောင်းလဲ၊ ဘာကြောင့်လဲ ဆိုတာ မှတ်ရပါတယ်။ [[mark:history-3]] ဒါဆိုရင် ဘယ်နေ့မှာ ဘယ်သူ
+      လုပ်နိုင်ခဲ့လဲ ဆိုတာ log ကို အဲဒီနေ့အထိ replay လုပ်ရုံပါပဲ။ [[mark:close-history]] code ထဲ
+      ထည့်ကြည့်ရအောင်။ [[mark:type-canat]] အသစ် ထည့်တဲ့ function က change log ကို အစကနေ မေးတဲ့နေ့အထိ
+      ဖတ်ပြီး၊ ဒီ permission ကို ပေးတဲ့ role အတွက် နောက်ဆုံး change က grant လား revoke လား ကြည့်ပါတယ်။
+      အဲဒီ change ကိုပါ ပြန်ပေးလို့ ဘယ်သူ ဘာကြောင့် လုပ်ခဲ့လဲ ဆိုတာပါ သိရပါတယ်။ [[mark:type-days]]
+      main ထဲမှာ ဒုတိယ user အတွက် မတ်လ သုံးရက်နဲ့ ဧပြီလ သုံးရက်ကို မေးပါမယ်။ မတ်လအတွက် ဘာ ပြန်ရမလဲ
+      ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-mar]] မတ်လ သုံးရက်မှာ true ပါ၊
+      ပေးခဲ့တဲ့သူနဲ့ treasury rota ဆိုတဲ့ အကြောင်းပြချက်ပါ ပါလာပါတယ်။ [[mark:pt-apr]] ဧပြီလ သုံးရက်မှာတော့
+      false ဖြစ်ပြီး ရုပ်သိမ်းခဲ့တဲ့ change ကို ပြပါတယ်။ [[mark:dock-2]] ဒီနေ့ table က မရဘူး လို့ ပြောပေမဲ့
+      မတ်လမှာ ဒီ user က fund ရွှေ့နိုင်ခဲ့ပါတယ်၊ table တစ်ခုတည်းဆိုရင် ဒီအဖြေ ပျောက်သွားပါတယ်။
+      လက်တွေ့မှာတော့ table ကို log ကနေ ဆင့်ထုတ်ထားတဲ့ projection အဖြစ် ထားနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Access control (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#access-control",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - {
+          id: show-history,
+          type: slide.show,
+          at: { mark: show-history, offsetMs: -700 },
+          slideId: history-1,
+        }
+      - { id: pt-grant, type: slide.point, at: { mark: pt-grant }, target: { x: 0.128, y: 0.355 } }
+      - { id: history-2, type: slide.show, at: { mark: history-2 }, slideId: history-2 }
+      - {
+          id: pt-revoke,
+          type: slide.point,
+          at: { afterAction: history-2 },
+          target: { x: 0.128, y: 0.398 },
+        }
+      - { id: history-3, type: slide.show, at: { mark: history-3 }, slideId: history-3 }
+      - {
+          id: pt-q,
+          type: slide.point,
+          at: { afterAction: history-3 },
+          target: { x: 0.29, y: 0.931 },
+        }
+      - { id: close-history, type: slide.close, at: { mark: close-history } }
+      - id: type-canat
+        type: editor.type
+        at: { mark: type-canat }
+        target: { file: main.go, after: "\treturn false\n}\n", occurrence: 1 }
+        text: "\nfunc canAt(who, perm, day string) (last Change, ok bool) {\n\tfor _, c := range changes {\n\t\tif c.Who == who && c.Day <= day && gives(c.Role, perm) {\n\t\t\tlast, ok = c, c.Grant\n\t\t}\n\t}\n\treturn last, ok\n}\n"
+        cadence: line-by-line
+      - id: type-days
+        type: editor.type
+        at: { mark: type-days }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"u-91 funds.move:\", can(\"u-91\", \"funds.move\"))\n",
+            occurrence: 1,
+          }
+        text: "\n\tfor _, day := range []string{\"2026-03-03\", \"2026-04-03\"} {\n\t\tc, ok := canAt(\"u-42\", \"funds.move\", day)\n\t\tfmt.Printf(\"funds.move on %s: %v, last change by %s: %s\\n\", day, ok, c.By, c.Why)\n\t}\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "funds.move on 2026-03-03: true",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-canat,
+          type: expect.file,
+          at: { afterAction: expect-2 },
+          path: main.go,
+          contains: "if c.Who == who && c.Day <= day && gives(c.Role, perm) {",
+        }
+      - id: pt-mar
+        type: console.point
+        at: { mark: pt-mar }
+        target: { text: "funds.move on 2026-03-03", occurrence: 1 }
+      - id: pt-apr
+        type: console.point
+        at: { mark: pt-apr }
+        target: { text: "funds.move on 2026-04-03", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: grants
+    chapter: Grant ကိုယ်တိုင်က sensitive
+    narration: >-
+      [[mark:open-access2]] log ကို ပြန်ကြည့်ရင် စိတ်ဝင်စားစရာ နှစ်ခု တွေ့ရပါတယ်။ [[mark:sel-svc]]
+      reconciliation service account ကို ဒီဇင်ဘာမှာ payout ကို debug လုပ်ဖို့ ဆိုပြီး treasury role
+      ပေးခဲ့ပါတယ်။ ယာယီ လိုလို့ ပေးခဲ့ပေမဲ့ ပြန်ရုပ်သိမ်းဖို့ ဘယ်သူမှ မမှတ်ထားလို့ အမြဲတမ်း access
+      ဖြစ်သွားတာပါ။ ဒါကြောင့် temporary grant မှာ expiry ပါပြီး system က အလိုလို ရုပ်သိမ်းတာ ပိုစိတ်ချရပါတယ်။
+      [[mark:sel-by]] ဒုတိယက grant တိုင်းကို admin တစ်ယောက်တည်းက ပေးထားတာပါ။ treasury role
+      ပေးတာဟာ ငွေ ရွှေ့ခွင့် ပေးတာ ဖြစ်လို့ ခုနက lesson ကလို four-eyes လိုပါတယ်။ access ပေးနိုင်တဲ့
+      permission က system ထဲမှာ အင်အား အကြီးဆုံး permission ပါ၊ ကိုယ့်ကိုယ်ကိုယ် ပေးလို့ရရင် တခြား
+      control တွေ အားလုံး အဓိပ္ပာယ် မရှိတော့ပါဘူး။ role ရဲ့ permission စာရင်း ပြောင်းတာကလည်း role ထဲက
+      လူတိုင်းရဲ့ access ကို တစ်ပြိုင်နက် ပြောင်းလို့ အဲဒါလည်း event တစ်ခုပါပဲ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Access control (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#access-control",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Segregation of duties and four-eyes (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#segregation-of-duties-and-four-eyes",
+        }
+    actions:
+      - { id: open-access2, type: workspace.openFile, at: { mark: open-access2 }, path: access.go }
+      - id: sel-svc
+        type: editor.select
+        at: { mark: sel-svc }
+        target:
+          {
+            file: access.go,
+            text: '{"2025-12-01", "svc-recon", "treasury", true, "u-07", "debug payouts"},',
+            occurrence: 1,
+          }
+      - id: sel-by
+        type: editor.select
+        at: { mark: sel-by }
+        target: { file: access.go, text: '"u-07"', occurrence: 2 }
+
+  - id: review
+    chapter: Access review
+    narration: >-
+      [[mark:show-review]] access ဟာ အချိန်ကြာလာရင် ဟောင်းလာတတ်ပါတယ်။ ဒါကြောင့် access review ကို
+      schedule နဲ့ လုပ်ပါတယ်၊ recertification လို့လည်း ခေါ်ပါတယ်။ role owner က role ထဲက လူတိုင်းကို
+      ဆက်လိုသေးလား အတည်ပြုတာပါ။ ledger မှာ invariant ကို နောက်မှ ပြန်စစ်သလိုပဲ access ကို နောက်မှ
+      ပြန်စစ်တာပါ။ [[mark:pt-u91]] treasury team ထဲက user က ကိုးဆယ့်ငါးရက်ကြာ fund မရွှေ့ခဲ့ပါဘူး၊
+      role owner ကို ဆက်လိုသေးလား မေးရပါမယ်။ [[mark:pt-svcrow]] service account ကတော့ debug
+      အတွက် ယူခဲ့တဲ့ access ကို ငါးလနီးပါး ကိုင်ထားပါတယ်၊ ဖတ်ခွင့်ပဲ လိုလို့ ရုပ်သိမ်းရပါမယ်။
+      [[mark:review-2]] access က တိတ်တိတ်လေး စုလာတတ်ပါတယ်၊ least privilege နဲ့ periodic review က
+      access ဘက်မှာ No trust ကို ထိန်းတဲ့ နည်းပါ။ [[mark:close-review]] review ကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:open-main3]] subject တိုင်းအတွက် ဒီနေ့ fund ရွှေ့ခွင့် ရှိသလား ဆိုတာကို table ကနေ မဟုတ်ဘဲ log ကနေ စစ်ပါမယ်။ [[mark:type-review]] ရက် ကိုးဆယ်ထက် ပိုကြာအောင် မသုံးခဲ့ရင် ပေးခဲ့တဲ့ အကြောင်းပြချက်နဲ့ တကွ ထုတ်ပြပါတယ်။ service account တွေကလည်း လူတွေနဲ့ စာရင်းတစ်ခုတည်းမှာ ပါပါတယ်။
+      [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-rv1]] treasury team ထဲက user ကို ဆက်လိုသေးလား
+      မေးဖို့ ပေါ်လာပါတယ်။ [[mark:pt-rv2]] service account ကလည်း debug အကြောင်းပြချက်နဲ့ အတူ
+      ပေါ်လာပါတယ်။ [[mark:dock-3]] reviewer ကို ဘာပြလဲ ဆိုတာ အရေးကြီးပါတယ်။ နာမည်စာရင်း တစ်ခုပဲ
+      ပြရင် reviewer က အကုန် approve လုပ်လိုက်တာပဲ ဖြစ်တတ်ပါတယ်၊ နောက်ဆုံး သုံးခဲ့တဲ့ နေ့နဲ့ ပေးခဲ့တဲ့
+      အကြောင်းပြချက်ကို ပြမှ တကယ် ဆုံးဖြတ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Access control (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#access-control",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+    actions:
+      - {
+          id: show-review,
+          type: slide.show,
+          at: { mark: show-review, offsetMs: -700 },
+          slideId: review-1,
+        }
+      - { id: pt-u91, type: slide.point, at: { mark: pt-u91 }, target: { x: 0.138, y: 0.496 } }
+      - {
+          id: pt-svcrow,
+          type: slide.point,
+          at: { mark: pt-svcrow },
+          target: { x: 0.138, y: 0.618 },
+        }
+      - { id: review-2, type: slide.show, at: { mark: review-2 }, slideId: review-2 }
+      - {
+          id: pt-who,
+          type: slide.point,
+          at: { afterAction: review-2 },
+          target: { x: 0.365, y: 0.802 },
+        }
+      - { id: close-review, type: slide.close, at: { mark: close-review } }
+      - { id: open-main3, type: workspace.openFile, at: { mark: open-main3 }, path: main.go }
+      - id: type-review
+        type: editor.type
+        at: { mark: type-review }
+        target: { file: main.go, after: "c.By, c.Why)\n\t}\n", occurrence: 1 }
+        text: "\n\tfor _, s := range subjects {\n\t\tif c, ok := canAt(s, \"funds.move\", today); ok && idle(s) > 90 {\n\t\t\tfmt.Println(\"review:\", s, c.Role, \"idle\", idle(s), \"days, granted for:\", c.Why)\n\t\t}\n\t}\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "review: svc-recon treasury idle 139 days",
+          timeoutMs: 8000,
+        }
+      - id: pt-rv1
+        type: console.point
+        at: { mark: pt-rv1 }
+        target: { text: "review: u-91", occurrence: 1 }
+      - id: pt-rv2
+        type: console.point
+        at: { mark: pt-rv2 }
+        target: { text: "review: svc-recon", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ မတ်လ သုံးရက်နေ့က ဘယ်သူတွေ fund ရွှေ့နိုင်ခဲ့လဲ ဆိုတာ
+      ဘယ်လို ဖြေမလဲ လို့ မေးတတ်ပါတယ်။ user role table ကို query လုပ်မယ် လို့ ဖြေရင် ဒီနေ့ရဲ့ အဖြေပဲ
+      ရပါမယ်။ [[mark:iv-a]] ပထမ၊ access ကို လက်ရှိ state အဖြစ်ပဲ မသိမ်းဘဲ event log နဲ့ သိမ်းပါတယ်၊
+      grant နဲ့ revoke တိုင်းမှာ ဘယ်သူ့ကို၊ ဘယ်သူက၊ ဘာကြောင့်၊ ဘယ်တော့ ဆိုတာ ပါပါတယ်။ [[mark:iv-b]]
+      ဒုတိယ၊ log ကို အဲဒီနေ့အထိ replay လုပ်ပြီး role ကနေ permission ကို ဆင့်တွက်ပါတယ်၊ role ရဲ့
+      permission ပြောင်းတာကိုလည်း event အဖြစ် ထည့်တွက်ပါတယ်။ [[mark:iv-c]] တတိယ၊ ဘယ်လို ရလာလဲ
+      ဆိုတာပါ ပြပါ၊ grant ကို ဘယ်သူ approve လုပ်ခဲ့လဲ ဆိုတာနဲ့၊ service account တွေပါ စာရင်းထဲ ပါတာကို
+      ပြောပါ။ [[mark:iv-d]] ပြီးရင် ဒီမေးခွန်း မပေါ်ခင် ကိုယ် ဘာလုပ်ထားမလဲ ဆက်ပြောပါ။ least
+      privilege၊ RBAC၊ schedule နဲ့ recertification၊ temporary grant တွေ အလိုလို expire ဖြစ်တာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Access control (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#access-control",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:open-access3]] change log ရဲ့
+      နောက်ဆုံးမှာ၊ [[mark:sel-try]] service account ရဲ့ treasury role ကို ဒီနေ့ ရက်စွဲနဲ့ revoke လုပ်တဲ့
+      row တစ်ခု ထည့်ပါ။ ပြီးရင် main ထဲက ဒုတိယ user ကို service account နဲ့ ပြောင်းပြီး run ကြည့်ပါ။ review
+      စာရင်းထဲက service account ပျောက်သွားပေမဲ့၊ မတ်လ သုံးရက်နဲ့ ဧပြီလ သုံးရက်မှာတော့ fund
+      ရွှေ့နိုင်ခဲ့တယ် လို့ပဲ ဆက်ပြပါလိမ့်မယ်။ ဒီနေ့ revoke လုပ်တာက အတိတ်ကို ပြန်ပြင်တာ မဟုတ်ပါဘူး။
+      [[mark:recap]] ပြန်ချုပ်ရရင်၊ ဘယ်သူ ဘာလုပ်ခွင့် ရှိလဲ ဆိုတာကို role နဲ့ အနည်းဆုံးပဲ ပေး၊ ပြောင်းတာ
+      တိုင်းကို event အဖြစ် သိမ်းပြီး၊ ဟောင်းသွားတဲ့ access ကို schedule နဲ့ ပြန်စစ်ရပါတယ်။ နောက် lesson
+      မှာတော့ code တစ်ကြောင်း production ကို ဘယ်လို ရောက်လာလဲ ဆိုတာကို auditor ကို ဘယ်လို
+      သက်သေပြမလဲ ဆက်ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Access control (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#access-control",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - { id: open-access3, type: workspace.openFile, at: { mark: open-access3 }, path: access.go }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target:
+          {
+            file: access.go,
+            text: '{"2026-04-01", "u-42", "support", true, "u-07", "moved to support"},',
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

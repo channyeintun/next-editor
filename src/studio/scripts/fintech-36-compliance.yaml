@@ -1,0 +1,951 @@
+# Fintech Engineering, lesson 36: compliance for engineers (Burmese).
+#
+# Source: Fintech Engineering Handbook, Appendix A "Compliance & regulation" and Appendix B
+# "Flow 1" (the compliance gate) (CC BY 4.0, Voytek Pitula).
+# Start state: gate.go holds the customer states, the decision trail, the case queue and the
+# withdrawal gate; monitor.go the deposit window helpers; screen.go a toy list with placeholder
+# names and normalize/screen; data.go three customers and one day of deposits; main.go gates a
+# withdrawal for each customer and prints the trail size.
+# Edits, all insert-only (main.go):
+#   1. a structuring rule: >= 3 deposits under the threshold in a day, summing over it -> run-2
+#   2. screen two counterparty names                                                   -> run-3
+# Runs: run-1 (allow, block, hold; trail 3), run-2 (one alert), run-3 (a match and a miss).
+# Figures: kyc (states and what they allow; PEP, SoF/SoW, sanctions), gate (the gate in a money
+# flow), rule (deposits under a threshold inside one day), travel (Travel Rule, VASP/CASP, MiCA), iv.
+# Facts: B17 (Travel Rule), B18 (MiCA, VASP/CASP), B23 (sanctions lists), B24 (PEP).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-36-compliance
+  title: "Fintech Engineering 36: Engineer အတွက် compliance"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      data.go: |
+        package main
+
+        import "time"
+
+        var customers = []Customer{{1042, Verified}, {2077, Pending}, {3150, Restricted}}
+
+        func at(hour, minute int) time.Time { return time.Date(2026, 3, 2, hour, minute, 0, 0, time.UTC) }
+
+        // deposits of one day, in EUR cents.
+        var deposits = []Deposit{
+        	{1042, 1900_00, at(9, 10)},
+        	{2077, 300_00, at(10, 0)},
+        	{1042, 1950_00, at(13, 40)},
+        	{2077, 450_00, at(14, 5)},
+        	{3150, 700_00, at(15, 30)},
+        	{1042, 1800_00, at(18, 5)},
+        	{2077, 250_00, at(20, 15)},
+        	{3150, 600_00, at(21, 0)},
+        	{3150, 400_00, at(22, 30)},
+        }
+      gate.go: |
+        package main
+
+        import "fmt"
+
+        // State is where a customer is in onboarding. It decides what they may do with money.
+        type State string
+
+        const (
+        	Pending    State = "pending"    // signed up, identity not verified yet
+        	Verified   State = "verified"   // KYC passed
+        	Restricted State = "restricted" // flagged: every money movement waits for a human
+        )
+
+        type Customer struct {
+        	ID    int
+        	State State
+        }
+
+        // Decision is one compliance outcome. Every one is kept: an auditor will ask why.
+        type Decision struct {
+        	Subject, Check, Outcome string
+        }
+
+        var trail []Decision
+        var cases int
+
+        func record(subject, check, outcome string) string {
+        	trail = append(trail, Decision{subject, check, outcome})
+        	return outcome
+        }
+
+        // openCase puts an item in the manual-review queue.
+        func openCase() string {
+        	cases++
+        	return fmt.Sprintf("case C-%d", cases)
+        }
+
+        // gate decides a withdrawal: allow it, block it, or hold it for a human.
+        func gate(c Customer, amount int64) string {
+        	subject := fmt.Sprintf("withdraw %s by %d", cents(amount), c.ID)
+        	switch c.State {
+        	case Verified:
+        		return record(subject, "kyc", "allow")
+        	case Pending:
+        		return record(subject, "kyc", "block, KYC not finished")
+        	default:
+        		return record(subject, "kyc", "hold, "+openCase())
+        	}
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	return fmt.Sprintf("%d.%02d", n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        	for _, c := range customers {
+        		fmt.Printf("withdraw 100.00 by %d (%s): %s\n", c.ID, c.State, gate(c, 100_00))
+        	}
+
+        	fmt.Println("trail:", len(trail), "decisions")
+        }
+      monitor.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        	"time"
+        )
+
+        // day is the window the structuring rule looks at.
+        const day = 24 * time.Hour
+
+        type Deposit struct {
+        	User   int
+        	Amount int64
+        	At     time.Time
+        }
+
+        // under returns the user's deposits below the threshold made within window of their last one.
+        func under(deps []Deposit, user int, threshold int64, window time.Duration) []Deposit {
+        	var last time.Time
+        	for _, d := range deps {
+        		if d.User == user && d.At.After(last) {
+        			last = d.At
+        		}
+        	}
+        	var hits []Deposit
+        	for _, d := range deps {
+        		if d.User == user && d.Amount < threshold && last.Sub(d.At) < window {
+        			hits = append(hits, d)
+        		}
+        	}
+        	return hits
+        }
+
+        func sum(ds []Deposit) int64 {
+        	var total int64
+        	for _, d := range ds {
+        		total += d.Amount
+        	}
+        	return total
+        }
+
+        // alert opens a case for a monitoring hit, with the deposits that caused it.
+        func alert(rule string, user int, hits []Deposit) {
+        	var parts []string
+        	for _, d := range hits {
+        		parts = append(parts, cents(d.Amount))
+        	}
+        	outcome := record(fmt.Sprintf("user %d", user), rule, openCase())
+        	fmt.Printf("alert %s %d: %s = %s -> %s\n", rule, user, strings.Join(parts, " + "), cents(sum(hits)), outcome)
+        }
+      screen.go: |
+        package main
+
+        import (
+        	"strings"
+        	"unicode"
+        )
+
+        // listed is a toy list with placeholder names. Real screening runs against the published
+        // sanctions lists and runs again whenever they change.
+        var listed = []string{"EXAMPLE METALS LLC", "SAMPLE SHIPPING CO"}
+
+        // normalize lower-cases a name, drops punctuation and collapses the spaces.
+        func normalize(s string) string {
+        	s = strings.Map(func(r rune) rune {
+        		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r) {
+        			return unicode.ToLower(r)
+        		}
+        		return -1
+        	}, s)
+        	return strings.Join(strings.Fields(s), " ")
+        }
+
+        // screen matches the normalized name exactly against the normalized list.
+        func screen(name string) string {
+        	for _, l := range listed {
+        		if normalize(l) == normalize(name) {
+        			return record(name, "sanctions", "match "+l+", "+openCase())
+        		}
+        	}
+        	return record(name, "sanctions", "no match")
+        }
+  slides:
+    - id: gate-1
+      contentType: html
+      name: "Compliance gate 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">COMPLIANCE GATE</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1222" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Compliance က money flow ထဲက gate တစ်ခုပါ</text>
+        <g class="in"><circle cx="170" cy="400" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="140.6" y="370.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="170" y="498" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><text x="170" y="530" font-size="23" text-anchor="middle" fill="#8a94a8">withdraw 100.00</text></g>
+        <g class="in"><rect x="400" y="320" width="420" height="160" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="400" y="320" width="420" height="160" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-shield" x="422" y="368" width="64" height="64" style="color:#b794f6"/><text x="650" y="390.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">compliance gate</text><text x="650" y="431.6" font-size="24" text-anchor="middle" fill="#8a94a8">KYC · sanctions · rules</text></g>
+        <path d="M236 400L386 400" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <g class="in"><text x="420" y="540" font-size="23" fill="#8a94a8">onboarding  +  per transaction</text></g>
+        </svg>
+    - id: gate-2
+      contentType: html
+      name: "Compliance gate 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-clock" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M24 13v11l8 5"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">COMPLIANCE GATE</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1222" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Compliance က money flow ထဲက gate တစ်ခုပါ</text>
+        <circle cx="170" cy="400" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="140.6" y="370.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="170" y="498" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><text x="170" y="530" font-size="23" text-anchor="middle" fill="#8a94a8">withdraw 100.00</text>
+        <rect x="400" y="320" width="420" height="160" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="400" y="320" width="420" height="160" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-shield" x="422" y="368" width="64" height="64" style="color:#b794f6"/><text x="650" y="390.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">compliance gate</text><text x="650" y="431.6" font-size="24" text-anchor="middle" fill="#8a94a8">KYC · sanctions · rules</text>
+        <path d="M236 400L386 400" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <text x="420" y="540" font-size="23" fill="#8a94a8">onboarding  +  per transaction</text>
+        <g class="in"><rect x="1000" y="215" width="330" height="110" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-check" x="1022" y="238" width="64" height="64" style="color:#68d391"/><text x="1205" y="260.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">allow</text><text x="1205" y="301.6" font-size="24" text-anchor="middle" fill="#8a94a8">→ ledger, rail</text></g>
+        <g class="in"><rect x="1000" y="345" width="330" height="110" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-cross" x="1022" y="368" width="64" height="64" style="color:#fc8181"/><text x="1205" y="410" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">block</text></g>
+        <g class="in"><rect x="1000" y="475" width="330" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-clock" x="1022" y="498" width="64" height="64" style="color:#f6ad55"/><text x="1205" y="520.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">hold + case</text><text x="1205" y="561.6" font-size="24" text-anchor="middle" fill="#8a94a8">a human decides</text></g>
+        <path d="M828.1 394.1L988.7 278.2" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/>
+        <path d="M830 400L986 400" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M828.1 405.9L988.7 521.8" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: gate-3
+      contentType: html
+      name: "Compliance gate 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-clock" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M24 13v11l8 5"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">COMPLIANCE GATE</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1146.1" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1222" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Compliance က money flow ထဲက gate တစ်ခုပါ</text>
+        <circle cx="170" cy="400" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="140.6" y="370.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="170" y="498" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><text x="170" y="530" font-size="23" text-anchor="middle" fill="#8a94a8">withdraw 100.00</text>
+        <rect x="400" y="320" width="420" height="160" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><rect x="400" y="320" width="420" height="160" rx="18" fill="#b794f6" opacity="0.13"/><use href="#i-shield" x="422" y="368" width="64" height="64" style="color:#b794f6"/><text x="650" y="390.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">compliance gate</text><text x="650" y="431.6" font-size="24" text-anchor="middle" fill="#8a94a8">KYC · sanctions · rules</text>
+        <path d="M236 400L386 400" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <text x="420" y="540" font-size="23" fill="#8a94a8">onboarding  +  per transaction</text>
+        <rect x="1000" y="215" width="330" height="110" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-check" x="1022" y="238" width="64" height="64" style="color:#68d391"/><text x="1205" y="260.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">allow</text><text x="1205" y="301.6" font-size="24" text-anchor="middle" fill="#8a94a8">→ ledger, rail</text>
+        <rect x="1000" y="345" width="330" height="110" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-cross" x="1022" y="368" width="64" height="64" style="color:#fc8181"/><text x="1205" y="410" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">block</text>
+        <rect x="1000" y="475" width="330" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-clock" x="1022" y="498" width="64" height="64" style="color:#f6ad55"/><text x="1205" y="520.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">hold + case</text><text x="1205" y="561.6" font-size="24" text-anchor="middle" fill="#8a94a8">a human decides</text>
+        <path d="M828.1 394.1L988.7 278.2" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/>
+        <path d="M830 400L986 400" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <path d="M828.1 405.9L988.7 521.8" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><rect x="420" y="680" width="812.2" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="420" y="680" width="812.2" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="826.1" y="714.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">manual review can take days → the flow waits at the gate</text></g>
+        <g class="in"><rect x="420" y="770" width="751.7" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="420" y="770" width="751.7" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="795.9" y="804.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">every decision → audit trail: rule, input, who overrode</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Monitoring rule တစ်ခုကို ဘယ်လို ဒီဇိုင်းဆွဲမလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Monitoring rule တစ်ခုကို ဘယ်လို ဒီဇိုင်းဆွဲမလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Rule = pattern + window + threshold, versioned</text><text x="188" y="311" font-size="26" fill="#8a94a8">ledger events ပေါ်မှာ run၊ alert မှာ အကြောင်းရင်း transaction တွေ ပါ</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Monitoring rule တစ်ခုကို ဘယ်လို ဒီဇိုင်းဆွဲမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Rule = pattern + window + threshold, versioned</text><text x="188" y="311" font-size="26" fill="#8a94a8">ledger events ပေါ်မှာ run၊ alert မှာ အကြောင်းရင်း transaction တွေ ပါ</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Alert → case queue → hold → လူက ဆုံးဖြတ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">decision တိုင်း audit trail ထဲ — rule version အပါအဝင်</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Monitoring rule တစ်ခုကို ဘယ်လို ဒီဇိုင်းဆွဲမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Rule = pattern + window + threshold, versioned</text><text x="188" y="311" font-size="26" fill="#8a94a8">ledger events ပေါ်မှာ run၊ alert မှာ အကြောင်းရင်း transaction တွေ ပါ</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Alert → case queue → hold → လူက ဆုံးဖြတ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">decision တိုင်း audit trail ထဲ — rule version အပါအဝင်</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">False positive က နေ့စဉ် cost</text><text x="188" y="575" font-size="26" fill="#8a94a8">threshold ပြောင်းရင် အရေအတွက်ရော ဘယ်သူ alert ဖြစ်လဲပါ ပြောင်းတယ်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Monitoring rule တစ်ခုကို ဘယ်လို ဒီဇိုင်းဆွဲမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Rule = pattern + window + threshold, versioned</text><text x="188" y="311" font-size="26" fill="#8a94a8">ledger events ပေါ်မှာ run၊ alert မှာ အကြောင်းရင်း transaction တွေ ပါ</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Alert → case queue → hold → လူက ဆုံးဖြတ်</text><text x="188" y="443" font-size="26" fill="#8a94a8">decision တိုင်း audit trail ထဲ — rule version အပါအဝင်</text></g><g><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">False positive က နေ့စဉ် cost</text><text x="188" y="575" font-size="26" fill="#8a94a8">threshold ပြောင်းရင် အရေအတွက်ရော ဘယ်သူ alert ဖြစ်လဲပါ ပြောင်းတယ်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">rule အသစ်ကို history ပေါ် back-test လုပ်ပြီးမှ deploy</text><text x="188" y="707" font-size="26" fill="#8a94a8">alert rate နဲ့ case ရလဒ်ကို တိုင်းပြီး compliance နဲ့ tune</text></g>
+        </svg>
+    - id: kyc-1
+      contentType: html
+      name: "KYC 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">KYC</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Customer state က ငွေကို ဘာလုပ်ခွင့်ရလဲ ဆုံးဖြတ်တယ်</text>
+        <g class="in"><rect x="90" y="240" width="370" height="150" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-user" x="112" y="283" width="64" height="64" style="color:#9aa5b8"/><text x="315" y="307.1" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">pending</text><text x="315" y="345.9" font-size="22" text-anchor="middle" fill="#8a94a8">sign up · no money out</text></g>
+        <g class="in"><rect x="620" y="240" width="370" height="150" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><rect x="620" y="240" width="370" height="150" rx="18" fill="#68d391" opacity="0.13"/><use href="#i-check" x="642" y="283" width="64" height="64" style="color:#68d391"/><text x="845" y="305.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">verified</text><text x="845" y="346.6" font-size="24" text-anchor="middle" fill="#8a94a8">deposit · withdraw</text></g>
+        <g class="in"><rect x="1150" y="240" width="370" height="150" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-lock" x="1172" y="283" width="64" height="64" style="color:#f6ad55"/><text x="1375" y="306.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">restricted</text><text x="1375" y="346.3" font-size="23" text-anchor="middle" fill="#8a94a8">every move → review</text></g>
+        <path d="M470 315L606 315" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/><text x="538" y="298.8" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">KYC passed</text>
+        <path d="M1000 315L1136 315" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/><text x="1068" y="298.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">alert / hit</text>
+        <path d="M1325 390Q1072 450 819 390" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="1072" y="467.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">case closed</text>
+        </svg>
+    - id: kyc-2
+      contentType: html
+      name: "KYC 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">KYC</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Customer state က ငွေကို ဘာလုပ်ခွင့်ရလဲ ဆုံးဖြတ်တယ်</text>
+        <rect x="90" y="240" width="370" height="150" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-user" x="112" y="283" width="64" height="64" style="color:#9aa5b8"/><text x="315" y="307.1" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">pending</text><text x="315" y="345.9" font-size="22" text-anchor="middle" fill="#8a94a8">sign up · no money out</text>
+        <rect x="620" y="240" width="370" height="150" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><rect x="620" y="240" width="370" height="150" rx="18" fill="#68d391" opacity="0.13"/><use href="#i-check" x="642" y="283" width="64" height="64" style="color:#68d391"/><text x="845" y="305.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">verified</text><text x="845" y="346.6" font-size="24" text-anchor="middle" fill="#8a94a8">deposit · withdraw</text>
+        <rect x="1150" y="240" width="370" height="150" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-lock" x="1172" y="283" width="64" height="64" style="color:#f6ad55"/><text x="1375" y="306.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">restricted</text><text x="1375" y="346.3" font-size="23" text-anchor="middle" fill="#8a94a8">every move → review</text>
+        <path d="M470 315L606 315" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/><text x="538" y="298.8" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">KYC passed</text>
+        <path d="M1000 315L1136 315" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/><text x="1068" y="298.8" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="600">alert / hit</text>
+        <path d="M1325 390Q1072 450 819 390" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="1072" y="467.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">case closed</text>
+        <g class="in"><text x="90" y="600" font-size="26" fill="#8a94a8">verified ≠ low risk: extra checks</text></g>
+        <g class="in"><rect x="90" y="630" width="440" height="140" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-building" x="112" y="668" width="64" height="64" style="color:#b794f6"/><text x="350" y="690.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">PEP</text><text x="350" y="731.6" font-size="24" text-anchor="middle" fill="#8a94a8">public function → EDD</text></g>
+        <g class="in"><rect x="580" y="630" width="440" height="140" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-doc" x="602" y="668" width="64" height="64" style="color:#6cb2f5"/><text x="840" y="690.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">SoF / SoW</text><text x="840" y="731.6" font-size="24" text-anchor="middle" fill="#8a94a8">origin of the money</text></g>
+        <g class="in"><rect x="1070" y="630" width="440" height="140" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-shield" x="1092" y="668" width="64" height="64" style="color:#fc8181"/><text x="1330" y="691.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">sanctions hit</text><text x="1330" y="731.3" font-size="23" text-anchor="middle" fill="#8a94a8">assets blocked · no dealing</text></g>
+        </svg>
+    - id: rule-1
+      contentType: html
+      name: "Transaction monitoring 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">TRANSACTION MONITORING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Threshold အောက်က deposit သုံးခု၊ တစ်ရက်အတွင်း</text>
+        <g class="in"><path d="M150 300L1460 300" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/></g>
+        <g class="in"><text x="1460" y="284" font-size="23" text-anchor="end" fill="#fc8181">threshold 2,000.00 (example)</text></g>
+        <g class="in"><path d="M150 640L1460 640" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+        <g class="in"><rect x="210" y="317" width="150" height="323" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="285" y="488.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1,900</text></g>
+        <g class="in"><rect x="620" y="308" width="150" height="332" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="695" y="484" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1,950</text></g>
+        <g class="in"><rect x="1030" y="334" width="150" height="306" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1105" y="497" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1,800</text></g>
+        <g class="in"><text x="285" y="680" font-size="23" text-anchor="middle" fill="#8a94a8" class="mono">09:10</text></g>
+        <g class="in"><text x="695" y="680" font-size="23" text-anchor="middle" fill="#8a94a8" class="mono">13:40</text></g>
+        <g class="in"><text x="1105" y="680" font-size="23" text-anchor="middle" fill="#8a94a8" class="mono">18:05</text></g>
+        </svg>
+    - id: rule-2
+      contentType: html
+      name: "Transaction monitoring 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">TRANSACTION MONITORING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Threshold အောက်က deposit သုံးခု၊ တစ်ရက်အတွင်း</text>
+        <path d="M150 300L1460 300" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/>
+        <text x="1460" y="284" font-size="23" text-anchor="end" fill="#fc8181">threshold 2,000.00 (example)</text>
+        <path d="M150 640L1460 640" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="210" y="317" width="150" height="323" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="285" y="488.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1,900</text>
+        <rect x="620" y="308" width="150" height="332" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="695" y="484" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1,950</text>
+        <rect x="1030" y="334" width="150" height="306" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1105" y="497" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1,800</text>
+        <text x="285" y="680" font-size="23" text-anchor="middle" fill="#8a94a8" class="mono">09:10</text>
+        <text x="695" y="680" font-size="23" text-anchor="middle" fill="#8a94a8" class="mono">13:40</text>
+        <text x="1105" y="680" font-size="23" text-anchor="middle" fill="#8a94a8" class="mono">18:05</text>
+        <g class="in"><path d="M210 705q0 14 14 14H681q14 0 14 14q0 -14 14 -14H1166q14 0 14 -14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="695" y="767" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">inside 24 h: 5,650.00 ≥ 2,000.00</text></g>
+        </svg>
+    - id: rule-3
+      contentType: html
+      name: "Transaction monitoring 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">TRANSACTION MONITORING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Threshold အောက်က deposit သုံးခု၊ တစ်ရက်အတွင်း</text>
+        <path d="M150 300L1460 300" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/>
+        <text x="1460" y="284" font-size="23" text-anchor="end" fill="#fc8181">threshold 2,000.00 (example)</text>
+        <path d="M150 640L1460 640" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="210" y="317" width="150" height="323" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="285" y="488.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1,900</text>
+        <rect x="620" y="308" width="150" height="332" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="695" y="484" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1,950</text>
+        <rect x="1030" y="334" width="150" height="306" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="1105" y="497" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">1,800</text>
+        <text x="285" y="680" font-size="23" text-anchor="middle" fill="#8a94a8" class="mono">09:10</text>
+        <text x="695" y="680" font-size="23" text-anchor="middle" fill="#8a94a8" class="mono">13:40</text>
+        <text x="1105" y="680" font-size="23" text-anchor="middle" fill="#8a94a8" class="mono">18:05</text>
+        <path d="M210 705q0 14 14 14H681q14 0 14 14q0 -14 14 -14H1166q14 0 14 -14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="695" y="767" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">inside 24 h: 5,650.00 ≥ 2,000.00</text>
+        <g class="in"><rect x="1210" y="420" width="202" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="1210" y="420" width="202" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="1311" y="454.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700">alert → case</text></g>
+        </svg>
+    - id: travel-1
+      contentType: html
+      name: "Travel Rule 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">TRAVEL RULE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေနဲ့အတူ ပို့သူ၊ လက်ခံသူ အချက်အလက်ပါ သွားရတယ်</text>
+        <g class="in"><rect x="90" y="230" width="400" height="140" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="112" y="268" width="64" height="64" style="color:#9aa5b8"/><text x="330" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">VASP / CASP A</text><text x="330" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">originator's provider</text></g>
+        <g class="in"><rect x="1110" y="230" width="400" height="140" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1132" y="268" width="64" height="64" style="color:#9aa5b8"/><text x="1350" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">VASP / CASP B</text><text x="1350" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">beneficiary's provider</text></g>
+        <path d="M500 270L1096 270" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M500 270L1096 270')"/><text x="798" y="253.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600">transfer</text>
+        </svg>
+    - id: travel-2
+      contentType: html
+      name: "Travel Rule 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">TRAVEL RULE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေနဲ့အတူ ပို့သူ၊ လက်ခံသူ အချက်အလက်ပါ သွားရတယ်</text>
+        <rect x="90" y="230" width="400" height="140" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="112" y="268" width="64" height="64" style="color:#9aa5b8"/><text x="330" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">VASP / CASP A</text><text x="330" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">originator's provider</text>
+        <rect x="1110" y="230" width="400" height="140" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1132" y="268" width="64" height="64" style="color:#9aa5b8"/><text x="1350" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">VASP / CASP B</text><text x="1350" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">beneficiary's provider</text>
+        <path d="M500 270L1096 270" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M500 270L1096 270')"/><text x="798" y="253.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600">transfer</text>
+        <path d="M500 330L1096 330" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="798" y="371.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">originator + beneficiary info</text>
+        </svg>
+    - id: travel-3
+      contentType: html
+      name: "Travel Rule 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">TRAVEL RULE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေနဲ့အတူ ပို့သူ၊ လက်ခံသူ အချက်အလက်ပါ သွားရတယ်</text>
+        <rect x="90" y="230" width="400" height="140" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="112" y="268" width="64" height="64" style="color:#9aa5b8"/><text x="330" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">VASP / CASP A</text><text x="330" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">originator's provider</text>
+        <rect x="1110" y="230" width="400" height="140" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1132" y="268" width="64" height="64" style="color:#9aa5b8"/><text x="1350" y="290.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">VASP / CASP B</text><text x="1350" y="331.6" font-size="24" text-anchor="middle" fill="#8a94a8">beneficiary's provider</text>
+        <path d="M500 270L1096 270" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M500 270L1096 270')"/><text x="798" y="253.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600">transfer</text>
+        <path d="M500 330L1096 330" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="798" y="371.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">originator + beneficiary info</text>
+        <g class="in"><rect x="90" y="440" width="1420" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="475" font-size="22" fill="#8a94a8" font-weight="700">where</text><text x="439.7" y="475" font-size="22" fill="#8a94a8" font-weight="700">when it applies</text><path d="M90 492H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="533" font-size="28" fill="#e9edf5">FATF</text><text x="439.7" y="533" font-size="28" fill="#e9edf5">VASPs send the info · countries may exempt &lt; USD / EUR 1,000</text></g><g><path d="M106 554H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="595" font-size="28" fill="#e9edf5">US</text><text x="439.7" y="595" font-size="28" fill="#e9edf5">funds transfers of $3,000 or more (banks and non-banks)</text></g><g><path d="M106 616H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="657" font-size="28" fill="#e9edf5">EU</text><text x="439.7" y="657" font-size="28" fill="#e9edf5">from 30 Dec 2024 · no minimum between CASPs</text></g></g>
+        <g class="in"><rect x="90" y="760" width="1049.2" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="90" y="760" width="1049.2" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="614.6" y="794.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">MiCA (EU 2023/1114): CASP = an authorised crypto-asset service provider</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9536
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "withdraw 100.00 by 1042 (verified): allow\nwithdraw 100.00 by 2077 (pending): block, KYC not finished\nwithdraw 100.00 by 3150 (restricted): hold, case C-1\ntrail: 3 decisions\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "withdraw 100.00 by 1042 (verified): allow\nwithdraw 100.00 by 2077 (pending): block, KYC not finished\nwithdraw 100.00 by 3150 (restricted): hold, case C-1\nalert structuring 1042: 1900.00 + 1950.00 + 1800.00 = 5650.00 -> case C-2\ntrail: 4 decisions\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "withdraw 100.00 by 1042 (verified): allow\nwithdraw 100.00 by 2077 (pending): block, KYC not finished\nwithdraw 100.00 by 3150 (restricted): hold, case C-1\nalert structuring 1042: 1900.00 + 1950.00 + 1800.00 = 5650.00 -> case C-2\nscreen \"Example Metals, L.L.C.\": match EXAMPLE METALS LLC, case C-3\nscreen \"Exampel Metals LLC\": no match\ntrail: 6 decisions\n"
+
+scenes:
+  - id: hook
+    chapter: KYC နဲ့ customer state
+    narration: >-
+      ငွေ system တစ်ခုက ငွေကို မှန်မှန်ကန်ကန် ရွှေ့ရုံနဲ့ မလုံလောက်ပါဘူး၊ ဘယ်သူ့ငွေကို ဘယ်သူ့ဆီ
+      ရွှေ့နေလဲ ဆိုတာကိုပါ သိရပါတယ်။ [[mark:sel-states]] KYC ဆိုတာ Know Your Customer ပါ၊ customer က
+      တကယ် ဘယ်သူလဲ ဆိုတာကို စစ်ဆေးတာပါ။ စစ်ပြီး မပြီး ဆိုတာကို customer ရဲ့ state အဖြစ် သိမ်းထားပြီး၊
+      ဒီ program မှာ pending၊ verified နဲ့ restricted ဆိုပြီး သုံးမျိုး ရှိပါတယ်။ [[mark:sel-gate]] gate
+      function က withdrawal တစ်ခုကို state ကြည့်ပြီး ခွင့်ပြုမလား၊ ပိတ်မလား၊ case ဖွင့်ပြီး လူ့ဆီ
+      လွှဲမလား ဆုံးဖြတ်ပါတယ်။ [[mark:sel-record]] ဘယ်လို ဆုံးဖြတ်ဆုံးဖြတ်၊ ဆုံးဖြတ်ချက် တိုင်းကို trail ထဲ
+      ထည့်ပါတယ်။ customer သုံးယောက်စလုံး ယူရို တစ်ရာစီ ထုတ်ချင်တယ် ဆိုပါစို့။ [[mark:run-1]] run
+      လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Compliance & regulation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#compliance-regulation",
+        }
+    actions:
+      - { id: open-gate, type: workspace.openFile, at: { scene: start }, path: gate.go }
+      - id: sel-states
+        type: editor.select
+        at: { mark: sel-states }
+        target: { file: gate.go, text: "type State string", occurrence: 1 }
+      - id: sel-gate
+        type: editor.select
+        at: { mark: sel-gate }
+        target: { file: gate.go, text: "switch c.State {", occurrence: 1 }
+      - id: sel-record
+        type: editor.select
+        at: { mark: sel-record }
+        target:
+          {
+            file: gate.go,
+            text: "trail = append(trail, Decision{subject, check, outcome})",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "trail: 3 decisions",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-allow]] verified ဖြစ်တဲ့ customer က ထုတ်ခွင့် ရပါတယ်။ [[mark:pt-block]] pending
+      customer ကိုတော့ KYC မပြီးသေးလို့ ပိတ်ပါတယ်။ [[mark:pt-hold]] restricted customer ရဲ့ withdrawal ကို
+      ငြင်းတာ မဟုတ်ဘဲ hold လုပ်ပြီး manual review အတွက် case တစ်ခု ဖွင့်ပါတယ်။ [[mark:pt-trail]] ရလဒ်
+      သုံးမျိုးလုံး trail ထဲ ရောက်ပါတယ်။ [[mark:dock-1]] ခွင့်ပြုခဲ့တဲ့ ဆုံးဖြတ်ချက်ကိုပါ သိမ်းရတာက၊ နောက်မှ
+      auditor ဒါမှမဟုတ် regulator က ဒီ withdrawal ကို ဘာ check တွေနဲ့ ခွင့်ပြုခဲ့လဲ မေးရင် ဖြေနိုင်ဖို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - id: pt-allow
+        type: console.point
+        at: { mark: pt-allow }
+        target: { text: "(verified): allow", occurrence: 1 }
+      - id: pt-block
+        type: console.point
+        at: { mark: pt-block }
+        target: { text: "(pending): block", occurrence: 1 }
+      - id: pt-hold
+        type: console.point
+        at: { mark: pt-hold }
+        target: { text: "(restricted): hold", occurrence: 1 }
+      - id: pt-trail
+        type: console.point
+        at: { mark: pt-trail }
+        target: { text: "trail: 3 decisions", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: kyc
+    narration: >-
+      [[mark:show-kyc]] state တွေကို lifecycle အဖြစ် ကြည့်ရအောင်။ [[mark:pt-pend]] pending customer က
+      sign up လုပ်လို့ ရပေမဲ့ ငွေ ထုတ်လို့ မရပါဘူး။ KYC အောင်မှ verified ဖြစ်ပါတယ်။ [[mark:pt-res]] alert
+      တစ်ခု ဒါမှမဟုတ် list hit တစ်ခုကြောင့် restricted ဖြစ်သွားပြီး၊ case ပိတ်မှ ပြန်လာပါတယ်။ ဒါကြောင့်
+      customer state ဆိုတာ profile ထဲက flag တစ်ခု မဟုတ်ဘဲ၊ ငွေရွှေ့တဲ့ code path တိုင်းက စစ်ရမယ့် state
+      machine ပါ။ [[mark:kyc-2]] verified ဖြစ်တာနဲ့ risk နည်းတယ်လို့ မဆိုလိုပါဘူး။ [[mark:pt-pep]] PEP ဆိုတာ politically exposed person ပါ။ FATF ရဲ့ အဓိပ္ပာယ်အရ ထင်ရှားတဲ့ public function ကို ထမ်းဆောင်နေတဲ့ ဒါမှမဟုတ် ထမ်းဆောင်ခဲ့တဲ့ လူဖြစ်ပြီး၊ အလယ်အလတ်နဲ့ အောက်ပိုင်း အရာရှိတွေ မပါပါဘူး။ PEP ကို ငြင်းရမယ်လို့ မဆိုလိုဘဲ risk ပိုမြင့်လို့ ပိုနက်တဲ့
+      စစ်ဆေးမှု လိုတာပါ။ [[mark:pt-sof]] source of funds နဲ့ source of wealth ကတော့ ငွေ ဘယ်က လာလဲ ဆိုတဲ့ သက်သေ document တွေပါ။ [[mark:pt-sanc]] sanctions
+      screening ကတော့ customer နဲ့ payment တွေကို sanction list တွေနဲ့ တိုက်စစ်တာပါ။ US Treasury ရဲ့
+      OFAC က SDN list ကို ထုတ်ပြီး၊ list ထဲက လူတွေရဲ့ US jurisdiction ထဲက ပိုင်ဆိုင်မှုကို block လုပ်ပါတယ်။
+      EU ကလည်း financial sanctions ရဲ့ consolidated list ကို ထုတ်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Compliance & regulation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#compliance-regulation",
+        }
+      - {
+          title: "FATF Guidance — Politically Exposed Persons (Recommendations 12 and 22), June 2013",
+          url: "https://cbos.gov.sd/sites/default/files/guidance-pep-rec12-22.pdf",
+        }
+      - {
+          title: "OFAC — Specially Designated Nationals and Blocked Persons List (SDN)",
+          url: "https://ofac.treasury.gov/specially-designated-nationals-and-blocked-persons-list-sdn-human-readable-lists",
+        }
+    actions:
+      - { id: show-kyc, type: slide.show, at: { mark: show-kyc, offsetMs: -700 }, slideId: kyc-1 }
+      - { id: pt-pend, type: slide.point, at: { mark: pt-pend }, target: { x: 0.172, y: 0.442 } }
+      - { id: pt-res, type: slide.point, at: { mark: pt-res }, target: { x: 0.834, y: 0.442 } }
+      - { id: kyc-2, type: slide.show, at: { mark: kyc-2 }, slideId: kyc-2 }
+      - { id: pt-pep, type: slide.point, at: { mark: pt-pep }, target: { x: 0.194, y: 0.864 } }
+      - { id: pt-sof, type: slide.point, at: { mark: pt-sof }, target: { x: 0.5, y: 0.864 } }
+      - { id: pt-sanc, type: slide.point, at: { mark: pt-sanc }, target: { x: 0.806, y: 0.864 } }
+
+  - id: gate
+    chapter: Compliance gate
+    narration: >-
+      [[mark:show-gate]] engineering ဘက်က ကြည့်ရင် compliance က money flow ထဲက gate တစ်ခုပါ။
+      [[mark:pt-when]] onboarding မှာ တစ်ခါ စစ်ရုံ မဟုတ်ဘဲ transaction တွေမှာလည်း ထပ်စစ်ပါတယ်။ [[mark:gate-2]]
+      gate ရဲ့ ရလဒ် သုံးမျိုး ရှိပါတယ်၊ ခွင့်ပြုတာ၊ ပိတ်တာ၊ ငွေကို hold လုပ်ပြီး case queue ထဲ ထည့်တာပါ။
+      [[mark:pt-hold2]] case queue ဆိုတာ compliance analyst တွေ တစ်ခုချင်း ကြည့်ဆုံးဖြတ်တဲ့ manual review
+      တန်းစီပါ။ [[mark:gate-3]] manual review က ရက်ပိုင်း ကြာနိုင်လို့ flow က gate မှာ ရက်ချီ စောင့်နိုင်ရပါမယ်၊ ဒါကို နောက် lesson ရဲ့
+      withdrawal flow ထဲမှာ အသေးစိတ် ကြည့်ပါမယ်။
+      [[mark:pt-trail2]] pass ဖြစ်ဖြစ်၊ block ဖြစ်ဖြစ်၊ ဘယ်သူ override လုပ်ခဲ့လဲ ဆိုတာပါ audit trail ထဲ
+      ရောက်ရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 1: the compliance gate (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-1-a-crypto-withdrawal",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Full resumability (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#full-resumability",
+        }
+    actions:
+      - {
+          id: show-gate,
+          type: slide.show,
+          at: { mark: show-gate, offsetMs: -700 },
+          slideId: gate-1,
+        }
+      - { id: pt-when, type: slide.point, at: { mark: pt-when }, target: { x: 0.3, y: 0.613 } }
+      - { id: gate-2, type: slide.show, at: { mark: gate-2 }, slideId: gate-2 }
+      - {
+          id: pt-allow2,
+          type: slide.point,
+          at: { afterAction: gate-2 },
+          target: { x: 0.728, y: 0.37 },
+        }
+      - { id: pt-hold2, type: slide.point, at: { mark: pt-hold2 }, target: { x: 0.728, y: 0.659 } }
+      - { id: gate-3, type: slide.show, at: { mark: gate-3 }, slideId: gate-3 }
+      - {
+          id: pt-days,
+          type: slide.point,
+          at: { afterAction: gate-3 },
+          target: { x: 0.51, y: 0.82 },
+        }
+      - { id: pt-trail2, type: slide.point, at: { mark: pt-trail2 }, target: { x: 0.491, y: 0.92 } }
+
+  - id: rule
+    chapter: Transaction monitoring
+    narration: >-
+      [[mark:show-rule]] gate ထဲက rule တစ်ခုကို ကြည့်ရအောင်။ AML နဲ့ CFT ဆိုတာ anti-money laundering
+      နဲ့ countering the financing of terrorism ပါ၊ တရားမဝင် ငွေကို ရှာဖွေ တားဆီးတဲ့ control တွေပါ။
+      transaction monitoring က အဲဒီ control တွေရဲ့ engineering အပိုင်းဖြစ်ပြီး၊ ငွေရွှေ့ပုံ pattern တွေကို rule
+      နဲ့ စစ်ပါတယ်။ [[mark:pt-d1]] deposit တစ်ခုချင်းက threshold အောက်မှာပဲ ရှိပါတယ်။ threshold အောက်မှာ
+      နေအောင် ပမာဏကို ခွဲပို့တဲ့ pattern ကို structuring လို့ ခေါ်ပါတယ်။ [[mark:rule-2]] တစ်ခုချင်း ကြည့်ရင်
+      ဘာမှ မဖြစ်ပေမဲ့ တစ်ရက်အတွင်း ပေါင်းကြည့်ရင် threshold ကို အများကြီး ကျော်ပါတယ်။ [[mark:rule-3]] ဒီလို rule ရဲ့ အလုပ်က များသောအားဖြင့် ပိတ်ဖို့ မဟုတ်ဘဲ alert တစ်ခုနဲ့ case တစ်ခု ဖွင့်ဖို့ပါ၊ ဆုံးဖြတ်တာက
+      လူပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Compliance & regulation: AML / CFT (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#compliance-regulation",
+        }
+    actions:
+      - {
+          id: show-rule,
+          type: slide.show,
+          at: { mark: show-rule, offsetMs: -700 },
+          slideId: rule-1,
+        }
+      - {
+          id: pt-thr,
+          type: slide.point,
+          at: { afterAction: show-rule },
+          target: { x: 0.752, y: 0.329 },
+        }
+      - { id: pt-d1, type: slide.point, at: { mark: pt-d1 }, target: { x: 0.434, y: 0.72 } }
+      - { id: rule-2, type: slide.show, at: { mark: rule-2 }, slideId: rule-2 }
+      - {
+          id: pt-win,
+          type: slide.point,
+          at: { afterAction: rule-2 },
+          target: { x: 0.434, y: 0.866 },
+        }
+      - { id: rule-3, type: slide.show, at: { mark: rule-3 }, slideId: rule-3 }
+      - {
+          id: pt-al,
+          type: slide.point,
+          at: { afterAction: rule-3 },
+          target: { x: 0.813, y: 0.531 },
+        }
+
+  - id: monitor
+    narration: >-
+      [[mark:close-rule]] ဒီ rule ကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:open-data]] deposit data ကို အရင်
+      ကြည့်ပါမယ်။ [[mark:sel-deps]] ဒီနေ့အတွက် customer သုံးယောက်ရဲ့ deposit တွေပါ၊ တစ်ခုချင်းစီမှာ
+      အချိန် ပါပါတယ်။ [[mark:open-main]] rule ကို main ထဲမှာ ထည့်ပါမယ်။ [[mark:type-rule]] customer
+      တစ်ယောက်ချင်းအတွက် threshold အောက်က deposit တွေကို တစ်ရက်အတွင်း စုပါတယ်။ သုံးခုနဲ့ အထက် ရှိပြီး
+      ပေါင်းလဒ်က threshold ကို ကျော်ရင် alert ပေးပါတယ်။ threshold က ဥပမာ တန်ဖိုးပါ။ ဘယ် customer alert
+      ဖြစ်မလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-alert]] user ၁၀၄၂ တစ်ယောက်ပဲ alert
+      ဖြစ်ပါတယ်။ alert ထဲမှာ အကြောင်းရင်း deposit သုံးခု ပါလို့ analyst က ဘာကြောင့်လဲ ချက်ချင်း မြင်ရပါတယ်။ [[mark:pt-trail3]] alert ကိုယ်တိုင်ကလည်း ဆုံးဖြတ်ချက်
+      တစ်ခုမို့ trail ထဲ ရောက်ပါတယ်။ [[mark:dock-2]] ဒီ rule က ledger ထဲက event တွေပေါ်မှာ run ရပါတယ်၊ app
+      log ပေါ်မှာ run ရင် ပျောက်တဲ့ log တစ်ကြောင်းက လွတ်သွားတဲ့ alert တစ်ခု ဖြစ်သွားလို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Compliance & regulation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#compliance-regulation",
+        }
+      - { title: "Go package time — Duration", url: "https://pkg.go.dev/time#Duration" }
+    actions:
+      - { id: close-rule, type: slide.close, at: { mark: close-rule } }
+      - { id: open-data, type: workspace.openFile, at: { mark: open-data }, path: data.go }
+      - id: sel-deps
+        type: editor.select
+        at: { mark: sel-deps }
+        target: { file: data.go, text: "var deposits = []Deposit{", occurrence: 1 }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: main.go }
+      - id: type-rule
+        type: editor.type
+        at: { mark: type-rule }
+        target: { file: main.go, after: "gate(c, 100_00))\n\t}\n", occurrence: 1 }
+        text: "\n\tconst threshold = 2000_00 // an example value, not a legal one\n\tfor _, user := range []int{1042, 2077, 3150} {\n\t\thits := under(deposits, user, threshold, day)\n\t\tif len(hits) >= 3 && sum(hits) >= threshold {\n\t\t\talert(\"structuring\", user, hits)\n\t\t}\n\t}\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "alert structuring 1042",
+          timeoutMs: 8000,
+        }
+      - id: pt-alert
+        type: console.point
+        at: { mark: pt-alert }
+        target: { text: "alert structuring 1042", occurrence: 1 }
+      - id: pt-trail3
+        type: console.point
+        at: { mark: pt-trail3 }
+        target: { text: "trail: 4 decisions", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: screen
+    chapter: Sanctions screening နဲ့ false positive
+    narration: >-
+      [[mark:open-screen]] sanctions screening ကို code နဲ့ ကြည့်ရအောင်။ [[mark:sel-listed]] ဒီ list က
+      placeholder company နာမည် နှစ်ခုပါတဲ့ ဥပမာ list ပါ။ [[mark:sel-norm]] နာမည်ကို တိုက်မစစ်ခင် normalize
+      လုပ်ပါတယ်၊ စာလုံးအသေး ပြောင်းတာ၊ punctuation ဖြုတ်တာ၊ space တွေ စုတာပါ။ ပြီးမှ တစ်လုံးမကျန် ကိုက်မှ
+      match လို့ ယူပါတယ်။ [[mark:open-main3]] payment ရဲ့ counterparty နာမည် နှစ်ခုကို screen လုပ်ကြည့်ပါမယ်။
+      [[mark:type-screen]] ပထမ နာမည်က list ထဲက နာမည်ကို punctuation တွေ ထည့်ရေးထားတာပါ။ ဒုတိယ နာမည်က
+      စာလုံး နှစ်လုံး နေရာလဲ ရေးထားတာပါ။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-match]] ပထမ နာမည်က
+      normalize လုပ်ပြီးနောက် ကိုက်သွားလို့ case ဖွင့်ပါတယ်။ [[mark:pt-miss]] ဒုတိယ နာမည်ကတော့ no match ပါ။
+      လူတစ်ယောက် ကြည့်ရင် ချက်ချင်း သိမယ့် typo ကို exact match က လွတ်သွားပါတယ်။ fuzzy
+      matching ကို သုံးရင် ဒီ typo ကို မိပေမဲ့ နာမည်ဆင်တူတဲ့ ပုံမှန် company တွေပါ alert ဖြစ်လာပါတယ်။
+      false positive ဆိုတာ ဒါပါ။ alert တိုင်းက case တစ်ခု၊ case တိုင်းက analyst ရဲ့ အချိန်နဲ့ hold ခံထားရတဲ့
+      user တစ်ယောက် ဖြစ်လို့ compliance ရဲ့ နေ့စဉ် ကုန်ကျစရိတ်ပါ။ [[mark:dock-3b]] ဘယ်လောက် ဆင်တူမှ match ယူမလဲ ဆိုတာကို
+      engineer တစ်ယောက်တည်း မဆုံးဖြတ်ဘဲ compliance team နဲ့ ချိန်ရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Compliance & regulation: sanctions screening (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#compliance-regulation",
+        }
+      - {
+          title: "OFAC Sanctions List Service — SDN list",
+          url: "https://sanctionslist.ofac.treas.gov/Home/SdnList",
+        }
+    actions:
+      - { id: open-screen, type: workspace.openFile, at: { mark: open-screen }, path: screen.go }
+      - id: sel-listed
+        type: editor.select
+        at: { mark: sel-listed }
+        target:
+          {
+            file: screen.go,
+            text: 'var listed = []string{"EXAMPLE METALS LLC", "SAMPLE SHIPPING CO"}',
+            occurrence: 1,
+          }
+      - id: sel-norm
+        type: editor.select
+        at: { mark: sel-norm }
+        target: { file: screen.go, text: "func normalize(s string) string {", occurrence: 1 }
+      - { id: open-main3, type: workspace.openFile, at: { mark: open-main3 }, path: main.go }
+      - id: type-screen
+        type: editor.type
+        at: { mark: type-screen }
+        target:
+          {
+            file: main.go,
+            after: "alert(\"structuring\", user, hits)\n\t\t}\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\n\tfor _, name := range []string{\"Example Metals, L.L.C.\", \"Exampel Metals LLC\"} {\n\t\tfmt.Printf(\"screen %q: %s\\n\", name, screen(name))\n\t}\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "no match",
+          timeoutMs: 8000,
+        }
+      - id: pt-match
+        type: console.point
+        at: { mark: pt-match }
+        target: { text: "match EXAMPLE METALS LLC", occurrence: 1 }
+      - id: pt-miss
+        type: console.point
+        at: { mark: pt-miss }
+        target: { text: "no match", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3b } }
+      - {
+          id: expect-file-rule,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "if len(hits) >= 3 && sum(hits) >= threshold {",
+        }
+
+  - id: travel
+    chapter: Travel Rule နဲ့ MiCA
+    narration: >-
+      [[mark:show-travel]] crypto transfer တွေအတွက် နောက်ထပ် စည်းမျဉ်း တစ်ခု ရှိပါတယ်။ [[mark:pt-a]] VASP
+      ဆိုတာ virtual asset service provider ပါ။ FATF က သုံးတဲ့ term ဖြစ်ပြီး၊ သူတစ်ပါးအတွက် virtual asset ကို
+      လဲပေး၊ လွှဲပေး ဒါမှမဟုတ် ထိန်းပေးတဲ့ business ပါ။ [[mark:travel-2]] FATF ရဲ့ standard က VASP တွေကို
+      transfer နဲ့အတူ ပို့သူနဲ့ လက်ခံသူ အချက်အလက်ကို ရယူ၊ သိမ်းဆည်းပြီး ပို့ပေးဖို့ တောင်းဆိုထားပါတယ်။ ဒါကို
+      Travel Rule လို့ ခေါ်ပါတယ်။ engineering အတွက် ဆိုလိုတာက transfer တစ်ခုမှာ ငွေနဲ့ အချက်အလက် ဆိုပြီး
+      message နှစ်ခု ပါလာတာပါ။ [[mark:travel-3]] threshold က နေရာအလိုက် ကွာပါတယ်။ [[mark:pt-fatf]] FATF
+      က နိုင်ငံတွေကို ဒေါ်လာ ဒါမှမဟုတ် ယူရို တစ်ထောင်အောက် transfer တွေကို ကင်းလွတ်ခွင့် ပေးနိုင်အောင်
+      ခွင့်ပြုထားပါတယ်။ [[mark:pt-us]] US မှာ ဒေါ်လာ သုံးထောင်နဲ့ အထက် funds transfer တွေမှာ ဘဏ်ရော ဘဏ်
+      မဟုတ်တဲ့ financial institution တွေမှာပါ သက်ရောက်ပါတယ်။ [[mark:pt-eu]] EU မှာတော့ ၂၀၂၄ ဒီဇင်ဘာ ၃၀
+      ကစပြီး crypto-asset service provider တွေကြားမှာ အနည်းဆုံး ပမာဏ မရှိပါဘူး။ [[mark:pt-mica]] အဲဒီ provider ကို EU ရဲ့ Markets in Crypto-Assets regulation၊ အတိုကောက် MiCA က CASP လို့ ခေါ်ပြီး၊
+      ခွင့်ပြုချက် ရထားတဲ့ firm ကို ဆိုလိုပါတယ်။ VASP က FATF ရဲ့ အမျိုးအစား၊ CASP က EU licence status ဖြစ်လို့ တူတဲ့ term မဟုတ်ပါဘူး။ ဘယ် rule၊ ဘယ်
+      threshold က ကိုယ့် business အပေါ် သက်ရောက်လဲ ဆိုတာကို compliance နဲ့ legal team က ဆုံးဖြတ်ပြီး၊ engineer က အဲဒါကို config အဖြစ် ပြောင်းလို့ရတဲ့ system ကို ဆောက်ပေးတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Compliance & regulation: Travel Rule, VASP, MiCA (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#compliance-regulation",
+        }
+      - {
+          title: "FinCEN — Funds Travel Regulations: Questions & Answers",
+          url: "https://www.fincen.gov/resources/statutes-regulations/guidance/funds-travel-regulations-questions-answers",
+        }
+      - {
+          title: "ESMA — Markets in Crypto-Assets Regulation (MiCA)",
+          url: "https://www.esma.europa.eu/esmas-activities/digital-finance-and-innovation/markets-crypto-assets-regulation-mica",
+        }
+    actions:
+      - {
+          id: show-travel,
+          type: slide.show,
+          at: { mark: show-travel, offsetMs: -700 },
+          slideId: travel-1,
+        }
+      - { id: pt-a, type: slide.point, at: { mark: pt-a }, target: { x: 0.181, y: 0.42 } }
+      - { id: travel-2, type: slide.show, at: { mark: travel-2 }, slideId: travel-2 }
+      - {
+          id: pt-b,
+          type: slide.point,
+          at: { afterAction: travel-2 },
+          target: { x: 0.819, y: 0.42 },
+        }
+      - { id: travel-3, type: slide.show, at: { mark: travel-3 }, slideId: travel-3 }
+      - { id: pt-fatf, type: slide.point, at: { mark: pt-fatf }, target: { x: 0.131, y: 0.609 } }
+      - { id: pt-us, type: slide.point, at: { mark: pt-us }, target: { x: 0.131, y: 0.678 } }
+      - { id: pt-eu, type: slide.point, at: { mark: pt-eu }, target: { x: 0.131, y: 0.747 } }
+      - { id: pt-mica, type: slide.point, at: { mark: pt-mica }, target: { x: 0.378, y: 0.909 } }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ transaction monitoring rule တစ်ခုကို ဘယ်လို ဒီဇိုင်းဆွဲမလဲ၊
+      false positive ကို ဘယ်လို ကိုင်တွယ်မလဲ လို့ မေးတတ်ပါတယ်။ [[mark:iv-a]] ပထမ၊ rule ဆိုတာ pattern၊ window နဲ့ threshold ပါ၊ version ပါတဲ့ config အဖြစ် ထားပြီး ledger event တွေပေါ်မှာ run ပါတယ်။ alert မှာ အကြောင်းရင်း transaction တွေ ပါရပါတယ်။ [[mark:iv-b]] ဒုတိယ၊ alert က case queue ထဲ ဝင်ပါတယ်။ ငွေကို hold လုပ်ထားတုန်း လူက ဆုံးဖြတ်ပြီး၊ ဆုံးဖြတ်ချက်ကော rule
+      version ကော audit trail ထဲ ရောက်ပါတယ်။ [[mark:iv-c]] တတိယ၊ false positive က နေ့စဉ် ကုန်ကျစရိတ်ဖြစ်ပြီး၊ threshold ကို
+      ပြောင်းရင် alert အရေအတွက်သာမက ဘယ်သူ alert ဖြစ်လဲပါ ပြောင်းပါတယ်။ [[mark:iv-d]] ပြီးရင် ကိုယ် ဘာလုပ်မလဲ
+      ပြောပါ။ rule အသစ်ကို history ပေါ်မှာ back-test လုပ်ပြီးမှ deploy လုပ်မယ်၊ alert rate နဲ့ case
+      ရလဒ်ကို တိုင်းပြီး compliance team နဲ့ အတူ tune လုပ်မယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Compliance & regulation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#compliance-regulation",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] threshold ကို ယူရို
+      ကိုးရာ လို့ လျှော့ပြီး run ကြည့်ပါ။ alert နှစ်ခု ထွက်လာပြီး နှစ်ခုလုံးက ပမာဏ သေးသေးလေးတွေ ပို့တဲ့ customer တွေပါ။ user ၁၀၄၂ ကတော့ deposit တွေက ကိုးရာထက် ကြီးနေလို့ alert မဖြစ်တော့ပါဘူး။  [[mark:recap]] ပြန်ချုပ်ရရင်၊ engineer အတွက် compliance ဆိုတာ ငွေ ရွှေ့တဲ့ လမ်းပေါ်က gate တွေဖြစ်ပြီး၊ ဆုံးဖြတ်ချက် တိုင်း
+      trail ထဲ ရောက်ရပါတယ်။ နောက် lesson ကစပြီး course တစ်ခုလုံးက
+      pattern တွေကို end-to-end flow သုံးခုထဲမှာ ပေါင်းကြည့်ပါမယ်၊ ပထမဆုံးက crypto withdrawal ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Compliance & regulation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#compliance-regulation",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "const threshold = 2000_00", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

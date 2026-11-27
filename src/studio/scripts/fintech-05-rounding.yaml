@@ -1,0 +1,918 @@
+# Fintech Engineering, lesson 05: rounding is a business decision (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Rounding strategies" (CC BY 4.0, Voytek Pitula).
+# Start state: main.go splits 100.00 EUR (10000 cents) three ways with integer division and with
+# ceiling division and prints each split with its sum; the rounding helpers are pinned below main.
+# Edits, all insert-only:
+#   1. allocate(): the remainder handed out one cent at a time   (typed after main)
+#   2. a call that prints allocate(amount, 3)                     -> run-2 prints ... = 10000
+#   3. four ties (0.5 1.5 2.5 3.5 in tenths) under two modes     -> run-3 prints 10 vs 8
+# Figures: split (the lost and the invented cent), modes (where ties go), late (round once, at the
+# boundary), case (the Vancouver index), iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-05-rounding
+  title: "Fintech Engineering 05: Rounding က business ဆုံးဖြတ်ချက်"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        func main() {
+        	amount := int64(10000) // 100.00 EUR, counted in cents
+
+        	down := amount / 3     // integer division drops the remainder
+        	up := (amount + 2) / 3 // ceiling division
+        	show("round down", []int64{down, down, down})
+        	show("round up", []int64{up, up, up})
+        }
+
+        // roundHalfUp rounds tenths to a whole number; a tie (x.5) always goes up.
+        func roundHalfUp(tenths int64) int64 {
+        	return (tenths + 5) / 10
+        }
+
+        // roundHalfEven rounds tenths to a whole number; a tie goes to the even neighbour.
+        func roundHalfEven(tenths int64) int64 {
+        	q, r := tenths/10, tenths%10
+        	if r > 5 || (r == 5 && q%2 == 1) {
+        		q++
+        	}
+        	return q
+        }
+
+        // roundAll applies one rounding mode to every value.
+        func roundAll(values []int64, round func(int64) int64) []int64 {
+        	out := make([]int64, len(values))
+        	for i, v := range values {
+        		out[i] = round(v)
+        	}
+        	return out
+        }
+
+        // show prints the parts and what they add up to: "allocate: 3334 + 3333 + 3333 = 10000".
+        func show(label string, parts []int64) {
+        	var total int64
+        	terms := make([]string, len(parts))
+        	for i, p := range parts {
+        		total += p
+        		terms[i] = fmt.Sprint(p)
+        	}
+        	fmt.Printf("%-11s %s = %d\n", label+":", strings.Join(terms, " + "), total)
+        }
+  slides:
+    - id: case-1
+      contentType: html
+      name: "Real case 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">REAL CASE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Vancouver Stock Exchange index, 1982–1983</text>
+        <g class="in"><rect x="100" y="230" width="640" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="420" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Jan 1982 · new index</text><text x="420" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">1000.000 ကနေ စ</text></g>
+        <g class="in"><rect x="100" y="400" width="640" height="150" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="420" y="466.9" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">trade တိုင်း ပြန်တွက်</text><text x="420" y="511" font-size="22" text-anchor="middle" fill="#8a94a8">တစ်ရက် ~3,000 ခါ · ဒသမ 3 နေရာမှာ ဖြတ် (truncate)</text></g>
+        </svg>
+    - id: case-2
+      contentType: html
+      name: "Real case 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">REAL CASE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Vancouver Stock Exchange index, 1982–1983</text>
+        <rect x="100" y="230" width="640" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="420" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Jan 1982 · new index</text><text x="420" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">1000.000 ကနေ စ</text>
+        <rect x="100" y="400" width="640" height="150" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="420" y="466.9" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">trade တိုင်း ပြန်တွက်</text><text x="420" y="511" font-size="22" text-anchor="middle" fill="#8a94a8">တစ်ရက် ~3,000 ခါ · ဒသမ 3 နေရာမှာ ဖြတ် (truncate)</text>
+        <g class="in"><text x="860" y="330" font-size="96" fill="#fc8181" font-weight="800" class="mono">524.811</text><text x="860" y="376" font-size="26" fill="#8a94a8">Nov 1983 · truncate လုပ်ထားတဲ့ index</text></g>
+        <path d="M745 466.3L840 300" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        </svg>
+    - id: case-3
+      contentType: html
+      name: "Real case 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">REAL CASE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Vancouver Stock Exchange index, 1982–1983</text>
+        <rect x="100" y="230" width="640" height="130" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><text x="420" y="283.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">Jan 1982 · new index</text><text x="420" y="327.7" font-size="24" text-anchor="middle" fill="#8a94a8">1000.000 ကနေ စ</text>
+        <rect x="100" y="400" width="640" height="150" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="420" y="466.9" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">trade တိုင်း ပြန်တွက်</text><text x="420" y="511" font-size="22" text-anchor="middle" fill="#8a94a8">တစ်ရက် ~3,000 ခါ · ဒသမ 3 နေရာမှာ ဖြတ် (truncate)</text>
+        <text x="860" y="330" font-size="96" fill="#fc8181" font-weight="800" class="mono">524.811</text><text x="860" y="376" font-size="26" fill="#8a94a8">Nov 1983 · truncate လုပ်ထားတဲ့ index</text>
+        <g class="in"><text x="860" y="560" font-size="96" fill="#68d391" font-weight="800" class="mono">1098.892</text><text x="860" y="606" font-size="26" fill="#8a94a8">25–28 Nov 1983 · မှန်မှန် ပြန်တွက်တော့</text></g>
+        <path d="M745 466.3L840 300" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <g class="in"><rect x="100" y="680" width="835.4" height="54" rx="27" fill="#fc8181" opacity="0.16"/><rect x="100" y="680" width="835.4" height="54" rx="27" fill="none" stroke="#fc8181" stroke-width="2"/><text x="517.7" y="717.5" font-size="30" text-anchor="middle" fill="#fc8181" font-weight="700">loop ထဲမှာ ဖြတ်ချတာ = တစ်ဘက်တည်း စုလာတဲ့ bias</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဒေါ်လာ 100 ကို သုံးယောက် အညီအမျှ ခွဲပေးပါ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဒေါ်လာ 100 ကို သုံးယောက် အညီအမျှ ခွဲပေးပါ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Minor unit နဲ့ တွက် — 10000 ÷ 3 = 3333 ကျန် 1</text><text x="188" y="311" font-size="26" fill="#8a94a8">ကျန်တဲ့ cent ကို ဖုံးမထားဘဲ ထုတ်ပြတယ်</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဒေါ်လာ 100 ကို သုံးယောက် အညီအမျှ ခွဲပေးပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Minor unit နဲ့ တွက် — 10000 ÷ 3 = 3333 ကျန် 1</text><text x="188" y="311" font-size="26" fill="#8a94a8">ကျန်တဲ့ cent ကို ဖုံးမထားဘဲ ထုတ်ပြတယ်</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">ကျန်တာကို rule တစ်ခုနဲ့ ပေး — 3334 + 3333 + 3333</text><text x="188" y="443" font-size="26" fill="#8a94a8">deterministic ဖြစ်ရမယ်၊ ဒါမှမဟုတ် rounding account ထဲ</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဒေါ်လာ 100 ကို သုံးယောက် အညီအမျှ ခွဲပေးပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Minor unit နဲ့ တွက် — 10000 ÷ 3 = 3333 ကျန် 1</text><text x="188" y="311" font-size="26" fill="#8a94a8">ကျန်တဲ့ cent ကို ဖုံးမထားဘဲ ထုတ်ပြတယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">ကျန်တာကို rule တစ်ခုနဲ့ ပေး — 3334 + 3333 + 3333</text><text x="188" y="443" font-size="26" fill="#8a94a8">deterministic ဖြစ်ရမယ်၊ ဒါမှမဟုတ် rounding account ထဲ</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">ဘယ်သူ ရမလဲ ဆိုတာ business ဆုံးဖြတ်ချက်</text><text x="188" y="575" font-size="26" fill="#8a94a8">mode ကို တမင် ရွေး၊ legal / tax အကျိုးဆက် ရှိနိုင်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဒေါ်လာ 100 ကို သုံးယောက် အညီအမျှ ခွဲပေးပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Minor unit နဲ့ တွက် — 10000 ÷ 3 = 3333 ကျန် 1</text><text x="188" y="311" font-size="26" fill="#8a94a8">ကျန်တဲ့ cent ကို ဖုံးမထားဘဲ ထုတ်ပြတယ်</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">ကျန်တာကို rule တစ်ခုနဲ့ ပေး — 3334 + 3333 + 3333</text><text x="188" y="443" font-size="26" fill="#8a94a8">deterministic ဖြစ်ရမယ်၊ ဒါမှမဟုတ် rounding account ထဲ</text></g><g><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">ဘယ်သူ ရမလဲ ဆိုတာ business ဆုံးဖြတ်ချက်</text><text x="188" y="575" font-size="26" fill="#8a94a8">mode ကို တမင် ရွေး၊ legal / tax အကျိုးဆက် ရှိနိုင်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">allocate + test — parts ပေါင်းလဒ် = မူရင်း၊ n တိုင်းအတွက်</text><text x="188" y="707" font-size="26" fill="#8a94a8">round ကို boundary မှာ တစ်ခါပဲ</text></g>
+        </svg>
+    - id: late-1
+      contentType: html
+      name: "Round late 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">ROUND LATE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Round လုပ်တာ နောက်ကျလေ ကောင်းလေ</text>
+        <g class="in"><text x="100" y="255" font-size="30" fill="#8a94a8" class="mono">1000.00 EUR · 1% a year · 30 days → 0.0273972… EUR a day</text></g>
+        <g class="in"><rect x="100" y="320" width="420" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="310" y="375.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">round every day</text><text x="310" y="416.6" font-size="24" text-anchor="middle" fill="#8a94a8">0.0274 → 0.03</text></g>
+        <g class="in"><rect x="640" y="320" width="380" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="830" y="373.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">30 × 0.03</text><text x="830" y="417.7" font-size="24" text-anchor="middle" fill="#8a94a8">30 ခါ round</text></g>
+        <g class="in"><text x="1130" y="420" font-size="72" fill="#fc8181" font-weight="800" class="mono">0.90</text><text x="1130" y="466" font-size="26" fill="#8a94a8">0.08 ပိုပေးမိတယ်</text></g>
+        <path d="M530 385L626 385" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        </svg>
+    - id: late-2
+      contentType: html
+      name: "Round late 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">ROUND LATE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Round လုပ်တာ နောက်ကျလေ ကောင်းလေ</text>
+        <text x="100" y="255" font-size="30" fill="#8a94a8" class="mono">1000.00 EUR · 1% a year · 30 days → 0.0273972… EUR a day</text>
+        <rect x="100" y="320" width="420" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="310" y="375.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">round every day</text><text x="310" y="416.6" font-size="24" text-anchor="middle" fill="#8a94a8">0.0274 → 0.03</text>
+        <rect x="640" y="320" width="380" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="830" y="373.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">30 × 0.03</text><text x="830" y="417.7" font-size="24" text-anchor="middle" fill="#8a94a8">30 ခါ round</text>
+        <text x="1130" y="420" font-size="72" fill="#fc8181" font-weight="800" class="mono">0.90</text><text x="1130" y="466" font-size="26" fill="#8a94a8">0.08 ပိုပေးမိတယ်</text>
+        <path d="M530 385L626 385" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <g class="in"><rect x="100" y="520" width="420" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="310" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">full precision</text><text x="310" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">0.0273972… ကို စုထား</text></g>
+        <g class="in"><rect x="640" y="520" width="380" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="830" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">round once</text><text x="830" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">post လုပ်ချိန်မှာ</text></g>
+        <g class="in"><text x="1130" y="620" font-size="72" fill="#68d391" font-weight="800" class="mono">0.82</text><text x="1130" y="658" font-size="26" fill="#8a94a8">0.8219… → 0.82</text></g>
+        <path d="M530 585L626 585" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/>
+        </svg>
+    - id: late-3
+      contentType: html
+      name: "Round late 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">ROUND LATE</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Round လုပ်တာ နောက်ကျလေ ကောင်းလေ</text>
+        <text x="100" y="255" font-size="30" fill="#8a94a8" class="mono">1000.00 EUR · 1% a year · 30 days → 0.0273972… EUR a day</text>
+        <rect x="100" y="320" width="420" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="310" y="375.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">round every day</text><text x="310" y="416.6" font-size="24" text-anchor="middle" fill="#8a94a8">0.0274 → 0.03</text>
+        <rect x="640" y="320" width="380" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="830" y="373.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">30 × 0.03</text><text x="830" y="417.7" font-size="24" text-anchor="middle" fill="#8a94a8">30 ခါ round</text>
+        <text x="1130" y="420" font-size="72" fill="#fc8181" font-weight="800" class="mono">0.90</text><text x="1130" y="466" font-size="26" fill="#8a94a8">0.08 ပိုပေးမိတယ်</text>
+        <path d="M530 385L626 385" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <rect x="100" y="520" width="420" height="130" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><text x="310" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">full precision</text><text x="310" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">0.0273972… ကို စုထား</text>
+        <rect x="640" y="520" width="380" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="830" y="573.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">round once</text><text x="830" y="617.7" font-size="24" text-anchor="middle" fill="#8a94a8">post လုပ်ချိန်မှာ</text>
+        <text x="1130" y="620" font-size="72" fill="#68d391" font-weight="800" class="mono">0.82</text><text x="1130" y="658" font-size="26" fill="#8a94a8">0.8219… → 0.82</text>
+        <path d="M530 585L626 585" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/>
+        <g class="in"><rect x="100" y="740" width="969.7" height="52" rx="26" fill="#4fd1c5" opacity="0.16"/><rect x="100" y="740" width="969.7" height="52" rx="26" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="584.9" y="775.8" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700">နေ့တိုင်း post လုပ်ရရင် → residual ကို နောက်နေ့ဆီ သယ်  (Σ = 0.82)</text></g>
+        </svg>
+    - id: modes-1
+      contentType: html
+      name: "Rounding modes 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">ROUNDING MODES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Tie တွေ ဘယ်ဘက် သွားလဲ</text>
+        <g class="in"><path d="M160 520L1440 520" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+        <g class="in"><text x="160" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">0</text></g>
+        <g class="in"><text x="480" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">1</text></g>
+        <g class="in"><text x="800" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">2</text></g>
+        <g class="in"><text x="1120" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">3</text></g>
+        <g class="in"><text x="1440" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">4</text></g>
+        <g class="in"><text x="320" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">0.5</text></g>
+        <g class="in"><text x="640" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">1.5</text></g>
+        <g class="in"><text x="960" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">2.5</text></g>
+        <g class="in"><text x="1280" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">3.5</text></g>
+        <g class="in"><rect x="160" y="240" width="247.6" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="160" y="240" width="247.6" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="283.8" y="274.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">exact sum = 8</text></g>
+        </svg>
+    - id: modes-2
+      contentType: html
+      name: "Rounding modes 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">ROUNDING MODES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Tie တွေ ဘယ်ဘက် သွားလဲ</text>
+        <path d="M160 520L1440 520" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="160" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">0</text>
+        <text x="480" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">1</text>
+        <text x="800" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">2</text>
+        <text x="1120" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">3</text>
+        <text x="1440" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">4</text>
+        <text x="320" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">0.5</text>
+        <text x="640" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">1.5</text>
+        <text x="960" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">2.5</text>
+        <text x="1280" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">3.5</text>
+        <rect x="160" y="240" width="247.6" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="160" y="240" width="247.6" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="283.8" y="274.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">exact sum = 8</text>
+        <path d="M320 455Q400 385 480 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M640 455Q720 385 800 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M960 455Q1040 385 1120 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M1280 455Q1360 385 1440 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <g class="in"><rect x="500" y="240" width="475.5" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="500" y="240" width="475.5" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="737.8" y="274.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">half-up  1 + 2 + 3 + 4 = 10</text></g>
+        </svg>
+    - id: modes-3
+      contentType: html
+      name: "Rounding modes 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">ROUNDING MODES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Tie တွေ ဘယ်ဘက် သွားလဲ</text>
+        <path d="M160 520L1440 520" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="160" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">0</text>
+        <text x="480" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">1</text>
+        <text x="800" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">2</text>
+        <text x="1120" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">3</text>
+        <text x="1440" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">4</text>
+        <text x="320" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">0.5</text>
+        <text x="640" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">1.5</text>
+        <text x="960" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">2.5</text>
+        <text x="1280" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">3.5</text>
+        <rect x="160" y="240" width="247.6" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="160" y="240" width="247.6" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="283.8" y="274.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">exact sum = 8</text>
+        <path d="M320 455Q400 385 480 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <path d="M640 455Q720 385 800 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <path d="M960 455Q1040 385 1120 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <path d="M1280 455Q1360 385 1440 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <rect x="500" y="240" width="475.5" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="500" y="240" width="475.5" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="737.8" y="274.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">half-up  1 + 2 + 3 + 4 = 10</text>
+        <path d="M320 600Q240 670 160 600" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/>
+        <path d="M640 600Q720 670 800 600" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/>
+        <path d="M960 600Q880 670 800 600" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/>
+        <path d="M1280 600Q1360 670 1440 600" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" class="dr"/>
+        <g class="in"><rect x="160" y="660" width="491.8" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="160" y="660" width="491.8" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="405.9" y="694.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700" class="mono">half-even  0 + 2 + 2 + 4 = 8</text></g>
+        </svg>
+    - id: modes-4
+      contentType: html
+      name: "Rounding modes 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">ROUNDING MODES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Tie တွေ ဘယ်ဘက် သွားလဲ</text>
+        <path d="M160 520L1440 520" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="160" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">0</text>
+        <text x="480" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">1</text>
+        <text x="800" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">2</text>
+        <text x="1120" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">3</text>
+        <text x="1440" y="570" font-size="32" text-anchor="middle" fill="#8a94a8" class="mono">4</text>
+        <text x="320" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">0.5</text>
+        <text x="640" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">1.5</text>
+        <text x="960" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">2.5</text>
+        <text x="1280" y="500" font-size="30" text-anchor="middle" fill="#f6c453" class="mono">3.5</text>
+        <rect x="160" y="240" width="247.6" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="160" y="240" width="247.6" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="283.8" y="274.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">exact sum = 8</text>
+        <path d="M320 455Q400 385 480 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <path d="M640 455Q720 385 800 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <path d="M960 455Q1040 385 1120 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <path d="M1280 455Q1360 385 1440 455" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <rect x="500" y="240" width="475.5" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="500" y="240" width="475.5" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="737.8" y="274.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">half-up  1 + 2 + 3 + 4 = 10</text>
+        <path d="M320 600Q240 670 160 600" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/>
+        <path d="M640 600Q720 670 800 600" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/>
+        <path d="M960 600Q880 670 800 600" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/>
+        <path d="M1280 600Q1360 670 1440 600" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)"/>
+        <rect x="160" y="660" width="491.8" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="160" y="660" width="491.8" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="405.9" y="694.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700" class="mono">half-even  0 + 2 + 2 + 4 = 8</text>
+        <g class="in"><rect x="160" y="780" width="453.2" height="48" rx="24" fill="#9aa5b8" opacity="0.16"/><rect x="160" y="780" width="453.2" height="48" rx="24" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="386.6" y="812.4" font-size="24" text-anchor="middle" fill="#9aa5b8" font-weight="700">Go math.Round → away from zero</text></g>
+        <g class="in"><rect x="650" y="780" width="405.3" height="48" rx="24" fill="#9aa5b8" opacity="0.16"/><rect x="650" y="780" width="405.3" height="48" rx="24" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="852.7" y="812.4" font-size="24" text-anchor="middle" fill="#9aa5b8" font-weight="700">Python round() · .NET → even</text></g>
+        <g class="in"><rect x="1080" y="780" width="383.9" height="48" rx="24" fill="#9aa5b8" opacity="0.16"/><rect x="1080" y="780" width="383.9" height="48" rx="24" fill="none" stroke="#9aa5b8" stroke-width="2"/><text x="1272" y="812.4" font-size="24" text-anchor="middle" fill="#9aa5b8" font-weight="700">Java → HALF_EVEN ပေးမှ</text></g>
+        </svg>
+    - id: split-1
+      contentType: html
+      name: "Rounding breaks sums 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">ROUNDING BREAKS SUMS</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1128.3" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">100.00 ကို သုံးပုံခွဲရင် cent ဘယ်ရောက်သွားလဲ</text>
+        <g class="in"><text x="100" y="262" font-size="44" fill="#f6c453" class="mono">100.00 EUR ÷ 3 = 33.333…</text></g>
+        <g class="in"><rect x="100" y="320" width="1400" height="340" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="355" font-size="22" fill="#8a94a8" font-weight="700">rule</text><text x="532.5" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">part 1</text><text x="714.4" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">part 2</text><text x="896.2" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">part 3</text><text x="1132.5" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">sum</text><text x="1176.5" y="355" font-size="22" fill="#8a94a8" font-weight="700">result</text><path d="M100 372H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="430" font-size="28" fill="#fc8181" class="mono">round down</text><text x="532.5" y="430" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.33</text><text x="714.4" y="430" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.33</text><text x="896.2" y="430" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.33</text><text x="1132.5" y="430" font-size="28" text-anchor="end" fill="#fc8181" font-weight="700" class="mono">99.99</text><text x="1176.5" y="430" font-size="28" fill="#fc8181">0.01 ပျောက်</text></g></g>
+        </svg>
+    - id: split-2
+      contentType: html
+      name: "Rounding breaks sums 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">ROUNDING BREAKS SUMS</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1128.3" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">100.00 ကို သုံးပုံခွဲရင် cent ဘယ်ရောက်သွားလဲ</text>
+        <text x="100" y="262" font-size="44" fill="#f6c453" class="mono">100.00 EUR ÷ 3 = 33.333…</text>
+        <rect x="100" y="320" width="1400" height="340" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="355" font-size="22" fill="#8a94a8" font-weight="700">rule</text><text x="532.5" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">part 1</text><text x="714.4" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">part 2</text><text x="896.2" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">part 3</text><text x="1132.5" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">sum</text><text x="1176.5" y="355" font-size="22" fill="#8a94a8" font-weight="700">result</text><path d="M100 372H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="430" font-size="28" fill="#fc8181" class="mono">round down</text><text x="532.5" y="430" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.33</text><text x="714.4" y="430" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.33</text><text x="896.2" y="430" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.33</text><text x="1132.5" y="430" font-size="28" text-anchor="end" fill="#fc8181" font-weight="700" class="mono">99.99</text><text x="1176.5" y="430" font-size="28" fill="#fc8181">0.01 ပျောက်</text></g><g class="in"><path d="M116 468H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="526" font-size="28" fill="#fc8181" class="mono">round up</text><text x="532.5" y="526" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.34</text><text x="714.4" y="526" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.34</text><text x="896.2" y="526" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.34</text><text x="1132.5" y="526" font-size="28" text-anchor="end" fill="#fc8181" font-weight="700" class="mono">100.02</text><text x="1176.5" y="526" font-size="28" fill="#fc8181">0.02 ပေါ်လာ</text></g>
+        </svg>
+    - id: split-3
+      contentType: html
+      name: "Rounding breaks sums 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">ROUNDING BREAKS SUMS</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1024.3" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1128.3" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">100.00 ကို သုံးပုံခွဲရင် cent ဘယ်ရောက်သွားလဲ</text>
+        <text x="100" y="262" font-size="44" fill="#f6c453" class="mono">100.00 EUR ÷ 3 = 33.333…</text>
+        <rect x="100" y="320" width="1400" height="340" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="122" y="355" font-size="22" fill="#8a94a8" font-weight="700">rule</text><text x="532.5" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">part 1</text><text x="714.4" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">part 2</text><text x="896.2" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">part 3</text><text x="1132.5" y="355" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">sum</text><text x="1176.5" y="355" font-size="22" fill="#8a94a8" font-weight="700">result</text><path d="M100 372H1500" stroke="#2a3345" stroke-width="2"/><g><text x="122" y="430" font-size="28" fill="#fc8181" class="mono">round down</text><text x="532.5" y="430" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.33</text><text x="714.4" y="430" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.33</text><text x="896.2" y="430" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.33</text><text x="1132.5" y="430" font-size="28" text-anchor="end" fill="#fc8181" font-weight="700" class="mono">99.99</text><text x="1176.5" y="430" font-size="28" fill="#fc8181">0.01 ပျောက်</text></g><g><path d="M116 468H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="526" font-size="28" fill="#fc8181" class="mono">round up</text><text x="532.5" y="526" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.34</text><text x="714.4" y="526" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.34</text><text x="896.2" y="526" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.34</text><text x="1132.5" y="526" font-size="28" text-anchor="end" fill="#fc8181" font-weight="700" class="mono">100.02</text><text x="1176.5" y="526" font-size="28" fill="#fc8181">0.02 ပေါ်လာ</text></g><g class="in"><rect x="106" y="569" width="1388" height="86" rx="10" fill="#68d391" opacity="0.14"/><path d="M116 564H1484" stroke="#2a3345" stroke-width="1.5"/><text x="122" y="622" font-size="28" fill="#68d391" class="mono">allocate</text><text x="532.5" y="622" font-size="28" text-anchor="end" fill="#f6c453" class="mono">33.34</text><text x="714.4" y="622" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.33</text><text x="896.2" y="622" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">33.33</text><text x="1132.5" y="622" font-size="28" text-anchor="end" fill="#68d391" font-weight="700" class="mono">100.00</text><text x="1176.5" y="622" font-size="28" fill="#68d391">ကိုက်တယ်</text></g>
+        <g class="in"><rect x="100" y="730" width="1129" height="52" rx="26" fill="#68d391" opacity="0.16"/><rect x="100" y="730" width="1129" height="52" rx="26" fill="none" stroke="#68d391" stroke-width="2"/><text x="664.5" y="765.8" font-size="28" text-anchor="middle" fill="#68d391" font-weight="700">ကျန်တဲ့ 1 cent → တမင် သတ်မှတ်ထားတဲ့ part ဒါမှမဟုတ် rounding account</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9505
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "round down: 3333 + 3333 + 3333 = 9999\nround up:   3334 + 3334 + 3334 = 10002\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "round down: 3333 + 3333 + 3333 = 9999\nround up:   3334 + 3334 + 3334 = 10002\nallocate:   3334 + 3333 + 3333 = 10000\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "round down: 3333 + 3333 + 3333 = 9999\nround up:   3334 + 3334 + 3334 = 10002\nallocate:   3334 + 3333 + 3333 = 10000\nhalf-up:    1 + 2 + 3 + 4 = 10\nhalf-even:  0 + 2 + 2 + 4 = 8\n"
+
+scenes:
+  - id: hook
+    chapter: သုံးပုံခွဲရင် cent ဘယ်ရောက်လဲ
+    narration: >-
+      ငွေကို အပိုင်းတွေ ခွဲတာ၊ currency တစ်ခုကနေ တစ်ခု ပြောင်းတာ၊ fee ယူတာ၊ အတိုး တွက်တာ၊ precision
+      မတူတဲ့ system တစ်ခုဆီ ပို့တာ၊ ဒါတွေ အားလုံးမှာ အသေးဆုံး unit ထက် သေးတဲ့ အပိုင်းလေး ကျန်လာပြီး
+      round လုပ်ရပါတယ်။ rounding ကို ရှောင်လို့ မရပါဘူး၊ ဆုံးဖြတ်ရမှာက ဘယ်နေရာမှာ ဘယ်လို
+      လုပ်မလဲ ဆိုတာပါ။ [[mark:sel-amount]] ဒီ program က ယူရို တစ်ရာကို ဆင့်နဲ့
+      ရေတွက်တဲ့ ကိန်းပြည့်အဖြစ် ထားပါတယ်။ [[mark:sel-split]] ပထမ line က ကိန်းပြည့်နဲ့ သုံးပုံ စားပြီး
+      အကြွင်းကို လွှင့်ပစ်ပါတယ်၊ ဆိုလိုတာက round down ပါ။ ဒုတိယ line က အပေါ်ကို round up လုပ်ပါတယ်။
+      နှစ်မျိုးလုံးမှာ အပိုင်း သုံးခုကို ပြန်ပေါင်းပြီး ပြပါမယ်။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+      - {
+          title: "The Go Programming Language Specification — Arithmetic operators (integer division)",
+          url: "https://go.dev/ref/spec#Arithmetic_operators",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-amount
+        type: editor.select
+        at: { mark: sel-amount }
+        target: { file: main.go, text: "amount := int64(10000)", occurrence: 1 }
+      - id: sel-split
+        type: editor.select
+        at: { mark: sel-split }
+        target:
+          {
+            file: main.go,
+            text: "down := amount / 3     // integer division drops the remainder\n\tup := (amount + 2) / 3",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "3333 + 3333 + 3333 = 9999",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-down]] round down လုပ်တော့ ပေါင်းလဒ်က ဆင့် ၉၉၉၉ ပဲ ရှိပါတယ်၊ ဆင့် တစ်ပြား
+      ပျောက်သွားပါပြီ။ [[mark:pt-up]] round up လုပ်တော့ ဆင့် နှစ်ပြား ပိုလာပြီး မရှိတဲ့ ငွေ
+      ပေါ်လာပါတယ်။ [[mark:dock-1]] error တစ်ခုမှ မတက်ပါဘူး။ အပိုင်း တစ်ခုချင်းကို ကြည့်ရင် အားလုံး
+      မှန်နေပြီး၊ မှားနေတာက ပေါင်းလဒ် တစ်ခုတည်းပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+    actions:
+      - id: pt-down
+        type: console.point
+        at: { mark: pt-down }
+        target: { text: "round down:", occurrence: 1 }
+      - id: pt-up
+        type: console.point
+        at: { mark: pt-up }
+        target: { text: "round up:", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: split
+    chapter: Rounding က ပေါင်းလဒ်ကို ဖျက်တယ်
+    narration: >-
+      [[mark:show-split]] ဒသမနဲ့ ကြည့်ရင် ပိုရှင်းပါတယ်။ ယူရို တစ်ရာကို သုံးနဲ့ စားရင် သုံးဆယ့်သုံး
+      ဒသမ သုံးသုံး ပြီးတော့လည်း သုံးတွေ အဆုံးမရှိ ဆက်သွားပါတယ်။ [[mark:pt-down-row]] အောက်ကို
+      ဖြတ်လိုက်ရင် ဆင့် တစ်ပြား ပျောက်ပါတယ်။ ဒါက No lost data ကို ချိုးဖောက်တာပါ၊ ဆိုလိုတာက ငွေနဲ့
+      ပတ်သက်ပြီး ဖြစ်ခဲ့သမျှ မပျောက်ရဘူး ဆိုတဲ့ မူပါ။ [[mark:split-2]] အပေါ်ကို ယူလိုက်ရင် ဆင့်
+      နှစ်ပြား ပေါ်လာပါတယ်။ ဒါက No invented data ကို ချိုးဖောက်တာပါ၊ ငွေကို မရှိဘဲ မဖန်တီးရဘူး
+      ဆိုတဲ့ မူပါ။ [[mark:split-3]] ဖြေရှင်းနည်းက အကြွင်းကို တမင် ခွဲပေးတာပါ။ allocate ဆိုတာ ပမာဏ
+      တစ်ခုကို အပိုင်းတွေ ခွဲတဲ့အခါ ကျန်တဲ့ unit တွေကို တစ်ခုချင်း ဝေပေးပြီး၊ အပိုင်းတွေ ပေါင်းလဒ်ကို
+      မူရင်းနဲ့ အမြဲ ညီအောင် လုပ်တာပါ။ [[mark:pt-fix]] နောက်တစ်နည်းက အပိုင်းတွေကို အညီ ထားပြီး
+      ကျန်တဲ့ ဆင့်ကို rounding account လို့ ခေါ်တဲ့ သီးသန့် account ထဲ မှတ်ထားတာပါ။ ဘယ်နည်းပဲ
+      သုံးသုံး ဆင့်တိုင်း ဘယ်ကို ရောက်သွားလဲ ဆိုတာ မှတ်တမ်း ရှိနေရပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - {
+          id: show-split,
+          type: slide.show,
+          at: { mark: show-split, offsetMs: -700 },
+          slideId: split-1,
+        }
+      - {
+          id: pt-q,
+          type: slide.point,
+          at: { afterAction: show-split },
+          target: { x: 0.1, y: 0.304 },
+        }
+      - {
+          id: pt-down-row,
+          type: slide.point,
+          at: { mark: pt-down-row },
+          target: { x: 0.138, y: 0.513 },
+        }
+      - { id: split-2, type: slide.show, at: { mark: split-2 }, slideId: split-2 }
+      - {
+          id: pt-up-row,
+          type: slide.point,
+          at: { afterAction: split-2 },
+          target: { x: 0.138, y: 0.62 },
+        }
+      - { id: split-3, type: slide.show, at: { mark: split-3 }, slideId: split-3 }
+      - {
+          id: pt-alloc-row,
+          type: slide.point,
+          at: { afterAction: split-3 },
+          target: { x: 0.138, y: 0.727 },
+        }
+      - { id: pt-fix, type: slide.point, at: { mark: pt-fix }, target: { x: 0.409, y: 0.878 } }
+
+  - id: allocate
+    chapter: Allocate၊ ကျန်တဲ့ cent ကို တမင် ပေး
+    narration: >-
+      [[mark:close-split]] allocate ကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-alloc]] အပိုင်းတိုင်းကို
+      ကိန်းပြည့် စားလဒ်နဲ့ စပြီး၊ အကြွင်း ရှိသလောက် ရှေ့ဆုံးက အပိုင်းတွေကို unit တစ်ခုစီ ထပ်ပေးပါတယ်။
+      ဒါကြောင့် အပိုင်းတွေ အများဆုံး unit တစ်ခုပဲ ကွာပြီး ပေါင်းလဒ်က မူရင်းနဲ့ အမြဲ ညီပါတယ်။ [[mark:type-call]] ယူရို တစ်ရာကို ဒီ function နဲ့ သုံးပုံ ခွဲပြီး ပြပါမယ်။
+      ပထမ အပိုင်းက ဆင့် တစ်ပြား ပိုရပြီး ကျန်တဲ့ နှစ်ခုက အတူတူ ဖြစ်ရပါမယ်။ [[mark:run-2]] run
+      လိုက်ရအောင်။ [[mark:pt-alloc]] ပေါင်းလဒ်က ဆင့် တစ်သောင်း အတိအကျ ပြန်ဖြစ်ပါပြီ။
+      [[mark:alloc-who]] ဒီမှာ တကယ် ဆုံးဖြတ်ရတာက ပိုတဲ့ ဆင့်ကို ဘယ်အပိုင်း ရမလဲ ဆိုတာပါ။ ဒီ code မှာ
+      ရှေ့ဆုံးက အပိုင်း ရပါတယ်။ အရေးကြီးတာက rule က deterministic ဖြစ်ဖို့ပါ၊ ဆိုလိုတာက input
+      တူရင် ဘယ်နှခါ run run ရလဒ် တူရပါမယ်။ retry လုပ်တိုင်း ပိုတဲ့ ဆင့် နေရာ ပြောင်းနေရင် နောက်မှ
+      reconcile လုပ်လို့ မရတော့ပါဘူး။ [[mark:dock-2]] အချိုး မညီတဲ့ ခွဲဝေမှု၊ ဥပမာ fee ကို ရာခိုင်နှုန်း ခုနစ်ဆယ်နဲ့
+      သုံးဆယ် ခွဲတာမျိုးမှာတော့ ဖြတ်ချလိုက်တဲ့ အပိုင်း အကြီးဆုံး အပိုင်းကို ပိုတဲ့ ဆင့် အရင် ပေးတဲ့ နည်းကို သုံးနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+    actions:
+      - { id: close-split, type: slide.close, at: { mark: close-split } }
+      - id: type-alloc
+        type: editor.type
+        at: { mark: type-alloc }
+        target:
+          { file: main.go, after: "\tshow(\"round up\", []int64{up, up, up})\n}\n", occurrence: 1 }
+        text: "\n// allocate splits amount into n parts that add up to exactly amount.\nfunc allocate(amount, n int64) []int64 {\n\tparts := make([]int64, n)\n\tfor i := range parts {\n\t\tparts[i] = amount / n\n\t\tif int64(i) < amount%n {\n\t\t\tparts[i]++\n\t\t}\n\t}\n\treturn parts\n}\n"
+        cadence: line-by-line
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call }
+        target:
+          { file: main.go, after: "\tshow(\"round up\", []int64{up, up, up})\n", occurrence: 1 }
+        text: "\n\tshow(\"allocate\", allocate(amount, 3))\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "3334 + 3333 + 3333 = 10000",
+          timeoutMs: 8000,
+        }
+      - id: pt-alloc
+        type: console.point
+        at: { mark: pt-alloc }
+        target: { text: "allocate:", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: modes-code
+    chapter: Half-up နဲ့ half-even
+    narration: >-
+      [[mark:sel-up]] file ရဲ့ အောက်ပိုင်းမှာ rounding mode နှစ်မျိုး ရှိပါတယ်။ ပထမ တစ်ခုက half-up
+      ပါ။ ကိန်းပြည့် နှစ်ခုရဲ့ အလယ်တည့်တည့်မှာ ရှိတဲ့ တန်ဖိုးကို tie လို့ ခေါ်ပြီး၊ half-up က tie ကို
+      အပေါ်ကို အမြဲ ယူပါတယ်။ [[mark:sel-even]] ဒုတိယက half-even ပါ။ tie ကို အနီးဆုံး စုံကိန်းဆီ
+      ပို့ပြီး၊ banker's rounding လို့လည်း ခေါ်ပါတယ်။ [[mark:type-ties]] သုည ဒသမ ငါး၊ တစ် ဒသမ
+      ငါး၊ နှစ် ဒသမ ငါး၊ သုံး ဒသမ ငါး ဆိုတဲ့ tie လေးခုကို ဆယ်ပုံတစ်ပုံ unit နဲ့ ကိန်းပြည့်အဖြစ် ထားပြီး
+      mode နှစ်မျိုးနဲ့ round လုပ်ပြီး ပေါင်းပါမယ်။ မူရင်း ပေါင်းလဒ်က ရှစ် အတိအကျပါ။ run မလုပ်ခင် ဘယ်
+      mode က ရှစ်ကို ရမလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-halfup]]
+      half-up က ဆယ် ရပါတယ်၊ tie တိုင်း အပေါ်ကို သွားလို့ နှစ် ပိုနေပါတယ်။ [[mark:pt-halfeven]]
+      half-even ကတော့ ရှစ် အတိအကျ ရပါတယ်။ [[mark:dock-3]] ဂဏန်း တစ်လုံးချင်းမှာ mode နှစ်ခုလုံး
+      သုည ဒသမ ငါးပဲ ကွာတာပါ။ ကွာခြားချက်က ပေါင်းလဒ်မှာမှ ပေါ်လာတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+      - {
+          title: "Java SE 25 — RoundingMode (HALF_EVEN, Banker's rounding)",
+          url: "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/math/RoundingMode.html",
+        }
+    actions:
+      - id: sel-up
+        type: editor.select
+        at: { mark: sel-up }
+        target: { file: main.go, text: "return (tenths + 5) / 10", occurrence: 1 }
+      - id: sel-even
+        type: editor.select
+        at: { mark: sel-even }
+        target: { file: main.go, text: "if r > 5 || (r == 5 && q%2 == 1) {", occurrence: 1 }
+      - id: type-ties
+        type: editor.type
+        at: { mark: type-ties }
+        target:
+          { file: main.go, after: "\tshow(\"allocate\", allocate(amount, 3))\n", occurrence: 1 }
+        text: "\n\tties := []int64{5, 15, 25, 35} // 0.5 1.5 2.5 3.5, counted in tenths\n\tshow(\"half-up\", roundAll(ties, roundHalfUp))\n\tshow(\"half-even\", roundAll(ties, roundHalfEven))\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "0 + 2 + 2 + 4 = 8",
+          timeoutMs: 8000,
+        }
+      - id: pt-halfup
+        type: console.point
+        at: { mark: pt-halfup }
+        target: { text: "half-up:", occurrence: 1 }
+      - id: pt-halfeven
+        type: console.point
+        at: { mark: pt-halfeven }
+        target: { text: "half-even:", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+      - {
+          id: expect-file-alloc,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "if int64(i) < amount%n {",
+        }
+
+  - id: modes
+    chapter: Rounding က business ဆုံးဖြတ်ချက်
+    narration: >-
+      [[mark:show-modes]] ဘာကြောင့်လဲ ဆိုတာ ကိန်းစဉ် ပေါ်မှာ ကြည့်ရအောင်။ [[mark:pt-ties]] tie လေးခုက
+      ကိန်းပြည့် နှစ်ခုကြားရဲ့ အလယ်တည့်တည့်မှာ ရှိပါတယ်။ [[mark:modes-2]] half-up မှာ မြှားတိုင်း
+      ညာဘက်ကို သွားပါတယ်။ တစ်ခါချင်းမှာ သေးပေမဲ့ ဘက်တစ်ဘက်တည်းကို အမြဲ ကွာနေတော့ ပေါင်းလဒ်မှာ bias
+      ဖြစ်လာပါတယ်၊ bias ဆိုတာ တစ်ဘက်တည်းကို စောင်းပြီး စုလာတဲ့ အမှားပါ။ [[mark:modes-3]] half-even
+      မှာတော့ တစ်ဝက်က ဘယ်ဘက်၊ တစ်ဝက်က ညာဘက် သွားလို့ အမှားတွေ အချင်းချင်း ကြေသွားပါတယ်။ ဒါပေမဲ့ ဒါက
+      tie အများကြီးမှာ ပျမ်းမျှ မှန်တာပါ၊ payment တစ်ခုတည်းအတွက်တော့ ဘယ် mode မဆို ဆင့် တစ်ပြား
+      ကွာနိုင်ပါတယ်။ [[mark:pt-even]] ဒါကြောင့် mode ရွေးတာက business ဆုံးဖြတ်ချက်ပါ။ statistical bias
+      ကို ဂရုစိုက်ရင် half-even ကို ရွေးပါတယ်။ မရှိတဲ့ ငွေကို သုံးမိမှာ စိုးရတဲ့ နေရာ၊ ဥပမာ user
+      ထုတ်ယူလို့ ရတဲ့ ပမာဏမှာဆိုရင် conservative ဖြစ်အောင် round down လုပ်ပါတယ်။ ကျန်တဲ့ အပိုင်းလေးကို ဘယ်သူ
+      ရမလဲ ဆိုတာ legal နဲ့ tax အကျိုးဆက် ရှိနိုင်လို့ engineer တစ်ယောက်တည်း ဆုံးဖြတ်ရမယ့် ကိစ္စ
+      မဟုတ်ပါဘူး။ [[mark:modes-4]] နောက်ထပ် ထောင်ချောက် တစ်ခုက language တွေရဲ့ default ပါ။ Go ရဲ့
+      standard round function က tie ကို သုညနဲ့ ဝေးတဲ့ဘက် ပို့ပါတယ်။ [[mark:pt-py]] Python ရဲ့ round နဲ့
+      .NET ရဲ့ Math Round ကတော့ default အနေနဲ့ စုံကိန်းဘက် ပို့ပါတယ်။ [[mark:pt-java]] Java မှာ half
+      even mode ကို ကိုယ်တိုင် ထည့်ပေးမှ ရပါတယ်။ ဆိုလိုတာက language မတူတဲ့ service နှစ်ခုက ပမာဏ
+      တစ်ခုတည်းကို ဆင့် တစ်ပြား ကွာအောင် round လုပ်နိုင်ပြီး၊ reconciliation မှာ မကိုက်တော့ပါဘူး။
+      ဒါကြောင့် rounding mode ကို language ရဲ့ default ပေါ် မမှီခိုဘဲ code ထဲမှာ ထင်ထင်ရှားရှား ရေးရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+      - {
+          title: "Python — built-in round()",
+          url: "https://docs.python.org/3/library/functions.html#round",
+        }
+      - { title: "Go — package math (Round, RoundToEven)", url: "https://pkg.go.dev/math#Round" }
+    actions:
+      - {
+          id: show-modes,
+          type: slide.show,
+          at: { mark: show-modes, offsetMs: -700 },
+          slideId: modes-1,
+        }
+      - { id: pt-ties, type: slide.point, at: { mark: pt-ties }, target: { x: 0.592, y: 0.569 } }
+      - { id: modes-2, type: slide.show, at: { mark: modes-2 }, slideId: modes-2 }
+      - {
+          id: pt-upchip,
+          type: slide.point,
+          at: { afterAction: modes-2 },
+          target: { x: 0.455, y: 0.331 },
+        }
+      - { id: modes-3, type: slide.show, at: { mark: modes-3 }, slideId: modes-3 }
+      - {
+          id: pt-evenchip,
+          type: slide.point,
+          at: { afterAction: modes-3 },
+          target: { x: 0.247, y: 0.798 },
+        }
+      - { id: pt-even, type: slide.point, at: { mark: pt-even }, target: { x: 0.171, y: 0.331 } }
+      - { id: modes-4, type: slide.show, at: { mark: modes-4 }, slideId: modes-4 }
+      - {
+          id: pt-go,
+          type: slide.point,
+          at: { afterAction: modes-4 },
+          target: { x: 0.235, y: 0.929 },
+        }
+      - { id: pt-py, type: slide.point, at: { mark: pt-py }, target: { x: 0.527, y: 0.929 } }
+      - { id: pt-java, type: slide.point, at: { mark: pt-java }, target: { x: 0.789, y: 0.929 } }
+
+  - id: late
+    chapter: တတ်နိုင်သမျှ နောက်ကျမှ round
+    narration: >-
+      [[mark:show-late]] တတိယ စည်းမျဉ်းက တတ်နိုင်သမျှ နည်းနည်းနဲ့ တတ်နိုင်သမျှ နောက်ကျမှ round လုပ်ဖို့ပါ။
+      user တစ်ယောက်မှာ ယူရို တစ်ထောင် ရှိပြီး တစ်နှစ်ကို တစ် ရာခိုင်နှုန်း အတိုး ရတယ် ဆိုပါစို့။ တစ်ရက်စာ
+      အတိုးက ဆင့် နှစ်ပြား ခွဲကျော်လောက်ပဲ ရှိပါတယ်။ [[mark:pt-daily]] နေ့တိုင်း round လုပ်ရင် ဆင့် သုံးပြား
+      ဖြစ်သွားပြီး ရက် သုံးဆယ်မှာ ဆင့် ကိုးဆယ် ပေးမိပါတယ်။ [[mark:late-2]] full precision နဲ့ စုထားပြီး
+      post လုပ်တဲ့ အချိန်မှာ တစ်ခါပဲ round လုပ်ရင်တော့ ဆင့် ရှစ်ဆယ့်နှစ်ပြား ရပါတယ်။ [[mark:pt-once]]
+      ကွာတာက account တစ်ခုကို တစ်လ ဆင့် ရှစ်ပြားပါ။ account တစ်သန်းဆိုရင် တစ်လကို ယူရို ရှစ်သောင်း
+      ဖြစ်ပါတယ်။ [[mark:late-3]] နေ့တိုင်း post လုပ်ရမယ် ဆိုရင်တော့ round လုပ်လို့ ကျန်တဲ့ residual ကို
+      လွှင့်မပစ်ဘဲ နောက်နေ့ဆီ သယ်သွားပါ၊ residual ဆိုတာ round လုပ်တုန်း ချန်ခဲ့တဲ့ အပိုင်းလေးပါ။ ဒါဆို
+      ရက် သုံးဆယ်ရဲ့ ပေါင်းလဒ်က ရှစ်ဆယ့်နှစ်ပြား ပြန်ဖြစ်ပါတယ်။ boundary လို့ ပြောတာက database ထဲ
+      သိမ်းတဲ့ အချိန်၊ user ကို ပြတဲ့ အချိန်၊ ငွေ တကယ် ပေးတဲ့ အချိန်တွေပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+    actions:
+      - {
+          id: show-late,
+          type: slide.show,
+          at: { mark: show-late, offsetMs: -700 },
+          slideId: late-1,
+        }
+      - {
+          id: pt-given,
+          type: slide.point,
+          at: { afterAction: show-late },
+          target: { x: 0.1, y: 0.297 },
+        }
+      - { id: pt-daily, type: slide.point, at: { mark: pt-daily }, target: { x: 0.733, y: 0.531 } }
+      - { id: late-2, type: slide.show, at: { mark: late-2 }, slideId: late-2 }
+      - {
+          id: pt-s2,
+          type: slide.point,
+          at: { afterAction: late-2 },
+          target: { x: 0.519, y: 0.731 },
+        }
+      - { id: pt-once, type: slide.point, at: { mark: pt-once }, target: { x: 0.733, y: 0.744 } }
+      - { id: late-3, type: slide.show, at: { mark: late-3 }, slideId: late-3 }
+      - {
+          id: pt-carry,
+          type: slide.point,
+          at: { afterAction: late-3 },
+          target: { x: 0.359, y: 0.889 },
+        }
+
+  - id: case
+    chapter: Vancouver index ရဲ့ သင်ခန်းစာ
+    narration: >-
+      [[mark:show-case]] ဒီ စည်းမျဉ်းကို မလိုက်ရင် ဘာဖြစ်လဲ ဆိုတာ တကယ် ဖြစ်ခဲ့ဖူးပါတယ်။ ၁၉၈၂ ခုနှစ်
+      ဇန်နဝါရီမှာ Vancouver Stock Exchange က index အသစ် တစ်ခုကို တစ်ထောင်ကနေ စခဲ့ပါတယ်။
+      [[mark:pt-rule]] trade တစ်ခု ပြီးတိုင်း index ကို ပြန်တွက်ပြီး၊ အဲဒါ တစ်ရက်ကို သုံးထောင်ခါလောက်
+      ရှိပါတယ်။ အကြိမ်တိုင်း ရလဒ်ကို ဒသမ သုံးနေရာမှာ round မလုပ်ဘဲ ဖြတ်ချခဲ့ပါတယ်၊ truncate
+      လုပ်တာပါ။ [[mark:case-2]] ၁၉၈၃ နိုဝင်ဘာ နှောင်းပိုင်းမှာ index က ငါးရာ နှစ်ဆယ့်လေး လောက်ပဲ
+      ကျန်ပါတော့တယ်။ [[mark:case-3]] အဲဒီ လကုန်ပိုင်း ပိတ်ရက်မှာ မှန်မှန်ကန်ကန် ပြန်တွက်လိုက်တော့
+      တစ်ထောင့် ကိုးဆယ့်ရှစ် ကျော် ဖြစ်ပါတယ်။ ဆိုလိုတာက index ရဲ့ တန်ဖိုး တစ်ဝက်လောက်က ဖြတ်ချမှု
+      သေးသေးလေးတွေ စုပြီး ပျောက်သွားခဲ့တာပါ။ ဒါက binary float bug မဟုတ်ဘဲ decimal truncation bug
+      ပါ။ [[mark:pt-lesson]] update တိုင်း ဘက်တစ်ဘက်တည်းကို ဖြတ်တော့ bias က နေ့တိုင်း
+      စုလာတာပါ၊ balance ကို update တိုင်း တစ်ဘက်တည်းကို round လုပ်တဲ့ ငွေ system မှာလည်း ဒီလိုပဲ စုလာနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "R. W. Floyd, SAIL note citing the Toronto Star, 29 Nov 1983 (Vancouver index)",
+          url: "https://www.saildart.org/A112.TEX[106,RWF]1",
+        }
+      - {
+          title: "Vancouver Stock Exchange (pointer to the 1983 WSJ and Toronto Star reports)",
+          url: "https://en.wikipedia.org/wiki/Vancouver_Stock_Exchange",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+    actions:
+      - {
+          id: show-case,
+          type: slide.show,
+          at: { mark: show-case, offsetMs: -700 },
+          slideId: case-1,
+        }
+      - {
+          id: pt-start,
+          type: slide.point,
+          at: { afterAction: show-case },
+          target: { x: 0.263, y: 0.409 },
+        }
+      - { id: pt-rule, type: slide.point, at: { mark: pt-rule }, target: { x: 0.263, y: 0.62 } }
+      - { id: case-2, type: slide.show, at: { mark: case-2 }, slideId: case-2 }
+      - {
+          id: pt-bad,
+          type: slide.point,
+          at: { afterAction: case-2 },
+          target: { x: 0.575, y: 0.431 },
+        }
+      - { id: case-3, type: slide.show, at: { mark: case-3 }, slideId: case-3 }
+      - {
+          id: pt-good,
+          type: slide.point,
+          at: { afterAction: case-3 },
+          target: { x: 0.575, y: 0.687 },
+        }
+      - {
+          id: pt-lesson,
+          type: slide.point,
+          at: { mark: pt-lesson },
+          target: { x: 0.317, y: 0.824 },
+        }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ ဒေါ်လာ တစ်ရာကို သုံးယောက် အညီအမျှ ခွဲပေးပါ ဆိုတဲ့
+      မေးခွန်းကို မေးလေ့ရှိပါတယ်။ သုံးဆယ့်သုံး ဒသမ သုံးသုံး လို့ ဖြေရင် ဆင့် တစ်ပြား ပျောက်သွားပါပြီ။
+      [[mark:iv-a]] ပထမ၊ minor unit ကိန်းပြည့်နဲ့ တွက်ပြီး စားလဒ်နဲ့ အကြွင်းကို ခွဲထုတ်ပါ။ ဆင့် တစ်သောင်းကို
+      သုံးနဲ့ စားရင် တစ် ကျန်ပါတယ်။ [[mark:iv-b]] ဒုတိယ၊ ကျန်တဲ့
+      ဆင့်ကို deterministic rule တစ်ခုနဲ့ ပေးပါ၊ ဒါမှမဟုတ် rounding account ထဲ မှတ်ပါ။ [[mark:iv-c]] တတိယ၊ ဘယ်သူက ပိုတဲ့ ဆင့်ကို
+      ရမလဲ၊ ဘယ် mode သုံးမလဲ ဆိုတာ business ဆုံးဖြတ်ချက် ဖြစ်ပြီး legal နဲ့ tax အကျိုးဆက် ရှိနိုင်တယ်
+      ဆိုတာ ထည့်ပြောပါ။ [[mark:iv-d]] ပြီးရင် ကိုယ် ဘာလုပ်မလဲ ဆိုတာ ဆက်ပြောပါ။ allocate function
+      တစ်ခု ရေးပြီး၊ n တိုင်းအတွက် အပိုင်းတွေ ပေါင်းလဒ်က မူရင်းနဲ့ ညီရမယ် ဆိုတဲ့ test ထည့်မယ်၊ round
+      ကိုလည်း boundary မှာ တစ်ခါပဲ လုပ်မယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ဒီ line မှာ သုံးကို
+      ခုနစ်လို့ ပြောင်းပြီး run ကြည့်ပါ။ ယူရို တစ်ရာကို ခုနစ်ပုံ ခွဲရင် ဆင့် လေးပြား ကျန်လို့ ရှေ့က
+      အပိုင်း လေးခုက တစ်ထောင့်လေးရာ နှစ်ဆယ့်ကိုး စီ၊ နောက်က သုံးခုက တစ်ထောင့်လေးရာ နှစ်ဆယ့်ရှစ် စီ
+      ရပြီး၊ ပေါင်းလဒ်က တစ်သောင်း အတိအကျ ဖြစ်နေပါလိမ့်မယ်။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ rounding ကို
+      ရှောင်လို့ မရပေမဲ့ ဘယ်နေရာမှာ၊ ဘယ် mode နဲ့၊ ကျန်တဲ့ ဆင့်ကို ဘယ်သူ ရမလဲ ဆိုတာကို တမင်
+      ဆုံးဖြတ်ပြီး code ထဲမှာ ရေးထားရပါတယ်။ နောက် lesson မှာတော့ ကိန်းပြည့် တစ်ခုတည်းက ငွေ မဟုတ်ဘူး
+      ဆိုတာ ကြည့်ပါမယ်။ ဒေါ်လာနဲ့ ယန်းကို ပေါင်းမိတာကို type က ဘယ်လို တားမလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Rounding strategies (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#rounding-strategies",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "allocate(amount, 3)", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

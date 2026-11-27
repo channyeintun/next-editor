@@ -1,0 +1,1115 @@
+# Fintech Engineering, lesson 38: end to end, a card deposit (Burmese).
+#
+# Source: Fintech Engineering Handbook, Appendix B "Flow 2: A card deposit" (CC BY 4.0, Voytek
+# Pitula), with pointers back to the lessons that taught each pattern.
+# Start state: psp.go (a fake PSP: Authorize with a key, Capture, Get = the truth, signed webhook
+# events, Settle = one transfer for many payments), deposit.go (Start, the webhook endpoint
+# Receive = verify + store + answer, Process = ask the API + credit once through the receivable),
+# settle.go (Reconcile one-to-many, Chargeback as a linked entry, payout), ledger.go (the course
+# ledger + Period, Corrects, Get), main.go (two deposits; a forged event; one event twice; one lost).
+# Edits, all insert-only, in main.go:
+#   1. the settlement batch reconciled, then the books   -> run-2 finds pi_2 and matches po_1
+#   2. a payout of 80.00, then a chargeback in December  -> run-3 user 1042 -80.00
+# Runs: run-1 (hold, 400, 200 200, credited, already credited), run-2, run-3.
+# Figures: flow (the deposit as a sequence, 7 steps), clearing (books vs where the money is),
+# late (capture, T+2, chargeback in the dispute window), iv.
+# Facts: A18 (Stripe authorization holds), B02 (Stripe webhook delivery), B10 (chargeback window).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-38-flow-card-deposit
+  title: "Fintech Engineering 38: Flow ၂၊ card deposit"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      deposit.go: |
+        package main
+
+        import (
+        	"crypto/hmac"
+        	"encoding/json"
+        	"fmt"
+        )
+
+        // Service is our side: the ledger, the inbox of raw webhooks, and which payments are credited.
+        type Service struct {
+        	ledger   Ledger
+        	psp      *PSP
+        	secret   []byte
+        	inbox    [][]byte
+        	credited map[string]string // PSP payment id → our transaction id
+        	owner    map[string]string // PSP payment id → the user's account
+        }
+
+        // Start opens a deposit with an idempotency key. The card is only authorized: no credit yet.
+        func (s *Service) Start(key, user string, amount int64) Payment {
+        	pay := s.psp.Authorize(user+"/deposit/"+key, amount)
+        	s.owner[pay.ID] = user
+        	return pay
+        }
+
+        // Receive is the webhook endpoint: verify the raw bytes, store them, answer. Nothing else.
+        func (s *Service) Receive(body []byte, sig string) int {
+        	if !hmac.Equal([]byte(sig), []byte(sign(s.secret, body))) {
+        		return 400
+        	}
+        	s.inbox = append(s.inbox, body)
+        	return 200
+        }
+
+        // Process runs later, off the request path. An event is a hint: the API says what is true.
+        func (s *Service) Process() {
+        	for _, body := range s.inbox {
+        		var evt struct{ ID, Payment string }
+        		must(json.Unmarshal(body, &evt))
+        		pay := s.psp.Get(evt.Payment)
+        		switch {
+        		case pay.Status != "captured":
+        			fmt.Println(evt.ID, "→ API:", pay.ID, pay.Status, "- nothing to credit")
+        		case s.credited[pay.ID] != "":
+        			fmt.Println(evt.ID, "→", pay.ID, "already credited")
+        		default:
+        			s.credit(pay)
+        			fmt.Printf("%s → API: %s captured, credited %s\n", evt.ID, pay.ID, cents(pay.Amount))
+        		}
+        	}
+        	s.inbox = nil
+        }
+
+        // credit books a captured payment through the PSP receivable: the money is not in our bank yet.
+        func (s *Service) credit(pay Payment) {
+        	id := "d-" + pay.ID[3:]
+        	must(s.ledger.Post(Tx{ID: id, Memo: "card deposit " + pay.ID, Period: "2026-11", Lines: []Line{
+        		{Account: "asset:psp-receivable", Debit: pay.Amount - pay.Fee},
+        		{Account: "expense:processing-fee", Debit: pay.Fee},
+        		{Account: s.owner[pay.ID], Credit: pay.Amount},
+        	}}))
+        	s.credited[pay.ID] = id
+        }
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID       string
+        	Memo     string
+        	Period   string // the reporting period it is booked in
+        	Corrects string // the transaction this one reverses, if any
+        	Lines    []Line
+        }
+
+        // Get returns a posted transaction by id.
+        func (l *Ledger) Get(id string) Tx {
+        	for _, tx := range l.txs {
+        		if tx.ID == id {
+        			return tx
+        		}
+        	}
+        	return Tx{}
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // kindOf reads the account type from the name: "asset:bank" is an asset.
+        func kindOf(account string) string {
+        	kind, _, _ := strings.Cut(account, ":")
+        	return kind
+        }
+
+        // Balance derives an account's balance on the side where that kind of account grows:
+        // assets and expenses grow with debits; liabilities, equity and revenue grow with credits.
+        func (l *Ledger) Balance(account string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind := kindOf(account); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        const user = "liability:user:1042"
+
+        func main() {
+        	psp := newPSP("whsec_shared")
+        	s := &Service{psp: psp, secret: []byte("whsec_shared"),
+        		credited: map[string]string{}, owner: map[string]string{}}
+        	pi1 := s.Start("k-1", user, 100_00)                 // user 1042 tops up 100.00 by card
+        	pi2 := s.Start("k-7", "liability:user:2077", 50_00) // user 2077 tops up 50.00
+        	fmt.Println(pi1.ID, pi1.Status, "- user 1042 balance", cents(s.ledger.Balance(user)))
+        	psp.Capture(pi1.ID)
+        	psp.Capture(pi2.ID) // its webhook is lost on the way
+
+        	fake := []byte(`{"id":"evt_9","type":"payment.captured","payment":"pi_1"}`)
+        	fmt.Println("evt_9 bad signature:", s.Receive(fake, "00"))
+        	body, sig := psp.Event("evt_1", pi1.ID)
+        	fmt.Println("evt_1 delivered twice:", s.Receive(body, sig), s.Receive(body, sig))
+        	s.Process()
+        }
+
+        // report prints the books: what the user is owed, and where the money really is.
+        func (s *Service) report() {
+        	l := &s.ledger
+        	fmt.Printf("user 1042 %s  bank %s  receivable %s  fees %s\n", cents(l.Balance(user)),
+        		cents(l.Balance("asset:bank")), cents(l.Balance("asset:psp-receivable")),
+        		cents(l.Balance("expense:processing-fee")))
+        }
+
+        func must(err error) {
+        	if err != nil {
+        		panic(err)
+        	}
+        }
+      psp.go: |
+        package main
+
+        import (
+        	"crypto/hmac"
+        	"crypto/sha256"
+        	"encoding/hex"
+        	"fmt"
+        )
+
+        // PSP is a fake payment service provider. Its API is the truth; its webhooks are only hints.
+        type PSP struct {
+        	secret   []byte
+        	payments map[string]*Payment
+        	byKey    map[string]string // our idempotency key → payment id
+        }
+
+        // Payment is the PSP's record of one card payment.
+        type Payment struct {
+        	ID, Status  string // authorized, then captured
+        	Amount, Fee int64
+        }
+
+        func newPSP(secret string) *PSP {
+        	return &PSP{[]byte(secret), map[string]*Payment{}, map[string]string{}}
+        }
+
+        // Authorize places a hold on the card. The same key returns the same payment.
+        func (p *PSP) Authorize(key string, amount int64) Payment {
+        	if id, ok := p.byKey[key]; ok {
+        		return *p.payments[id]
+        	}
+        	id := fmt.Sprintf("pi_%d", len(p.payments)+1)
+        	p.payments[id] = &Payment{id, "authorized", amount, amount * 29 / 1000} // fee 2.9%
+        	p.byKey[key] = id
+        	return *p.payments[id]
+        }
+
+        // Capture takes the money. The webhook that says so may come late, twice, or never.
+        func (p *PSP) Capture(id string) { p.payments[id].Status = "captured" }
+
+        // Get is the authoritative state of a payment.
+        func (p *PSP) Get(id string) Payment { return *p.payments[id] }
+
+        // Event is a webhook as it arrives: the raw JSON bytes and an HMAC-SHA256 over exactly them.
+        func (p *PSP) Event(evt, payment string) ([]byte, string) {
+        	body := []byte(fmt.Sprintf(`{"id":%q,"type":"payment.captured","payment":%q}`, evt, payment))
+        	return body, sign(p.secret, body)
+        }
+
+        func sign(secret, body []byte) string {
+        	m := hmac.New(sha256.New, secret)
+        	m.Write(body)
+        	return hex.EncodeToString(m.Sum(nil))
+        }
+
+        // Batch is one bank transfer that settles many payments at once, net of the PSP's fees.
+        type Batch struct {
+        	ID    string
+        	Items []string
+        	Net   int64
+        }
+
+        // Settle pays the listed payments out in one transfer, days after the capture.
+        func (p *PSP) Settle(id string, items ...string) Batch {
+        	b := Batch{ID: id, Items: items}
+        	for _, it := range items {
+        		b.Net += p.payments[it].Amount - p.payments[it].Fee
+        	}
+        	return b
+        }
+      settle.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Reconcile matches one settlement transfer against the many payments it covers.
+        // A payment in the batch that the ledger never credited is a webhook that never came.
+        func (s *Service) Reconcile(b Batch) {
+        	var parts []string
+        	var booked int64
+        	for _, id := range b.Items {
+        		if s.credited[id] == "" {
+        			pay := s.psp.Get(id)
+        			s.credit(pay)
+        			fmt.Printf("%s in %s, never credited: API says %s, credited %s\n", id, b.ID, pay.Status, cents(pay.Amount))
+        		}
+        		net := s.ledger.Get(s.credited[id]).Lines[0].Debit
+        		booked += net
+        		parts = append(parts, id+" "+cents(net))
+        	}
+        	verdict := "matched"
+        	if booked != b.Net {
+        		verdict = "BREAK"
+        	}
+        	fmt.Printf("%s %s = %s: %s\n", b.ID, cents(b.Net), strings.Join(parts, " + "), verdict)
+        	must(s.ledger.Post(Tx{ID: b.ID, Memo: "settlement", Period: "2026-11", Lines: []Line{
+        		{Account: "asset:bank", Debit: b.Net},
+        		{Account: "asset:psp-receivable", Credit: b.Net},
+        	}}))
+        }
+
+        // Chargeback reverses a credited deposit with a new entry, linked to it, in the open period.
+        func (s *Service) Chargeback(payment, period string) {
+        	orig := s.ledger.Get(s.credited[payment])
+        	user, amount := s.owner[payment], orig.Lines[2].Credit
+        	must(s.ledger.Post(Tx{ID: "cb-" + payment[3:], Memo: "chargeback", Period: period, Corrects: orig.ID,
+        		Lines: []Line{{Account: user, Debit: amount}, {Account: "asset:psp-receivable", Credit: amount}}}))
+        	fmt.Printf("cb-%s reverses %s (%s) in %s: %s %s\n", payment[3:], orig.ID, orig.Period, period,
+        		strings.ReplaceAll(strings.TrimPrefix(user, "liability:"), ":", " "), cents(s.ledger.Balance(user)))
+        }
+
+        // payout sends a user's money out to their bank account.
+        func (s *Service) payout(user string, amount int64) {
+        	must(s.ledger.Post(Tx{ID: "po-out", Memo: "payout", Period: "2026-11", Lines: []Line{
+        		{Account: user, Debit: amount}, {Account: "asset:bank", Credit: amount}}}))
+        }
+  slides:
+    - id: clearing-1
+      contentType: html
+      name: "Clearing account 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">CLEARING ACCOUNT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Books က credit ပြီ၊ ငွေက PSP မှာ ရှိသေးတယ်</text>
+        <g class="in"><text x="80" y="236" font-size="26" fill="#8a94a8">the books say</text></g>
+        <g class="in"><rect x="80" y="256" width="840" height="468" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="291" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="212.9" y="291" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="739.5" y="291" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">debit</text><text x="898" y="291" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">credit</text><path d="M80 308H920" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="344" font-size="28" fill="#9aa5b8" class="mono">d-1</text><text x="212.9" y="344" font-size="28" fill="#e9edf5" class="mono">asset:psp-receivable</text><text x="739.5" y="344" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">97.10</text></g><g><path d="M96 360H904" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="396" font-size="28" fill="#9aa5b8" class="mono">d-1</text><text x="212.9" y="396" font-size="26" fill="#e9edf5" class="mono">expense:processing-fee</text><text x="739.5" y="396" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">2.90</text></g><g><path d="M96 412H904" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="448" font-size="28" fill="#9aa5b8" class="mono">d-1</text><text x="212.9" y="448" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="898" y="448" font-size="28" text-anchor="end" fill="#f6c453" class="mono">100.00</text></g></g>
+        <g class="in"><text x="1000" y="236" font-size="26" fill="#8a94a8">where the money is</text></g>
+        <g class="in"><rect x="1000" y="256" width="520" height="150" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><rect x="1000" y="256" width="520" height="150" rx="18" fill="#f6ad55" opacity="0.13"/><use href="#i-building" x="1022" y="299" width="64" height="64" style="color:#f6ad55"/><text x="1300" y="321.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">at the PSP</text><text x="1300" y="362.6" font-size="24" text-anchor="middle" fill="#8a94a8">captured, not paid out</text></g>
+        <g class="in"><rect x="1000" y="560" width="520" height="150" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-bank" x="1022" y="603" width="64" height="64" style="color:#9aa5b8"/><text x="1300" y="625.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">our bank</text><text x="1300" y="666.6" font-size="24" text-anchor="middle" fill="#8a94a8">0.00</text></g>
+        </svg>
+    - id: clearing-2
+      contentType: html
+      name: "Clearing account 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">CLEARING ACCOUNT</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Books က credit ပြီ၊ ငွေက PSP မှာ ရှိသေးတယ်</text>
+        <text x="80" y="236" font-size="26" fill="#8a94a8">the books say</text>
+        <rect x="80" y="256" width="840" height="468" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="291" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="212.9" y="291" font-size="22" fill="#8a94a8" font-weight="700">account</text><text x="739.5" y="291" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">debit</text><text x="898" y="291" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">credit</text><path d="M80 308H920" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="344" font-size="28" fill="#9aa5b8" class="mono">d-1</text><text x="212.9" y="344" font-size="28" fill="#e9edf5" class="mono">asset:psp-receivable</text><text x="739.5" y="344" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">97.10</text></g><g><path d="M96 360H904" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="396" font-size="28" fill="#9aa5b8" class="mono">d-1</text><text x="212.9" y="396" font-size="26" fill="#e9edf5" class="mono">expense:processing-fee</text><text x="739.5" y="396" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">2.90</text></g><g><path d="M96 412H904" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="448" font-size="28" fill="#9aa5b8" class="mono">d-1</text><text x="212.9" y="448" font-size="28" fill="#e9edf5" class="mono">liability:user:1042</text><text x="898" y="448" font-size="28" text-anchor="end" fill="#f6c453" class="mono">100.00</text></g><g class="in"><path d="M96 464H904" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="500" font-size="28" fill="#9aa5b8" class="mono">d-2</text><text x="212.9" y="500" font-size="28" fill="#8a94a8" class="mono">asset:psp-receivable</text><text x="739.5" y="500" font-size="28" text-anchor="end" fill="#8a94a8" class="mono">48.55</text></g><g class="in"><path d="M96 516H904" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="552" font-size="28" fill="#9aa5b8" class="mono">d-2</text><text x="212.9" y="552" font-size="26" fill="#8a94a8" class="mono">expense:processing-fee</text><text x="739.5" y="552" font-size="28" text-anchor="end" fill="#8a94a8" class="mono">1.45</text></g><g class="in"><path d="M96 568H904" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="604" font-size="28" fill="#9aa5b8" class="mono">d-2</text><text x="212.9" y="604" font-size="28" fill="#8a94a8" class="mono">liability:user:2077</text><text x="898" y="604" font-size="28" text-anchor="end" fill="#8a94a8" class="mono">50.00</text></g><g class="in"><path d="M96 620H904" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="656" font-size="26" fill="#9aa5b8" class="mono">po_1</text><text x="212.9" y="656" font-size="28" fill="#e9edf5" class="mono">asset:bank</text><text x="739.5" y="656" font-size="28" text-anchor="end" fill="#4fd1c5" class="mono">145.65</text></g><g class="in"><path d="M96 672H904" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="708" font-size="26" fill="#9aa5b8" class="mono">po_1</text><text x="212.9" y="708" font-size="28" fill="#e9edf5" class="mono">asset:psp-receivable</text><text x="898" y="708" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">145.65</text></g>
+        <text x="1000" y="236" font-size="26" fill="#8a94a8">where the money is</text>
+        <g class="in" opacity="0.45"><rect x="1000" y="256" width="520" height="150" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1022" y="299" width="64" height="64" style="color:#9aa5b8"/><text x="1300" y="321.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">at the PSP</text><text x="1300" y="362.6" font-size="24" text-anchor="middle" fill="#8a94a8">all paid out</text></g>
+        <g class="in"><rect x="1000" y="560" width="520" height="150" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><rect x="1000" y="560" width="520" height="150" rx="18" fill="#4fd1c5" opacity="0.13"/><use href="#i-bank" x="1022" y="603" width="64" height="64" style="color:#4fd1c5"/><text x="1300" y="625.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">our bank</text><text x="1300" y="666.6" font-size="24" text-anchor="middle" fill="#8a94a8">145.65 · one transfer</text></g>
+        <path d="M1260 416L1260 546" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M1260 416L1260 546')"/><text x="1386.4" y="488.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600">T+2 · net of fees</text>
+        <g class="in"><rect x="80" y="780" width="696.1" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="80" y="780" width="696.1" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="428" y="814.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700">receivable = in flight: booked now, settled at T+X</text></g>
+        </svg>
+    - id: flow-1
+      contentType: html
+      name: "Flow 2 · card deposit 1/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">FLOW 2 · CARD DEPOSIT</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="934.4" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Happy-path signal တစ်ခုမှ မယုံဘူး</text>
+        <g class="in"><path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M601.7 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="476.7" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="496.7" y="218" width="40" height="40" style="color:#b794f6"/><text x="627.7" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our API</text><path d="M998.3 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="873.3" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="893.3" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="1024.3" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><g><path d="M213 344H589.7" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="403.3" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">top up 100.00 · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g></g>
+        </svg>
+    - id: flow-2
+      contentType: html
+      name: "Flow 2 · card deposit 2/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">FLOW 2 · CARD DEPOSIT</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="934.4" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Happy-path signal တစ်ခုမှ မယုံဘူး</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M601.7 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="476.7" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="496.7" y="218" width="40" height="40" style="color:#b794f6"/><text x="627.7" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our API</text><path d="M998.3 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="873.3" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="893.3" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="1024.3" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><g><path d="M213 344H589.7" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="403.3" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">top up 100.00 · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g class="in"><path d="M609.7 405.8H1383" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="998.3" y="392.8" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">authorize · key</text><circle cx="627.7" cy="405.8" r="17" fill="#6cb2f5"/><text x="627.7" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g><g class="in"><rect x="1272.3" y="441.5" width="245.5" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="1395" y="474.5" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">hold: no credit yet</text></g>
+        </svg>
+    - id: flow-3
+      contentType: html
+      name: "Flow 2 · card deposit 3/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-violet" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#b794f6" stroke="#b794f6" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">FLOW 2 · CARD DEPOSIT</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="934.4" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Happy-path signal တစ်ခုမှ မယုံဘူး</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M601.7 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="476.7" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="496.7" y="218" width="40" height="40" style="color:#b794f6"/><text x="627.7" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our API</text><path d="M998.3 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="873.3" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="893.3" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="1024.3" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><g><path d="M213 344H589.7" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="403.3" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">top up 100.00 · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g><path d="M609.7 405.8H1383" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="998.3" y="392.8" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">authorize · key</text><circle cx="627.7" cy="405.8" r="17" fill="#6cb2f5"/><text x="627.7" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g><g><rect x="1272.3" y="441.5" width="245.5" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="1395" y="474.5" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">hold: no credit yet</text></g><g class="in"><path d="M1387 529.3H613.7" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="998.3" y="516.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">webhook: captured (a hint)</text><circle cx="1369" cy="529.3" r="17" fill="#f6ad55"/><text x="1369" y="537.3" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">3</text></g><g class="in"><rect x="409.4" y="565.1" width="384.5" height="48" rx="12" fill="#0b0e14" stroke="#b794f6" stroke-width="2"/><text x="601.7" y="598.1" font-size="25" text-anchor="middle" fill="#b794f6" font-weight="600">verify raw bytes · store · 200</text></g>
+        </svg>
+    - id: flow-4
+      contentType: html
+      name: "Flow 2 · card deposit 4/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-violet" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#b794f6" stroke="#b794f6" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">FLOW 2 · CARD DEPOSIT</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="934.4" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Happy-path signal တစ်ခုမှ မယုံဘူး</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M601.7 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="476.7" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="496.7" y="218" width="40" height="40" style="color:#b794f6"/><text x="627.7" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our API</text><path d="M998.3 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="873.3" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="893.3" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="1024.3" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><g><path d="M213 344H589.7" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="403.3" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">top up 100.00 · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g><path d="M609.7 405.8H1383" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="998.3" y="392.8" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">authorize · key</text><circle cx="627.7" cy="405.8" r="17" fill="#6cb2f5"/><text x="627.7" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g><g><rect x="1272.3" y="441.5" width="245.5" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="1395" y="474.5" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">hold: no credit yet</text></g><g><path d="M1387 529.3H613.7" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="998.3" y="516.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">webhook: captured (a hint)</text><circle cx="1369" cy="529.3" r="17" fill="#f6ad55"/><text x="1369" y="537.3" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">3</text></g><g><rect x="409.4" y="565.1" width="384.5" height="48" rx="12" fill="#0b0e14" stroke="#b794f6" stroke-width="2"/><text x="601.7" y="598.1" font-size="25" text-anchor="middle" fill="#b794f6" font-weight="600">verify raw bytes · store · 200</text></g><g class="in"><path d="M609.7 652.9H1383" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="998.3" y="639.9" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600" class="mono">GET pi_1 → captured</text><circle cx="627.7" cy="652.9" r="17" fill="#68d391"/><text x="627.7" y="660.9" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">4</text></g>
+        </svg>
+    - id: flow-5
+      contentType: html
+      name: "Flow 2 · card deposit 5/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-violet" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#b794f6" stroke="#b794f6" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">FLOW 2 · CARD DEPOSIT</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="934.4" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Happy-path signal တစ်ခုမှ မယုံဘူး</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M601.7 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="476.7" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="496.7" y="218" width="40" height="40" style="color:#b794f6"/><text x="627.7" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our API</text><path d="M998.3 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="873.3" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="893.3" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="1024.3" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><g><path d="M213 344H589.7" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="403.3" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">top up 100.00 · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g><path d="M609.7 405.8H1383" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="998.3" y="392.8" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">authorize · key</text><circle cx="627.7" cy="405.8" r="17" fill="#6cb2f5"/><text x="627.7" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g><g><rect x="1272.3" y="441.5" width="245.5" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="1395" y="474.5" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">hold: no credit yet</text></g><g><path d="M1387 529.3H613.7" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="998.3" y="516.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">webhook: captured (a hint)</text><circle cx="1369" cy="529.3" r="17" fill="#f6ad55"/><text x="1369" y="537.3" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">3</text></g><g><rect x="409.4" y="565.1" width="384.5" height="48" rx="12" fill="#0b0e14" stroke="#b794f6" stroke-width="2"/><text x="601.7" y="598.1" font-size="25" text-anchor="middle" fill="#b794f6" font-weight="600">verify raw bytes · store · 200</text></g><g><path d="M609.7 652.9H1383" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="998.3" y="639.9" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600" class="mono">GET pi_1 → captured</text><circle cx="627.7" cy="652.9" r="17" fill="#68d391"/><text x="627.7" y="660.9" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">4</text></g><g class="in"><path d="M609.7 714.6H986.3" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="800" y="701.6" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">credit via receivable</text><circle cx="627.7" cy="714.6" r="17" fill="#f6c453"/><text x="627.7" y="722.6" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">5</text></g>
+        </svg>
+    - id: flow-6
+      contentType: html
+      name: "Flow 2 · card deposit 6/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-violet" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#b794f6" stroke="#b794f6" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">FLOW 2 · CARD DEPOSIT</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="934.4" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Happy-path signal တစ်ခုမှ မယုံဘူး</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M601.7 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="476.7" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="496.7" y="218" width="40" height="40" style="color:#b794f6"/><text x="627.7" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our API</text><path d="M998.3 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="873.3" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="893.3" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="1024.3" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><g><path d="M213 344H589.7" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="403.3" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">top up 100.00 · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g><path d="M609.7 405.8H1383" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="998.3" y="392.8" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">authorize · key</text><circle cx="627.7" cy="405.8" r="17" fill="#6cb2f5"/><text x="627.7" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g><g><rect x="1272.3" y="441.5" width="245.5" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="1395" y="474.5" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">hold: no credit yet</text></g><g><path d="M1387 529.3H613.7" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="998.3" y="516.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">webhook: captured (a hint)</text><circle cx="1369" cy="529.3" r="17" fill="#f6ad55"/><text x="1369" y="537.3" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">3</text></g><g><rect x="409.4" y="565.1" width="384.5" height="48" rx="12" fill="#0b0e14" stroke="#b794f6" stroke-width="2"/><text x="601.7" y="598.1" font-size="25" text-anchor="middle" fill="#b794f6" font-weight="600">verify raw bytes · store · 200</text></g><g><path d="M609.7 652.9H1383" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="998.3" y="639.9" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600" class="mono">GET pi_1 → captured</text><circle cx="627.7" cy="652.9" r="17" fill="#68d391"/><text x="627.7" y="660.9" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">4</text></g><g><path d="M609.7 714.6H986.3" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="800" y="701.6" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">credit via receivable</text><circle cx="627.7" cy="714.6" r="17" fill="#f6c453"/><text x="627.7" y="722.6" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">5</text></g><g class="in"><path d="M1387 776.4H1010.3" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="1196.7" y="763.4" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">batch T+2 → reconcile</text><circle cx="1369" cy="776.4" r="17" fill="#f6c453"/><text x="1369" y="784.4" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">6</text></g>
+        </svg>
+    - id: flow-7
+      contentType: html
+      name: "Flow 2 · card deposit 7/7"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#6cb2f5" stop-opacity="0.13"/><stop offset="1" stop-color="#6cb2f5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-orange" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6ad55" stroke="#f6ad55" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-violet" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#b794f6" stroke="#b794f6" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-building" viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#6cb2f5" font-weight="700" letter-spacing="0.14em">FLOW 2 · CARD DEPOSIT</text>
+        <rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1311.9" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1416" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1024.3" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1161.1" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="858.5" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="934.4" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Happy-path signal တစ်ခုမှ မယုံဘူး</text>
+        <path d="M205 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="80" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="100" y="218" width="40" height="40" style="color:#6cb2f5"/><text x="231" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">User</text><path d="M601.7 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="476.7" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="496.7" y="218" width="40" height="40" style="color:#b794f6"/><text x="627.7" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Our API</text><path d="M998.3 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="873.3" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="893.3" y="218" width="40" height="40" style="color:#4fd1c5"/><text x="1024.3" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Ledger</text><path d="M1395 276V872" stroke="#2a3345" stroke-width="2.5" stroke-dasharray="6 9"/><rect x="1270" y="200" width="250" height="76" rx="16" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-building" x="1290" y="218" width="40" height="40" style="color:#9aa5b8"/><text x="1421" y="247.5" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">PSP</text><g><path d="M213 344H589.7" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="403.3" y="331" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">top up 100.00 · k-1</text><circle cx="231" cy="344" r="17" fill="#6cb2f5"/><text x="231" y="352" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">1</text></g><g><path d="M609.7 405.8H1383" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="998.3" y="392.8" font-size="25" text-anchor="middle" fill="#6cb2f5" font-weight="600">authorize · key</text><circle cx="627.7" cy="405.8" r="17" fill="#6cb2f5"/><text x="627.7" y="413.8" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">2</text></g><g><rect x="1272.3" y="441.5" width="245.5" height="48" rx="12" fill="#0b0e14" stroke="#f6ad55" stroke-width="2"/><text x="1395" y="474.5" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">hold: no credit yet</text></g><g><path d="M1387 529.3H613.7" fill="none" stroke="#f6ad55" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-orange)"/><text x="998.3" y="516.3" font-size="25" text-anchor="middle" fill="#f6ad55" font-weight="600">webhook: captured (a hint)</text><circle cx="1369" cy="529.3" r="17" fill="#f6ad55"/><text x="1369" y="537.3" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">3</text></g><g><rect x="409.4" y="565.1" width="384.5" height="48" rx="12" fill="#0b0e14" stroke="#b794f6" stroke-width="2"/><text x="601.7" y="598.1" font-size="25" text-anchor="middle" fill="#b794f6" font-weight="600">verify raw bytes · store · 200</text></g><g><path d="M609.7 652.9H1383" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-green)"/><text x="998.3" y="639.9" font-size="25" text-anchor="middle" fill="#68d391" font-weight="600" class="mono">GET pi_1 → captured</text><circle cx="627.7" cy="652.9" r="17" fill="#68d391"/><text x="627.7" y="660.9" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">4</text></g><g><path d="M609.7 714.6H986.3" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="800" y="701.6" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">credit via receivable</text><circle cx="627.7" cy="714.6" r="17" fill="#f6c453"/><text x="627.7" y="722.6" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">5</text></g><g><path d="M1387 776.4H1010.3" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-gold)"/><text x="1196.7" y="763.4" font-size="25" text-anchor="middle" fill="#f6c453" font-weight="600">batch T+2 → reconcile</text><circle cx="1369" cy="776.4" r="17" fill="#f6c453"/><text x="1369" y="784.4" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">6</text></g><g class="in"><path d="M1387 838.2H613.7" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" marker-end="url(#ah-red)"/><text x="998.3" y="825.2" font-size="25" text-anchor="middle" fill="#fc8181" font-weight="600">chargeback, weeks later</text><circle cx="1369" cy="838.2" r="17" fill="#fc8181"/><text x="1369" y="846.2" font-size="22" text-anchor="middle" fill="#0b0e14" font-weight="700">7</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Card နဲ့ top-up လုပ်တဲ့ feature တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Card နဲ့ top-up လုပ်တဲ့ feature တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Authorization က hold ပဲ၊ credit မလုပ်သေး</text><text x="188" y="311" font-size="26" fill="#8a94a8">start ကို key နဲ့၊ capture ဖြစ်မှ credit</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Card နဲ့ top-up လုပ်တဲ့ feature တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Authorization က hold ပဲ၊ credit မလုပ်သေး</text><text x="188" y="311" font-size="26" fill="#8a94a8">start ကို key နဲ့၊ capture ဖြစ်မှ credit</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Webhook က hint: verify · store · 200 · API ကို မေး</text><text x="188" y="443" font-size="26" fill="#8a94a8">raw bytes ပေါ်က signature၊ async၊ payment id နဲ့ idempotent</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Card နဲ့ top-up လုပ်တဲ့ feature တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Authorization က hold ပဲ၊ credit မလုပ်သေး</text><text x="188" y="311" font-size="26" fill="#8a94a8">start ကို key နဲ့၊ capture ဖြစ်မှ credit</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Webhook က hint: verify · store · 200 · API ကို မေး</text><text x="188" y="443" font-size="26" fill="#8a94a8">raw bytes ပေါ်က signature၊ async၊ payment id နဲ့ idempotent</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Receivable ကနေ credit၊ batch နဲ့ one-to-many reconcile</text><text x="188" y="575" font-size="26" fill="#8a94a8">T+X ကို ကြိုထည့်ထား၊ ပျောက်တဲ့ webhook ကို ဒီ job က ဖမ်း</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Card နဲ့ top-up လုပ်တဲ့ feature တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Authorization က hold ပဲ၊ credit မလုပ်သေး</text><text x="188" y="311" font-size="26" fill="#8a94a8">start ကို key နဲ့၊ capture ဖြစ်မှ credit</text></g><g><circle cx="138" cy="381" r="25" fill="#f6ad55"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Webhook က hint: verify · store · 200 · API ကို မေး</text><text x="188" y="443" font-size="26" fill="#8a94a8">raw bytes ပေါ်က signature၊ async၊ payment id နဲ့ idempotent</text></g><g><circle cx="138" cy="513" r="25" fill="#4fd1c5"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Receivable ကနေ credit၊ batch နဲ့ one-to-many reconcile</text><text x="188" y="575" font-size="26" fill="#8a94a8">T+X ကို ကြိုထည့်ထား၊ ပျောက်တဲ့ webhook ကို ဒီ job က ဖမ်း</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">Chargeback = linked reversal၊ later period၊ negative ဖြစ်နိုင်</text><text x="188" y="707" font-size="26" fill="#8a94a8">inbox table · worker · receivable account · nightly recon job</text></g>
+        </svg>
+    - id: late-1
+      contentType: html
+      name: "Time 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">TIME</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေ ဝင်ပြီးတာတောင် ပြန်ထွက်သွားနိုင်တယ်</text>
+        <g class="in"><path d="M120 430H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><circle cx="174.4" cy="430" r="10" fill="#f6c453"/><path d="M174.4 430V476" stroke="#f6c453" stroke-width="2.5"/><text x="174.4" y="512" font-size="28" text-anchor="middle" fill="#f6c453" font-weight="700">capture</text><text x="174.4" y="544" font-size="23" text-anchor="middle" fill="#8a94a8">booked · Nov</text></g></g>
+        </svg>
+    - id: late-2
+      contentType: html
+      name: "Time 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">TIME</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေ ဝင်ပြီးတာတောင် ပြန်ထွက်သွားနိုင်တယ်</text>
+        <path d="M120 430H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g class="in"><path d="M174.4 412H419.2" stroke="#f6ad55" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="296.8" y="396" font-size="24" text-anchor="middle" fill="#f6ad55" font-weight="600">receivable open</text></g><g><circle cx="174.4" cy="430" r="10" fill="#f6c453"/><path d="M174.4 430V476" stroke="#f6c453" stroke-width="2.5"/><text x="174.4" y="512" font-size="28" text-anchor="middle" fill="#f6c453" font-weight="700">capture</text><text x="174.4" y="544" font-size="23" text-anchor="middle" fill="#8a94a8">booked · Nov</text></g><g class="in"><circle cx="419.2" cy="430" r="10" fill="#4fd1c5"/><path d="M419.2 430V384" stroke="#4fd1c5" stroke-width="2.5"/><text x="419.2" y="336" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700">settlement</text><text x="419.2" y="368" font-size="23" text-anchor="middle" fill="#8a94a8">T+2 batch</text></g>
+        </svg>
+    - id: late-3
+      contentType: html
+      name: "Time 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">TIME</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ငွေ ဝင်ပြီးတာတောင် ပြန်ထွက်သွားနိုင်တယ်</text>
+        <path d="M120 430H1480" stroke="#8a94a8" stroke-width="3" stroke-linecap="round" marker-end="url(#ah-gray)"/><g><path d="M174.4 412H419.2" stroke="#f6ad55" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="296.8" y="396" font-size="24" text-anchor="middle" fill="#f6ad55" font-weight="600">receivable open</text></g><g class="in"><path d="M174.4 412H1439.2" stroke="#fc8181" stroke-width="12" stroke-linecap="round" opacity="0.85"/><text x="806.8" y="396" font-size="24" text-anchor="middle" fill="#fc8181" font-weight="600">the cardholder can dispute</text></g><g><circle cx="174.4" cy="430" r="10" fill="#f6c453"/><path d="M174.4 430V476" stroke="#f6c453" stroke-width="2.5"/><text x="174.4" y="512" font-size="28" text-anchor="middle" fill="#f6c453" font-weight="700">capture</text><text x="174.4" y="544" font-size="23" text-anchor="middle" fill="#8a94a8">booked · Nov</text></g><g><circle cx="419.2" cy="430" r="10" fill="#4fd1c5"/><path d="M419.2 430V384" stroke="#4fd1c5" stroke-width="2.5"/><text x="419.2" y="336" font-size="28" text-anchor="middle" fill="#4fd1c5" font-weight="700">settlement</text><text x="419.2" y="368" font-size="23" text-anchor="middle" fill="#8a94a8">T+2 batch</text></g><g class="in"><circle cx="1180.8" cy="430" r="10" fill="#fc8181"/><path d="M1180.8 430V476" stroke="#fc8181" stroke-width="2.5"/><text x="1180.8" y="512" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700">chargeback</text><text x="1180.8" y="544" font-size="23" text-anchor="middle" fill="#8a94a8">booked · Dec</text></g><g class="in"><circle cx="1439.2" cy="430" r="10" fill="#9aa5b8"/><path d="M1439.2 430V384" stroke="#9aa5b8" stroke-width="2.5"/><text x="1439.2" y="336" font-size="28" text-anchor="middle" fill="#9aa5b8" font-weight="700">≈ 120 days</text><text x="1439.2" y="368" font-size="23" text-anchor="middle" fill="#8a94a8">typical window</text></g>
+        <g class="in"><rect x="120" y="640" width="640" height="130" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-doc" x="142" y="673" width="64" height="64" style="color:#b794f6"/><text x="480" y="695.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">cb-1 → corrects d-1</text><text x="480" y="736.6" font-size="24" text-anchor="middle" fill="#8a94a8">new entry, later period, original untouched</text></g>
+        <g class="in"><rect x="860" y="640" width="620" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-warn" x="882" y="673" width="64" height="64" style="color:#fc8181"/><text x="1210" y="695.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">user 1042 −80.00</text><text x="1210" y="736.6" font-size="24" text-anchor="middle" fill="#8a94a8">spent before the dispute → overdraft</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9538
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "pi_1 authorized - user 1042 balance 0.00\nevt_9 bad signature: 400\nevt_1 delivered twice: 200 200\nevt_1 → API: pi_1 captured, credited 100.00\nevt_1 → pi_1 already credited\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "pi_1 authorized - user 1042 balance 0.00\nevt_9 bad signature: 400\nevt_1 delivered twice: 200 200\nevt_1 → API: pi_1 captured, credited 100.00\nevt_1 → pi_1 already credited\npi_2 in po_1, never credited: API says captured, credited 50.00\npo_1 145.65 = pi_1 97.10 + pi_2 48.55: matched\nuser 1042 100.00  bank 145.65  receivable 0.00  fees 4.35\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "pi_1 authorized - user 1042 balance 0.00\nevt_9 bad signature: 400\nevt_1 delivered twice: 200 200\nevt_1 → API: pi_1 captured, credited 100.00\nevt_1 → pi_1 already credited\npi_2 in po_1, never credited: API says captured, credited 50.00\npo_1 145.65 = pi_1 97.10 + pi_2 48.55: matched\nuser 1042 100.00  bank 145.65  receivable 0.00  fees 4.35\ncb-1 reverses d-1 (2026-11) in 2026-12: user 1042 -80.00\nuser 1042 -80.00  bank 65.65  receivable -100.00  fees 4.35\n"
+
+scenes:
+  - id: hook
+    chapter: Flow ၂၊ card deposit
+    narration: >-
+      ငွေ system ထဲကို ငွေ ဝင်လာတဲ့ flow မှာ အခက်က နေရာ ပြောင်းသွားပါတယ်။ withdrawal မှာ နှစ်ခါ
+      မပို့ဖို့ပါ၊ card deposit မှာတော့ အပြင်ကမ္ဘာ ပြောတာကို မယုံဖို့နဲ့ တကယ် မရောက်သေးတဲ့ ငွေကို credit
+      မလုပ်ဖို့ ဖြစ်လာပါတယ်။ [[mark:pt-req]] user တစ်ယောက်က card နဲ့ ယူရို ၁၀၀ ဖြည့်မယ် ဆိုပါစို့။ submit ကို
+      client က retry လုပ်နိုင်လို့ PSP ဆီမှာ deposit ဖွင့်တာကိုလည်း idempotency key နဲ့ပဲ လုပ်ပါတယ်။
+      [[mark:flow-2]] PSP က card ကို authorize လုပ်ပြီး hold ချပါတယ်၊ ငွေကို မယူရသေးပါဘူး။ lesson ၁၈ မှာ
+      ပြောခဲ့တဲ့ reservation ရဲ့ card version ပါ။ [[mark:pt-hold]] ဒီအဆင့်မှာ user ရဲ့ balance ကို credit
+      မလုပ်သေးပါဘူး၊ ငွေက ကိုယ့်ငွေ မဟုတ်သေးလို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+    actions:
+      - { id: open-main-1, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - { id: show-flow, type: slide.show, at: { scene: start, offsetMs: 300 }, slideId: flow-1 }
+      - {
+          id: pt-title0,
+          type: slide.point,
+          at: { afterAction: show-flow },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: pt-req, type: slide.point, at: { mark: pt-req }, target: { x: 0.227, y: 0.398 } }
+      - { id: flow-2, type: slide.show, at: { mark: flow-2 }, slideId: flow-2 }
+      - {
+          id: pt-auth,
+          type: slide.point,
+          at: { afterAction: flow-2 },
+          target: { x: 0.599, y: 0.466 },
+        }
+      - { id: pt-hold, type: slide.point, at: { mark: pt-hold }, target: { x: 0.847, y: 0.535 } }
+
+  - id: webhook
+    chapter: Webhook က fact မဟုတ်ဘူး
+    narration: >-
+      [[mark:flow-3]] capture ဖြစ်တော့ PSP က webhook နဲ့ captured လို့ ပြောပါတယ်။ ဒီ message ကို ဘာမှ
+      မယုံပါဘူး။ [[mark:pt-vfy]] lesson ၂၄ မှာလို signature ကို ရောက်လာတဲ့ raw bytes ပေါ်မှာ verify လုပ်၊ raw
+      payload ကို သိမ်း၊ success response နဲ့ မြန်မြန် ပြန်ဖြေပြီးမှ async process လုပ်ပါတယ်။ [[mark:pt-stripe]] Stripe
+      ကိုယ်တိုင်က event တွေ အစဉ်လိုက် ရောက်မယ်လို့ အာမမခံဘဲ၊ event တစ်ခုကို တစ်ခါထက် ပိုရနိုင်တယ်လို့
+      ဆိုထားတာကို အဲဒီ lesson မှာ မြင်ခဲ့ပါပြီ။ [[mark:flow-4]] process လုပ်တဲ့အခါ webhook ရဲ့
+      body ကို အမှန်လို့ မယူဘဲ PSP ရဲ့ API ကို payment ရဲ့ authoritative state ကို မေးပါတယ်။ webhook က
+      တစ်ခုခု ဖြစ်ခဲ့တယ် ဆိုတဲ့ hint ပဲ ဖြစ်ပြီး၊ နောက်ကျတာ၊ ထပ်ရောက်တာ၊ data ဟောင်း ပါလာတာ၊ ပျောက်တာ
+      အကုန် ဖြစ်တတ်လို့ပါ။ [[mark:pt-apply]] apply လုပ်တာကလည်း payment id နဲ့ idempotent ဖြစ်ရပါမယ်၊ captured ကို နှစ်ခါ
+      ရလည်း user ကို တစ်ခါပဲ credit လုပ်ဖို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+      - {
+          title: "Stripe Docs — How events work (automatic retries, event ordering)",
+          url: "https://docs.stripe.com/events/how-events-work",
+        }
+      - {
+          title: "Stripe Docs — Receive Stripe events in your webhook endpoint",
+          url: "https://docs.stripe.com/webhooks",
+        }
+    actions:
+      - { id: flow-3, type: slide.show, at: { mark: flow-3 }, slideId: flow-3 }
+      - {
+          id: pt-wh,
+          type: slide.point,
+          at: { afterAction: flow-3 },
+          target: { x: 0.599, y: 0.604 },
+        }
+      - { id: pt-vfy, type: slide.point, at: { mark: pt-vfy }, target: { x: 0.351, y: 0.672 } }
+      - {
+          id: pt-stripe,
+          type: slide.point,
+          at: { mark: pt-stripe },
+          target: { x: 0.599, y: 0.604 },
+        }
+      - { id: flow-4, type: slide.show, at: { mark: flow-4 }, slideId: flow-4 }
+      - {
+          id: pt-get,
+          type: slide.point,
+          at: { afterAction: flow-4 },
+          target: { x: 0.599, y: 0.741 },
+        }
+      - { id: pt-apply, type: slide.point, at: { mark: pt-apply }, target: { x: 0.376, y: 0.316 } }
+
+  - id: books-flow
+    chapter: Receivable၊ batch၊ chargeback
+    narration: >-
+      [[mark:flow-5]] credit ကို clearing account ကနေ လုပ်ပါတယ်။ PSP က capture လုပ်ပြီးပေမဲ့ ကိုယ့်ဘဏ်ကို
+      မလွှဲရသေးတဲ့ ငွေမို့ ဘဏ်ထဲ ရောက်ပြီလို့ မဟန်ဆောင်ဘဲ၊ PSP receivable ကို debit လုပ်၊ user ကို
+      credit လုပ်ပြီး processing fee ကို expense အဖြစ် book လုပ်ပါတယ်။ lesson ၁၁ ရဲ့ စကားနဲ့ဆို booking time
+      က အခု၊ settlement time က T plus X ပါ။ [[mark:flow-6]] ရက်အနည်းငယ် ကြာမှ PSP က deposit အများကြီးကို
+      bank transfer တစ်ခုတည်းနဲ့ settle လုပ်ပါတယ်။ ဒါကြောင့် lesson ၂၆ မှာလို reconciliation က one-to-many
+      ဖြစ်ပြီး၊ T plus X ကြာမှာကို process ထဲ ကြိုထည့်ထားလို့ settle မဖြစ်သေးရုံ ဖြစ်တဲ့ deposit တွေအတွက်
+      alert မထပါဘူး။ webhook လုံးဝ မရောက်ခဲ့တဲ့ deposit ကို ဖမ်းမိတာလည်း ဒီ job ပါပဲ။ [[mark:flow-7]] အပတ်တွေ
+      ကြာပြီးမှ cardholder က dispute လုပ်ရင် သူ့ဘဏ်က chargeback နဲ့ ငွေကို အတင်း ပြန်ဆွဲယူပါတယ်။
+      [[mark:pt-title]] ဒီ flow တစ်ခုလုံးက No trust၊ ဘယ်သူ့ကိုမှ အလိုလို မယုံရဘူး ဆိုတဲ့ မူပေါ်မှာ ဆောက်ထားတာပါ။
+      webhook က fact မဟုတ်ဘဲ trigger ပါ၊ clearing account က ငွေ တကယ် မရွေ့မချင်း ရောက်ပြီလို့ မယူဆပါဘူး၊
+      reconciliation က PSP ကို ကိုယ့် books နဲ့ စစ်တာပါ။ [[mark:pt-once]] credit တစ်ခါပဲ လုပ်တာက No invented data ကို၊
+      raw payload သိမ်းတာက No lost data ကို ထိန်းပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Value time vs booking time vs settlement time (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#value-time-vs-booking-time-vs-settlement-time",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+    actions:
+      - { id: flow-5, type: slide.show, at: { mark: flow-5 }, slideId: flow-5 }
+      - { id: pt-cr, type: slide.point, at: { afterAction: flow-5 }, target: { x: 0.475, y: 0.81 } }
+      - { id: flow-6, type: slide.show, at: { mark: flow-6 }, slideId: flow-6 }
+      - {
+          id: pt-bat,
+          type: slide.point,
+          at: { afterAction: flow-6 },
+          target: { x: 0.723, y: 0.878 },
+        }
+      - { id: flow-7, type: slide.show, at: { mark: flow-7 }, slideId: flow-7 }
+      - {
+          id: pt-cb,
+          type: slide.point,
+          at: { afterAction: flow-7 },
+          target: { x: 0.599, y: 0.947 },
+        }
+      - { id: pt-title, type: slide.point, at: { mark: pt-title }, target: { x: 0.125, y: 0.184 } }
+      - { id: pt-once, type: slide.point, at: { mark: pt-once }, target: { x: 0.475, y: 0.81 } }
+
+  - id: code
+    chapter: Endpoint နဲ့ worker
+    narration: >-
+      [[mark:close-flow]] code နဲ့ ကြည့်ရအောင်။ [[mark:open-dep]] Receive က webhook endpoint ပါ။
+      [[mark:sel-verify]] signature ကို ရောက်လာတဲ့ bytes အတိုင်း စစ်ပြီး မကိုက်ရင် ၄၀၀ ပြန်ပါတယ်၊ parse လုပ်ပြီး
+      ပြန် serialize လုပ်ထားတာကို မစစ်ပါဘူး။ [[mark:sel-inbox]] ကိုက်ရင်
+      raw bytes ကို inbox ထဲ သိမ်းပြီး ၂၀၀ ပြန်ပါတယ်၊ ဒီထက် ဘာမှ မလုပ်ပါဘူး။ [[mark:sel-get]] Process က
+      နောက်မှ run ပြီး event ထဲက payment id ကိုပဲ ယူပြီး PSP ရဲ့ API ကို state မေးပါတယ်။ [[mark:sel-credited]]
+      credit လုပ်ပြီးသား payment ဆိုရင် ကျော်သွားပါတယ်။ [[mark:open-main-2]] main မှာ user နှစ်ယောက်က card နဲ့
+      ငွေဖြည့်ပြီး PSP က နှစ်ခုလုံးကို capture လုပ်ပါတယ်။ [[mark:sel-lost]] ဒုတိယ payment ရဲ့ webhook က လမ်းမှာ
+      ပျောက်သွားပါတယ်။ [[mark:sel-twice]] signature မမှန်တဲ့ fake event တစ်ခု ရောက်လာပြီး၊ ပထမ payment ရဲ့ event
+      အစစ်ကတော့ နှစ်ခါ ရောက်ပါတယ်။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Handling webhooks (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#handling-webhooks",
+        }
+      - { title: "Go standard library — crypto/hmac", url: "https://pkg.go.dev/crypto/hmac" }
+    actions:
+      - { id: close-flow, type: slide.close, at: { mark: close-flow } }
+      - { id: open-dep, type: workspace.openFile, at: { mark: open-dep }, path: deposit.go }
+      - id: sel-verify
+        type: editor.select
+        at: { mark: sel-verify }
+        target:
+          {
+            file: deposit.go,
+            text: "\tif !hmac.Equal([]byte(sig), []byte(sign(s.secret, body))) {",
+            occurrence: 1,
+          }
+      - id: sel-inbox
+        type: editor.select
+        at: { mark: sel-inbox }
+        target: { file: deposit.go, text: "\ts.inbox = append(s.inbox, body)", occurrence: 1 }
+      - id: sel-get
+        type: editor.select
+        at: { mark: sel-get }
+        target: { file: deposit.go, text: "\t\tpay := s.psp.Get(evt.Payment)", occurrence: 1 }
+      - id: sel-credited
+        type: editor.select
+        at: { mark: sel-credited }
+        target: { file: deposit.go, text: "\t\tcase s.credited[pay.ID] != \"\":", occurrence: 1 }
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: sel-lost
+        type: editor.select
+        at: { mark: sel-lost }
+        target:
+          {
+            file: main.go,
+            text: "\tpsp.Capture(pi2.ID) // its webhook is lost on the way",
+            occurrence: 1,
+          }
+      - id: sel-twice
+        type: editor.select
+        at: { mark: sel-twice }
+        target:
+          {
+            file: main.go,
+            text: "\tfmt.Println(\"evt_1 delivered twice:\", s.Receive(body, sig), s.Receive(body, sig))",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "evt_1 → pi_1 already credited",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-auth1]] authorize ပြီးတဲ့ အချိန်မှာ user ရဲ့ balance က သုည ပါပဲ။ [[mark:pt-bad]] fake event ကို
+      ၄၀၀ နဲ့ ငြင်းပြီး ဘာမှ မသိမ်းပါဘူး။ [[mark:pt-twice]] event အစစ်ကို နှစ်ခါလုံး သိမ်းပြီး ၂၀၀ ပြန်ပါတယ်၊
+      endpoint က dedupe မလုပ်ဘဲ မြန်မြန် ဖြေတာကိုပဲ တာဝန်ယူပါတယ်။ [[mark:pt-cred]] process လုပ်တော့ API က
+      captured လို့ အတည်ပြုမှ ယူရို ၁၀၀ ကို credit လုပ်ပြီး၊ [[mark:pt-dup]] ဒုတိယ delivery ကိုတော့ credit
+      လုပ်ပြီးသားမို့ ကျော်သွားပါတယ်။ [[mark:dock-1]] ဒီ credit ကို books မှာ ဘယ်လို ရေးလဲ ကြည့်ရအောင်။
+      [[mark:show-clear]] user ကို ယူရို ၁၀၀ ပေးရမယ်လို့ credit လုပ်ပေမဲ့၊ [[mark:pt-psp]] ငွေက PSP ဆီမှာပဲ ရှိသေးလို့
+      debit ဘက်က ဘဏ် မဟုတ်ဘဲ PSP receivable ပါ၊ fee နုတ်ပြီးသား ပမာဏနဲ့ပါ။ [[mark:clear-2]] settlement ရောက်တော့
+      receivable ကို credit လုပ်ပြီး ဘဏ်ကို debit လုပ်ပါတယ်။ transfer တစ်ခုက deposit နှစ်ခုစာ ဖြစ်လို့ ပမာဏက
+      ဘယ် deposit တစ်ခုနဲ့မှ မတူပါဘူး။ [[mark:pt-rule]] receivable က လမ်းမှာ ရှိနေတဲ့ ငွေပါ၊ capture
+      လုပ်ထားတာ အားလုံး settle ဖြစ်ပြီးရင် သုည ပြန်ဖြစ်ရပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+    actions:
+      - id: pt-auth1
+        type: console.point
+        at: { mark: pt-auth1 }
+        target: { text: "pi_1 authorized - user 1042 balance 0.00", occurrence: 1 }
+      - id: pt-bad
+        type: console.point
+        at: { mark: pt-bad }
+        target: { text: "evt_9 bad signature: 400", occurrence: 1 }
+      - id: pt-twice
+        type: console.point
+        at: { mark: pt-twice }
+        target: { text: "evt_1 delivered twice: 200 200", occurrence: 1 }
+      - id: pt-cred
+        type: console.point
+        at: { mark: pt-cred }
+        target: { text: "evt_1 → API: pi_1 captured, credited 100.00", occurrence: 1 }
+      - id: pt-dup
+        type: console.point
+        at: { mark: pt-dup }
+        target: { text: "evt_1 → pi_1 already credited", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+      - {
+          id: show-clear,
+          type: slide.show,
+          at: { mark: show-clear, offsetMs: -700 },
+          slideId: clearing-1,
+        }
+      - {
+          id: pt-user,
+          type: slide.point,
+          at: { afterAction: show-clear },
+          target: { x: 0.113, y: 0.509 },
+        }
+      - { id: pt-psp, type: slide.point, at: { mark: pt-psp }, target: { x: 0.788, y: 0.46 } }
+      - { id: clear-2, type: slide.show, at: { mark: clear-2 }, slideId: clearing-2 }
+      - {
+          id: pt-bank,
+          type: slide.point,
+          at: { afterAction: clear-2 },
+          target: { x: 0.113, y: 0.74 },
+        }
+      - { id: pt-rule, type: slide.point, at: { mark: pt-rule }, target: { x: 0.261, y: 0.931 } }
+
+  - id: settle
+    chapter: ပျောက်တဲ့ webhook ကို ဘယ်သူ ရှာမလဲ
+    narration: >-
+      [[mark:close-clear]] code နဲ့ စမ်းကြည့်ရအောင်။ [[mark:type-batch]] ရက်အနည်းငယ် ကြာတော့ PSP က payment
+      နှစ်ခုလုံးကို batch တစ်ခုတည်းနဲ့ settle လုပ်ပါတယ်။ Reconcile က batch ထဲက payment တိုင်းကို ledger နဲ့
+      တိုက်ပြီး၊ transfer ပမာဏနဲ့ ကိုယ် book လုပ်ထားတဲ့ receivable ပေါင်းလဒ် ညီလား စစ်ပါတယ်။ webhook
+      ပျောက်ခဲ့တဲ့ ဒုတိယ deposit ကို ledger က ဘယ်အချိန်မှာ သိမလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။
+      [[mark:pt-found]] batch ထဲမှာ ပါပေမဲ့ ledger က မကြားဖူးတဲ့ payment ကို တွေ့ပါတယ်။ webhook ကို ဆက်မစောင့်ဘဲ
+      API ကို မေးပြီး ပုံမှန် credit လမ်းကြောင်းနဲ့ပဲ credit လုပ်လိုက်တာပါ၊ lesson ၂၆ ရဲ့ first-class tool နဲ့
+      ပြင်တာဖြစ်ပြီး ကိုက်အောင် ကိန်းဂဏန်း ပြင်ရေးတာ မဟုတ်ပါဘူး။ [[mark:pt-match]] အဲဒီနောက် transfer တစ်ခုက payment နှစ်ခုရဲ့ fee နုတ်ပြီး
+      ပမာဏ ပေါင်းလဒ်နဲ့ ကိုက်ပါတယ်။ [[mark:pt-books2]] receivable က သုည ပြန်ဖြစ်ပြီး ငွေက ဘဏ်ထဲ ရောက်ပါပြီ။
+      [[mark:dock-2]] webhook လုံးဝ မရောက်ရင် ဒီ job မရှိဘဲ user ၂၀၇၇ ရဲ့ ယူရို ငါးဆယ်က ဘဏ်ထဲ ရောက်နေပေမဲ့
+      user ဘက်မှာ ပေါ်မလာပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+    actions:
+      - { id: close-clear, type: slide.close, at: { mark: close-clear } }
+      - id: type-batch
+        type: editor.type
+        at: { mark: type-batch }
+        target: { file: main.go, after: "\ts.Process()\n", occurrence: 1 }
+        text: "\n\tbatch := psp.Settle(\"po_1\", pi1.ID, pi2.ID) // days later, one transfer for both\n\ts.Reconcile(batch)\n\ts.report()\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "po_1 145.65 = pi_1 97.10 + pi_2 48.55: matched",
+          timeoutMs: 8000,
+        }
+      - id: pt-found
+        type: console.point
+        at: { mark: pt-found }
+        target: { text: "pi_2 in po_1, never credited", occurrence: 1 }
+      - id: pt-match
+        type: console.point
+        at: { mark: pt-match }
+        target: { text: "po_1 145.65 = pi_1 97.10 + pi_2 48.55: matched", occurrence: 1 }
+      - id: pt-books2
+        type: console.point
+        at: { mark: pt-books2 }
+        target: { text: "receivable 0.00", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+      - {
+          id: expect-file,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "s.Reconcile(batch)",
+        }
+
+  - id: chargeback
+    chapter: ခက်တဲ့ နေရာ၊ အပတ်တွေ ကြာမှ chargeback
+    narration: >-
+      [[mark:show-late]] ဒါပေမဲ့ settle ဖြစ်ပြီးတာနဲ့ ပြီးတာ မဟုတ်ပါဘူး။ [[mark:pt-cap]] capture တဲ့နေ့မှာ deposit
+      ကို book လုပ်ပါတယ်။ [[mark:late-2]] ရက်နှစ်ရက် အကြာမှာ settle ဖြစ်ပြီး receivable ပိတ်သွားပါတယ်။
+      [[mark:late-3]] cardholder က dispute လုပ်နိုင်တဲ့ ကာလကတော့ အများကြီး ပိုရှည်ပါတယ်။ card network တွေက
+      ပုံမှန်အားဖြင့် မူလ payment ကနေ ရက် ၁၂၀ အတွင်း dispute စခွင့်ပေးပြီး၊ တချို့ case တွေမှာ ပိုကြာခွင့်
+      ရှိပါတယ်။ [[mark:pt-link]] chargeback ရောက်လာရင် မူလ posting ကို မပြင်ဘဲ lesson ၁၅ မှာလို link ပါတဲ့
+      compensating entry အသစ်ကို post လုပ်ပါတယ်၊ deposit က နိုဝင်ဘာ period ထဲမှာ ကျန်ပြီး reversal က ဒီဇင်ဘာမှာ
+      ကျပါတယ်။ [[mark:pt-neg]] user က ဒီကြားထဲမှာ ငွေကို သုံးပြီးသွားရင် balance က အနုတ် ဖြစ်သွားပါတယ်။ ဒါက
+      capture မှာ credit လုပ်လိုက်တဲ့ ဆုံးဖြတ်ချက်ရဲ့ ကုန်ကျစရိတ်ပါ၊ settle မဖြစ်ခင်၊ dispute window မကုန်ခင် ငွေကို
+      သုံးခွင့် ပေးထားလို့ပါ။ lesson ၁၉ မှာလို overdraft အဖြစ် book လုပ်ပြီး ပြန်ယူရပါတယ်။ [[mark:close-late]] code
+      နဲ့ စမ်းကြည့်ရအောင်။ [[mark:type-cb]] user ၁၀၄၂ က ယူရို ရှစ်ဆယ်ကို သူ့ဘဏ်ကို ထုတ်သွားပြီး၊ အပတ်တွေ ကြာမှ
+      ပထမ payment အတွက် chargeback ရောက်လာပါတယ်။ Chargeback က မူလ entry ကို link လုပ်ပြီး ဒီဇင်ဘာ period မှာ post
+      လုပ်ပါတယ်။ ပြီးရင် books ကို ပြန်ထုတ်ပါတယ်။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-cbline]] reversal က
+      နိုဝင်ဘာက deposit ကို ညွှန်ပြီး ဒီဇင်ဘာမှာ book ဖြစ်ပါတယ်၊ user balance က အနုတ် ရှစ်ဆယ် ဖြစ်သွားပါတယ်။
+      [[mark:pt-books3]] receivable ကလည်း အနုတ် ဖြစ်သွားပါတယ်၊ ဆိုလိုတာက cardholder ကို ပြန်ပေးလိုက်တဲ့ ငွေအတွက်
+      ကိုယ်က PSP ကို ပေးစရာ ရှိနေတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+      - {
+          title: "Stripe Docs — How disputes work (dispute timing)",
+          url: "https://docs.stripe.com/disputes/how-disputes-work",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+    actions:
+      - {
+          id: show-late,
+          type: slide.show,
+          at: { mark: show-late, offsetMs: -700 },
+          slideId: late-1,
+        }
+      - { id: pt-cap, type: slide.point, at: { mark: pt-cap }, target: { x: 0.09, y: 0.618 } }
+      - { id: late-2, type: slide.show, at: { mark: late-2 }, slideId: late-2 }
+      - {
+          id: pt-set,
+          type: slide.point,
+          at: { afterAction: late-2 },
+          target: { x: 0.243, y: 0.422 },
+        }
+      - { id: late-3, type: slide.show, at: { mark: late-3 }, slideId: late-3 }
+      - {
+          id: pt-end,
+          type: slide.point,
+          at: { afterAction: late-3 },
+          target: { x: 0.881, y: 0.422 },
+        }
+      - { id: pt-link, type: slide.point, at: { mark: pt-link }, target: { x: 0.275, y: 0.864 } }
+      - { id: pt-neg, type: slide.point, at: { mark: pt-neg }, target: { x: 0.731, y: 0.864 } }
+      - { id: close-late, type: slide.close, at: { mark: close-late } }
+      - id: type-cb
+        type: editor.type
+        at: { mark: type-cb }
+        target: { file: main.go, after: "\ts.report()\n", occurrence: 1 }
+        text: "\n\ts.payout(user, 80_00)           // the user moves 80.00 out to their bank\n\ts.Chargeback(pi1.ID, \"2026-12\") // weeks later the cardholder disputes it\n\ts.report()\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "cb-1 reverses d-1 (2026-11) in 2026-12: user 1042 -80.00",
+          timeoutMs: 8000,
+        }
+      - id: pt-cbline
+        type: console.point
+        at: { mark: pt-cbline }
+        target: { text: "cb-1 reverses d-1", occurrence: 1 }
+      - id: pt-books3
+        type: console.point
+        at: { mark: pt-books3 }
+        target: { text: "receivable -100.00", occurrence: 1 }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech system design interview တွေမှာ card နဲ့ top-up လုပ်တဲ့ feature တစ်ခု ဒီဇိုင်းဆွဲပါ
+      လို့ မေးလေ့ရှိပါတယ်။ webhook ရောက်ရင် balance တိုးမယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး။ [[mark:iv-a]] ပထမ၊
+      authorization က hold ပဲ ဖြစ်လို့ credit မလုပ်သေးပါဘူး၊ capture ဖြစ်မှ credit လုပ်ပါတယ်။ [[mark:iv-b]]
+      ဒုတိယ၊ webhook ကို raw bytes ပေါ်မှာ verify လုပ်၊ သိမ်း၊ မြန်မြန် ဖြေပြီး၊ worker က API ကို မေးပြီး payment id
+      နဲ့ idempotent ဖြစ်အောင် apply လုပ်ပါ။ [[mark:iv-c]] တတိယ၊ PSP receivable ကနေ credit လုပ်ပြီး settlement
+      batch ကို one-to-many reconcile လုပ်ပါ၊ T plus X ကို ကြိုထည့်ထားပြီး ပျောက်တဲ့ webhook ကို ဒီ job က
+      ဖမ်းပါတယ်။ [[mark:iv-d]] ပြီးရင် chargeback ကို ဆက်ပြောပါ။ link ပါတဲ့ reversal ကို နောက် period မှာ post လုပ်ပြီး
+      အနုတ် balance ကို overdraft အဖြစ် ပြန်ယူမယ်၊ build လုပ်မှာက inbox table၊ worker၊ receivable account နဲ့ ညတိုင်း
+      run တဲ့ reconciliation job ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ပထမ payment ရဲ့ event ကို ဆောက်တဲ့
+      line နဲ့ ပို့တဲ့ line နှစ်ကြောင်းကို ဖျက်ပြီး run ကြည့်ပါ။ webhook နှစ်ခုလုံး ပျောက်သွားတဲ့ အခြေအနေပါ။ ပထမ
+      deposit ကိုလည်း settlement batch ရောက်မှ reconciliation က ရှာတွေ့ပြီး credit လုပ်တာ တွေ့ရပါမယ်၊ အဲဒီ
+      မတိုင်ခင် user ဘက်မှာ ဘာမှ မပေါ်ပါဘူး။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ card deposit မှာ အဆင့်တိုင်းက
+      happy path signal ကို မယုံပါဘူး၊ webhook ကို API နဲ့ စစ်ပြီး ငွေ တကယ် ရောက်တာကို reconciliation နဲ့
+      အတည်ပြုပါတယ်။ နောက် lesson မှာ ငွေ system အတွင်းမှာပဲ ရွေ့တဲ့
+      conversion ကို ကြည့်ပါမယ်၊ ယူရိုကနေ USDC ပြောင်းပြီး cashback ပေးတဲ့အခါ ဆင့်တစ်ပြားမှ မပေါ်မပျောက်အောင်
+      ဘယ်လို လုပ်မလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target:
+          {
+            file: main.go,
+            text: "\tbody, sig := psp.Event(\"evt_1\", pi1.ID)\n\tfmt.Println(\"evt_1 delivered twice:\", s.Receive(body, sig), s.Receive(body, sig))",
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

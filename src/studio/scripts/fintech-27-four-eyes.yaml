@@ -1,0 +1,902 @@
+# Fintech Engineering, lesson 27: segregation of duties and four-eyes (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Controls and access" and "Segregation of duties and
+# four-eyes" (CC BY 4.0, Voytek Pitula).
+# Start state: ledger.go is the course ledger (kit/go/ledger.go) plus a `credit` helper; main.go has
+# execute / request / approve (no maker check yet) and posts adj-1 directly, by one engineer.
+# Edits, all insert-only:
+#   1. approve refuses a checker who is the maker                  } run-2: wait, refuse, post
+#   2. main requests adj-2 and approves it as the maker, then as u-42 }   with maker and checker
+#   3. breakGlass: post without a checker, say so, queue a review  } run-3: BREAK-GLASS line and
+#   4. main posts adj-3 through it and prints the review queue     }   the review queue
+# Runs: run-1, run-2, run-3.
+# Figures: maker (request → approve → post, the approval record), where (money and engineering
+# actions that need a second person), glass (the break-glass path and its extra trail),
+# case (Citibank / Revlon and Bybit), iv (the interview answer).
+# Facts: B05 (Citibank / Revlon), B07 (Bybit).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-27-four-eyes
+  title: "Fintech Engineering 27: Four-eyes နဲ့ တာဝန်ခွဲခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // kindOf reads the account type from the name: "asset:bank" is an asset.
+        func kindOf(account string) string {
+        	kind, _, _ := strings.Cut(account, ":")
+        	return kind
+        }
+
+        // Balance derives an account's balance on the side where that kind of account grows:
+        // assets and expenses grow with debits; liabilities, equity and revenue grow with credits.
+        func (l *Ledger) Balance(account string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind := kindOf(account); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+
+        // credit is a manual correction that pays a user from the write-off expense account.
+        func credit(id string, amount int64) Tx {
+        	return Tx{ID: id, Memo: "manual correction", Lines: []Line{
+        		{Account: "expense:writeoff", Debit: amount},
+        		{Account: "liability:user:1042", Credit: amount},
+        	}}
+        }
+      main.go: |
+        package main
+
+        import "fmt"
+
+        const threshold = 1000_00 // a correction this large needs a second person
+
+        // Request is one manual ledger correction and who has acted on it.
+        type Request struct {
+        	Tx      Tx
+        	Maker   string
+        	Checker string
+        	Status  string // pending, posted
+        }
+
+        var books Ledger
+        var reviews []string // break-glass posts that a second person must look at afterwards
+
+        // execute posts the correction and records who made and who checked it.
+        func execute(r *Request, note string) {
+        	if err := books.Post(r.Tx); err != nil {
+        		fmt.Println(r.Tx.ID, "failed:", err)
+        		return
+        	}
+        	r.Status = "posted"
+        	fmt.Printf("%s posted: maker %s, %s\n", r.Tx.ID, r.Maker, note)
+        }
+
+        // request posts a small correction at once and holds a large one for a second person.
+        func request(maker string, tx Tx) *Request {
+        	r := &Request{Tx: tx, Maker: maker, Status: "pending"}
+        	if tx.Lines[0].Debit < threshold {
+        		execute(r, "under threshold")
+        	} else {
+        		fmt.Println(tx.ID, "waits for a second person")
+        	}
+        	return r
+        }
+
+        // approve posts a pending request once a second person agrees to it.
+        func approve(r *Request, checker string) {
+        	if r.Status != "pending" {
+        		fmt.Println(r.Tx.ID, "is already", r.Status)
+        		return
+        	}
+        	r.Checker = checker
+        	execute(r, "checker "+checker)
+        }
+
+        func main() {
+        	execute(&Request{Tx: credit("adj-1", 1500_00), Maker: "u-17"}, "no checker")
+        }
+  slides:
+    - id: case-1
+      contentType: html
+      name: "Real cases 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">REAL CASES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Approver တွေ ရှိပေမဲ့ ငွေ ထွက်သွားတယ်</text>
+        <g class="in"><text x="100" y="255" font-size="26" fill="#8a94a8">Citibank · Revlon loan · 11 Aug 2020</text></g>
+        <g class="in"><text x="100" y="380" font-size="72" fill="#68d391" font-weight="800">$7.8M</text><text x="100" y="426" font-size="26" fill="#8a94a8">ပို့ဖို့ ရည်ရွယ်တဲ့ interest</text></g>
+        <g class="in"><text x="430" y="380" font-size="72" fill="#fc8181" font-weight="800">≈ $894M</text><text x="430" y="426" font-size="26" fill="#8a94a8">ကိုယ့်ငွေ ထပ်ပါသွားတာ (principal နဲ့ ညီ)</text></g>
+        </svg>
+    - id: case-2
+      contentType: html
+      name: "Real cases 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">REAL CASES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Approver တွေ ရှိပေမဲ့ ငွေ ထွက်သွားတယ်</text>
+        <text x="100" y="255" font-size="26" fill="#8a94a8">Citibank · Revlon loan · 11 Aug 2020</text>
+        <text x="100" y="380" font-size="72" fill="#68d391" font-weight="800">$7.8M</text><text x="100" y="426" font-size="26" fill="#8a94a8">ပို့ဖို့ ရည်ရွယ်တဲ့ interest</text>
+        <text x="430" y="380" font-size="72" fill="#fc8181" font-weight="800">≈ $894M</text><text x="430" y="426" font-size="26" fill="#8a94a8">ကိုယ့်ငွေ ထပ်ပါသွားတာ (principal နဲ့ ညီ)</text>
+        <g class="in"><rect x="100" y="540" width="719.7" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="100" y="540" width="719.7" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="459.8" y="574.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700" class="mono">maker ✓  checker ✓  approver ✓   (six-eye)</text></g>
+        </svg>
+    - id: case-3
+      contentType: html
+      name: "Real cases 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-eye" viewBox="0 0 48 48"><path d="M4 24c5-9 12-13 20-13s15 4 20 13c-5 9-12 13-20 13S9 33 4 24z"/><circle cx="24" cy="24" r="6"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">REAL CASES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Approver တွေ ရှိပေမဲ့ ငွေ ထွက်သွားတယ်</text>
+        <text x="100" y="255" font-size="26" fill="#8a94a8">Citibank · Revlon loan · 11 Aug 2020</text>
+        <text x="100" y="380" font-size="72" fill="#68d391" font-weight="800">$7.8M</text><text x="100" y="426" font-size="26" fill="#8a94a8">ပို့ဖို့ ရည်ရွယ်တဲ့ interest</text>
+        <text x="430" y="380" font-size="72" fill="#fc8181" font-weight="800">≈ $894M</text><text x="430" y="426" font-size="26" fill="#8a94a8">ကိုယ့်ငွေ ထပ်ပါသွားတာ (principal နဲ့ ညီ)</text>
+        <rect x="100" y="540" width="719.7" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="100" y="540" width="719.7" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="459.8" y="574.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700" class="mono">maker ✓  checker ✓  approver ✓   (six-eye)</text>
+        <g class="in"><path d="M920 230L920 760" fill="none" stroke="#9aa5b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 9"/></g>
+        <g class="in"><text x="980" y="255" font-size="26" fill="#8a94a8">Bybit · multisig cold wallet · 21 Feb 2025</text></g>
+        <g class="in"><rect x="980" y="300" width="520" height="110" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-eye" x="1002" y="323" width="64" height="64" style="color:#9aa5b8"/><text x="1280" y="345.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">signer တွေ မြင်တာ</text><text x="1280" y="391.7" font-size="24" text-anchor="middle" fill="#8a94a8">masked interface — ပုံမှန် transfer</text></g>
+        <g class="in"><rect x="980" y="440" width="520" height="110" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><use href="#i-warn" x="1002" y="463" width="64" height="64" style="color:#fc8181"/><text x="1280" y="485.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">တကယ် sign လုပ်တာ</text><text x="1280" y="531.7" font-size="24" text-anchor="middle" fill="#8a94a8">wallet ရဲ့ contract logic ပြောင်း</text></g>
+        <g class="in"><text x="980" y="660" font-size="64" fill="#fc8181" font-weight="800">≈ $1.5B</text><text x="980" y="706" font-size="26" fill="#8a94a8">ခိုးခံရတဲ့ virtual assets</text></g>
+        <g class="in"><rect x="100" y="700" width="623.9" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="100" y="700" width="623.9" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="411.9" y="734.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">approver ကို operation ရဲ့ တကယ့် effect ကို ပြ</text></g>
+        </svg>
+    - id: glass-1
+      contentType: html
+      name: "Break-glass 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">BREAK-GLASS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အရေးပေါ် လမ်း ပေးထား၊ trail ကို ပိုထူထူ ထား</text>
+        <g class="in"><rect x="100" y="250" width="300" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-doc" x="122" y="273" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">request</text></g>
+        <g class="in"><rect x="530" y="250" width="300" height="110" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-check" x="552" y="273" width="64" height="64" style="color:#b794f6"/><text x="720" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">approve</text></g>
+        <g class="in"><rect x="1140" y="250" width="340" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="1162" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="1350" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">posted</text></g>
+        <path d="M410 305L516 305" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <path d="M840 305L1126 305" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/>
+        </svg>
+    - id: glass-2
+      contentType: html
+      name: "Break-glass 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">BREAK-GLASS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အရေးပေါ် လမ်း ပေးထား၊ trail ကို ပိုထူထူ ထား</text>
+        <rect x="100" y="250" width="300" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-doc" x="122" y="273" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">request</text>
+        <rect x="530" y="250" width="300" height="110" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-check" x="552" y="273" width="64" height="64" style="color:#b794f6"/><text x="720" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">approve</text>
+        <rect x="1140" y="250" width="340" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="1162" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="1350" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">posted</text>
+        <path d="M410 305L516 305" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <path d="M840 305L1126 305" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <g class="in"><rect x="530" y="470" width="380" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><rect x="530" y="470" width="380" height="120" rx="18" fill="#fc8181" opacity="0.13"/><use href="#i-warn" x="552" y="498" width="64" height="64" style="color:#fc8181"/><text x="760" y="518.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">break-glass</text><text x="760" y="562.7" font-size="24" text-anchor="middle" fill="#8a94a8">checker မပါဘဲ</text></g>
+        <path d="M405 313.7L523 517.9" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        <path d="M917.1 523L1130 314.8" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        </svg>
+    - id: glass-3
+      contentType: html
+      name: "Break-glass 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">BREAK-GLASS</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အရေးပေါ် လမ်း ပေးထား၊ trail ကို ပိုထူထူ ထား</text>
+        <rect x="100" y="250" width="300" height="110" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-doc" x="122" y="273" width="64" height="64" style="color:#6cb2f5"/><text x="290" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">request</text>
+        <rect x="530" y="250" width="300" height="110" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-check" x="552" y="273" width="64" height="64" style="color:#b794f6"/><text x="720" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">approve</text>
+        <rect x="1140" y="250" width="340" height="110" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="1162" y="273" width="64" height="64" style="color:#4fd1c5"/><text x="1350" y="315" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">posted</text>
+        <path d="M410 305L516 305" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <path d="M840 305L1126 305" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/>
+        <rect x="530" y="470" width="380" height="120" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><rect x="530" y="470" width="380" height="120" rx="18" fill="#fc8181" opacity="0.13"/><use href="#i-warn" x="552" y="498" width="64" height="64" style="color:#fc8181"/><text x="760" y="518.4" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">break-glass</text><text x="760" y="562.7" font-size="24" text-anchor="middle" fill="#8a94a8">checker မပါဘဲ</text>
+        <path d="M405 313.7L523 517.9" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <path d="M917.1 523L1130 314.8" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <g class="in"><rect x="100" y="680" width="491.8" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="100" y="680" width="491.8" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="345.9" y="714.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">record: BREAK-GLASS + reason</text></g>
+        <g class="in"><rect x="640" y="680" width="227.8" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="640" y="680" width="227.8" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="753.9" y="714.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">alert ချက်ချင်း</text></g>
+        <g class="in"><rect x="900" y="680" width="534.4" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="900" y="680" width="534.4" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="1167.2" y="714.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">review queue: ဒုတိယ လူ နောက်မှ စစ်</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Manual ledger adjustment tool တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Manual ledger adjustment tool တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Request နဲ့ approve ခွဲ — checker ≠ maker ကို system က စစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">threshold ကို request တစ်ခုချင်း မဟုတ်ဘဲ maker တစ်ယောက်ရဲ့ စုစုပေါင်းနဲ့</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Manual ledger adjustment tool တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Request နဲ့ approve ခွဲ — checker ≠ maker ကို system က စစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">threshold ကို request တစ်ခုချင်း မဟုတ်ဘဲ maker တစ်ယောက်ရဲ့ စုစုပေါင်းနဲ့</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Approver ကို တကယ့် effect ပြ — postings နဲ့ balance အပြောင်းအလဲ</text><text x="188" y="443" font-size="26" fill="#8a94a8">approval ကို အဲဒီ version အတိအကျနဲ့ ချည် — ပြင်ရင် ပြန်အတည်ပြု</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Manual ledger adjustment tool တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Request နဲ့ approve ခွဲ — checker ≠ maker ကို system က စစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">threshold ကို request တစ်ခုချင်း မဟုတ်ဘဲ maker တစ်ယောက်ရဲ့ စုစုပေါင်းနဲ့</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Approver ကို တကယ့် effect ပြ — postings နဲ့ balance အပြောင်းအလဲ</text><text x="188" y="443" font-size="26" fill="#8a94a8">approval ကို အဲဒီ version အတိအကျနဲ့ ချည် — ပြင်ရင် ပြန်အတည်ပြု</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">အားလုံး trail ထဲ — break-glass လမ်းကြောင်း ရှိ၊ နောက်မှ review</text><text x="188" y="575" font-size="26" fill="#8a94a8">correction ကို entry အသစ်နဲ့ပဲ၊ row ကို မပြင်</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Manual ledger adjustment tool တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Request နဲ့ approve ခွဲ — checker ≠ maker ကို system က စစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">threshold ကို request တစ်ခုချင်း မဟုတ်ဘဲ maker တစ်ယောက်ရဲ့ စုစုပေါင်းနဲ့</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Approver ကို တကယ့် effect ပြ — postings နဲ့ balance အပြောင်းအလဲ</text><text x="188" y="443" font-size="26" fill="#8a94a8">approval ကို အဲဒီ version အတိအကျနဲ့ ချည် — ပြင်ရင် ပြန်အတည်ပြု</text></g><g><circle cx="138" cy="513" r="25" fill="#fc8181"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">အားလုံး trail ထဲ — break-glass လမ်းကြောင်း ရှိ၊ နောက်မှ review</text><text x="188" y="575" font-size="26" fill="#8a94a8">correction ကို entry အသစ်နဲ့ပဲ၊ row ကို မပြင်</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">ဘယ်သူ maker / checker ဖြစ်ခွင့်ရှိလဲ ဆိုတာ role နဲ့ ထိန်း</text><text x="188" y="707" font-size="26" fill="#8a94a8">maker က checker ကို ကိုယ်တိုင် ရွေးလို့ မရ</text></g>
+        </svg>
+    - id: maker-1
+      contentType: html
+      name: "Maker-checker 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">MAKER-CHECKER</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">လုပ်တဲ့သူနဲ့ အတည်ပြုတဲ့သူ မတူရဘူး</text>
+        <g class="in"><circle cx="200" cy="330" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="170.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="200" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">maker u-17</text></g>
+        <g class="in"><rect x="470" y="260" width="400" height="140" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-doc" x="492" y="298" width="64" height="64" style="color:#f6ad55"/><text x="710" y="318.1" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">adj-2  1500.00</text><text x="710" y="362.1" font-size="24" text-anchor="middle" fill="#8a94a8">pending — မရွေ့သေး</text></g>
+        <path d="M266 330L456 330" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="361" y="313.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">request</text>
+        </svg>
+    - id: maker-2
+      contentType: html
+      name: "Maker-checker 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">MAKER-CHECKER</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">လုပ်တဲ့သူနဲ့ အတည်ပြုတဲ့သူ မတူရဘူး</text>
+        <circle cx="200" cy="330" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="170.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="200" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">maker u-17</text>
+        <rect x="470" y="260" width="400" height="140" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-doc" x="492" y="298" width="64" height="64" style="color:#f6ad55"/><text x="710" y="318.1" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">adj-2  1500.00</text><text x="710" y="362.1" font-size="24" text-anchor="middle" fill="#8a94a8">pending — မရွေ့သေး</text>
+        <path d="M266 330L456 330" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="361" y="313.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">request</text>
+        <g class="in"><circle cx="670" cy="560" r="56" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-user" x="640.6" y="530.6" width="58.800000000000004" height="58.800000000000004" style="color:#b794f6"/><text x="670" y="658" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">checker u-42</text></g>
+        <path d="M670 494L670 414" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="741.2" y="461.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">approve</text>
+        <g class="in"><rect x="1080" y="260" width="420" height="140" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="1102" y="298" width="64" height="64" style="color:#4fd1c5"/><text x="1330" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="1330" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">posted</text></g>
+        <path d="M880 330L1066 330" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)" class="dr"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M880 330L1066 330')"/><text x="973" y="313.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">1500.00</text>
+        </svg>
+    - id: maker-3
+      contentType: html
+      name: "Maker-checker 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gold" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#f6c453" stroke="#f6c453" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-user" viewBox="0 0 48 48"><circle cx="24" cy="15" r="8"/><path d="M8 42c0-9 7-15 16-15s16 6 16 15"/></symbol><symbol id="i-doc" viewBox="0 0 48 48"><path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">MAKER-CHECKER</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">လုပ်တဲ့သူနဲ့ အတည်ပြုတဲ့သူ မတူရဘူး</text>
+        <circle cx="200" cy="330" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-user" x="170.6" y="300.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="200" y="428" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">maker u-17</text>
+        <rect x="470" y="260" width="400" height="140" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5" stroke-dasharray="10 8"/><use href="#i-doc" x="492" y="298" width="64" height="64" style="color:#f6ad55"/><text x="710" y="318.1" font-size="31" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">adj-2  1500.00</text><text x="710" y="362.1" font-size="24" text-anchor="middle" fill="#8a94a8">pending — မရွေ့သေး</text>
+        <path d="M266 330L456 330" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="361" y="313.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">request</text>
+        <circle cx="670" cy="560" r="56" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-user" x="640.6" y="530.6" width="58.800000000000004" height="58.800000000000004" style="color:#b794f6"/><text x="670" y="658" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">checker u-42</text>
+        <path d="M670 494L670 414" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="741.2" y="461.8" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">approve</text>
+        <rect x="1080" y="260" width="420" height="140" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="1102" y="298" width="64" height="64" style="color:#4fd1c5"/><text x="1330" y="320.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="1330" y="361.6" font-size="24" text-anchor="middle" fill="#8a94a8">posted</text>
+        <path d="M880 330L1066 330" fill="none" stroke="#f6c453" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gold)"/><circle r="8" fill="#f6c453" class="fl" style="offset-path:path('M880 330L1066 330')"/><text x="973" y="313.8" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="600" class="mono">1500.00</text>
+        <g class="in"><rect x="880" y="470" width="620" height="238" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="904" y="504" font-size="22" fill="#8a94a8" font-weight="700" class="mono">approval record</text><path d="M880 516H1500" stroke="#2a3345" stroke-width="2"/><g><text x="904" y="562.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">adj-2  liability:user:1042  +1500.00</text></g><g><text x="904" y="601.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">maker    u-17   day 14  09:12</text></g><g><text x="904" y="640.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">checker  u-42   day 14  09:40</text></g><g><rect x="888" y="654.4" width="604" height="39" rx="8" fill="#68d391" opacity="0.16"/><text x="904" y="679.1" font-size="26" class="mono" xml:space="preserve" fill="#e9edf5">maker ≠ checker  ✓</text></g></g>
+        </svg>
+    - id: where-1
+      contentType: html
+      name: "Four-eyes 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-coin" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M29.5 18c-1-2.2-3-3.5-5.5-3.5-3.3 0-6 1.8-6 4.6 0 6.3 12 3.3 12 9.6 0 2.900-2.700 4.800-6 4.800-2.800 0-5-1.300-6-3.500M24 10v4.500M24 33.500V38"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-wallet" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="29" rx="4"/><path d="M43 21H33a4.500 4.500 0 0 0 0 9h10"/></symbol><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">FOUR-EYES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဒုတိယ လူ ထားသင့်တဲ့ နေရာတွေ</text>
+        <g class="in"><rect x="90" y="215" width="680" height="520" rx="22" fill="#f6c453" fill-opacity="0.05" stroke="#f6c453" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="112" y="251" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.06em">MONEY</text></g>
+        <g class="in"><rect x="130" y="270" width="600" height="95" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-coin" x="152" y="288" width="59" height="59" style="color:#f6c453"/><text x="467.5" y="327.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">large / manual withdrawal</text></g>
+        <g class="in"><rect x="130" y="380" width="600" height="95" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-ledger" x="152" y="398" width="59" height="59" style="color:#f6c453"/><text x="467.5" y="437.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">manual ledger correction</text></g>
+        <g class="in"><rect x="130" y="490" width="600" height="95" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-wallet" x="152" y="508" width="59" height="59" style="color:#f6c453"/><text x="467.5" y="547.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">treasury / cold-wallet move</text></g>
+        <g class="in"><rect x="130" y="600" width="600" height="95" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-gear" x="152" y="618" width="59" height="59" style="color:#f6c453"/><text x="467.5" y="657.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">fee schedule / limit change</text></g>
+        </svg>
+    - id: where-2
+      contentType: html
+      name: "Four-eyes 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-coin" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M29.5 18c-1-2.2-3-3.5-5.5-3.5-3.3 0-6 1.8-6 4.6 0 6.3 12 3.3 12 9.6 0 2.900-2.700 4.800-6 4.800-2.800 0-5-1.300-6-3.500M24 10v4.500M24 33.500V38"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-wallet" viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="29" rx="4"/><path d="M43 21H33a4.500 4.500 0 0 0 0 9h10"/></symbol><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-cloud" viewBox="0 0 48 48"><path d="M14 37a9 9 0 0 1-1-18 12 12 0 0 1 23 2 8 8 0 0 1-1 16z"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">FOUR-EYES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ဒုတိယ လူ ထားသင့်တဲ့ နေရာတွေ</text>
+        <rect x="90" y="215" width="680" height="520" rx="22" fill="#f6c453" fill-opacity="0.05" stroke="#f6c453" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="112" y="251" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.06em">MONEY</text>
+        <rect x="130" y="270" width="600" height="95" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-coin" x="152" y="288" width="59" height="59" style="color:#f6c453"/><text x="467.5" y="327.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">large / manual withdrawal</text>
+        <rect x="130" y="380" width="600" height="95" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-ledger" x="152" y="398" width="59" height="59" style="color:#f6c453"/><text x="467.5" y="437.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">manual ledger correction</text>
+        <rect x="130" y="490" width="600" height="95" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-wallet" x="152" y="508" width="59" height="59" style="color:#f6c453"/><text x="467.5" y="547.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">treasury / cold-wallet move</text>
+        <rect x="130" y="600" width="600" height="95" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><use href="#i-gear" x="152" y="618" width="59" height="59" style="color:#f6c453"/><text x="467.5" y="657.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">fee schedule / limit change</text>
+        <g class="in"><rect x="830" y="215" width="680" height="520" rx="22" fill="#b794f6" fill-opacity="0.05" stroke="#b794f6" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="852" y="251" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.06em">ENGINEERING</text></g>
+        <g class="in"><rect x="870" y="270" width="600" height="95" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-code" x="892" y="288" width="59" height="59" style="color:#b794f6"/><text x="1207.5" y="327.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">merge to main</text></g>
+        <g class="in"><rect x="870" y="380" width="600" height="95" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="892" y="398" width="59" height="59" style="color:#b794f6"/><text x="1207.5" y="437.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">deploy to production</text></g>
+        <g class="in"><rect x="870" y="490" width="600" height="95" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-cloud" x="892" y="508" width="59" height="59" style="color:#b794f6"/><text x="1207.5" y="547.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">infrastructure change</text></g>
+        <g class="in"><rect x="90" y="780" width="1065.6" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="90" y="780" width="1065.6" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="622.8" y="814.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">ငွေ ရွှေ့နိုင်တာ၊ ငွေကို မှားပြနိုင်တာ မှန်သမျှ → second approver ထားဖို့ စဉ်းစား</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9527
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "adj-1 posted: maker u-17, no checker\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "adj-1 posted: maker u-17, no checker\nadj-2 waits for a second person\nadj-2 refused: u-17 cannot approve own request\nadj-2 posted: maker u-17, checker u-42\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "adj-1 posted: maker u-17, no checker\nadj-2 waits for a second person\nadj-2 refused: u-17 cannot approve own request\nadj-2 posted: maker u-17, checker u-42\nadj-3 posted: maker u-17, BREAK-GLASS: provider outage\nreview queue: [adj-3 by u-17]\n"
+
+scenes:
+  - id: hook
+    chapter: No trust ကို အတွင်းဘက် လှည့်ကြည့်
+    narration: >-
+      ဒီအထိ ကြည့်ခဲ့တဲ့ pattern တွေက ငွေနဲ့ ပတ်သက်တဲ့ data ကို မှန်အောင် ထိန်းတာပါ။ ဒါပေမဲ့ ငွေ
+      system တစ်ခုက ဘယ်သူ ဘာလုပ်ခွင့် ရှိလဲ ဆိုတာကိုလည်း ကန့်သတ်ရပြီး၊ process ကို
+      လိုက်နာခဲ့တယ် ဆိုတာကို နောက်မှ သက်သေပြနိုင်ရပါမယ်။ ဒီနေရာမှာ No trust က အတွင်းဘက်ကို
+      လှည့်လာပါတယ်။ provider တွေ၊ component တွေလိုပဲ ကိုယ့် operator တွေ၊ engineer တွေကလည်း trust
+      boundary တစ်ခုပါ။ [[mark:sel-exec]] ဒီ execute function က manual correction တစ်ခုကို ledger
+      ထဲ post လုပ်ပြီး ဘယ်သူ လုပ်လဲ ဆိုတာ ထုတ်ပြပါတယ်။ [[mark:sel-call]] main ထဲမှာတော့ engineer
+      တစ်ယောက်က write-off expense account ကနေ user တစ်ယောက်ကို ယူရို တစ်ထောင့်ငါးရာ credit
+      ပေးတာကို တိုက်ရိုက် ခေါ်ထားပါတယ်။ ကြားမှာ ဘယ်သူမှ ကြည့်ပေးတာ မရှိပါဘူး။ [[mark:run-1]] run
+      လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Controls and access (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#controls-and-access",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-exec
+        type: editor.select
+        at: { mark: sel-exec }
+        target: { file: main.go, text: "func execute(r *Request, note string) {", occurrence: 1 }
+      - id: sel-call
+        type: editor.select
+        at: { mark: sel-call }
+        target:
+          {
+            file: main.go,
+            text: 'execute(&Request{Tx: credit("adj-1", 1500_00), Maker: "u-17"}, "no checker")',
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "adj-1 posted: maker u-17, no checker",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-1]] post ဖြစ်သွားပါပြီ၊ checker ဆိုတာ မရှိပါဘူး။ သတိထားရမှာက ဒီ transaction ဟာ
+      debit နဲ့ credit ညီပြီး ledger ရဲ့ invariant တွေ အကုန် pass ပါတယ်။ ဒါပေမဲ့ user တစ်ယောက်ရဲ့
+      balance ထဲကို ယူရို တစ်ထောင့်ငါးရာ ဝင်သွားတာက engineer တစ်ယောက်တည်းရဲ့ ဆုံးဖြတ်ချက်ပါ။
+      ရိုက်မှားတာလည်း ဖြစ်နိုင်၊ ကိုယ်သိတဲ့ account ကို ငွေ ထည့်ပေးတာလည်း ဖြစ်နိုင်ပါတယ်၊ ledger က
+      အဲဒီ နှစ်ခုကို ခွဲမပြနိုင်ပါဘူး။ [[mark:dock-1]] invariant က ငွေ ဘယ်လို ရွေ့လဲ ဆိုတာကို စစ်တာပါ၊
+      ဘယ်သူ ရွှေ့ခွင့် ရှိလဲ ဆိုတာကိုတော့ မစစ်ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Controls and access (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#controls-and-access",
+        }
+    actions:
+      - id: pt-1
+        type: console.point
+        at: { mark: pt-1 }
+        target: { text: "adj-1 posted: maker u-17, no checker", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: maker
+    chapter: Maker-checker
+    narration: >-
+      [[mark:show-maker]] finance မှာ အဟောင်းဆုံး control က အလုပ်တစ်ခုကို လူ နှစ်ယောက် ခွဲလုပ်တာပါ။
+      ပုံစံ နှစ်မျိုး ရှိပါတယ်။ segregation of duties ဆိုတာ process တစ်ခုလုံးကို လူ တစ်ယောက်တည်း
+      မပိုင်ရတာပါ။ four-eyes ဒါမှမဟုတ် maker-checker ဆိုတာကတော့ action တစ်ခု အသက်မဝင်ခင် ဒုတိယ လူ
+      တစ်ယောက်က approve လုပ်ရတာပါ၊ dual control လို့လည်း ခေါ်ပါတယ်။ [[mark:pt-req]] maker က request
+      တင်လိုက်ရင် ဘာမှ မရွေ့သေးပါဘူး၊ pending ပဲ ဖြစ်ပါတယ်။ [[mark:maker-2]] maker မဟုတ်တဲ့ checker
+      က approve လုပ်မှ ledger ထဲ ရောက်ပါတယ်။ [[mark:maker-3]] approval ကိုယ်တိုင်ကလည်း trail ရဲ့
+      အစိတ်အပိုင်းပါ။ ဘယ်သူ request လုပ်လဲ၊ ဘယ်သူ approve လုပ်လဲ၊ အဲဒီ နှစ်ယောက် မတူဘူး ဆိုတာ
+      record ထဲမှာ မပါရင် control ရှိခဲ့တယ် ဆိုတာကို auditor ကို သက်သေပြလို့ မရပါဘူး။ ဘယ်လောက်
+      ယုံရတဲ့ လူ ဖြစ်ဖြစ်၊ အတွင်းက လူ တစ်ယောက်တည်းရဲ့ ဆုံးဖြတ်ချက်က sensitive ဖြစ်တဲ့၊ ပြန်ပြင်လို့
+      မရတဲ့ action အတွက် မလုံလောက်ပါဘူး၊ ဒါက No trust ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Segregation of duties and four-eyes (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#segregation-of-duties-and-four-eyes",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - {
+          id: show-maker,
+          type: slide.show,
+          at: { mark: show-maker, offsetMs: -700 },
+          slideId: maker-1,
+        }
+      - {
+          id: pt-mk,
+          type: slide.point,
+          at: { afterAction: show-maker },
+          target: { x: 0.1, y: 0.487 },
+        }
+      - { id: pt-req, type: slide.point, at: { mark: pt-req }, target: { x: 0.419, y: 0.453 } }
+      - { id: maker-2, type: slide.show, at: { mark: maker-2 }, slideId: maker-2 }
+      - {
+          id: pt-ck,
+          type: slide.point,
+          at: { afterAction: maker-2 },
+          target: { x: 0.394, y: 0.742 },
+        }
+      - { id: maker-3, type: slide.show, at: { mark: maker-3 }, slideId: maker-3 }
+      - {
+          id: pt-rec,
+          type: slide.point,
+          at: { afterAction: maker-3 },
+          target: { x: 0.609, y: 0.768 },
+        }
+
+  - id: control
+    chapter: Approver က maker မဖြစ်ရ
+    narration: >-
+      [[mark:close-maker]] code ထဲ ထည့်ကြည့်ရအောင်။ [[mark:sel-request]] request function က threshold
+      အောက်က correction ကို ချက်ချင်း post လုပ်ပြီး၊ threshold ကျော်ရင် ဒုတိယ လူကို စောင့်ခိုင်းပါတယ်။
+      [[mark:type-check]] approve ထဲမှာ ပထမဆုံး စစ်ရမှာက approve လုပ်တဲ့သူဟာ request တင်တဲ့သူ
+      မဖြစ်ရဘူး ဆိုတာပါ။ ဒီစစ်ချက်ကို UI မှာ မထားဘဲ ငွေ ရွှေ့တဲ့ code ထဲမှာ ထားရပါတယ်၊ ဒါမှ API ကို
+      တိုက်ရိုက် ခေါ်လည်း ကျော်လို့ မရမှာပါ။ [[mark:type-calls]] main ထဲမှာတော့ ယူရို တစ်ထောင့်ငါးရာ
+      correction ကို request တင်ပြီး၊ maker ကိုယ်တိုင် approve လုပ်ကြည့်ပါမယ်၊ ပြီးမှ တခြား တစ်ယောက်က
+      approve လုပ်ပါမယ်။ maker ကိုယ်တိုင် approve လုပ်တဲ့ line က ဘာ ထုတ်မလဲ ခန့်မှန်းကြည့်ပါ။
+      [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-wait]] request တင်ရုံနဲ့ post မဖြစ်ဘဲ စောင့်နေပါတယ်။
+      [[mark:pt-refused]] maker ကိုယ်တိုင် approve လုပ်တာကို ငြင်းလိုက်ပါတယ်။ [[mark:pt-posted]] ဒုတိယ
+      လူ approve လုပ်မှ post ဖြစ်ပြီး၊ record ထဲမှာ maker နဲ့ checker နှစ်ယောက်လုံး ပါပါတယ်။
+      [[mark:pt-first]] ပထမ line ကို ပြန်ယှဉ်ကြည့်ရင် အဲဒီ record မှာ checker မရှိပါဘူး။ [[mark:dock-2]]
+      တကယ့် system မှာ execute လို direct path ကို လူတွေ ခေါ်လို့ မရအောင် ထားရပါမယ်။ ခေါ်လို့ ရနေသေးရင်
+      control က ရှိတယ်ဆိုရုံပဲ ဖြစ်နေပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Segregation of duties and four-eyes (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#segregation-of-duties-and-four-eyes",
+        }
+    actions:
+      - { id: close-maker, type: slide.close, at: { mark: close-maker } }
+      - id: sel-request
+        type: editor.select
+        at: { mark: sel-request }
+        target: { file: main.go, text: "if tx.Lines[0].Debit < threshold {", occurrence: 1 }
+      - id: type-check
+        type: editor.type
+        at: { mark: type-check }
+        target:
+          { file: main.go, after: "func approve(r *Request, checker string) {\n", occurrence: 1 }
+        text: "\tif checker == r.Maker {\n\t\tfmt.Println(r.Tx.ID, \"refused:\", checker, \"cannot approve own request\")\n\t\treturn\n\t}\n"
+        cadence: line-by-line
+      - id: type-calls
+        type: editor.type
+        at: { mark: type-calls }
+        target:
+          {
+            file: main.go,
+            after: "\texecute(&Request{Tx: credit(\"adj-1\", 1500_00), Maker: \"u-17\"}, \"no checker\")\n",
+            occurrence: 1,
+          }
+        text: "\n\tr := request(\"u-17\", credit(\"adj-2\", 1500_00))\n\tapprove(r, \"u-17\")\n\tapprove(r, \"u-42\")\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "adj-2 posted: maker u-17, checker u-42",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-check,
+          type: expect.file,
+          at: { afterAction: expect-2 },
+          path: main.go,
+          contains: "if checker == r.Maker {",
+        }
+      - id: pt-wait
+        type: console.point
+        at: { mark: pt-wait }
+        target: { text: "adj-2 waits for a second person", occurrence: 1 }
+      - id: pt-refused
+        type: console.point
+        at: { mark: pt-refused }
+        target: { text: "adj-2 refused", occurrence: 1 }
+      - id: pt-posted
+        type: console.point
+        at: { mark: pt-posted }
+        target: { text: "checker u-42", occurrence: 1 }
+      - id: pt-first
+        type: console.point
+        at: { mark: pt-first }
+        target: { text: "no checker", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: where
+    chapter: ဘယ်နေရာတွေမှာ လိုလဲ
+    narration: >-
+      [[mark:show-where]] ဒုတိယ approver ထားဖို့ စဉ်းစားရမယ့် နေရာက ငွေကို ရွှေ့နိုင်တဲ့၊ ဒါမှမဟုတ် ငွေကို
+      မှားပြနိုင်တဲ့ action မှန်သမျှပါ။ [[mark:pt-m1]] ပမာဏ ကြီးတဲ့ withdrawal၊ လူက ကိုယ်တိုင် လုပ်တဲ့ withdrawal၊
+      ခုနက လို manual ledger correction၊ treasury နဲ့ cold wallet ကနေ ငွေ ရွှေ့တာတွေ ပါပါတယ်။
+      [[mark:pt-m4]] fee schedule နဲ့ limit ပြောင်းတာလည်း ပါပါတယ်။ ငွေ တစ်ပြားမှ မရွှေ့ပေမဲ့ နောက်
+      transaction တိုင်းရဲ့ ပမာဏကို ပြောင်းသွားလို့ပါ။ [[mark:where-2]] engineering ဘက်မှာလည်း
+      အတူတူပါပဲ။ main ထဲ merge လုပ်တာ၊ production ကို deploy လုပ်တာ၊ infrastructure ပြောင်းတာတွေက
+      ငွေ system မှာ sensitive action တွေပါ၊ code တစ်ကြောင်းက manual correction တစ်ခုထက် ငွေ
+      ပိုများများ ရွှေ့နိုင်လို့ပါ။ ဒါကြောင့် review နဲ့ approval ကို များသောအားဖြင့် မဖြစ်မနေ လိုအပ်အောင် ထားကြပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Segregation of duties and four-eyes (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#segregation-of-duties-and-four-eyes",
+        }
+    actions:
+      - {
+          id: show-where,
+          type: slide.show,
+          at: { mark: show-where, offsetMs: -700 },
+          slideId: where-1,
+        }
+      - { id: pt-m1, type: slide.point, at: { mark: pt-m1 }, target: { x: 0.269, y: 0.414 } }
+      - { id: pt-m4, type: slide.point, at: { mark: pt-m4 }, target: { x: 0.269, y: 0.781 } }
+      - { id: where-2, type: slide.show, at: { mark: where-2 }, slideId: where-2 }
+      - {
+          id: pt-e2,
+          type: slide.point,
+          at: { afterAction: where-2 },
+          target: { x: 0.731, y: 0.537 },
+        }
+
+  - id: glass
+    chapter: Break-glass
+    narration: >-
+      [[mark:show-glass]] control တင်းကျပ်လွန်းရင် တခြား ပြဿနာ တစ်ခု ပေါ်လာပါတယ်။ အရေးပေါ်
+      အချိန်မှာ ဒုတိယ လူ မရှိရင် လူတွေက control ကို ရှောင်တဲ့ လမ်းကို ကိုယ်တိုင် ဖောက်တတ်ပါတယ်၊ database
+      ကို တိုက်ရိုက် ပြင်တာမျိုးပါ။ [[mark:glass-2]] ဒါကြောင့် break-glass ဆိုတဲ့ တရားဝင် လမ်း တစ်ခု
+      ပေးထားပါတယ်။ checker မပါဘဲ လုပ်လို့ ရပေမဲ့ ဈေးကြီးပါတယ်။ [[mark:glass-3]] record ထဲမှာ
+      break-glass လို့ အကြောင်းပြချက်နဲ့ ထင်ထင်ရှားရှား မှတ်တယ်၊ alert ကို ချက်ချင်း ပို့တယ်၊ ပြီးတော့
+      ဒုတိယ လူ တစ်ယောက်က နောက်မှ စစ်ရမယ့် review queue ထဲ ထည့်ပါတယ်။ approval ကို ရှေ့မှာ
+      မလုပ်နိုင်ရင် နောက်မှ လုပ်တာပါ။ [[mark:close-glass]] code ထဲ ထည့်ကြည့်ရအောင်။
+      [[mark:type-glass]] break-glass function က checker မပါဘဲ execute ကို ခေါ်ပေမဲ့၊ record ထဲမှာ
+      break-glass နဲ့ အကြောင်းပြချက်ကို ရေးပြီး review queue ထဲ ထည့်ပါတယ်။ [[mark:type-call3]] main
+      ထဲမှာ provider outage ကြောင့် ယူရို နှစ်ထောင် correction ကို အဲဒီ လမ်းကနေ post လုပ်ပြီး review
+      queue ကို ထုတ်ပြပါမယ်။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-bg]] post ဖြစ်ပေမဲ့ record
+      ထဲမှာ break-glass နဲ့ အကြောင်းပြချက် ပါနေပါတယ်။ [[mark:pt-queue]] review queue ထဲမှာလည်း
+      ရောက်နေပါပြီ။ [[mark:dock-3]] break-glass ကို ဘယ်နှခါ သုံးလဲ ဆိုတာ ကိုယ်တိုင်က စောင့်ကြည့်ရမယ့်
+      metric တစ်ခုပါ၊ ပုံမှန် လမ်းလို သုံးနေရင် control ကို ပြန်ဒီဇိုင်းဆွဲဖို့ signal ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Segregation of duties and four-eyes (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#segregation-of-duties-and-four-eyes",
+        }
+    actions:
+      - {
+          id: show-glass,
+          type: slide.show,
+          at: { mark: show-glass, offsetMs: -700 },
+          slideId: glass-1,
+        }
+      - {
+          id: pt-ap,
+          type: slide.point,
+          at: { afterAction: show-glass },
+          target: { x: 0.425, y: 0.409 },
+        }
+      - { id: glass-2, type: slide.show, at: { mark: glass-2 }, slideId: glass-2 }
+      - {
+          id: pt-bgc,
+          type: slide.point,
+          at: { afterAction: glass-2 },
+          target: { x: 0.45, y: 0.664 },
+        }
+      - { id: glass-3, type: slide.show, at: { mark: glass-3 }, slideId: glass-3 }
+      - { id: pt-c1, type: slide.point, at: { afterAction: glass-3 }, target: { x: 0.21, y: 0.82 } }
+      - { id: close-glass, type: slide.close, at: { mark: close-glass } }
+      - id: type-glass
+        type: editor.type
+        at: { mark: type-glass }
+        target: { file: main.go, after: "\texecute(r, \"checker \"+checker)\n}\n", occurrence: 1 }
+        text: "\nfunc breakGlass(r *Request, reason string) {\n\texecute(r, \"BREAK-GLASS: \"+reason)\n\treviews = append(reviews, r.Tx.ID+\" by \"+r.Maker)\n}\n"
+        cadence: line-by-line
+      - id: type-call3
+        type: editor.type
+        at: { mark: type-call3 }
+        target: { file: main.go, after: "\tapprove(r, \"u-42\")\n", occurrence: 1 }
+        text: "\n\tbreakGlass(&Request{Tx: credit(\"adj-3\", 2000_00), Maker: \"u-17\"}, \"provider outage\")\n\tfmt.Println(\"review queue:\", reviews)\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "review queue: [adj-3 by u-17]",
+          timeoutMs: 8000,
+        }
+      - id: pt-bg
+        type: console.point
+        at: { mark: pt-bg }
+        target: { text: "BREAK-GLASS", occurrence: 1 }
+      - id: pt-queue
+        type: console.point
+        at: { mark: pt-queue }
+        target: { text: "review queue", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: case
+    chapter: Approver တွေ ရှိရဲ့နဲ့
+    narration: >-
+      [[mark:show-case]] approver ရှိနေရုံနဲ့ လုံခြုံတာ မဟုတ်ပါဘူး။ ၂၀၂၀ ခုနှစ် ဩဂုတ်လ ၁၁ ရက်နေ့မှာ
+      Citibank က Revlon ရဲ့ term loan အတွက် administrative agent အနေနဲ့ lender တွေဆီ အတိုး ဒေါ်လာ သန်း ခုနစ်ဒသမ ရှစ် လောက် ပို့ဖို့ ရည်ရွယ်ခဲ့ပါတယ်။ [[mark:pt-sent]] ဒါပေမဲ့ ကိုယ့်ငွေ ဒေါ်လာ သန်း ၉၀၀ နီးပါးကိုပါ
+      လွှဲမိခဲ့ပါတယ်၊ ကျန်နေတဲ့ principal နဲ့ ညီတဲ့ ပမာဏပါ။ [[mark:case-2]] ဒီ payment ကို Oracle
+      Flexcube ထဲမှာ ထည့်ခဲ့ပြီး Citibank ရဲ့ six-eye procedure ကို ဖြတ်သွားပါတယ်၊ maker၊ checker နဲ့
+      approver ဆိုပြီး သုံးယောက် အတည်ပြုခဲ့တာပါ။ ဒေါ်လာ သန်း ၅၀၀ ကျော် ရထားတဲ့ lender တွေက ပြန်မပေးခဲ့ပါဘူး။
+      [[mark:case-3]] ၂၀၂၅ ဖေဖော်ဝါရီ ၂၁ ရက်နေ့မှာတော့ Bybit ရဲ့ Ethereum multisig cold wallet ကနေ warm
+      wallet ကို ပုံမှန် လွှဲနေတုန်း ဒေါ်လာ ဘီလီယံ တစ်ဒသမ ငါး လောက်တန် virtual asset တွေ
+      ခိုးခံခဲ့ရပါတယ်။ multisig ဆိုတာ key အများက sign လုပ်မှ ငွေ ရွှေ့လို့ရတဲ့ wallet ပါ၊ four-eyes ကို
+      cryptography နဲ့ enforce လုပ်ထားတာပါ။ [[mark:pt-saw]] Bybit ရဲ့ ပြောချက်အရ signer တွေ မြင်ခဲ့ရတာက
+      ဖုံးကွယ်ထားတဲ့ interface ပါ၊ [[mark:pt-did]] transaction ကတော့ cold wallet ရဲ့ smart contract logic
+      ကို ပြောင်းလိုက်တာပါ။ FBI က ဒီ ခိုးမှုကို North Korea လုပ်တာလို့ သတ်မှတ်ခဲ့ပါတယ်။
+      [[mark:pt-rule]] ဆိုလိုတာက approver ဘယ်နှယောက် ရှိလဲ ဆိုတာထက် approver ဘာကို မြင်လဲ ဆိုတာ
+      ပိုအရေးကြီးပါတယ်။ approver အားလုံး screen တစ်ခုတည်းကို ကြည့်ပြီး အဲဒီ screen မှားနေရင်
+      approval တွေက တစ်ခုနဲ့ တစ်ခု independent မဖြစ်တော့ပါဘူး။ [[mark:case-rule2]] ဒါကြောင့် approver
+      ကို maker ရေးတဲ့ ဖော်ပြချက် မဟုတ်ဘဲ၊ operation ကနေ တွက်ထုတ်ထားတဲ့ တကယ့် effect ကို ပြရပါတယ်၊
+      ဘယ် account က ဘယ်လောက် ပြောင်းမလဲ ဆိုတာပါ။ approval ကိုလည်း အဲဒီ version အတိအကျနဲ့
+      ချည်ထားပြီး request ပြောင်းရင် ပြန်အတည်ပြုခိုင်းရပါတယ်။
+    sources:
+      - {
+          title: "In re Citibank August 11, 2020 Wire Transfers, No. 20-cv-6539 (S.D.N.Y. 16 Feb 2021)",
+          url: "https://www.nysd.uscourts.gov/sites/default/files/2021-02/20cv6539%20Citibank%20Opinion.pdf",
+        }
+      - {
+          title: "FBI / IC3 — North Korea Responsible for $1.5 Billion Bybit Hack (26 Feb 2025)",
+          url: "https://www.ic3.gov/PSA/2025/PSA250226",
+        }
+      - {
+          title: "Bybit — Bybit Confirms Security Integrity Amid Safe{Wallet} Incident",
+          url: "https://www.bybit.com/en/press/post/bybit-confirms-security-integrity-amid-safe-wallet-incident-no-compromise-of-infrastructure-blt9986889e919da8d2",
+        }
+    actions:
+      - {
+          id: show-case,
+          type: slide.show,
+          at: { mark: show-case, offsetMs: -700 },
+          slideId: case-1,
+        }
+      - {
+          id: pt-meant,
+          type: slide.point,
+          at: { afterAction: show-case },
+          target: { x: 0.098, y: 0.487 },
+        }
+      - { id: pt-sent, type: slide.point, at: { mark: pt-sent }, target: { x: 0.306, y: 0.487 } }
+      - { id: case-2, type: slide.show, at: { mark: case-2 }, slideId: case-2 }
+      - {
+          id: pt-six,
+          type: slide.point,
+          at: { afterAction: case-2 },
+          target: { x: 0.281, y: 0.664 },
+        }
+      - { id: case-3, type: slide.show, at: { mark: case-3 }, slideId: case-3 }
+      - {
+          id: pt-lost,
+          type: slide.point,
+          at: { afterAction: case-3 },
+          target: { x: 0.65, y: 0.798 },
+        }
+      - { id: pt-saw, type: slide.point, at: { mark: pt-saw }, target: { x: 0.775, y: 0.464 } }
+      - { id: pt-did, type: slide.point, at: { mark: pt-did }, target: { x: 0.775, y: 0.62 } }
+      - { id: pt-rule, type: slide.point, at: { mark: pt-rule }, target: { x: 0.281, y: 0.664 } }
+      - {
+          id: pt-rule2,
+          type: slide.point,
+          at: { mark: case-rule2 },
+          target: { x: 0.251, y: 0.842 },
+        }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ manual ledger adjustment tool တစ်ခု ဒီဇိုင်းဆွဲပါ လို့
+      မေးတတ်ပါတယ်။ approve ခလုတ် ထည့်မယ် ဆိုတာထက် ပိုပြောရပါမယ်။ [[mark:iv-a]] ပထမ၊ request နဲ့
+      approve ကို ခွဲပြီး checker က maker မဖြစ်ရဘူး ဆိုတာ server ဘက်က စစ်မယ်။ threshold ကို request
+      တစ်ခုချင်းနဲ့ မဟုတ်ဘဲ maker တစ်ယောက်ရဲ့ ကာလ တစ်ခုအတွင်း စုစုပေါင်းနဲ့ စစ်မယ်၊ မဟုတ်ရင် ပမာဏကို
+      ခွဲတင်ပြီး ကျော်လို့ ရပါတယ်။ [[mark:iv-b]] ဒုတိယ၊ approver ကို posting တွေနဲ့ balance
+      အပြောင်းအလဲ ဆိုတဲ့ တကယ့် effect ကို ပြပြီး၊ approval ကို အဲဒီ version နဲ့ ချည်မယ်။ [[mark:iv-c]]
+      တတိယ၊ အဆင့်တိုင်း trail ထဲ ရောက်မယ်၊ break-glass လမ်း ရှိပြီး နောက်မှ review လုပ်မယ်၊
+      correction ကိုလည်း entry အသစ်နဲ့ပဲ လုပ်မယ်။ [[mark:iv-d]] ပြီးရင် ဘယ်သူ maker ဖြစ်ခွင့်၊ checker
+      ဖြစ်ခွင့် ရှိလဲ ဆိုတာ role နဲ့ ထိန်းမယ်၊ maker က checker ကို ကိုယ်တိုင် ရွေးလို့ မရဘူး ဆိုတာ
+      ဆက်ပြောပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Segregation of duties and four-eyes (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#segregation-of-duties-and-four-eyes",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] threshold ကို ယူရို
+      နှစ်ထောင် လို့ ပြောင်းပြီး run ကြည့်ပါ။ ယူရို တစ်ထောင့်ငါးရာ correction က ဘယ်သူမှ မကြည့်ဘဲ
+      ချက်ချင်း post ဖြစ်သွားပြီး၊ ဒုတိယ လူ approve လုပ်ဖို့ ရောက်လာတဲ့အခါ post ပြီးသား
+      ဖြစ်နေပါလိမ့်မယ်။ threshold ကို ဘယ်မှာ ထားမလဲ ဆိုတာ code ဆုံးဖြတ်ချက် မဟုတ်ဘဲ risk
+      ဆုံးဖြတ်ချက်ပါ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ ငွေကို ရွှေ့နိုင်တဲ့ sensitive action တွေမှာ လုပ်တဲ့သူနဲ့
+      အတည်ပြုတဲ့သူ မတူရဘူး ဆိုတာကို system က စစ်ပြီး၊ နှစ်ယောက်လုံးကို trail ထဲ မှတ်ရပါတယ်၊
+      approver ကိုလည်း တကယ့် effect ကို ပြရပါတယ်။ နောက် lesson မှာတော့ ဘယ်သူ checker ဖြစ်ခွင့်
+      ရှိလဲ၊ အဲဒီ ခွင့်ကို ဘယ်လို ရလာခဲ့လဲ ဆိုတဲ့ access control ကို ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Segregation of duties and four-eyes (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#segregation-of-duties-and-four-eyes",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "const threshold = 1000_00", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

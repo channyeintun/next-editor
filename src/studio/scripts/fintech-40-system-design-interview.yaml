@@ -1,0 +1,972 @@
+# Fintech Engineering, lesson 40: the fintech system design interview (Burmese). The course's last
+# lesson.
+#
+# Source: Fintech Engineering Handbook, all of it with "Principles" as the spine, "Resources" and
+# Appendix C (CC BY 4.0, Voytek Pitula).
+# Start state: ledger.go (the kit's ledger), wallet.go (a transfer built from the course's pieces:
+# key store, balance check, ledger post, outbox; a deposit of 100.00 to user 1042), main.go sends
+# one transfer of 40.00 from 1042 to 2077 and prints both balances.
+# Edits, all insert-only (main.go):
+#   1. the same request again with the same key        -> run-2: replay, same response, one movement
+#   2. a new key for 70.00 more, the bank vs what is owed, the outbox -> run-3: 409, 100.00 = 100.00, one event
+# Runs: run-1, run-2, run-3.
+# Figures: moves (the six moves with their lessons), wallet (the transfer as an architecture),
+# iv (what interviewers listen for), read (the handbook's reading list by layer).
+# Facts: none beyond the handbook (its resource list and Appendix C).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-40-system-design-interview
+  title: "Fintech Engineering 40: Fintech system design interview"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID    string
+        	Memo  string
+        	Lines []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs []Tx
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // kindOf reads the account type from the name: "asset:bank" is an asset.
+        func kindOf(account string) string {
+        	kind, _, _ := strings.Cut(account, ":")
+        	return kind
+        }
+
+        // Balance derives an account's balance on the side where that kind of account grows:
+        // assets and expenses grow with debits; liabilities, equity and revenue grow with credits.
+        func (l *Ledger) Balance(account string) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind := kindOf(account); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        func main() {
+        	w := newWallet()
+        	req := Request{Key: "k-7f3a", From: "liability:user:1042", To: "liability:user:2077", Amount: 40_00}
+        	first, steps := w.Transfer(req)
+        	fmt.Println("first:", strings.Join(steps, " -> "), "=>", first.Status, first.TxID)
+
+        	fmt.Printf("balances: 1042 %s, 2077 %s\n",
+        		cents(w.ledger.Balance("liability:user:1042")), cents(w.ledger.Balance("liability:user:2077")))
+        }
+      wallet.go: |
+        package main
+
+        import "fmt"
+
+        // Request is one call to the transfer API. The client picks the key and reuses it on a retry.
+        type Request struct {
+        	Key      string
+        	From, To string
+        	Amount   int64
+        }
+
+        type Response struct {
+        	Status int
+        	TxID   string
+        }
+
+        type Event struct{ ID, Type, TxID string }
+
+        // Wallet is the course's pieces in one place: a ledger, a key store and an outbox.
+        // In production the key, the posting and the outbox row commit in one database transaction.
+        type Wallet struct {
+        	ledger Ledger
+        	keys   map[string]Response // idempotency key -> the response sent the first time
+        	outbox []Event
+        	users  []string
+        }
+
+        func newWallet() *Wallet {
+        	w := &Wallet{keys: map[string]Response{}, users: []string{"liability:user:1042", "liability:user:2077"}}
+        	w.ledger.Post(Tx{ID: "tx-1", Memo: "deposit", Lines: []Line{
+        		{Account: "asset:bank", Debit: 100_00},
+        		{Account: "liability:user:1042", Credit: 100_00},
+        	}})
+        	return w
+        }
+
+        // Transfer moves money between two users once per key, and says what it did.
+        func (w *Wallet) Transfer(r Request) (Response, []string) {
+        	if res, ok := w.keys[r.Key]; ok {
+        		return res, []string{"key seen", "replay"}
+        	}
+        	if w.ledger.Balance(r.From) < r.Amount {
+        		w.keys[r.Key] = Response{Status: 409}
+        		return w.keys[r.Key], []string{"new key", "insufficient funds"}
+        	}
+        	tx := Tx{ID: fmt.Sprintf("tx-%d", len(w.ledger.txs)+1), Memo: "transfer " + r.Key, Lines: []Line{
+        		{Account: r.From, Debit: r.Amount},
+        		{Account: r.To, Credit: r.Amount},
+        	}}
+        	if err := w.ledger.Post(tx); err != nil {
+        		return Response{Status: 500}, []string{err.Error()}
+        	}
+        	evt := Event{fmt.Sprintf("evt-%d", len(w.outbox)+1), "transfer.completed", tx.ID}
+        	w.outbox = append(w.outbox, evt)
+        	w.keys[r.Key] = Response{200, tx.ID}
+        	return w.keys[r.Key], []string{"new key", "balance checked", "posted " + tx.ID, "outbox " + evt.ID}
+        }
+
+        // total is what the ledger says the platform owes its users.
+        func (w *Wallet) total() int64 {
+        	var sum int64
+        	for _, u := range w.users {
+        		sum += w.ledger.Balance(u)
+        	}
+        	return sum
+        }
+  slides:
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Wallet transfer API တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Wallet transfer API တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Principle 3 ချက်ကို ကိုယ့်စကားနဲ့</text><text x="188" y="311" font-size="26" fill="#8a94a8">ငွေ မပေါ်၊ မပျောက်၊ ဘာကိုမှ အလိုလို မယုံ — design တိုင်းကို ချိတ်ပြော</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Wallet transfer API တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Principle 3 ချက်ကို ကိုယ့်စကားနဲ့</text><text x="188" y="311" font-size="26" fill="#8a94a8">ငွေ မပေါ်၊ မပျောက်၊ ဘာကိုမှ အလိုလို မယုံ — design တိုင်းကို ချိတ်ပြော</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Trade-off ကို နာမည်တပ်ပြော</text><text x="188" y="443" font-size="26" fill="#8a94a8">strong consistency vs latency · reservation vs simplicity</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Wallet transfer API တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Principle 3 ချက်ကို ကိုယ့်စကားနဲ့</text><text x="188" y="311" font-size="26" fill="#8a94a8">ငွေ မပေါ်၊ မပျောက်၊ ဘာကိုမှ အလိုလို မယုံ — design တိုင်းကို ချိတ်ပြော</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Trade-off ကို နာမည်တပ်ပြော</text><text x="188" y="443" font-size="26" fill="#8a94a8">strong consistency vs latency · reservation vs simplicity</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">It depends — ဘာပေါ် မူတည်လဲ ဆက်ပြော</text><text x="188" y="575" font-size="26" fill="#8a94a8">internal transfer လား၊ external rail ပါလား</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Wallet transfer API တစ်ခု ဒီဇိုင်းဆွဲပါ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Principle 3 ချက်ကို ကိုယ့်စကားနဲ့</text><text x="188" y="311" font-size="26" fill="#8a94a8">ငွေ မပေါ်၊ မပျောက်၊ ဘာကိုမှ အလိုလို မယုံ — design တိုင်းကို ချိတ်ပြော</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Trade-off ကို နာမည်တပ်ပြော</text><text x="188" y="443" font-size="26" fill="#8a94a8">strong consistency vs latency · reservation vs simplicity</text></g><g><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">It depends — ဘာပေါ် မူတည်လဲ ဆက်ပြော</text><text x="188" y="575" font-size="26" fill="#8a94a8">internal transfer လား၊ external rail ပါလား</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">ခြေလှမ်း 6 ခု အစဉ်လိုက်၊ failure mode အတွက် အချိန် ချန်</text><text x="188" y="707" font-size="26" fill="#8a94a8">money facts ကို အရင် မေး၊ ပြီးမှ box တွေ ဆွဲ</text></g>
+        </svg>
+    - id: moves-1
+      contentType: html
+      name: "System design 1/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SYSTEM DESIGN</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Fintech design မေးခွန်းတိုင်းအတွက် ခြေလှမ်း 6 ခု</text>
+        <g class="in"><rect x="90" y="210" width="1420" height="604" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="134" y="245" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">#</text><text x="200" y="245" font-size="22" fill="#8a94a8" font-weight="700">move</text><text x="514.1" y="245" font-size="22" fill="#8a94a8" font-weight="700">what you put on the board</text><text x="1488" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">lessons</text><path d="M90 262H1510" stroke="#2a3345" stroke-width="2"/><g><text x="134" y="318" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">1</text><text x="200" y="318" font-size="28" fill="#f6c453" font-weight="700">Money facts</text><text x="514.1" y="318" font-size="26" fill="#9aa5b8">currencies · who holds the funds · rails · regulation</text><text x="1488" y="318" font-size="28" text-anchor="end" fill="#e9edf5">03 06 10 32–36</text></g></g>
+        </svg>
+    - id: moves-2
+      contentType: html
+      name: "System design 2/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SYSTEM DESIGN</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Fintech design မေးခွန်းတိုင်းအတွက် ခြေလှမ်း 6 ခု</text>
+        <rect x="90" y="210" width="1420" height="604" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="134" y="245" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">#</text><text x="200" y="245" font-size="22" fill="#8a94a8" font-weight="700">move</text><text x="514.1" y="245" font-size="22" fill="#8a94a8" font-weight="700">what you put on the board</text><text x="1488" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">lessons</text><path d="M90 262H1510" stroke="#2a3345" stroke-width="2"/><g><text x="134" y="318" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">1</text><text x="200" y="318" font-size="28" fill="#f6c453" font-weight="700">Money facts</text><text x="514.1" y="318" font-size="26" fill="#9aa5b8">currencies · who holds the funds · rails · regulation</text><text x="1488" y="318" font-size="28" text-anchor="end" fill="#e9edf5">03 06 10 32–36</text></g><g class="in"><path d="M106 354H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="410" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">2</text><text x="200" y="410" font-size="28" fill="#4fd1c5" font-weight="700">Data model</text><text x="514.1" y="410" font-size="25" fill="#9aa5b8">Money type · double-entry ledger · three timestamps</text><text x="1488" y="410" font-size="28" text-anchor="end" fill="#e9edf5">02–11</text></g>
+        </svg>
+    - id: moves-3
+      contentType: html
+      name: "System design 3/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SYSTEM DESIGN</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Fintech design မေးခွန်းတိုင်းအတွက် ခြေလှမ်း 6 ခု</text>
+        <rect x="90" y="210" width="1420" height="604" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="134" y="245" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">#</text><text x="200" y="245" font-size="22" fill="#8a94a8" font-weight="700">move</text><text x="514.1" y="245" font-size="22" fill="#8a94a8" font-weight="700">what you put on the board</text><text x="1488" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">lessons</text><path d="M90 262H1510" stroke="#2a3345" stroke-width="2"/><g><text x="134" y="318" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">1</text><text x="200" y="318" font-size="28" fill="#f6c453" font-weight="700">Money facts</text><text x="514.1" y="318" font-size="26" fill="#9aa5b8">currencies · who holds the funds · rails · regulation</text><text x="1488" y="318" font-size="28" text-anchor="end" fill="#e9edf5">03 06 10 32–36</text></g><g><path d="M106 354H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="410" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">2</text><text x="200" y="410" font-size="28" fill="#4fd1c5" font-weight="700">Data model</text><text x="514.1" y="410" font-size="25" fill="#9aa5b8">Money type · double-entry ledger · three timestamps</text><text x="1488" y="410" font-size="28" text-anchor="end" fill="#e9edf5">02–11</text></g><g class="in"><path d="M106 446H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="502" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">3</text><text x="200" y="502" font-size="28" fill="#f6ad55" font-weight="700">The flow</text><text x="514.1" y="502" font-size="24" fill="#9aa5b8">state machine · idempotency key · reservation · resume</text><text x="1488" y="502" font-size="28" text-anchor="end" fill="#e9edf5">17–22</text></g>
+        </svg>
+    - id: moves-4
+      contentType: html
+      name: "System design 4/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SYSTEM DESIGN</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Fintech design မေးခွန်းတိုင်းအတွက် ခြေလှမ်း 6 ခု</text>
+        <rect x="90" y="210" width="1420" height="604" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="134" y="245" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">#</text><text x="200" y="245" font-size="22" fill="#8a94a8" font-weight="700">move</text><text x="514.1" y="245" font-size="22" fill="#8a94a8" font-weight="700">what you put on the board</text><text x="1488" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">lessons</text><path d="M90 262H1510" stroke="#2a3345" stroke-width="2"/><g><text x="134" y="318" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">1</text><text x="200" y="318" font-size="28" fill="#f6c453" font-weight="700">Money facts</text><text x="514.1" y="318" font-size="26" fill="#9aa5b8">currencies · who holds the funds · rails · regulation</text><text x="1488" y="318" font-size="28" text-anchor="end" fill="#e9edf5">03 06 10 32–36</text></g><g><path d="M106 354H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="410" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">2</text><text x="200" y="410" font-size="28" fill="#4fd1c5" font-weight="700">Data model</text><text x="514.1" y="410" font-size="25" fill="#9aa5b8">Money type · double-entry ledger · three timestamps</text><text x="1488" y="410" font-size="28" text-anchor="end" fill="#e9edf5">02–11</text></g><g><path d="M106 446H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="502" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">3</text><text x="200" y="502" font-size="28" fill="#f6ad55" font-weight="700">The flow</text><text x="514.1" y="502" font-size="24" fill="#9aa5b8">state machine · idempotency key · reservation · resume</text><text x="1488" y="502" font-size="28" text-anchor="end" fill="#e9edf5">17–22</text></g><g class="in"><path d="M106 538H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="594" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">4</text><text x="200" y="594" font-size="28" fill="#6cb2f5" font-weight="700">Outside world</text><text x="514.1" y="594" font-size="24" fill="#9aa5b8">provider APIs · webhooks as hints · outbox · reconcile</text><text x="1488" y="594" font-size="28" text-anchor="end" fill="#e9edf5">23–26</text></g>
+        </svg>
+    - id: moves-5
+      contentType: html
+      name: "System design 5/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SYSTEM DESIGN</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Fintech design မေးခွန်းတိုင်းအတွက် ခြေလှမ်း 6 ခု</text>
+        <rect x="90" y="210" width="1420" height="604" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="134" y="245" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">#</text><text x="200" y="245" font-size="22" fill="#8a94a8" font-weight="700">move</text><text x="514.1" y="245" font-size="22" fill="#8a94a8" font-weight="700">what you put on the board</text><text x="1488" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">lessons</text><path d="M90 262H1510" stroke="#2a3345" stroke-width="2"/><g><text x="134" y="318" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">1</text><text x="200" y="318" font-size="28" fill="#f6c453" font-weight="700">Money facts</text><text x="514.1" y="318" font-size="26" fill="#9aa5b8">currencies · who holds the funds · rails · regulation</text><text x="1488" y="318" font-size="28" text-anchor="end" fill="#e9edf5">03 06 10 32–36</text></g><g><path d="M106 354H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="410" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">2</text><text x="200" y="410" font-size="28" fill="#4fd1c5" font-weight="700">Data model</text><text x="514.1" y="410" font-size="25" fill="#9aa5b8">Money type · double-entry ledger · three timestamps</text><text x="1488" y="410" font-size="28" text-anchor="end" fill="#e9edf5">02–11</text></g><g><path d="M106 446H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="502" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">3</text><text x="200" y="502" font-size="28" fill="#f6ad55" font-weight="700">The flow</text><text x="514.1" y="502" font-size="24" fill="#9aa5b8">state machine · idempotency key · reservation · resume</text><text x="1488" y="502" font-size="28" text-anchor="end" fill="#e9edf5">17–22</text></g><g><path d="M106 538H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="594" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">4</text><text x="200" y="594" font-size="28" fill="#6cb2f5" font-weight="700">Outside world</text><text x="514.1" y="594" font-size="24" fill="#9aa5b8">provider APIs · webhooks as hints · outbox · reconcile</text><text x="1488" y="594" font-size="28" text-anchor="end" fill="#e9edf5">23–26</text></g><g class="in"><path d="M106 630H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="686" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">5</text><text x="200" y="686" font-size="28" fill="#b794f6" font-weight="700">Controls</text><text x="514.1" y="686" font-size="28" fill="#9aa5b8">audit trail · immutability · four-eyes · access</text><text x="1488" y="686" font-size="28" text-anchor="end" fill="#e9edf5">12–16 27–29</text></g>
+        </svg>
+    - id: moves-6
+      contentType: html
+      name: "System design 6/6"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">SYSTEM DESIGN</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Fintech design မေးခွန်းတိုင်းအတွက် ခြေလှမ်း 6 ခု</text>
+        <rect x="90" y="210" width="1420" height="604" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="134" y="245" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">#</text><text x="200" y="245" font-size="22" fill="#8a94a8" font-weight="700">move</text><text x="514.1" y="245" font-size="22" fill="#8a94a8" font-weight="700">what you put on the board</text><text x="1488" y="245" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">lessons</text><path d="M90 262H1510" stroke="#2a3345" stroke-width="2"/><g><text x="134" y="318" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">1</text><text x="200" y="318" font-size="28" fill="#f6c453" font-weight="700">Money facts</text><text x="514.1" y="318" font-size="26" fill="#9aa5b8">currencies · who holds the funds · rails · regulation</text><text x="1488" y="318" font-size="28" text-anchor="end" fill="#e9edf5">03 06 10 32–36</text></g><g><path d="M106 354H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="410" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">2</text><text x="200" y="410" font-size="28" fill="#4fd1c5" font-weight="700">Data model</text><text x="514.1" y="410" font-size="25" fill="#9aa5b8">Money type · double-entry ledger · three timestamps</text><text x="1488" y="410" font-size="28" text-anchor="end" fill="#e9edf5">02–11</text></g><g><path d="M106 446H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="502" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">3</text><text x="200" y="502" font-size="28" fill="#f6ad55" font-weight="700">The flow</text><text x="514.1" y="502" font-size="24" fill="#9aa5b8">state machine · idempotency key · reservation · resume</text><text x="1488" y="502" font-size="28" text-anchor="end" fill="#e9edf5">17–22</text></g><g><path d="M106 538H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="594" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">4</text><text x="200" y="594" font-size="28" fill="#6cb2f5" font-weight="700">Outside world</text><text x="514.1" y="594" font-size="24" fill="#9aa5b8">provider APIs · webhooks as hints · outbox · reconcile</text><text x="1488" y="594" font-size="28" text-anchor="end" fill="#e9edf5">23–26</text></g><g><path d="M106 630H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="686" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">5</text><text x="200" y="686" font-size="28" fill="#b794f6" font-weight="700">Controls</text><text x="514.1" y="686" font-size="28" fill="#9aa5b8">audit trail · immutability · four-eyes · access</text><text x="1488" y="686" font-size="28" text-anchor="end" fill="#e9edf5">12–16 27–29</text></g><g class="in"><path d="M106 722H1494" stroke="#2a3345" stroke-width="1.5"/><text x="134" y="778" font-size="28" text-anchor="middle" fill="#9aa5b8" class="mono">6</text><text x="200" y="778" font-size="28" fill="#fc8181" font-weight="700">Failures &amp; tests</text><text x="514.1" y="778" font-size="28" fill="#9aa5b8">invariants · property tests · crash injection</text><text x="1488" y="778" font-size="28" text-anchor="end" fill="#e9edf5">17 30 31</text></g>
+        </svg>
+    - id: read-1
+      contentType: html
+      name: "Resources 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">RESOURCES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">နောက် ဘာဖတ်မလဲ — handbook ရဲ့ စာရင်း</text>
+        <g class="in"><rect x="90" y="205" width="1420" height="612" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="240" font-size="22" fill="#8a94a8" font-weight="700">layer</text><text x="302.7" y="240" font-size="22" fill="#8a94a8" font-weight="700">title</text><text x="1235.3" y="240" font-size="22" fill="#8a94a8" font-weight="700">covers</text><path d="M90 257H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="295" font-size="27" fill="#9aa5b8">Accounting</text><text x="302.7" y="295" font-size="28" fill="#4fd1c5">Accounting for Computer Scientists</text><text x="1235.3" y="295" font-size="22" fill="#9aa5b8">double entry as a graph</text></g><g><path d="M106 313H1494" stroke="#2a3345" stroke-width="1.5"/><text x="302.7" y="351" font-size="24" fill="#4fd1c5">The Accounting Game: Basic Accounting Fresh from the Lemonade Stand</text><text x="1235.3" y="351" font-size="24" fill="#9aa5b8">accounting from zero</text></g><g><path d="M106 369H1494" stroke="#2a3345" stroke-width="1.5"/><text x="302.7" y="407" font-size="28" fill="#4fd1c5">Modern Treasury, How to Scale a Ledger</text><text x="1235.3" y="407" font-size="27" fill="#9aa5b8">a production ledger</text></g><g><path d="M106 425H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="463" font-size="28" fill="#9aa5b8">Payments</text><text x="302.7" y="463" font-size="28" fill="#f6c453">Payments Systems in the U.S.</text><text x="1235.3" y="463" font-size="28" fill="#9aa5b8">cards, ACH, wires</text></g><g><path d="M106 481H1494" stroke="#2a3345" stroke-width="1.5"/><text x="302.7" y="519" font-size="28" fill="#f6c453">The Anatomy of the Swipe</text><text x="1235.3" y="519" font-size="24" fill="#9aa5b8">tap to money arriving</text></g><g><path d="M106 537H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="575" font-size="28" fill="#9aa5b8">Markets</text><text x="302.7" y="575" font-size="28" fill="#f6ad55">Trading and Exchanges: Market Microstructure for Practitioners</text><text x="1235.3" y="575" font-size="25" fill="#9aa5b8">order books, spreads</text></g><g><path d="M106 593H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="631" font-size="28" fill="#9aa5b8">Crypto</text><text x="302.7" y="631" font-size="28" fill="#b794f6">Mastering Bitcoin · Mastering Ethereum</text><text x="1235.3" y="631" font-size="28" fill="#9aa5b8">UTXO and account</text></g></g>
+        </svg>
+    - id: read-2
+      contentType: html
+      name: "Resources 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">RESOURCES</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">နောက် ဘာဖတ်မလဲ — handbook ရဲ့ စာရင်း</text>
+        <rect x="90" y="205" width="1420" height="612" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="112" y="240" font-size="22" fill="#8a94a8" font-weight="700">layer</text><text x="302.7" y="240" font-size="22" fill="#8a94a8" font-weight="700">title</text><text x="1235.3" y="240" font-size="22" fill="#8a94a8" font-weight="700">covers</text><path d="M90 257H1510" stroke="#2a3345" stroke-width="2"/><g><text x="112" y="295" font-size="27" fill="#9aa5b8">Accounting</text><text x="302.7" y="295" font-size="28" fill="#4fd1c5">Accounting for Computer Scientists</text><text x="1235.3" y="295" font-size="22" fill="#9aa5b8">double entry as a graph</text></g><g><path d="M106 313H1494" stroke="#2a3345" stroke-width="1.5"/><text x="302.7" y="351" font-size="24" fill="#4fd1c5">The Accounting Game: Basic Accounting Fresh from the Lemonade Stand</text><text x="1235.3" y="351" font-size="24" fill="#9aa5b8">accounting from zero</text></g><g><path d="M106 369H1494" stroke="#2a3345" stroke-width="1.5"/><text x="302.7" y="407" font-size="28" fill="#4fd1c5">Modern Treasury, How to Scale a Ledger</text><text x="1235.3" y="407" font-size="27" fill="#9aa5b8">a production ledger</text></g><g><path d="M106 425H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="463" font-size="28" fill="#9aa5b8">Payments</text><text x="302.7" y="463" font-size="28" fill="#f6c453">Payments Systems in the U.S.</text><text x="1235.3" y="463" font-size="28" fill="#9aa5b8">cards, ACH, wires</text></g><g><path d="M106 481H1494" stroke="#2a3345" stroke-width="1.5"/><text x="302.7" y="519" font-size="28" fill="#f6c453">The Anatomy of the Swipe</text><text x="1235.3" y="519" font-size="24" fill="#9aa5b8">tap to money arriving</text></g><g><path d="M106 537H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="575" font-size="28" fill="#9aa5b8">Markets</text><text x="302.7" y="575" font-size="28" fill="#f6ad55">Trading and Exchanges: Market Microstructure for Practitioners</text><text x="1235.3" y="575" font-size="25" fill="#9aa5b8">order books, spreads</text></g><g><path d="M106 593H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="631" font-size="28" fill="#9aa5b8">Crypto</text><text x="302.7" y="631" font-size="28" fill="#b794f6">Mastering Bitcoin · Mastering Ethereum</text><text x="1235.3" y="631" font-size="28" fill="#9aa5b8">UTXO and account</text></g><g class="in"><path d="M106 649H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="687" font-size="25" fill="#9aa5b8">Engineering</text><text x="302.7" y="687" font-size="28" fill="#6cb2f5">Designing Data-Intensive Applications</text><text x="1235.3" y="687" font-size="28" fill="#9aa5b8">idempotency, logs</text></g><g class="in"><path d="M106 705H1494" stroke="#2a3345" stroke-width="1.5"/><text x="112" y="743" font-size="25" fill="#9aa5b8">KYC &amp; AML</text><text x="302.7" y="743" font-size="28" fill="#fc8181">Anti-Money Laundering in a Nutshell</text><text x="1235.3" y="743" font-size="28" fill="#9aa5b8">awareness level</text></g><g class="in"><path d="M106 761H1494" stroke="#2a3345" stroke-width="1.5"/><text x="302.7" y="799" font-size="27" fill="#fc8181">Mastering Anti-Money Laundering and Counter-Terrorist Financing</text><text x="1235.3" y="799" font-size="24" fill="#9aa5b8">a practitioner's guide</text></g>
+        </svg>
+    - id: wallet-1
+      contentType: html
+      name: "Wallet transfer API 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">WALLET TRANSFER API</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Wallet transfer တစ်ခုရဲ့ architecture</text>
+        <g class="in"><circle cx="150" cy="420" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="120.6" y="390.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="150" y="518" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="150" y="550" font-size="23" text-anchor="middle" fill="#8a94a8">key k-7f3a</text></g>
+        <g class="in"><rect x="300" y="360" width="300" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="322" y="388" width="64" height="64" style="color:#b794f6"/><text x="490" y="427.8" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600">Transfer API</text></g>
+        <path d="M216 420L286 420" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <g class="in"><rect x="680" y="255" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-key" x="702" y="275.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="298.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key store</text><text x="890" y="339.1" font-size="24" text-anchor="middle" fill="#8a94a8">key → response</text></g>
+        <path d="M605.8 411.9L671.9 318.9" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        </svg>
+    - id: wallet-2
+      contentType: html
+      name: "Wallet transfer API 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-queue" viewBox="0 0 48 48"><rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">WALLET TRANSFER API</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Wallet transfer တစ်ခုရဲ့ architecture</text>
+        <circle cx="150" cy="420" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="120.6" y="390.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="150" y="518" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="150" y="550" font-size="23" text-anchor="middle" fill="#8a94a8">key k-7f3a</text>
+        <rect x="300" y="360" width="300" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="322" y="388" width="64" height="64" style="color:#b794f6"/><text x="490" y="427.8" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600">Transfer API</text>
+        <path d="M216 420L286 420" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <g class="in"><rect x="660" y="215" width="380" height="450" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="682" y="251" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">ONE DB TRANSACTION</text></g>
+        <rect x="680" y="255" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-key" x="702" y="275.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="298.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key store</text><text x="890" y="339.1" font-size="24" text-anchor="middle" fill="#8a94a8">key → response</text>
+        <g class="in"><rect x="680" y="385" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="702" y="405.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="428.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="890" y="469.1" font-size="24" text-anchor="middle" fill="#8a94a8">check + post</text></g>
+        <g class="in"><rect x="680" y="515" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-queue" x="702" y="535.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="558.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">outbox</text><text x="890" y="599.1" font-size="24" text-anchor="middle" fill="#8a94a8">event row</text></g>
+        <path d="M605.8 411.9L671.9 318.9" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        </svg>
+    - id: wallet-3
+      contentType: html
+      name: "Wallet transfer API 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-queue" viewBox="0 0 48 48"><rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/></symbol><symbol id="i-mail" viewBox="0 0 48 48"><rect x="6" y="11" width="36" height="26" rx="3"/><path d="M6 13l18 14 18-14"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">WALLET TRANSFER API</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Wallet transfer တစ်ခုရဲ့ architecture</text>
+        <circle cx="150" cy="420" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="120.6" y="390.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="150" y="518" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="150" y="550" font-size="23" text-anchor="middle" fill="#8a94a8">key k-7f3a</text>
+        <rect x="300" y="360" width="300" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="322" y="388" width="64" height="64" style="color:#b794f6"/><text x="490" y="427.8" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600">Transfer API</text>
+        <path d="M216 420L286 420" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <rect x="660" y="215" width="380" height="450" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="682" y="251" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">ONE DB TRANSACTION</text>
+        <rect x="680" y="255" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-key" x="702" y="275.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="298.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key store</text><text x="890" y="339.1" font-size="24" text-anchor="middle" fill="#8a94a8">key → response</text>
+        <rect x="680" y="385" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="702" y="405.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="428.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="890" y="469.1" font-size="24" text-anchor="middle" fill="#8a94a8">check + post</text>
+        <rect x="680" y="515" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-queue" x="702" y="535.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="558.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">outbox</text><text x="890" y="599.1" font-size="24" text-anchor="middle" fill="#8a94a8">event row</text>
+        <path d="M605.8 411.9L671.9 318.9" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <g class="in"><rect x="1200" y="515" width="330" height="105" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-mail" x="1222" y="535.5" width="64" height="64" style="color:#6cb2f5"/><text x="1405" y="559.6" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">consumers</text><text x="1405" y="598.4" font-size="22" text-anchor="middle" fill="#8a94a8">dedupe by event id</text></g>
+        <path d="M1030 567.5L1186 567.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1108" y="611.3" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">at-least-once</text>
+        </svg>
+    - id: wallet-4
+      contentType: html
+      name: "Wallet transfer API 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-queue" viewBox="0 0 48 48"><rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/></symbol><symbol id="i-mail" viewBox="0 0 48 48"><rect x="6" y="11" width="36" height="26" rx="3"/><path d="M6 13l18 14 18-14"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">WALLET TRANSFER API</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Wallet transfer တစ်ခုရဲ့ architecture</text>
+        <circle cx="150" cy="420" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="120.6" y="390.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="150" y="518" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="150" y="550" font-size="23" text-anchor="middle" fill="#8a94a8">key k-7f3a</text>
+        <rect x="300" y="360" width="300" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="322" y="388" width="64" height="64" style="color:#b794f6"/><text x="490" y="427.8" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600">Transfer API</text>
+        <path d="M216 420L286 420" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <rect x="660" y="215" width="380" height="450" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="682" y="251" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">ONE DB TRANSACTION</text>
+        <rect x="680" y="255" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-key" x="702" y="275.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="298.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key store</text><text x="890" y="339.1" font-size="24" text-anchor="middle" fill="#8a94a8">key → response</text>
+        <rect x="680" y="385" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="702" y="405.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="428.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="890" y="469.1" font-size="24" text-anchor="middle" fill="#8a94a8">check + post</text>
+        <rect x="680" y="515" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-queue" x="702" y="535.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="558.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">outbox</text><text x="890" y="599.1" font-size="24" text-anchor="middle" fill="#8a94a8">event row</text>
+        <path d="M605.8 411.9L671.9 318.9" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <rect x="1200" y="515" width="330" height="105" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-mail" x="1222" y="535.5" width="64" height="64" style="color:#6cb2f5"/><text x="1405" y="559.6" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">consumers</text><text x="1405" y="598.4" font-size="22" text-anchor="middle" fill="#8a94a8">dedupe by event id</text>
+        <path d="M1030 567.5L1186 567.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1108" y="611.3" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">at-least-once</text>
+        <g class="in"><rect x="1200" y="385" width="330" height="105" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-bank" x="1222" y="405.5" width="64" height="64" style="color:#9aa5b8"/><text x="1405" y="445.6" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600">bank statement</text></g>
+        <path d="M1030 437.5L1186 437.5" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" marker-start="url(#ah-green)" class="dr"/><text x="1108" y="421.3" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">reconcile</text>
+        <g class="in"><rect x="90" y="760" width="853.5" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="90" y="760" width="853.5" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="516.7" y="794.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">internal transfer: check + post in one commit · no reservation</text></g>
+        </svg>
+    - id: wallet-5
+      contentType: html
+      name: "Wallet transfer API 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-blue" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#6cb2f5" stroke="#6cb2f5" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-green" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#68d391" stroke="#68d391" stroke-width="1.500" stroke-linejoin="round"/></marker><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-phone" viewBox="0 0 48 48"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol><symbol id="i-key" viewBox="0 0 48 48"><circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/></symbol><symbol id="i-ledger" viewBox="0 0 48 48"><rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/></symbol><symbol id="i-queue" viewBox="0 0 48 48"><rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/></symbol><symbol id="i-mail" viewBox="0 0 48 48"><rect x="6" y="11" width="36" height="26" rx="3"/><path d="M6 13l18 14 18-14"/></symbol><symbol id="i-bank" viewBox="0 0 48 48"><path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">WALLET TRANSFER API</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="858.5" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="995.3" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Wallet transfer တစ်ခုရဲ့ architecture</text>
+        <circle cx="150" cy="420" r="56" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-phone" x="120.6" y="390.6" width="58.800000000000004" height="58.800000000000004" style="color:#6cb2f5"/><text x="150" y="518" font-size="28" text-anchor="middle" fill="#e9edf5" font-weight="600">Client</text><text x="150" y="550" font-size="23" text-anchor="middle" fill="#8a94a8">key k-7f3a</text>
+        <rect x="300" y="360" width="300" height="120" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-server" x="322" y="388" width="64" height="64" style="color:#b794f6"/><text x="490" y="427.8" font-size="25" text-anchor="middle" fill="#e9edf5" font-weight="600">Transfer API</text>
+        <path d="M216 420L286 420" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <rect x="660" y="215" width="380" height="450" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="682" y="251" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">ONE DB TRANSACTION</text>
+        <rect x="680" y="255" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-key" x="702" y="275.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="298.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">key store</text><text x="890" y="339.1" font-size="24" text-anchor="middle" fill="#8a94a8">key → response</text>
+        <rect x="680" y="385" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-ledger" x="702" y="405.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="428.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">ledger</text><text x="890" y="469.1" font-size="24" text-anchor="middle" fill="#8a94a8">check + post</text>
+        <rect x="680" y="515" width="340" height="105" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-queue" x="702" y="535.5" width="64" height="64" style="color:#4fd1c5"/><text x="890" y="558.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">outbox</text><text x="890" y="599.1" font-size="24" text-anchor="middle" fill="#8a94a8">event row</text>
+        <path d="M605.8 411.9L671.9 318.9" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/>
+        <rect x="1200" y="515" width="330" height="105" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-mail" x="1222" y="535.5" width="64" height="64" style="color:#6cb2f5"/><text x="1405" y="559.6" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">consumers</text><text x="1405" y="598.4" font-size="22" text-anchor="middle" fill="#8a94a8">dedupe by event id</text>
+        <path d="M1030 567.5L1186 567.5" fill="none" stroke="#6cb2f5" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="12 9" marker-end="url(#ah-blue)"/><text x="1108" y="611.3" font-size="26" text-anchor="middle" fill="#6cb2f5" font-weight="600">at-least-once</text>
+        <rect x="1200" y="385" width="330" height="105" rx="18" fill="#121824" stroke="#9aa5b8" stroke-width="2.5"/><use href="#i-bank" x="1222" y="405.5" width="64" height="64" style="color:#9aa5b8"/><text x="1405" y="445.6" font-size="26" text-anchor="middle" fill="#e9edf5" font-weight="600">bank statement</text>
+        <path d="M1030 437.5L1186 437.5" fill="none" stroke="#68d391" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-green)" marker-start="url(#ah-green)"/><text x="1108" y="421.3" font-size="26" text-anchor="middle" fill="#68d391" font-weight="600">reconcile</text>
+        <rect x="90" y="760" width="853.5" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="90" y="760" width="853.5" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="516.7" y="794.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700">internal transfer: check + post in one commit · no reservation</text>
+        <g class="in"><rect x="280" y="565" width="340" height="110" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5" stroke-dasharray="10 8"/><text x="450" y="610.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">payout rail</text><text x="450" y="651.6" font-size="24" text-anchor="middle" fill="#8a94a8">reserve → call → resume</text></g>
+        <path d="M450 490L450 551" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9540
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "first: new key -> balance checked -> posted tx-2 -> outbox evt-1 => 200 tx-2\nbalances: 1042 60.00, 2077 40.00\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "first: new key -> balance checked -> posted tx-2 -> outbox evt-1 => 200 tx-2\nretry: key seen -> replay => 200 tx-2\nsame response: true\nbalances: 1042 60.00, 2077 40.00\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "first: new key -> balance checked -> posted tx-2 -> outbox evt-1 => 200 tx-2\nretry: key seen -> replay => 200 tx-2\nsame response: true\nbalances: 1042 60.00, 2077 40.00\nnew key, 70.00 more: 409\nbank 100.00 = owed to users 100.00\noutbox: [{evt-1 transfer.completed tx-2}]\n"
+
+scenes:
+  - id: hook
+    chapter: ခြေလှမ်း ခြောက်ခု
+    narration: >-
+      [[mark:show-moves]] fintech system design interview မှာ user နှစ်ယောက်ကြား ငွေလွှဲတဲ့ wallet transfer API
+      တစ်ခု ဒီဇိုင်းဆွဲပါ လို့ မေးလေ့ရှိပါတယ်။ ပုံမှန် backend အဖြေက endpoint တစ်ခု၊ balance column တစ်ခု၊
+      update နှစ်ကြောင်းပါ။ အဲဒီ အဖြေက retry လာရင် ငွေ ထပ်ပေါ်တာ၊ crash ဖြစ်ရင် ပျောက်တာ၊ auditor မေးရင်
+      ဖြေစရာ မရှိတာကို တစ်ခုမှ မဖြေပါဘူး။ ဒါကြောင့် design မေးခွန်းတိုင်းကို ခြေလှမ်း ခြောက်ခုနဲ့ ဖြေပါ။
+      [[mark:pt-m1]] ပထမက ငွေနဲ့ ပတ်သက်တဲ့ fact တွေကို အရင် မေးတာပါ။ currency ဘယ်နှခုလဲ၊ user ငွေကို ဘယ်သူ
+      ကိုင်ထားလဲ၊ ဘယ် rail ပေါ်က သွားလဲ၊ ဘာတွေက regulated ဖြစ်လဲ ဆိုတာပါ၊ domain lesson တွေမှာ ကြည့်ခဲ့တာတွေပါ။ [[mark:moves-2]] ဒုတိယက data
+      model ပါ။ float မဟုတ်တဲ့ Money type၊ double-entry ledger နဲ့ value၊ booking၊ settlement ဆိုတဲ့ အချိန်
+      သုံးမျိုးပါ၊ lesson ၂ ကနေ ၁၁ အထိ ကြည့်ခဲ့တာတွေပါ။ [[mark:moves-3]] တတိယက flow ကို state machine
+      အဖြစ် ဆွဲတာပါ။ invariant၊ reservation၊ idempotency key နဲ့ crash ဖြစ်လည်း ဆက်သွားနိုင်တဲ့ resumability ပါ၊ lesson ၁၇ ကနေ ၂၂ အထိပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Double-entry bookkeeping (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#double-entry-bookkeeping",
+        }
+    actions:
+      - {
+          id: show-moves,
+          type: slide.show,
+          at: { mark: show-moves, offsetMs: -700 },
+          slideId: moves-1,
+        }
+      - {
+          id: pt-title,
+          type: slide.point,
+          at: { afterAction: show-moves },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: pt-m1, type: slide.point, at: { mark: pt-m1 }, target: { x: 0.131, y: 0.387 } }
+      - { id: moves-2, type: slide.show, at: { mark: moves-2 }, slideId: moves-2 }
+      - {
+          id: pt-m2,
+          type: slide.point,
+          at: { afterAction: moves-2 },
+          target: { x: 0.131, y: 0.489 },
+        }
+      - { id: moves-3, type: slide.show, at: { mark: moves-3 }, slideId: moves-3 }
+      - {
+          id: pt-m3,
+          type: slide.point,
+          at: { afterAction: moves-3 },
+          target: { x: 0.131, y: 0.591 },
+        }
+
+  - id: moves-b
+    narration: >-
+      [[mark:moves-4]] စတုတ္ထက အပြင်လောကပါ။ provider API ကို မယုံဘဲ သုံးတာ၊ webhook ကို fact မဟုတ်ဘဲ hint
+      အဖြစ် ယူတာ၊ outbox နဲ့ event ထုတ်တာ၊ reconciliation နဲ့ တိုက်စစ်တာပါ၊ lesson ၂၃ ကနေ ၂၆ အထိပါ။ [[mark:moves-5]] ပဉ္စမက control နဲ့
+      သက်သေပါ။ audit trail၊ immutability၊ four-eyes နဲ့ access control တို့ဖြစ်ပြီး၊ ဘယ်သူ ဘာကို ဘာကြောင့်
+      လုပ်ခဲ့လဲ ဆိုတာကို နောက်မှ ပြနိုင်ဖို့ပါ။ [[mark:moves-6]] ဆဋ္ဌမက ဘာက ပျက်နိုင်လဲ၊ ဘယ်လို စစ်မလဲ ဆိုတာပါ။
+      invariant တွေ၊ property-based test နဲ့ crash injection ပါ။ [[mark:pt-p]] ခြေလှမ်း တစ်ခုချင်းက principle
+      သုံးချက်ထဲက တစ်ခုခုကို ကာကွယ်ပါတယ်၊ ဒါကြောင့် ဘယ်ခြေလှမ်းကိုမှ ကျော်လို့ မရပါဘူး။ lesson ၃၇ ကနေ ၃၉ အထိ flow သုံးခုက ဒီ ခြေလှမ်းတွေကို withdrawal၊ card deposit နဲ့ conversion ပေါ်မှာ တစ်ခါစီ သုံးပြခဲ့တာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Testing (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#testing",
+        }
+    actions:
+      - { id: moves-4, type: slide.show, at: { mark: moves-4 }, slideId: moves-4 }
+      - {
+          id: pt-m4,
+          type: slide.point,
+          at: { afterAction: moves-4 },
+          target: { x: 0.131, y: 0.693 },
+        }
+      - { id: moves-5, type: slide.show, at: { mark: moves-5 }, slideId: moves-5 }
+      - {
+          id: pt-m5,
+          type: slide.point,
+          at: { afterAction: moves-5 },
+          target: { x: 0.131, y: 0.796 },
+        }
+      - { id: moves-6, type: slide.show, at: { mark: moves-6 }, slideId: moves-6 }
+      - {
+          id: pt-m6,
+          type: slide.point,
+          at: { afterAction: moves-6 },
+          target: { x: 0.131, y: 0.898 },
+        }
+      - { id: pt-p, type: slide.point, at: { mark: pt-p }, target: { x: 0.125, y: 0.184 } }
+
+  - id: code
+    chapter: Wallet transfer ကို code နဲ့
+    narration: >-
+      [[mark:close-moves]] ခြေလှမ်းတွေကို wallet transfer တစ်ခုပေါ်မှာ စမ်းကြည့်ရအောင်။ [[mark:open-wallet]] ဒီ
+      program ကို course ထဲက အပိုင်းတွေနဲ့ ဆောက်ထားပါတယ်။ [[mark:sel-key]] request တိုင်းမှာ client ရွေးတဲ့
+      idempotency key ပါပြီး၊ ပထမဆုံး key store ကို ကြည့်ပါတယ်။ [[mark:sel-check]] key အသစ်ဆိုရင် balance ကို
+      စစ်ပြီး၊ မလောက်ရင် ငြင်းတဲ့ response ကိုပါ key နဲ့ သိမ်းပါတယ်။ [[mark:sel-post]] လောက်ရင် debit တစ်ကြောင်း၊
+      credit တစ်ကြောင်းပါတဲ့ transaction ကို post လုပ်ပြီး outbox ထဲ event တစ်ခု ထည့်ပါတယ်။ production မှာ
+      key၊ posting နဲ့ outbox row သုံးခုလုံး database transaction တစ်ခုတည်းနဲ့ commit ဖြစ်ရပါမယ်။ [[mark:run-1]]
+      run လိုက်ရအောင်။ [[mark:pt-first]] ပထမ request က key အသစ်ဖြစ်လို့ balance စစ်၊ post လုပ်၊ outbox ထဲ
+      ထည့်ပြီး transaction နံပါတ် နှစ်ကို ပြန်ပေးပါတယ်။ [[mark:pt-bal]] user ၁၀၄၂ မှာ ယူရို ခြောက်ဆယ်၊ ၂၀၇၇ မှာ
+      လေးဆယ် ဖြစ်သွားပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+    actions:
+      - { id: close-moves, type: slide.close, at: { mark: close-moves } }
+      - { id: open-wallet, type: workspace.openFile, at: { mark: open-wallet }, path: wallet.go }
+      - id: sel-key
+        type: editor.select
+        at: { mark: sel-key }
+        target: { file: wallet.go, text: "if res, ok := w.keys[r.Key]; ok {", occurrence: 1 }
+      - id: sel-check
+        type: editor.select
+        at: { mark: sel-check }
+        target: { file: wallet.go, text: "if w.ledger.Balance(r.From) < r.Amount {", occurrence: 1 }
+      - id: sel-post
+        type: editor.select
+        at: { mark: sel-post }
+        target: { file: wallet.go, text: "w.outbox = append(w.outbox, evt)", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "outbox evt-1 => 200 tx-2",
+          timeoutMs: 8000,
+        }
+      - id: pt-first
+        type: console.point
+        at: { mark: pt-first }
+        target: { text: "first: new key", occurrence: 1 }
+      - id: pt-bal
+        type: console.point
+        at: { mark: pt-bal }
+        target: { text: "balances: 1042 60.00", occurrence: 1 }
+
+  - id: retry
+    narration: >-
+      [[mark:dock-1]] ဒီ response က client ဆီ မရောက်ခဲ့ဘူး ဆိုပါစို့။ [[mark:open-main]] client က timeout ဖြစ်တာပဲ
+      သိလို့ key တူတူနဲ့ request ကို ထပ်ပို့ပါတယ်။ [[mark:type-retry]] ဒုတိယ response က ပထမ response နဲ့ တူမတူကိုပါ စစ်ပါမယ်။ balance တွေ ဘယ်လောက်
+      ဖြစ်မလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-retry]] retry က key ကို တွေ့လို့
+      ဘာမှ ထပ်မလုပ်ဘဲ ပထမ response ကိုပဲ ပြန်ပေးပါတယ်။ [[mark:pt-same]] response နှစ်ခု အတူတူပါပဲ။
+      [[mark:pt-bal2]] balance တွေလည်း မပြောင်းပါဘူး၊ request နှစ်ခု ရောက်ပေမဲ့ ငွေက တစ်ခါပဲ ရွှေ့ပါတယ်။
+      [[mark:dock-2]] ဒါက No invented data ကို code နဲ့ ထိန်းတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Idempotency (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#idempotency",
+        }
+    actions:
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: main.go }
+      - id: type-retry
+        type: editor.type
+        at: { mark: type-retry }
+        target: { file: main.go, after: "first.Status, first.TxID)\n", occurrence: 1 }
+        text: "\n\tagain, steps := w.Transfer(req)\n\tfmt.Println(\"retry:\", strings.Join(steps, \" -> \"), \"=>\", again.Status, again.TxID)\n\tfmt.Println(\"same response:\", again == first)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "same response: true",
+          timeoutMs: 8000,
+        }
+      - id: pt-retry
+        type: console.point
+        at: { mark: pt-retry }
+        target: { text: "retry: key seen -> replay", occurrence: 1 }
+      - id: pt-same
+        type: console.point
+        at: { mark: pt-same }
+        target: { text: "same response: true", occurrence: 1 }
+      - id: pt-bal2
+        type: console.point
+        at: { mark: pt-bal2 }
+        target: { text: "balances: 1042 60.00", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: books
+    narration: >-
+      [[mark:type-books]] ဒီတစ်ခါ key အသစ်နဲ့ ယူရို ခုနစ်ဆယ် ထပ်လွှဲခိုင်းပါမယ်၊ ပြီးရင် ခြေလှမ်း ခြောက်က invariant တစ်ခုကို ထည့်ပါမယ်။ ဒီ wallet မှာ ledger အရ user တွေကို ပေးစရာ ရှိတဲ့ စုစုပေါင်းက ဘဏ်ထဲက ငွေနဲ့ ညီရပါမယ်။ outbox ထဲက event တွေကိုလည်း ထုတ်ကြည့်ပါမယ်။ [[mark:run-3]] run
+      လိုက်ရအောင်။ [[mark:pt-short]] key အသစ် ဖြစ်ပေမဲ့ ကျန်တဲ့ balance က ခြောက်ဆယ်ပဲ ရှိလို့ ငြင်းပါတယ်၊ key က duplicate ကို ကာကွယ်ပြီး balance check က overdraft ကို ကာကွယ်တာပါ။ [[mark:pt-inv]] ဘဏ်ထဲက ယူရို တစ်ရာက user တွေကို ပေးစရာ တစ်ရာနဲ့ ညီပါတယ်။ [[mark:pt-out]]
+      outbox မှာ event တစ်ခုပဲ ရှိပါတယ်၊ retry က event အသစ် မထုတ်လို့ပါ။ [[mark:dock-3]] consumer ဘက်မှာတော့
+      relay က event ကို တစ်ခါထက် ပိုပို့နိုင်လို့ event id နဲ့ dedupe လုပ်ရပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Invariants (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#invariants",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Notifying reliably (Outbox and CDC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#notifying-reliably-outbox-and-cdc",
+        }
+    actions:
+      - id: type-books
+        type: editor.type
+        at: { mark: type-books }
+        target:
+          {
+            file: main.go,
+            after: "cents(w.ledger.Balance(\"liability:user:2077\")))\n",
+            occurrence: 1,
+          }
+        text: "\n\tshort, _ := w.Transfer(Request{Key: \"k-9b21\", From: req.From, To: req.To, Amount: 70_00})\n\tfmt.Println(\"new key, 70.00 more:\", short.Status)\n\tfmt.Println(\"bank\", cents(w.ledger.Balance(\"asset:bank\")), \"= owed to users\", cents(w.total()))\n\tfmt.Println(\"outbox:\", w.outbox)\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "bank 100.00 = owed to users 100.00",
+          timeoutMs: 8000,
+        }
+      - id: pt-short
+        type: console.point
+        at: { mark: pt-short }
+        target: { text: "new key, 70.00 more: 409", occurrence: 1 }
+      - id: pt-inv
+        type: console.point
+        at: { mark: pt-inv }
+        target: { text: "bank 100.00 = owed to users 100.00", occurrence: 1 }
+      - id: pt-out
+        type: console.point
+        at: { mark: pt-out }
+        target: { text: "outbox: [{evt-1", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+      - {
+          id: expect-file-retry,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: 'fmt.Println("same response:", again == first)',
+        }
+
+  - id: arch
+    chapter: Architecture နဲ့ it depends
+    narration: >-
+      [[mark:show-wallet]] interview မှာ ဆွဲပြရမယ့် architecture က ဒီလောက်ပါပဲ။ [[mark:pt-api]] client က key
+      တစ်ခုနဲ့ API ကို ခေါ်ပါတယ်။ [[mark:wallet-2]] key store၊ ledger နဲ့ outbox က database transaction
+      တစ်ခုထဲမှာ ရှိပါတယ်။ ဒီ boundary က design ရဲ့ အချက်အချာပါ၊ တစ်ခုခု အပြင် system ထဲ ရောက်သွားတာနဲ့ commit
+      တစ်ခုတည်း မဖြစ်နိုင်တော့လို့ပါ။ [[mark:wallet-3]] event ကို relay က consumer တွေဆီ အနည်းဆုံး တစ်ခါ
+      ပို့ပါတယ်။ [[mark:wallet-4]] ledger ကိုလည်း ဘဏ်ရဲ့ statement နဲ့ နေ့တိုင်း reconcile လုပ်ပါတယ်။
+      [[mark:pt-dep]] handbook ရဲ့ author ကိုယ်တိုင်က စာအုပ်ရဲ့ အများစုကို it depends နဲ့ စသင့်တယ်လို့ ရေးထားပြီး၊ အဲဒီအစား safe
+      default နဲ့ ဆုံးဖြတ်ဖို့ context ကို ပေးထားပါတယ်။ interview မှာလည်း အရေးကြီးတာက ဘာပေါ် မူတည်လဲ ဆိုတာပါ။ wallet နှစ်ခုကြား ငွေလွှဲတာက ကိုယ့် database
+      ထဲမှာပဲ ဖြစ်လို့ balance စစ်တာနဲ့ post လုပ်တာကို တစ်ခါတည်း လုပ်နိုင်ပြီး reservation မလိုပါဘူး။ [[mark:wallet-5]] payout ဆိုရင်တော့ bank ဒါမှမဟုတ် chain ကို ခေါ်ရတဲ့ အဆင့် ကြားထဲ ရောက်လာလို့ reservation၊ resumability နဲ့
+      reconciliation အပြည့် လိုလာပါတယ်။ အဲဒီ ကွာခြားချက်ကို ကိုယ်တိုင် ပြောနိုင်တာက senior အဖြေရဲ့ အမှတ်အသားပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Funds reservation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#funds-reservation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Reconciliation (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reconciliation",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Appendix C: What to expect (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/",
+        }
+    actions:
+      - {
+          id: show-wallet,
+          type: slide.show,
+          at: { mark: show-wallet, offsetMs: -700 },
+          slideId: wallet-1,
+        }
+      - { id: pt-api, type: slide.point, at: { mark: pt-api }, target: { x: 0.281, y: 0.542 } }
+      - { id: wallet-2, type: slide.show, at: { mark: wallet-2 }, slideId: wallet-2 }
+      - {
+          id: pt-db,
+          type: slide.point,
+          at: { afterAction: wallet-2 },
+          target: { x: 0.531, y: 0.698 },
+        }
+      - { id: wallet-3, type: slide.show, at: { mark: wallet-3 }, slideId: wallet-3 }
+      - {
+          id: pt-cons,
+          type: slide.point,
+          at: { afterAction: wallet-3 },
+          target: { x: 0.853, y: 0.698 },
+        }
+      - { id: wallet-4, type: slide.show, at: { mark: wallet-4 }, slideId: wallet-4 }
+      - {
+          id: pt-bank,
+          type: slide.point,
+          at: { afterAction: wallet-4 },
+          target: { x: 0.853, y: 0.553 },
+        }
+      - { id: pt-dep, type: slide.point, at: { mark: pt-dep }, target: { x: 0.317, y: 0.909 } }
+      - { id: wallet-5, type: slide.show, at: { mark: wallet-5 }, slideId: wallet-5 }
+      - {
+          id: pt-rail,
+          type: slide.point,
+          at: { afterAction: wallet-5 },
+          target: { x: 0.281, y: 0.759 },
+        }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] ဒီ မေးခွန်းမှာ interviewer တွေ နားထောင်တာက box တွေထက် အချက် သုံးချက် ဖြစ်တတ်ပါတယ်။
+      [[mark:iv-a]] ပထမ၊ principle သုံးချက်ကို ကိုယ့်စကားနဲ့ ပြောပြီး ဆုံးဖြတ်ချက် တစ်ခုချင်းကို ချိတ်ပြတာပါ။ key
+      store က ငွေ မပေါ်အောင်၊ outbox က event မပျောက်အောင်၊ reconciliation က ဘာကိုမှ အလိုလို မယုံလို့ ဆိုတာမျိုးပါ။
+      [[mark:iv-b]] ဒုတိယ၊ trade-off ကို နာမည်တပ်ပြောတာပါ၊ strong consistency နဲ့ latency၊ reservation ရဲ့
+      ရှုပ်ထွေးမှုနဲ့ ဘေးကင်းမှု စတာတွေပါ။ [[mark:iv-c]] တတိယ၊ it depends လို့ ပြောရင် ဘာပေါ် မူတည်လဲ ဆိုတာ
+      ဆက်ပြောတာပါ။ [[mark:iv-d]] ပြီးရင် ခြေလှမ်း ခြောက်ခုကို အစဉ်လိုက် သွားပါ။ money fact တွေကို အရင် မေးပြီးမှ box
+      ဆွဲပြီး၊ failure mode တွေအတွက် အချိန် ချန်ထားပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: read
+    chapter: နောက် ဘာဖတ်မလဲ
+    narration: >-
+      [[mark:show-read]] handbook က ဆက်ဖတ်ဖို့ စာရင်းကို layer အလိုက် ပေးထားပါတယ်၊ ကိုယ် လိုနေတဲ့ အပိုင်းကို
+      ရွေးဖတ်နိုင်အောင်ပါ။ [[mark:pt-acc]] accounting အတွက် Accounting for Computer Scientists က double-entry
+      ကို graph နဲ့ data model အဖြစ် engineer တွေအတွက် ရှင်းထားတဲ့ essay ပါ။ The Accounting Game၊ Basic Accounting Fresh from the Lemonade Stand က lemonade stand ဥပမာ တစ်ခုနဲ့ finance နောက်ခံ မလိုဘဲ အခြေခံကနေ သင်ပေးပါတယ်။ Modern Treasury ရဲ့ How to Scale a Ledger က production ledger
+      ဆောက်ပုံကို software engineering ဘက်ကနေ ပြပါတယ်။ [[mark:pt-pay]] payment အတွက် Payments Systems in the US က US ကို ဗဟိုပြုပြီး ဘဏ်တွေကြား ငွေရွှေ့ပုံကို card၊ ACH၊ wire နဲ့ check အထိ reference ပုံစံနဲ့ ပြပါတယ်။ The Anatomy of the Swipe က card ကို tap လုပ်တာကနေ ငွေ ရောက်တဲ့အထိ ရှင်းပါတယ်။ [[mark:pt-mkt]] Trading and Exchanges၊ Market Microstructure for Practitioners က order book၊ maker၊ taker နဲ့ spread တွေ ဘယ်က လာလဲ ဆိုတာကို အသေးစိတ် ပြပါတယ်။ [[mark:pt-cry]] Mastering Bitcoin
+      နဲ့ Mastering Ethereum က UTXO နဲ့ account model နှစ်ခုအတွက် developer အဆင့် reference တွေပါ။
+      [[mark:read-2]] Designing Data-Intensive Applications က idempotency၊ log၊ consistency နဲ့ ဒီ course ထဲက
+      failure mode တွေကို system ဘက်ကနေ ကြည့်ပါတယ်။ [[mark:pt-aml]] KYC နဲ့ AML အတွက်တော့ Anti-Money
+      Laundering in a Nutshell က တိုတိုနဲ့ မိတ်ဆက်ပေးပြီး၊ Mastering Anti-Money Laundering and Counter-Terrorist
+      Financing က ပိုလေးတဲ့ practitioner guide ပါ။ ဒီ နှစ်အုပ်က compliance professional တွေအတွက် ရေးထားလို့
+      domain ကိုယ်တိုင် လိုမှ ဖတ်ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Resources (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#resources",
+        }
+    actions:
+      - {
+          id: show-read,
+          type: slide.show,
+          at: { mark: show-read, offsetMs: -700 },
+          slideId: read-1,
+        }
+      - { id: pt-acc, type: slide.point, at: { mark: pt-acc }, target: { x: 0.131, y: 0.341 } }
+      - { id: pt-pay, type: slide.point, at: { mark: pt-pay }, target: { x: 0.131, y: 0.528 } }
+      - { id: pt-mkt, type: slide.point, at: { mark: pt-mkt }, target: { x: 0.131, y: 0.652 } }
+      - { id: pt-cry, type: slide.point, at: { mark: pt-cry }, target: { x: 0.131, y: 0.714 } }
+      - { id: read-2, type: slide.show, at: { mark: read-2 }, slideId: read-2 }
+      - {
+          id: pt-ddia,
+          type: slide.point,
+          at: { afterAction: read-2 },
+          target: { x: 0.131, y: 0.777 },
+        }
+      - { id: pt-aml, type: slide.point, at: { mark: pt-aml }, target: { x: 0.131, y: 0.839 } }
+
+  - id: close
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-read]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ နှစ်ခု ရှိပါတယ်။ [[mark:sel-try]] transfer ပမာဏကို ယူရို
+      တစ်ရာ့နှစ်ဆယ် လို့ ပြောင်းပြီး run ကြည့်ပါ။ balance မလောက်လို့ ပထမ request က ငြင်းခံရပြီး၊ retry ကလည်း အဲဒီ ငြင်းတဲ့ response ကိုပဲ ပြန်ရပါမယ်။ key အသစ်နဲ့ ခုနစ်ဆယ်ကတော့ လောက်လို့ ရသွားပြီး outbox မှာ event တစ်ခုပဲ ရှိပါမယ်။ ပြီးရင် payout API တစ်ခုကို
+      ခြေလှမ်း ခြောက်ခုနဲ့ စာရွက်ပေါ်မှာ ဒီဇိုင်းဆွဲကြည့်ပါ၊ bank ကို ခေါ်ရတဲ့ အဆင့် ပါလာတာနဲ့ ဘယ်ခြေလှမ်းတွေ
+      ပြောင်းသွားလဲ ဆိုတာ သတိထားကြည့်ပါ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ fintech design မေးခွန်းတိုင်းကို ခြေလှမ်း
+      ခြောက်ခုနဲ့ ဖြေပြီး၊ ဆုံးဖြတ်ချက် တိုင်းကို ငွေ မပေါ်၊ မပျောက်၊ ဘာကိုမှ အလိုလို မယုံ ဆိုတဲ့ principle
+      သုံးချက်နဲ့ ချိတ်ပါ။ [[mark:thanks]] ဒီ course က Voytek Pitula ရေးတဲ့ Fintech Engineering Handbook ကို အခြေခံထားပြီး၊ handbook က Creative Commons Attribution လေး ဒသမ သုည
+      license နဲ့ ထုတ်ထားတာပါ။ handbook ကို payment၊ accounting၊ controlling
+      နဲ့ treasury ဘက်က fiat ရော crypto ရော အတွေ့အကြုံကနေ ရေးထားပြီး၊ ဆက်ပြီး update လုပ်နေတဲ့ document
+      ပါ၊ feedback ကို GitHub Issues မှာ ပေးနိုင်ပါတယ်။ [[mark:advice]] handbook ကိုယ်တိုင် ပြောထားသလို ဒီထဲက ဘာမှ legal၊
+      compliance ဒါမှမဟုတ် financial advice မဟုတ်ပါဘူး။ course ကို အဆုံးထိ လိုက်ခဲ့တဲ့အတွက် ကျေးဇူးတင်ပါတယ်
+      ခင်ဗျာ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Appendix C: About this handbook (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/",
+        }
+      - {
+          title: "Creative Commons — Attribution 4.0 International (CC BY 4.0)",
+          url: "https://creativecommons.org/licenses/by/4.0/",
+        }
+    actions:
+      - { id: close-read, type: slide.close, at: { mark: close-read } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: main.go, text: "Amount: 40_00}", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

@@ -1,0 +1,869 @@
+# Fintech Engineering, lesson 29: the change trail, from a commit to the version that runs (Burmese).
+#
+# Source: Fintech Engineering Handbook, "The change trail (SDLC)" (CC BY 4.0, Voytek Pitula).
+# Facts: B06 (Knight Capital, 1 August 2012), B21 (SOC 2 CC8.1, PCI DSS 6.5.1).
+# Start state: trail.go holds the record types, what each of eight servers reports it runs, and
+# the deploy log; main.go holds three change records and the merge gate `review`, run over them.
+# Edits, all insert-only, in main.go:
+#   1. the release gate: every server must report the release before the flag goes on
+#                                                            -> run-2: srv-8 runs r41, flag false
+#   2. which version ran on srv-8 at a given moment, from the deploy log
+#                                                            -> run-3: r41, deployed by u-40
+# Figures: trail (commit → review → checks → deploy → running), enforced (a rule people remember
+# vs a rule the system enforces), case (Knight Capital: one of eight servers), drift (where the
+# trail is bypassed), iv (the interview answer).
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-29-change-trail
+  title: "Fintech Engineering 29: Code ကနေ production အထိ trail"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        )
+
+        const release = "r42"
+
+        var changes = []Change{
+        	{"a41f9c2", "u-17", "u-23", "PAY-311", true},
+        	{"7be03d1", "u-23", "u-23", "PAY-318", true},
+        	{"c90e5aa", "u-31", "u-17", "", false},
+        }
+
+        // review is the merge gate: the rules a change must meet before it reaches main.
+        func review(c Change) []string {
+        	var why []string
+        	if c.Approver == "" || c.Approver == c.Author {
+        		why = append(why, "no second reviewer")
+        	}
+        	if c.Ticket == "" {
+        		why = append(why, "no ticket")
+        	}
+        	if !c.Checks {
+        		why = append(why, "checks failed")
+        	}
+        	return why
+        }
+
+        func main() {
+        	for _, c := range changes {
+        		if why := review(c); len(why) > 0 {
+        			fmt.Println(c.Commit, "blocked:", strings.Join(why, ", "))
+        		} else {
+        			fmt.Println(c.Commit, "merged")
+        		}
+        	}
+        }
+      trail.go: |
+        package main
+
+        import "slices"
+
+        // Change is one merge request as source control recorded it.
+        type Change struct {
+        	Commit   string
+        	Author   string
+        	Approver string
+        	Ticket   string
+        	Checks   bool // the required CI checks passed
+        }
+
+        // Server is what one production server reports it is running right now.
+        type Server struct {
+        	Name    string
+        	Version string
+        }
+
+        var fleet = []Server{
+        	{"srv-1", "r42"}, {"srv-2", "r42"}, {"srv-3", "r42"}, {"srv-4", "r42"},
+        	{"srv-5", "r42"}, {"srv-6", "r42"}, {"srv-7", "r42"}, {"srv-8", "r41"},
+        }
+
+        // Deploy is one line of the deploy log: a version, who released it, when,
+        // and the servers that confirmed they run it.
+        type Deploy struct {
+        	At      string
+        	Version string
+        	By      string
+        	Servers []string
+        }
+
+        var deploys = []Deploy{
+        	{"02-20 18:05", "r41", "u-40", []string{"srv-1", "srv-2", "srv-3", "srv-4",
+        		"srv-5", "srv-6", "srv-7", "srv-8"}},
+        	{"03-02 18:10", "r42", "u-52", []string{"srv-1", "srv-2", "srv-3", "srv-4",
+        		"srv-5", "srv-6", "srv-7"}},
+        }
+
+        func (d Deploy) reached(server string) bool { return slices.Contains(d.Servers, server) }
+  slides:
+    - id: case-1
+      contentType: html
+      name: "Knight Capital · 1 Aug 2012 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">KNIGHT CAPITAL · 1 AUG 2012</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Server 8 လုံးထဲက 1 လုံးကို code အသစ် မရောက်ခဲ့ဘူး</text>
+        <g class="in"><rect x="70" y="220" width="790" height="610" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="92" y="256" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">SMARS · order router</text></g>
+        <g class="in"><rect x="100" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="185" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 1</text><text x="185" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text></g>
+        <g class="in"><rect x="290" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="375" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 2</text><text x="375" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text></g>
+        <g class="in"><rect x="480" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="565" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 3</text><text x="565" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text></g>
+        <g class="in"><rect x="670" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="755" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 4</text><text x="755" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text></g>
+        <g class="in"><rect x="100" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="185" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 5</text><text x="185" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text></g>
+        <g class="in"><rect x="290" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="375" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 6</text><text x="375" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text></g>
+        <g class="in"><rect x="480" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="565" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 7</text><text x="565" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text></g>
+        <g class="in"><rect x="670" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><rect x="670" y="450" width="170" height="130" rx="18" fill="#fc8181" opacity="0.13"/><text x="755" y="506.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 8</text><text x="755" y="546.3" font-size="23" text-anchor="middle" fill="#8a94a8">Power Peg</text></g>
+        <g class="in"><circle cx="834" cy="456" r="24" fill="#0b0e14" stroke="#f6ad55" stroke-width="3"/><use href="#i-warn" x="820.2" y="442.2" width="27.599999999999998" height="27.599999999999998" style="color:#f6ad55" stroke-width="5"/></g>
+        </svg>
+    - id: case-2
+      contentType: html
+      name: "Knight Capital · 1 Aug 2012 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">KNIGHT CAPITAL · 1 AUG 2012</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Server 8 လုံးထဲက 1 လုံးကို code အသစ် မရောက်ခဲ့ဘူး</text>
+        <rect x="70" y="220" width="790" height="610" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="92" y="256" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">SMARS · order router</text>
+        <rect x="100" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="185" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 1</text><text x="185" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="290" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="375" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 2</text><text x="375" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="480" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="565" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 3</text><text x="565" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="670" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="755" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 4</text><text x="755" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="100" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="185" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 5</text><text x="185" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="290" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="375" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 6</text><text x="375" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="480" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="565" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 7</text><text x="565" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="670" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><rect x="670" y="450" width="170" height="130" rx="18" fill="#fc8181" opacity="0.13"/><text x="755" y="506.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 8</text><text x="755" y="546.3" font-size="23" text-anchor="middle" fill="#8a94a8">Power Peg</text>
+        <circle cx="834" cy="456" r="24" fill="#0b0e14" stroke="#f6ad55" stroke-width="3"/><use href="#i-warn" x="820.2" y="442.2" width="27.599999999999998" height="27.599999999999998" style="color:#f6ad55" stroke-width="5"/>
+        <g class="in"><rect x="120" y="700" width="361.6" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="120" y="700" width="361.6" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="300.8" y="734.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">repurposed flag → ON</text></g>
+        <path d="M490.4 720.3L742.6 586.6" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)" class="dr"/>
+        </svg>
+    - id: case-3
+      contentType: html
+      name: "Knight Capital · 1 Aug 2012 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">KNIGHT CAPITAL · 1 AUG 2012</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Server 8 လုံးထဲက 1 လုံးကို code အသစ် မရောက်ခဲ့ဘူး</text>
+        <rect x="70" y="220" width="790" height="610" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="92" y="256" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">SMARS · order router</text>
+        <rect x="100" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="185" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 1</text><text x="185" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="290" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="375" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 2</text><text x="375" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="480" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="565" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 3</text><text x="565" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="670" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="755" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 4</text><text x="755" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="100" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="185" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 5</text><text x="185" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="290" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="375" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 6</text><text x="375" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="480" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="565" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 7</text><text x="565" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="670" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><rect x="670" y="450" width="170" height="130" rx="18" fill="#fc8181" opacity="0.13"/><text x="755" y="506.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 8</text><text x="755" y="546.3" font-size="23" text-anchor="middle" fill="#8a94a8">Power Peg</text>
+        <circle cx="834" cy="456" r="24" fill="#0b0e14" stroke="#f6ad55" stroke-width="3"/><use href="#i-warn" x="820.2" y="442.2" width="27.599999999999998" height="27.599999999999998" style="color:#f6ad55" stroke-width="5"/>
+        <rect x="120" y="700" width="361.6" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="120" y="700" width="361.6" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="300.8" y="734.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">repurposed flag → ON</text>
+        <path d="M490.4 720.3L742.6 586.6" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <g class="in"><text x="940" y="330" font-size="84" fill="#f6ad55" font-weight="800">~45 min</text><text x="940" y="368" font-size="26" fill="#8a94a8">child orders by the millions</text></g>
+        <g class="in"><text x="940" y="520" font-size="84" fill="#fc8181" font-weight="800">$460M+</text><text x="940" y="558" font-size="26" fill="#8a94a8">loss — SEC figure</text></g>
+        <g class="in"><text x="940" y="625" font-size="26" fill="#8a94a8">4M+ executions · 154 stocks</text></g>
+        </svg>
+    - id: case-4
+      contentType: html
+      name: "Knight Capital · 1 Aug 2012 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#fc8181" stop-opacity="0.13"/><stop offset="1" stop-color="#fc8181" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-red" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#fc8181" stroke="#fc8181" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-warn" viewBox="0 0 48 48"><path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#fc8181" font-weight="700" letter-spacing="0.14em">KNIGHT CAPITAL · 1 AUG 2012</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Server 8 လုံးထဲက 1 လုံးကို code အသစ် မရောက်ခဲ့ဘူး</text>
+        <rect x="70" y="220" width="790" height="610" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="92" y="256" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">SMARS · order router</text>
+        <rect x="100" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="185" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 1</text><text x="185" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="290" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="375" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 2</text><text x="375" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="480" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="565" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 3</text><text x="565" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="670" y="290" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="755" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 4</text><text x="755" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="100" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="185" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 5</text><text x="185" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="290" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="375" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 6</text><text x="375" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="480" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="565" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 7</text><text x="565" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">RLP code</text>
+        <rect x="670" y="450" width="170" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><rect x="670" y="450" width="170" height="130" rx="18" fill="#fc8181" opacity="0.13"/><text x="755" y="506.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">srv 8</text><text x="755" y="546.3" font-size="23" text-anchor="middle" fill="#8a94a8">Power Peg</text>
+        <circle cx="834" cy="456" r="24" fill="#0b0e14" stroke="#f6ad55" stroke-width="3"/><use href="#i-warn" x="820.2" y="442.2" width="27.599999999999998" height="27.599999999999998" style="color:#f6ad55" stroke-width="5"/>
+        <rect x="120" y="700" width="361.6" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="120" y="700" width="361.6" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="300.8" y="734.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">repurposed flag → ON</text>
+        <path d="M490.4 720.3L742.6 586.6" fill="none" stroke="#fc8181" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-red)"/>
+        <text x="940" y="330" font-size="84" fill="#f6ad55" font-weight="800">~45 min</text><text x="940" y="368" font-size="26" fill="#8a94a8">child orders by the millions</text>
+        <text x="940" y="520" font-size="84" fill="#fc8181" font-weight="800">$460M+</text><text x="940" y="558" font-size="26" fill="#8a94a8">loss — SEC figure</text>
+        <text x="940" y="625" font-size="26" fill="#8a94a8">4M+ executions · 154 stocks</text>
+        <g class="in"><rect x="920" y="680" width="610" height="150" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><text x="1225" y="729.6" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">SEC order · 2013 · $12M</text><text x="1225" y="770.4" font-size="24" text-anchor="middle" fill="#8a94a8">no written procedure for a second</text><text x="1225" y="802.8" font-size="24" text-anchor="middle" fill="#8a94a8">technician to review the deployment</text></g>
+        </svg>
+    - id: drift-1
+      contentType: html
+      name: "Where it gets hard 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">WHERE IT GETS HARD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Trail ကို ကျော်သွားနိုင်တဲ့ နေရာ 3 ခု</text>
+        <g class="in"><text x="80" y="250" font-size="26" fill="#f6ad55" font-weight="700">1  deploy log ≠ what runs</text></g>
+        <g class="in"><rect x="80" y="280" width="800" height="244" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="315" font-size="22" fill="#8a94a8" font-weight="700">server</text><text x="453.3" y="315" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">tool logged</text><text x="737.8" y="315" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">server reports</text><path d="M80 332H880" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="390" font-size="28" fill="#e9edf5" class="mono">srv-1 … 7</text><text x="453.3" y="390" font-size="28" text-anchor="middle" fill="#68d391" class="mono">r42</text><text x="737.8" y="390" font-size="28" text-anchor="middle" fill="#68d391" class="mono">r42</text></g><g><rect x="86" y="433" width="788" height="86" rx="10" fill="#fc8181" opacity="0.14"/><path d="M96 428H864" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="486" font-size="28" fill="#e9edf5" class="mono">srv-8</text><text x="453.3" y="486" font-size="28" text-anchor="middle" fill="#68d391" class="mono">r42 ✓</text><text x="737.8" y="486" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">r41</text></g></g>
+        <g class="in"><rect x="80" y="600" width="622" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="80" y="600" width="622" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="391" y="634.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">reconcile: mismatch → flag stays off</text></g>
+        <g class="in"><text x="80" y="740" font-size="32" fill="#8a94a8" class="mono">log = intent   ·   report = fact</text></g>
+        </svg>
+    - id: drift-2
+      contentType: html
+      name: "Where it gets hard 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">WHERE IT GETS HARD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Trail ကို ကျော်သွားနိုင်တဲ့ နေရာ 3 ခု</text>
+        <text x="80" y="250" font-size="26" fill="#f6ad55" font-weight="700">1  deploy log ≠ what runs</text>
+        <rect x="80" y="280" width="800" height="244" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="315" font-size="22" fill="#8a94a8" font-weight="700">server</text><text x="453.3" y="315" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">tool logged</text><text x="737.8" y="315" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">server reports</text><path d="M80 332H880" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="390" font-size="28" fill="#e9edf5" class="mono">srv-1 … 7</text><text x="453.3" y="390" font-size="28" text-anchor="middle" fill="#68d391" class="mono">r42</text><text x="737.8" y="390" font-size="28" text-anchor="middle" fill="#68d391" class="mono">r42</text></g><g><rect x="86" y="433" width="788" height="86" rx="10" fill="#fc8181" opacity="0.14"/><path d="M96 428H864" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="486" font-size="28" fill="#e9edf5" class="mono">srv-8</text><text x="453.3" y="486" font-size="28" text-anchor="middle" fill="#68d391" class="mono">r42 ✓</text><text x="737.8" y="486" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">r41</text></g>
+        <rect x="80" y="600" width="622" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="80" y="600" width="622" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="391" y="634.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">reconcile: mismatch → flag stays off</text>
+        <g class="in"><text x="960" y="250" font-size="26" fill="#f6ad55" font-weight="700">2  a flag is a deploy</text></g>
+        <g class="in"><rect x="960" y="280" width="560" height="150" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-gear" x="982" y="323" width="64" height="64" style="color:#f6ad55"/><text x="1280" y="344.9" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">flag · config change</text><text x="1280" y="387" font-size="22" text-anchor="middle" fill="#8a94a8">code မပြောင်းဘဲ behaviour ပြောင်းတယ်</text></g>
+        <text x="80" y="740" font-size="32" fill="#8a94a8" class="mono">log = intent   ·   report = fact</text>
+        </svg>
+    - id: drift-3
+      contentType: html
+      name: "Where it gets hard 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-gear" viewBox="0 0 48 48"><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/></symbol><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">WHERE IT GETS HARD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Trail ကို ကျော်သွားနိုင်တဲ့ နေရာ 3 ခု</text>
+        <text x="80" y="250" font-size="26" fill="#f6ad55" font-weight="700">1  deploy log ≠ what runs</text>
+        <rect x="80" y="280" width="800" height="244" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="315" font-size="22" fill="#8a94a8" font-weight="700">server</text><text x="453.3" y="315" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">tool logged</text><text x="737.8" y="315" font-size="22" text-anchor="middle" fill="#8a94a8" font-weight="700">server reports</text><path d="M80 332H880" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="390" font-size="28" fill="#e9edf5" class="mono">srv-1 … 7</text><text x="453.3" y="390" font-size="28" text-anchor="middle" fill="#68d391" class="mono">r42</text><text x="737.8" y="390" font-size="28" text-anchor="middle" fill="#68d391" class="mono">r42</text></g><g><rect x="86" y="433" width="788" height="86" rx="10" fill="#fc8181" opacity="0.14"/><path d="M96 428H864" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="486" font-size="28" fill="#e9edf5" class="mono">srv-8</text><text x="453.3" y="486" font-size="28" text-anchor="middle" fill="#68d391" class="mono">r42 ✓</text><text x="737.8" y="486" font-size="28" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">r41</text></g>
+        <rect x="80" y="600" width="622" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="80" y="600" width="622" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="391" y="634.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">reconcile: mismatch → flag stays off</text>
+        <text x="960" y="250" font-size="26" fill="#f6ad55" font-weight="700">2  a flag is a deploy</text>
+        <rect x="960" y="280" width="560" height="150" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-gear" x="982" y="323" width="64" height="64" style="color:#f6ad55"/><text x="1280" y="344.9" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">flag · config change</text><text x="1280" y="387" font-size="22" text-anchor="middle" fill="#8a94a8">code မပြောင်းဘဲ behaviour ပြောင်းတယ်</text>
+        <g class="in"><text x="960" y="500" font-size="26" fill="#b794f6" font-weight="700">3  who can change the gate?</text></g>
+        <g class="in"><rect x="960" y="530" width="560" height="150" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-lock" x="982" y="573" width="64" height="64" style="color:#b794f6"/><text x="1280" y="595.2" font-size="30" text-anchor="middle" fill="#e9edf5" font-weight="600">branch protection · pipeline</text><text x="1280" y="635.3" font-size="24" text-anchor="middle" fill="#8a94a8">admin bypass = break-glass</text></g>
+        <g class="in"><rect x="960" y="720" width="394.3" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="960" y="720" width="394.3" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="1157.1" y="754.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">a change with its own trail</text></g>
+        <text x="80" y="740" font-size="32" fill="#8a94a8" class="mono">log = intent   ·   report = fact</text>
+        </svg>
+    - id: enforced-1
+      contentType: html
+      name: "Enforced 1/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">ENFORCED</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">လူက မှတ်ထားတဲ့ rule နဲ့ system က ပိတ်ထားတဲ့ rule</text>
+        <g class="in"><text x="100" y="250" font-size="26" fill="#fc8181" font-weight="700">remembered</text></g>
+        <g class="in"><rect x="100" y="280" width="660" height="262" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="314" font-size="22" fill="#8a94a8" font-weight="700" class="mono">wiki / how we deploy</text><path d="M100 326H760" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="376.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">1. open a pull request</text></g><g><text x="124" y="421.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">2. ask a colleague to review</text></g><g><text x="124" y="466.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">3. run the tests first</text></g><g><text x="124" y="511.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">4. never push to main</text></g></g>
+        <g class="in"><circle cx="754" cy="286" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="740.2" y="272.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        </svg>
+    - id: enforced-2
+      contentType: html
+      name: "Enforced 2/2"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">ENFORCED</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">လူက မှတ်ထားတဲ့ rule နဲ့ system က ပိတ်ထားတဲ့ rule</text>
+        <text x="100" y="250" font-size="26" fill="#fc8181" font-weight="700">remembered</text>
+        <rect x="100" y="280" width="660" height="262" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="124" y="314" font-size="22" fill="#8a94a8" font-weight="700" class="mono">wiki / how we deploy</text><path d="M100 326H760" stroke="#2a3345" stroke-width="2"/><g><text x="124" y="376.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">1. open a pull request</text></g><g><text x="124" y="421.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">2. ask a colleague to review</text></g><g><text x="124" y="466.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">3. run the tests first</text></g><g><text x="124" y="511.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">4. never push to main</text></g>
+        <circle cx="754" cy="286" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="740.2" y="272.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <g class="in"><text x="840" y="250" font-size="26" fill="#68d391" font-weight="700">enforced</text></g>
+        <g class="in"><rect x="840" y="280" width="660" height="307" rx="16" fill="#0e131d" stroke="#2a3345" stroke-width="2"/><text x="864" y="314" font-size="22" fill="#8a94a8" font-weight="700" class="mono">branch protection / main</text><path d="M840 326H1500" stroke="#2a3345" stroke-width="2"/><g><text x="864" y="376.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">required_approvals: 1</text></g><g><rect x="848" y="392.9" width="644" height="45" rx="8" fill="#68d391" opacity="0.16"/><text x="864" y="421.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">author_can_approve: false</text></g><g><text x="864" y="466.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">required_checks: [test, scan]</text></g><g><text x="864" y="511.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">direct_push: false</text></g><g><text x="864" y="556.4" font-size="30" class="mono" xml:space="preserve" fill="#e9edf5">force_push: false</text></g></g>
+        <g class="in"><circle cx="1494" cy="286" r="24" fill="#0b0e14" stroke="#68d391" stroke-width="3"/><use href="#i-check" x="1480.2" y="272.2" width="27.599999999999998" height="27.599999999999998" style="color:#68d391" stroke-width="5"/></g>
+        <g class="in"><rect x="483.1" y="680" width="633.9" height="50" rx="25" fill="#b794f6" opacity="0.16"/><rect x="483.1" y="680" width="633.9" height="50" rx="25" fill="none" stroke="#b794f6" stroke-width="2"/><text x="800" y="714.1" font-size="26" text-anchor="middle" fill="#b794f6" font-weight="700">SOC 2 CC8.1  ·  PCI DSS v4.0.1 Req. 6.5.1</text></g>
+        <g class="in"><text x="800" y="800" font-size="26" text-anchor="middle" fill="#8a94a8">auditor: "we follow it" ✗   ·   enforced by the system ✓</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">Production ကို ဘယ် code ရောက်ခဲ့လဲ၊ ဘယ်လို သက်သေပြမလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">Production ကို ဘယ် code ရောက်ခဲ့လဲ၊ ဘယ်လို သက်သေပြမလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Source control = the record — commit → author → ticket</text><text x="188" y="311" font-size="26" fill="#8a94a8">signed commits၊ protected main၊ force-push ပိတ်ထား</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">Production ကို ဘယ် code ရောက်ခဲ့လဲ၊ ဘယ်လို သက်သေပြမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Source control = the record — commit → author → ticket</text><text x="188" y="311" font-size="26" fill="#8a94a8">signed commits၊ protected main၊ force-push ပိတ်ထား</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#b794f6"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Gates enforced by the system, not by memory</text><text x="188" y="443" font-size="26" fill="#8a94a8">required review + checks၊ approver ≠ author ကို tool က စစ်</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">Production ကို ဘယ် code ရောက်ခဲ့လဲ၊ ဘယ်လို သက်သေပြမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Source control = the record — commit → author → ticket</text><text x="188" y="311" font-size="26" fill="#8a94a8">signed commits၊ protected main၊ force-push ပိတ်ထား</text></g><g><circle cx="138" cy="381" r="25" fill="#b794f6"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Gates enforced by the system, not by memory</text><text x="188" y="443" font-size="26" fill="#8a94a8">required review + checks၊ approver ≠ author ကို tool က စစ်</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Deploys traceable — which version, where, who, when</text><text x="188" y="575" font-size="26" fill="#8a94a8">deploy log ကို server report နဲ့ reconcile</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="45" fill="#e9edf5" font-weight="700">Production ကို ဘယ် code ရောက်ခဲ့လဲ၊ ဘယ်လို သက်သေပြမလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#4fd1c5"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Source control = the record — commit → author → ticket</text><text x="188" y="311" font-size="26" fill="#8a94a8">signed commits၊ protected main၊ force-push ပိတ်ထား</text></g><g><circle cx="138" cy="381" r="25" fill="#b794f6"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Gates enforced by the system, not by memory</text><text x="188" y="443" font-size="26" fill="#8a94a8">required review + checks၊ approver ≠ author ကို tool က စစ်</text></g><g><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Deploys traceable — which version, where, who, when</text><text x="188" y="575" font-size="26" fill="#8a94a8">deploy log ကို server report နဲ့ reconcile</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">incident time → running version → commits → approvals</text><text x="188" y="707" font-size="26" fill="#8a94a8">query တစ်ခုနဲ့ ပြနိုင်အောင် ထားမယ်</text></g>
+        </svg>
+    - id: trail-1
+      contentType: html
+      name: "Change trail 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">CHANGE TRAIL</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Production ရောက်တဲ့ code တိုင်းမှာ trail ရှိရတယ်</text>
+        <g class="in"><rect x="72" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-code" x="168" y="287.7" width="64" height="64" style="color:#4fd1c5"/><text x="200" y="394.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">commit</text><text x="200" y="434.3" font-size="23" text-anchor="middle" fill="#8a94a8">what · who · why</text></g>
+        <g class="in"><text x="200" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">a41f9c2</text><text x="200" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">by u-17</text><text x="200" y="583.4" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">PAY-311</text></g>
+        </svg>
+    - id: trail-2
+      contentType: html
+      name: "Change trail 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol><symbol id="i-eye" viewBox="0 0 48 48"><path d="M4 24c5-9 12-13 20-13s15 4 20 13c-5 9-12 13-20 13S9 33 4 24z"/><circle cx="24" cy="24" r="6"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">CHANGE TRAIL</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Production ရောက်တဲ့ code တိုင်းမှာ trail ရှိရတယ်</text>
+        <rect x="72" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-code" x="168" y="287.7" width="64" height="64" style="color:#4fd1c5"/><text x="200" y="394.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">commit</text><text x="200" y="434.3" font-size="23" text-anchor="middle" fill="#8a94a8">what · who · why</text>
+        <text x="200" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">a41f9c2</text><text x="200" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">by u-17</text><text x="200" y="583.4" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">PAY-311</text>
+        <g class="in"><rect x="372" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-eye" x="468" y="287" width="64" height="64" style="color:#b794f6"/><text x="500" y="393.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">review</text><text x="500" y="434.6" font-size="24" text-anchor="middle" fill="#8a94a8">a second person</text></g>
+        <g class="in"><text x="500" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">approver u-23</text><text x="500" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">≠ author</text></g>
+        <g class="in"><rect x="672" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-check" x="768" y="287" width="64" height="64" style="color:#68d391"/><text x="800" y="393.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">checks</text><text x="800" y="434.6" font-size="24" text-anchor="middle" fill="#8a94a8">tests · scans</text></g>
+        <g class="in"><text x="800" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">CI: passed</text><text x="800" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">at merge</text></g>
+        <path d="M338 365L358 365" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M638 365L658 365" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: trail-3
+      contentType: html
+      name: "Change trail 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol><symbol id="i-eye" viewBox="0 0 48 48"><path d="M4 24c5-9 12-13 20-13s15 4 20 13c-5 9-12 13-20 13S9 33 4 24z"/><circle cx="24" cy="24" r="6"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-cloud" viewBox="0 0 48 48"><path d="M14 37a9 9 0 0 1-1-18 12 12 0 0 1 23 2 8 8 0 0 1-1 16z"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">CHANGE TRAIL</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Production ရောက်တဲ့ code တိုင်းမှာ trail ရှိရတယ်</text>
+        <rect x="72" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-code" x="168" y="287.7" width="64" height="64" style="color:#4fd1c5"/><text x="200" y="394.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">commit</text><text x="200" y="434.3" font-size="23" text-anchor="middle" fill="#8a94a8">what · who · why</text>
+        <text x="200" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">a41f9c2</text><text x="200" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">by u-17</text><text x="200" y="583.4" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">PAY-311</text>
+        <rect x="372" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-eye" x="468" y="287" width="64" height="64" style="color:#b794f6"/><text x="500" y="393.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">review</text><text x="500" y="434.6" font-size="24" text-anchor="middle" fill="#8a94a8">a second person</text>
+        <text x="500" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">approver u-23</text><text x="500" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">≠ author</text>
+        <rect x="672" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-check" x="768" y="287" width="64" height="64" style="color:#68d391"/><text x="800" y="393.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">checks</text><text x="800" y="434.6" font-size="24" text-anchor="middle" fill="#8a94a8">tests · scans</text>
+        <text x="800" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">CI: passed</text><text x="800" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">at merge</text>
+        <path d="M338 365L358 365" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M638 365L658 365" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><rect x="972" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-cloud" x="1068" y="287" width="64" height="64" style="color:#f6ad55"/><text x="1100" y="393.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">deploy</text><text x="1100" y="434.6" font-size="24" text-anchor="middle" fill="#8a94a8">who · when</text></g>
+        <g class="in"><text x="1100" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">r42 by u-52</text><text x="1100" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">03-02 18:10</text></g>
+        <g class="in"><rect x="1272" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-server" x="1368" y="287" width="64" height="64" style="color:#6cb2f5"/><text x="1400" y="393.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">running</text><text x="1400" y="434.6" font-size="24" text-anchor="middle" fill="#8a94a8">version · where</text></g>
+        <g class="in"><text x="1400" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">srv-1..8</text><text x="1400" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">report r42?</text></g>
+        <path d="M938 365L958 365" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        <path d="M1238 365L1258 365" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/>
+        </svg>
+    - id: trail-4
+      contentType: html
+      name: "Change trail 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-code" viewBox="0 0 48 48"><path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/></symbol><symbol id="i-eye" viewBox="0 0 48 48"><path d="M4 24c5-9 12-13 20-13s15 4 20 13c-5 9-12 13-20 13S9 33 4 24z"/><circle cx="24" cy="24" r="6"/></symbol><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol><symbol id="i-cloud" viewBox="0 0 48 48"><path d="M14 37a9 9 0 0 1-1-18 12 12 0 0 1 23 2 8 8 0 0 1-1 16z"/></symbol><symbol id="i-server" viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">CHANGE TRAIL</text>
+        <rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="#b794f6" opacity="0.15"/><rect x="1368.2" y="58" width="151.8" height="40" rx="20" fill="none" stroke="#b794f6" stroke-width="2"/>
+        <text x="1444.1" y="85" font-size="20" text-anchor="middle" fill="#b794f6" font-weight="700" letter-spacing="0.06em">NO TRUST</text>
+        <rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="#4fd1c5" opacity="0.15"/><rect x="1146.1" y="58" width="208.1" height="40" rx="20" fill="none" stroke="#4fd1c5" stroke-width="2"/>
+        <text x="1250.2" y="85" font-size="20" text-anchor="middle" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NO LOST DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Production ရောက်တဲ့ code တိုင်းမှာ trail ရှိရတယ်</text>
+        <rect x="72" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#4fd1c5" stroke-width="2.5"/><use href="#i-code" x="168" y="287.7" width="64" height="64" style="color:#4fd1c5"/><text x="200" y="394.5" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">commit</text><text x="200" y="434.3" font-size="23" text-anchor="middle" fill="#8a94a8">what · who · why</text>
+        <text x="200" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">a41f9c2</text><text x="200" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">by u-17</text><text x="200" y="583.4" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">PAY-311</text>
+        <rect x="372" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#b794f6" stroke-width="2.5"/><use href="#i-eye" x="468" y="287" width="64" height="64" style="color:#b794f6"/><text x="500" y="393.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">review</text><text x="500" y="434.6" font-size="24" text-anchor="middle" fill="#8a94a8">a second person</text>
+        <text x="500" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">approver u-23</text><text x="500" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">≠ author</text>
+        <rect x="672" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><use href="#i-check" x="768" y="287" width="64" height="64" style="color:#68d391"/><text x="800" y="393.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">checks</text><text x="800" y="434.6" font-size="24" text-anchor="middle" fill="#8a94a8">tests · scans</text>
+        <text x="800" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">CI: passed</text><text x="800" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">at merge</text>
+        <path d="M338 365L358 365" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M638 365L658 365" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <rect x="972" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><use href="#i-cloud" x="1068" y="287" width="64" height="64" style="color:#f6ad55"/><text x="1100" y="393.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">deploy</text><text x="1100" y="434.6" font-size="24" text-anchor="middle" fill="#8a94a8">who · when</text>
+        <text x="1100" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">r42 by u-52</text><text x="1100" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">03-02 18:10</text>
+        <rect x="1272" y="270" width="256" height="190" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><use href="#i-server" x="1368" y="287" width="64" height="64" style="color:#6cb2f5"/><text x="1400" y="393.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">running</text><text x="1400" y="434.6" font-size="24" text-anchor="middle" fill="#8a94a8">version · where</text>
+        <text x="1400" y="520" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">srv-1..8</text><text x="1400" y="551.7" font-size="24" text-anchor="middle" fill="#8a94a8" class="mono">report r42?</text>
+        <path d="M938 365L958 365" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <path d="M1238 365L1258 365" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/>
+        <g class="in"><path d="M72 650q0 14 14 14H486q14 0 14 14q0 -14 14 -14H914q14 0 14 -14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="500" y="712" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">source control = the record</text></g>
+        <g class="in"><rect x="75.2" y="740" width="249.5" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="75.2" y="740" width="249.5" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="200" y="774.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">signed commits</text></g>
+        <g class="in"><rect x="383.1" y="740" width="233.8" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="383.1" y="740" width="233.8" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="500" y="774.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">protected main</text></g>
+        <g class="in"><rect x="689.4" y="740" width="221.2" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="689.4" y="740" width="221.2" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="800" y="774.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700">no force-push</text></g>
+        <g class="in"><rect x="1109.6" y="740" width="280.8" height="50" rx="25" fill="#f6ad55" opacity="0.16"/><rect x="1109.6" y="740" width="280.8" height="50" rx="25" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="1250" y="774.1" font-size="26" text-anchor="middle" fill="#f6ad55" font-weight="700">incident → change</text></g>
+        <g class="in"><path d="M972 650q0 14 14 14H1236q14 0 14 14q0 -14 14 -14H1514q14 0 14 -14" fill="none" stroke="#9aa5b8" stroke-width="3" stroke-linecap="round"/><text x="1250" y="712" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">deploys = traceable</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9529
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "a41f9c2 merged\n7be03d1 blocked: no second reviewer\nc90e5aa blocked: no ticket, checks failed\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "a41f9c2 merged\n7be03d1 blocked: no second reviewer\nc90e5aa blocked: no ticket, checks failed\nsrv-8 runs r41 not r42\nrelease flag on: false\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "a41f9c2 merged\n7be03d1 blocked: no second reviewer\nc90e5aa blocked: no ticket, checks failed\nsrv-8 runs r41 not r42\nrelease flag on: false\nsrv-8 at 03-03 09:30 ran r41 deployed 02-20 18:05 by u-40\n"
+
+scenes:
+  - id: hook
+    chapter: Code ကိုယ်တိုင်ရဲ့ audit trail
+    narration: >-
+      ငွေ system မှာ ledger entry တိုင်းအတွက် ဘယ်သူ၊ ဘာကြောင့်၊ ဘယ်တော့ ဆိုတာကို ပြနိုင်ရပါတယ်။ ဒါပေမဲ့ အဲဒီ entry တွေကို ရေးတဲ့ code ကိုယ်တိုင်ကရော။ regulated ဖြစ်တဲ့ နေရာမှာ auditor က များသောအားဖြင့် ဒီ code ကို ဘယ်သူ ရေးလဲ၊ ဘယ်သူ approve လုပ်လဲ၊ production ကို ဘယ်တော့ ရောက်လဲ ဆိုတာကိုပါ မေးပါတယ်။ [[mark:sel-changes]] ဒီ record သုံးခုက merge request သုံးခုပါ။ တစ်ခုစီမှာ commit၊ author၊ approver၊ ဘာကြောင့် ပြောင်းလဲ ဆိုတဲ့ ticket နဲ့ CI check ရလဒ် ပါပါတယ်။ [[mark:sel-review]] ဒီ function က change တစ်ခု main branch ကို မရောက်ခင် ဖြတ်ရမယ့် gate ပါ။ approve လုပ်တဲ့သူက ရေးတဲ့သူ မဖြစ်ရဘူး၊ ticket ရှိရမယ်၊ check တွေ pass ဖြစ်ရမယ်။ change သုံးခုကို ဒီ gate နဲ့ စစ်ကြည့်ရအောင်။ [[mark:run-1]] run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — The change trail (SDLC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#the-change-trail-sdlc",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-changes
+        type: editor.select
+        at: { mark: sel-changes }
+        target: { file: main.go, text: "var changes = []Change{", occurrence: 1 }
+      - id: sel-review
+        type: editor.select
+        at: { mark: sel-review }
+        target: { file: main.go, text: "func review(c Change) []string {", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "7be03d1 blocked: no second reviewer",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:pt-merged]] ပထမ change က rule သုံးခုလုံး ပြည့်လို့ merge ဖြစ်ပါတယ်။ [[mark:pt-self]] ဒုတိယ change မှာတော့ ရေးတဲ့သူနဲ့ approve လုပ်တဲ့သူ တစ်ယောက်တည်း ဖြစ်နေလို့ block ဖြစ်ပါတယ်၊ four-eyes မှာ တွေ့ခဲ့တဲ့ rule ပါပဲ။ [[mark:pt-noticket]] တတိယ change ကတော့ ဘာကြောင့် ပြောင်းလဲ ဆိုတဲ့ ticket မရှိသလို check တွေလည်း fail ဖြစ်နေပါတယ်။ [[mark:dock-1]] သတိထားရမှာက ဒီ စစ်ဆေးမှုကို reviewer တစ်ယောက်ရဲ့ သတိနဲ့ လုပ်တာ မဟုတ်ဘဲ code က လုပ်တာပါ။ ဒါကြောင့် အလောတကြီး merge လုပ်ရတဲ့ ညမှာလည်း rule က မပြောင်းပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Segregation of duties and four-eyes (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#segregation-of-duties-and-four-eyes",
+        }
+    actions:
+      - id: pt-merged
+        type: console.point
+        at: { mark: pt-merged }
+        target: { text: "a41f9c2 merged", occurrence: 1 }
+      - id: pt-self
+        type: console.point
+        at: { mark: pt-self }
+        target: { text: "no second reviewer", occurrence: 1 }
+      - id: pt-noticket
+        type: console.point
+        at: { mark: pt-noticket }
+        target: { text: "no ticket, checks failed", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+
+  - id: trail
+    chapter: Source control က record
+    narration: >-
+      [[mark:show-trail]] code တစ်ကြောင်း production ကို ရောက်ဖို့ ဖြတ်ရတဲ့ လမ်းကြောင်း တစ်ခုလုံးက audit trail တစ်ခုပါ။ [[mark:pt-commit]] commit က ဘာပြောင်းလဲ၊ ဘယ်သူ ပြောင်းလဲ ဆိုတာကို မှတ်ပြီး၊ ticket နဲ့ ချိတ်ထားရင် ဘာကြောင့် ပြောင်းလဲ ဆိုတာပါ ပါလာပါတယ်။ ledger entry တစ်ခုမှာ လိုတဲ့ what၊ who၊ why နဲ့ အတူတူပါပဲ။ [[mark:trail-2]] review က ဒုတိယ လူတစ်ယောက် approve လုပ်တာကို မှတ်ပြီး၊ CI က test နဲ့ scan တွေ pass ဖြစ်တာကို မှတ်ပါတယ်။ [[mark:trail-3]] deploy မှာတော့ ဘယ် version ကို ဘယ်သူ ဘယ်တော့ release လုပ်လဲ၊ ဘယ် server ပေါ်မှာ ဘာ run နေလဲ ဆိုတာ မှတ်ရပါတယ်။ [[mark:pt-running]] ဒါမှ incident တစ်ခု ဖြစ်တဲ့ အခါ အဲဒါကို ဖြစ်စေတဲ့ change ဆီ ပြန်ခြေရာခံလို့ ရပါတယ်။ [[mark:trail-4]] ဒီ မှတ်တမ်းကို ledger လိုပဲ ပြန်ပြင်လို့ မရအောင် ကာကွယ်ရပါတယ်။ commit တွေကို sign လုပ်တာ၊ main branch ကို protect လုပ်တာ၊ shared history ကို force-push နဲ့ ပြန်ရေးခွင့် မပေးတာတွေ ရှိမှ ဒီ trail ကို ယုံလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — The change trail (SDLC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#the-change-trail-sdlc",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Audits and audit trails (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#audits-and-audit-trails",
+        }
+    actions:
+      - {
+          id: show-trail,
+          type: slide.show,
+          at: { mark: show-trail, offsetMs: -700 },
+          slideId: trail-1,
+        }
+      - { id: pt-commit, type: slide.point, at: { mark: pt-commit }, target: { x: 0.125, y: 0.52 } }
+      - { id: trail-2, type: slide.show, at: { mark: trail-2 }, slideId: trail-2 }
+      - {
+          id: pt-review,
+          type: slide.point,
+          at: { afterAction: trail-2 },
+          target: { x: 0.313, y: 0.52 },
+        }
+      - { id: trail-3, type: slide.show, at: { mark: trail-3 }, slideId: trail-3 }
+      - {
+          id: pt-deploy,
+          type: slide.point,
+          at: { afterAction: trail-3 },
+          target: { x: 0.688, y: 0.52 },
+        }
+      - {
+          id: pt-running,
+          type: slide.point,
+          at: { mark: pt-running },
+          target: { x: 0.875, y: 0.52 },
+        }
+      - { id: trail-4, type: slide.show, at: { mark: trail-4 }, slideId: trail-4 }
+      - {
+          id: pt-protect,
+          type: slide.point,
+          at: { afterAction: trail-4 },
+          target: { x: 0.306, y: 0.887 },
+        }
+
+  - id: enforced
+    narration: >-
+      [[mark:show-enf]] ဒီ rule တွေကို ထိန်းတဲ့ နည်း နှစ်မျိုး ရှိပါတယ်။ ပထမ တစ်မျိုးက wiki ထဲမှာ process ကို ရေးထားပြီး လူတွေ မှတ်မိဖို့ မျှော်လင့်တာပါ။ incident တစ်ခုကြားမှာ တစ်ယောက်ယောက်က main ကို တိုက်ရိုက် push လုပ်လိုက်ရင် ဘာမှ မတားသလို review မှတ်တမ်းလည်း မကျန်ပါဘူး။ [[mark:enf-2]] ဒုတိယ တစ်မျိုးက system က enforce လုပ်တာပါ။ approval မရှိရင်၊ author ကိုယ်တိုင် approve လုပ်ရင်၊ check fail ရင် merge လုပ်လို့ မရသလို၊ direct push နဲ့ force-push ကိုလည်း ပိတ်ထားပါတယ်။ [[mark:pt-std]] SOC ၂ ရဲ့ change management criterion က change တွေကို authorize လုပ်၊ test လုပ်၊ approve လုပ်ပြီးမှ implement လုပ်ဖို့ တောင်းပါတယ်။ PCI DSS ကလည်း production change တိုင်းမှာ အကြောင်းပြချက်၊ approval မှတ်တမ်း၊ testing နဲ့ ပြန်လှည့်မယ့် procedure ရှိဖို့ တောင်းပါတယ်။ [[mark:pt-cap]] auditor က ကိုယ်တို့ လိုက်နာပါတယ် ဆိုတဲ့ စကားလောက်နဲ့ မကျေနပ်ပါဘူး၊ system က ပိတ်ထားတယ် ဆိုတဲ့ သက်သေကို ကြည့်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — The change trail (SDLC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#the-change-trail-sdlc",
+        }
+      - {
+          title: "PCI SSC — PCI DSS v4.0.1, Requirements 6.5.1–6.5.2",
+          url: "https://www.middlebury.edu/sites/default/files/2025-01/PCI-DSS-v4_0_1.pdf",
+        }
+      - {
+          title: "ISMS.online — Change Management CC8.1 explained",
+          url: "https://www.isms.online/soc-2/controls/change-management-cc8-1-explained/",
+        }
+    actions:
+      - {
+          id: show-enf,
+          type: slide.show,
+          at: { mark: show-enf, offsetMs: -700 },
+          slideId: enforced-1,
+        }
+      - {
+          id: pt-wiki,
+          type: slide.point,
+          at: { afterAction: show-enf },
+          target: { x: 0.128, y: 0.482 },
+        }
+      - { id: enf-2, type: slide.show, at: { mark: enf-2 }, slideId: enforced-2 }
+      - {
+          id: pt-rules,
+          type: slide.point,
+          at: { afterAction: enf-2 },
+          target: { x: 0.59, y: 0.482 },
+        }
+      - { id: pt-std, type: slide.point, at: { mark: pt-std }, target: { x: 0.494, y: 0.82 } }
+      - { id: pt-cap, type: slide.point, at: { mark: pt-cap }, target: { x: 0.325, y: 0.902 } }
+
+  - id: case
+    chapter: Knight Capital၊ ၂၀၁၂
+    narration: >-
+      [[mark:show-case]] system က မစစ်ရင် ဘာဖြစ်လဲ ဆိုတာ တကယ့် case တစ်ခုမှာ မြင်ရပါတယ်။ ၂၀၁၂ ခုနှစ် ဩဂုတ်လ တစ်ရက်နေ့မှာ Knight Capital က NYSE ရဲ့ Retail Liquidity Program အတွက် code အသစ်ကို သူတို့ရဲ့ order router ဖြစ်တဲ့ SMARS ထဲကို deploy လုပ်ခဲ့ပါတယ်။ [[mark:pt-srv8]] technician တစ်ယောက်က SMARS server ရှစ်လုံးထဲက တစ်လုံးကို code အသစ် copy မကူးမိခဲ့လို့ အဲဒီ server ပေါ်မှာ မသုံးတော့တဲ့ Power Peg ဆိုတဲ့ code အဟောင်း ကျန်နေခဲ့ပါတယ်။ [[mark:case-2]] အဲဒီနောက် တခြား ရည်ရွယ်ချက်နဲ့ ပြန်သုံးလိုက်တဲ့ flag တစ်ခုက အဲဒီ server ပေါ်က code အဟောင်းကို အလုပ်လုပ်စေခဲ့ပါတယ်။ [[mark:case-3]] မိနစ် ၄၅ လောက်အတွင်း SMARS က child order သန်းနဲ့ချီ ပို့ခဲ့ပြီး၊ စတော့ ၁၅၄ မျိုးမှာ execution လေးသန်း ကျော် ဖြစ်ခဲ့ပါတယ်။ SEC ရဲ့ ကိန်းဂဏန်းအရ Knight က ဒေါ်လာ သန်း ၄၆၀ ကျော် ဆုံးရှုံးခဲ့ပါတယ်။ [[mark:case-4]] နောက်တစ်နှစ်မှာ SEC က ဒေါ်လာ သန်း ၁၂ ဒဏ်ငွေ ချမှတ်ခဲ့ပြီး၊ deployment ကို ဒုတိယ technician တစ်ယောက်က review လုပ်ဖို့ ရေးထားတဲ့ procedure Knight မှာ မရှိခဲ့ဘူးလို့ တွေ့ခဲ့ပါတယ်။ ဆိုလိုတာက ဘယ် server ပေါ်မှာ ဘယ် version run နေလဲ ဆိုတာကို လူက မှတ်ထားရတာ မဟုတ်ဘဲ system က စစ်ပေးရပါမယ်။
+    sources:
+      - {
+          title: "SEC — In the Matter of Knight Capital Americas LLC, Release No. 34-70694 (16 Oct 2013)",
+          url: "https://www.sec.gov/litigation/admin/2013/34-70694.pdf",
+        }
+      - {
+          title: "Fintech Engineering Handbook — The change trail (SDLC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#the-change-trail-sdlc",
+        }
+    actions:
+      - {
+          id: show-case,
+          type: slide.show,
+          at: { mark: show-case, offsetMs: -700 },
+          slideId: case-1,
+        }
+      - {
+          id: pt-smars,
+          type: slide.point,
+          at: { afterAction: show-case },
+          target: { x: 0.069, y: 0.298 },
+        }
+      - { id: pt-srv8, type: slide.point, at: { mark: pt-srv8 }, target: { x: 0.472, y: 0.653 } }
+      - { id: case-2, type: slide.show, at: { mark: case-2 }, slideId: case-2 }
+      - {
+          id: pt-flag,
+          type: slide.point,
+          at: { afterAction: case-2 },
+          target: { x: 0.182, y: 0.842 },
+        }
+      - { id: case-3, type: slide.show, at: { mark: case-3 }, slideId: case-3 }
+      - {
+          id: pt-loss,
+          type: slide.point,
+          at: { afterAction: case-3 },
+          target: { x: 0.625, y: 0.422 },
+        }
+      - { id: case-4, type: slide.show, at: { mark: case-4 }, slideId: case-4 }
+      - {
+          id: pt-sec,
+          type: slide.point,
+          at: { afterAction: case-4 },
+          target: { x: 0.766, y: 0.931 },
+        }
+
+  - id: gate
+    chapter: Release gate
+    narration: >-
+      [[mark:close-case]] ဒီ စစ်ဆေးမှုကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-gate]] fleet ထဲက server တိုင်းက ကိုယ် run နေတဲ့ version ကို report လုပ်ပါတယ်။ ဒီ loop က release version နဲ့ မတူတဲ့ server တိုင်းကို ထုတ်ပြပြီး ရေတွက်ပါတယ်။ အဲဒီ အရေအတွက် သုည ဖြစ်မှသာ code အသစ်ကို ဖွင့်မယ့် release flag ကို on ခွင့်ပြုပါတယ်။ server ရှစ်လုံးထဲက တစ်လုံးက version အဟောင်း ဖြစ်နေရင် ဘာထွက်မလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-stale]] server ရှစ်ခုမြောက်က release အသစ် မဟုတ်ဘဲ version အဟောင်းကို run နေတာ တွေ့ပါတယ်။ [[mark:pt-flag-off]] ဒါကြောင့် flag ကို on ခွင့် မပြုပါဘူး၊ false ပါ။ ဒီ gate က flag ကို ဖွင့်မယ့် အဆင့်မှာပဲ fleet တစ်ခုလုံး မကိုက်တာကို ဖမ်းမိပါတယ်။ [[mark:dock-2]] deploy ပြီးတာနဲ့ fleet ကိုက်တယ်လို့ ယူဆလို့ မရပါဘူး၊ စစ်ပြီးမှ ရှေ့ဆက်ရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — The change trail (SDLC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#the-change-trail-sdlc",
+        }
+      - {
+          title: "SEC — In the Matter of Knight Capital Americas LLC, Release No. 34-70694 (16 Oct 2013)",
+          url: "https://www.sec.gov/litigation/admin/2013/34-70694.pdf",
+        }
+    actions:
+      - { id: close-case, type: slide.close, at: { mark: close-case } }
+      - id: type-gate
+        type: editor.type
+        at: { mark: type-gate }
+        target:
+          {
+            file: main.go,
+            after: "\t\t\tfmt.Println(c.Commit, \"merged\")\n\t\t}\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\n\tstale := 0\n\tfor _, s := range fleet {\n\t\tif s.Version != release {\n\t\t\tfmt.Println(s.Name, \"runs\", s.Version, \"not\", release)\n\t\t\tstale++\n\t\t}\n\t}\n\tfmt.Println(\"release flag on:\", stale == 0)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "release flag on: false",
+          timeoutMs: 8000,
+        }
+      - id: pt-stale
+        type: console.point
+        at: { mark: pt-stale }
+        target: { text: "srv-8 runs r41 not r42", occurrence: 1 }
+      - id: pt-flag-off
+        type: console.point
+        at: { mark: pt-flag-off }
+        target: { text: "release flag on: false", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+
+  - id: what-ran
+    narration: >-
+      [[mark:type-ran]] နောက် မေးခွန်းတစ်ခုက incident ဖြစ်ပြီးမှ မေးရတာပါ။ နောက်တစ်နေ့ မနက် ကိုးနာရီခွဲမှာ server ရှစ်ခုမြောက်ပေါ်မှာ ဘယ် code run နေခဲ့လဲ။ ဒီ loop က deploy log ထဲမှာ အဲဒီ အချိန် မတိုင်ခင် အဲဒီ server ကို တကယ် ရောက်ခဲ့တဲ့ နောက်ဆုံး deploy ကို ရှာပါတယ်။ log ရဲ့ line တိုင်းမှာ release လုပ်တဲ့သူနဲ့ အချိန် ပါပါတယ်။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-ran]] အဲဒီ အချိန်မှာ server ရှစ်ခုမြောက်က release အသစ်ကို မဟုတ်ဘဲ၊ ဖေဖော်ဝါရီလ နှစ်ဆယ်ရက်နေ့က deploy လုပ်ခဲ့တဲ့ version အဟောင်းကို run နေခဲ့ပါတယ်။ version ကနေ အဲဒီထဲက commit တွေ၊ commit ကနေ author နဲ့ approver ဆီ ဆက်သွားလို့ ရတော့ incident တစ်ခုကို change တစ်ခုဆီ ပြန်ချိတ်နိုင်ပါတယ်။ [[mark:dock-3]] trail ဆိုတာ မှတ်ထားရုံ မဟုတ်ပါဘူး၊ incident ဖြစ်နေတုန်း ဒီ မေးခွန်းကို မိနစ်ပိုင်းအတွင်း ဖြေနိုင်ဖို့ပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — The change trail (SDLC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#the-change-trail-sdlc",
+        }
+    actions:
+      - id: type-ran
+        type: editor.type
+        at: { mark: type-ran }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"release flag on:\", stale == 0)\n",
+            occurrence: 1,
+          }
+        text: "\n\tat, ran := \"03-03 09:30\", Deploy{}\n\tfor _, d := range deploys {\n\t\tif d.At <= at && d.reached(\"srv-8\") {\n\t\t\tran = d\n\t\t}\n\t}\n\tfmt.Println(\"srv-8 at\", at, \"ran\", ran.Version, \"deployed\", ran.At, \"by\", ran.By)\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "ran r41 deployed 02-20 18:05 by u-40",
+          timeoutMs: 8000,
+        }
+      - id: pt-ran
+        type: console.point
+        at: { mark: pt-ran }
+        target: { text: "srv-8 at 03-03 09:30 ran r41", occurrence: 1 }
+      - {
+          id: expect-file-gate,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: 'fmt.Println("release flag on:", stale == 0)',
+        }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+
+  - id: drift
+    chapter: Trail ကို ဘယ်နေရာမှာ ကျော်သွားတတ်လဲ
+    narration: >-
+      [[mark:show-drift]] တကယ့် system မှာ ဒီ trail ကို ကျော်သွားတတ်တဲ့ နေရာ သုံးခု ရှိပါတယ်။ [[mark:pt-r8]] ပထမက deploy log ကိုတောင် မယုံရတာပါ။ deploy tool က file ပို့ပြီးတာနဲ့ success လို့ ရေးတတ်ပေမဲ့ server က run နေတာက တခြား version ဖြစ်နိုင်ပါတယ်။ log က ရည်ရွယ်ချက်ပါ၊ server ရဲ့ report က အမှန်ပါ။ [[mark:pt-rec]] ဒါကြောင့် server တိုင်းက ကိုယ့် version ကို report လုပ်ပြီး အဲဒါကို log နဲ့ reconcile လုပ်ရပါတယ်၊ မကိုက်ရင် flag က off ပဲ ဆက်နေပါတယ်။ [[mark:drift-2]] ဒုတိယက flag ဖွင့်တာ၊ config ပြောင်းတာ ဆိုတာလည်း deploy တစ်ခုပါပဲ။ code တစ်ကြောင်းမှ မပြောင်းဘဲ production ရဲ့ အပြုအမူ ပြောင်းသွားလို့ အဲဒါတွေလည်း review၊ approval နဲ့ trail ကို ဖြတ်ရပါတယ်။ Knight မှာ code အဟောင်းကို နှိုးလိုက်တာက ပြန်သုံးလိုက်တဲ့ flag တစ်ခုပါ။ [[mark:drift-3]] တတိယက gate ကို ဘယ်သူ ပြင်နိုင်လဲ ဆိုတာပါ။ branch protection ကို ပိတ်နိုင်တဲ့ admin၊ pipeline config ကို ပြင်နိုင်တဲ့သူက rule အားလုံးကို ကျော်နိုင်ပါတယ်။ ဒါကြောင့် အဲဒီ setting ပြောင်းတာကလည်း trail ရှိတဲ့ change တစ်ခု ဖြစ်ရပြီး၊ admin bypass ကို break-glass လမ်းကြောင်းလို အပြည့်အဝ audit လုပ်ရပါတယ်။ [[mark:principles]] No lost data၊ ဆိုလိုတာက ငွေနဲ့ ပတ်သက်ပြီး ဖြစ်ခဲ့သမျှ မပျောက်ရဘူး ဆိုတဲ့ မူအရ system ဘယ်လို ဖြစ်လာလဲ ဆိုတဲ့ history ကလည်း trail ထဲ ပါရပါတယ်။ No trust၊ ဆိုလိုတာက ဘယ်သူ့ကိုမှ၊ ကိုယ့် component ကိုတောင် အလိုလို မယုံရဘူး ဆိုတဲ့ မူအရ delivery control တွေကို system က enforce လုပ်ရပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — The change trail (SDLC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#the-change-trail-sdlc",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Segregation of duties and four-eyes (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#segregation-of-duties-and-four-eyes",
+        }
+      - {
+          title: "SEC — In the Matter of Knight Capital Americas LLC, Release No. 34-70694 (16 Oct 2013)",
+          url: "https://www.sec.gov/litigation/admin/2013/34-70694.pdf",
+        }
+    actions:
+      - {
+          id: show-drift,
+          type: slide.show,
+          at: { mark: show-drift, offsetMs: -700 },
+          slideId: drift-1,
+        }
+      - { id: pt-r8, type: slide.point, at: { mark: pt-r8 }, target: { x: 0.11, y: 0.576 } }
+      - { id: pt-rec, type: slide.point, at: { mark: pt-rec }, target: { x: 0.238, y: 0.731 } }
+      - { id: drift-2, type: slide.show, at: { mark: drift-2 }, slideId: drift-2 }
+      - {
+          id: pt-flagcard,
+          type: slide.point,
+          at: { afterAction: drift-2 },
+          target: { x: 0.775, y: 0.487 },
+        }
+      - { id: drift-3, type: slide.show, at: { mark: drift-3 }, slideId: drift-3 }
+      - {
+          id: pt-gate,
+          type: slide.point,
+          at: { afterAction: drift-3 },
+          target: { x: 0.775, y: 0.764 },
+        }
+      - {
+          id: pt-princ,
+          type: slide.point,
+          at: { mark: principles },
+          target: { x: 0.717, y: 0.864 },
+        }
+
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ production ကို ဘယ် code ရောက်ခဲ့လဲ ဆိုတာ auditor ကို ဘယ်လို သက်သေပြမလဲ လို့ မေးတတ်ပါတယ်။ code review လုပ်ပါတယ် လို့ပဲ ဖြေရင် မလုံလောက်ပါဘူး၊ အချက် သုံးချက်နဲ့ ဖြေပါ။ [[mark:iv-a]] ပထမ၊ source control က record ပါ။ commit တိုင်းက author နဲ့ ticket ကို ချိတ်ထားပြီး၊ signed commit၊ protected branch နဲ့ force-push ပိတ်ထားတာကြောင့် history ကို တိတ်တိတ် ပြန်ပြင်လို့ မရပါဘူး။ [[mark:iv-b]] ဒုတိယ၊ gate တွေကို system က enforce လုပ်ပါတယ်။ review နဲ့ check တွေက မဖြစ်မနေ လိုပြီး၊ approver က author မဖြစ်ရဘူး ဆိုတာကို tool က စစ်ပါတယ်။ [[mark:iv-c]] တတိယ၊ deploy တွေကို trace လုပ်လို့ ရပါတယ်။ ဘယ် version ကို ဘယ်သူ ဘယ်တော့ release လုပ်လဲ ဆိုတာ log ထဲ ရှိပြီး၊ server တွေ report လုပ်တဲ့ version နဲ့ reconcile လုပ်ပါတယ်။ [[mark:iv-d]] ပြီးရင် incident အချိန် တစ်ခု ပေးလိုက်တာနဲ့ run နေခဲ့တဲ့ version၊ အဲဒီထဲက commit တွေ၊ approve လုပ်ခဲ့တဲ့သူတွေ အထိ query တစ်ခုနဲ့ ပြနိုင်အောင် ထားမယ် လို့ ဆက်ပြောပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — The change trail (SDLC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#the-change-trail-sdlc",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+
+  - id: try-it
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:open-trail]] trail ဖိုင်ထဲမှာ server တွေရဲ့ report နဲ့ deploy log ရှိပါတယ်။ [[mark:sel-try]] server ရှစ်ခုမြောက်ရဲ့ version ကို release အသစ်လို့ ပြောင်းပြီး run ကြည့်ပါ။ flag က true ဖြစ်သွားပေမဲ့ အောက်ဆုံး line က version အဟောင်းလို့ပဲ ဆက်ပြောနေပါလိမ့်မယ်။ server ကို လက်နဲ့ ပြင်ပြီး log ထဲ မှတ်မထားရင် trail က အမှန်ကို မပြောတော့ပါဘူး၊ reconcile လုပ်ရတဲ့ အကြောင်းရင်းလည်း ဒါပါပဲ။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ code ကနေ production အထိ လမ်းကြောင်းကလည်း ledger လိုပဲ audit trail တစ်ခုဖြစ်ပြီး၊ အဲဒီ trail ကို လူက မှတ်ထားတာ မဟုတ်ဘဲ system က enforce လုပ်ပြီး စစ်ပေးရပါတယ်။ နောက် lesson ကစပြီး testing အပိုင်းကို ရောက်ပါမယ်။ ဖြစ်နိုင်တဲ့ input တွေကို စာရင်းလုပ်လို့ မရရင် ငွေတွက်တဲ့ code ကို ဘယ်လို test လုပ်မလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — The change trail (SDLC) (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#the-change-trail-sdlc",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - { id: open-trail, type: workspace.openFile, at: { mark: open-trail }, path: trail.go }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target: { file: trail.go, text: '{"srv-8", "r41"}', occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

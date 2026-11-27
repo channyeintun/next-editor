@@ -1,0 +1,1004 @@
+# Fintech Engineering, lesson 15: reversals and corrections (Burmese).
+#
+# Source: Fintech Engineering Handbook, "Reversals and corrections" and Appendix A (reversal /
+# correction, write-off, chargeback) (CC BY 4.0, Voytek Pitula).
+# Start state: ledger.go (Line, Tx with Value and Corrects, Ledger with Post, Close, BalanceAt —
+# Close records the reported date but Post does not check it yet), corrections.go (Get,
+# CorrectedBy, Reversal, Book), main.go books a 100.00 deposit as 1000.00 on 30 Oct, closes
+# October and prints the transactions, today's balance and the Oct 31 balance against the reported one.
+# Edits, all insert-only:
+#   1. main.go: a reversal dated 30 Oct            -> run-2: accepted; Oct 31 balance 0.00 ≠ reported
+#   2. ledger.go: Post refuses a closed period     -> run-3: "period closed through 2026-10-31"
+#   3. main.go: reversal + re-post dated 3 Nov     -> run-4: three linked transactions, balance 100.00,
+#                                                     Oct 31 still equal to what was reported
+# Figures: forward (fixing forward with links), period (closed vs open period), two (reversal vs
+# correction), report (what the link does for a report), iv.
+# Built by ~/Documents/fintech-course-work/tools/build-lesson.ts; fixtures by sim-go.ts --write.
+schemaVersion: 1
+
+lesson:
+  slug: fintech-15-reversals
+  title: "Fintech Engineering 15: Reversal နဲ့ correction"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Fintech Engineering
+    entryFilePath: main.go
+    files:
+      corrections.go: |
+        package main
+
+        import "time"
+
+        // Get returns a posted transaction by id.
+        func (l *Ledger) Get(id string) Tx {
+        	for _, tx := range l.txs {
+        		if tx.ID == id {
+        			return tx
+        		}
+        	}
+        	return Tx{}
+        }
+
+        // CorrectedBy is the link back. The original is never edited, so the way back is a lookup.
+        func (l *Ledger) CorrectedBy(id string) []string {
+        	var ids []string
+        	for _, tx := range l.txs {
+        		if tx.Corrects == id {
+        			ids = append(ids, tx.ID)
+        		}
+        	}
+        	return ids
+        }
+
+        // Reversal negates every line of the original in full and links to it.
+        func Reversal(orig Tx, id string, value time.Time) Tx {
+        	tx := Tx{ID: id, Memo: "reversal", Value: value, Corrects: orig.ID}
+        	for _, line := range orig.Lines {
+        		tx.Lines = append(tx.Lines, Line{Account: line.Account, Debit: line.Credit, Credit: line.Debit})
+        	}
+        	return tx
+        }
+
+        // Book moves an amount between our bank account and user 1042's balance.
+        // A negative amount moves it back. corrects links it to the transaction it corrects.
+        func Book(id, memo string, amount int64, value time.Time, corrects string) Tx {
+        	bank := Line{Account: "asset:bank", Debit: amount}
+        	owed := Line{Account: user, Credit: amount}
+        	if amount < 0 {
+        		bank = Line{Account: "asset:bank", Credit: -amount}
+        		owed = Line{Account: user, Debit: -amount}
+        	}
+        	return Tx{ID: id, Memo: memo, Value: value, Corrects: corrects, Lines: []Line{bank, owed}}
+        }
+      ledger.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        	"time"
+        )
+
+        // Line is one row of a transaction: an amount on the debit or the credit side of one account.
+        type Line struct {
+        	Account string
+        	Debit   int64
+        	Credit  int64
+        }
+
+        // Tx is one business event. All of its lines are posted together, or none of them.
+        type Tx struct {
+        	ID       string
+        	Memo     string
+        	Value    time.Time // when it happened economically
+        	Corrects string    // the transaction this one reverses or corrects, if any
+        	Lines    []Line
+        }
+
+        // Ledger is an append-only list of posted transactions. Balances are derived from it.
+        type Ledger struct {
+        	txs    []Tx
+        	closed time.Time // the last day of the last reported period
+        }
+
+        // Post appends a transaction only if its debits equal its credits.
+        func (l *Ledger) Post(tx Tx) error {
+        	var debit, credit int64
+        	for _, line := range tx.Lines {
+        		debit += line.Debit
+        		credit += line.Credit
+        	}
+        	if debit != credit {
+        		return fmt.Errorf("tx %s is not balanced: debit %s, credit %s", tx.ID, cents(debit), cents(credit))
+        	}
+        	l.txs = append(l.txs, tx)
+        	return nil
+        }
+
+        // Close records that every day up to and including through has been reported.
+        func (l *Ledger) Close(through time.Time) { l.closed = through }
+
+        // BalanceAt derives an account's balance from the transactions valued on or before t,
+        // on the side where that kind of account grows.
+        func (l *Ledger) BalanceAt(account string, t time.Time) int64 {
+        	var debit, credit int64
+        	for _, tx := range l.txs {
+        		for _, line := range tx.Lines {
+        			if line.Account == account && !tx.Value.After(t) {
+        				debit += line.Debit
+        				credit += line.Credit
+        			}
+        		}
+        	}
+        	if kind, _, _ := strings.Cut(account, ":"); kind == "asset" || kind == "expense" {
+        		return debit - credit
+        	}
+        	return credit - debit
+        }
+
+        // cents prints minor units as an amount with two decimals: cents(1234) is "12.34".
+        func cents(n int64) string {
+        	sign := ""
+        	if n < 0 {
+        		sign, n = "-", -n
+        	}
+        	return fmt.Sprintf("%s%d.%02d", sign, n/100, n%100)
+        }
+
+        // day prints a date as 2026-10-30.
+        func day(t time.Time) string { return t.Format("2006-01-02") }
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strings"
+        	"time"
+        )
+
+        var (
+        	oct30 = time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
+        	oct31 = time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)
+        	nov3  = time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)
+        	today = time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
+        )
+
+        const user = "liability:user:1042"
+
+        func main() {
+        	var l Ledger
+        	// The user sent 100.00. It was booked as 1000.00.
+        	must(l.Post(Book("tx-1", "deposit", 100000, oct30, "")))
+        	reported := l.BalanceAt(user, oct31)
+        	l.Close(oct31) // October's statements have been sent
+
+        	show(&l)
+        	fmt.Println("Oct 31 balance:", cents(l.BalanceAt(user, oct31)), "reported:", cents(reported))
+        }
+
+        // show lists every transaction with its links, then the user's balance today.
+        func show(l *Ledger) {
+        	for _, tx := range l.txs {
+        		link := ""
+        		if tx.Corrects != "" {
+        			link = "corrects " + tx.Corrects
+        		}
+        		if by := l.CorrectedBy(tx.ID); len(by) > 0 {
+        			link = "corrected by " + strings.Join(by, " ")
+        		}
+        		amount := tx.Lines[0].Debit - tx.Lines[0].Credit
+        		row := fmt.Sprintf("%s %s %-8s %8s  %s", tx.ID, day(tx.Value), tx.Memo, cents(amount), link)
+        		fmt.Println(strings.TrimSpace(row))
+        	}
+        	fmt.Println("balance today:", cents(l.BalanceAt(user, today)))
+        }
+
+        func must(err error) {
+        	if err != nil {
+        		panic(err)
+        	}
+        }
+  slides:
+    - id: forward-1
+      contentType: html
+      name: "Fixing forward 1/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FIXING FORWARD</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အမှားကို ပြင်တာ မဟုတ်ဘဲ entry အသစ်နဲ့ ချေတယ်</text>
+        <g class="in"><rect x="80" y="240" width="400" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="280" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-1 deposit</text><text x="280" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">+1000.00 · 30 Oct</text></g>
+        <g class="in"><circle cx="474" cy="246" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="460.2" y="232.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        <g class="in"><text x="80" y="720" font-size="72" fill="#fc8181" font-weight="800" class="mono">1000.00</text><text x="80" y="766" font-size="26" fill="#8a94a8">liability:user:1042 — 900.00 က မရှိတဲ့ ငွေ</text></g>
+        </svg>
+    - id: forward-2
+      contentType: html
+      name: "Fixing forward 2/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FIXING FORWARD</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အမှားကို ပြင်တာ မဟုတ်ဘဲ entry အသစ်နဲ့ ချေတယ်</text>
+        <rect x="80" y="240" width="400" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="280" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-1 deposit</text><text x="280" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">+1000.00 · 30 Oct</text>
+        <circle cx="474" cy="246" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="460.2" y="232.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <g class="in"><rect x="620" y="450" width="400" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="820" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-2 reversal</text><text x="820" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">−1000.00 · 3 Nov</text></g>
+        <path d="M610.8 511.1H292.9V375.5" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="451.8" y="494.9" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">corrects</text>
+        <g class="in"><text x="80" y="720" font-size="72" fill="#f6ad55" font-weight="800" class="mono">0.00</text><text x="80" y="766" font-size="26" fill="#8a94a8">economically မဖြစ်ခဲ့သလို — ဒါပေမဲ့ နှစ်ခုလုံး မြင်ရတယ်</text></g>
+        </svg>
+    - id: forward-3
+      contentType: html
+      name: "Fixing forward 3/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FIXING FORWARD</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အမှားကို ပြင်တာ မဟုတ်ဘဲ entry အသစ်နဲ့ ချေတယ်</text>
+        <rect x="80" y="240" width="400" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="280" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-1 deposit</text><text x="280" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">+1000.00 · 30 Oct</text>
+        <circle cx="474" cy="246" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="460.2" y="232.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="620" y="450" width="400" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="820" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-2 reversal</text><text x="820" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">−1000.00 · 3 Nov</text>
+        <path d="M610.8 511.1H292.9V375.5" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="451.8" y="494.9" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">corrects</text>
+        <g class="in"><rect x="1120" y="450" width="400" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="1320" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-3 re-post</text><text x="1320" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">+100.00 · 3 Nov</text></g>
+        <path d="M1310.1 448.3V307.4H493.8" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="1310.1" y="361.6" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">corrects</text>
+        <g class="in"><text x="80" y="720" font-size="72" fill="#68d391" font-weight="800" class="mono">100.00</text><text x="80" y="766" font-size="26" fill="#8a94a8">liability:user:1042 — မှန်သွားပြီ</text></g>
+        </svg>
+    - id: forward-4
+      contentType: html
+      name: "Fixing forward 4/4"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">FIXING FORWARD</text>
+        <rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="#f6c453" opacity="0.15"/><rect x="1246.4" y="58" width="273.6" height="40" rx="20" fill="none" stroke="#f6c453" stroke-width="2"/>
+        <text x="1383.2" y="85" font-size="20" text-anchor="middle" fill="#f6c453" font-weight="700" letter-spacing="0.06em">NO INVENTED DATA</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">အမှားကို ပြင်တာ မဟုတ်ဘဲ entry အသစ်နဲ့ ချေတယ်</text>
+        <rect x="80" y="240" width="400" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5"/><text x="280" y="295.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-1 deposit</text><text x="280" y="336.6" font-size="24" text-anchor="middle" fill="#8a94a8">+1000.00 · 30 Oct</text>
+        <circle cx="474" cy="246" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="460.2" y="232.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <rect x="620" y="450" width="400" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="820" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-2 reversal</text><text x="820" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">−1000.00 · 3 Nov</text>
+        <path d="M610.8 511.1H292.9V375.5" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="451.8" y="494.9" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">corrects</text>
+        <rect x="1120" y="450" width="400" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="1320" y="505.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-3 re-post</text><text x="1320" y="546.6" font-size="24" text-anchor="middle" fill="#8a94a8">+100.00 · 3 Nov</text>
+        <path d="M1310.1 448.3V307.4H493.8" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)"/><text x="1310.1" y="361.6" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">corrects</text>
+        <text x="80" y="720" font-size="72" fill="#68d391" font-weight="800" class="mono">100.00</text><text x="80" y="766" font-size="26" fill="#8a94a8">liability:user:1042 — မှန်သွားပြီ</text>
+        <g class="in"><rect x="900" y="680" width="524.3" height="50" rx="25" fill="#4fd1c5" opacity="0.16"/><rect x="900" y="680" width="524.3" height="50" rx="25" fill="none" stroke="#4fd1c5" stroke-width="2"/><text x="1162.2" y="714.1" font-size="26" text-anchor="middle" fill="#4fd1c5" font-weight="700" class="mono">tx-1 ← corrected by tx-2, tx-3</text></g>
+        <g class="in"><text x="900" y="790" font-size="26" fill="#8a94a8">original ကို မပြင်ဘူး၊ ပြန်ရှာတာ</text></g>
+        </svg>
+    - id: iv-1
+      contentType: html
+      name: "Interview 1/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Post လုပ်ပြီးသား entry မှားနေရင် ဘယ်လို ပြင်မလဲ</text>
+        </svg>
+    - id: iv-2
+      contentType: html
+      name: "Interview 2/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Post လုပ်ပြီးသား entry မှားနေရင် ဘယ်လို ပြင်မလဲ</text>
+        <g class="in"><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Fix forward — original ကို မထိဘဲ compensating entry အသစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">reversal နဲ့ re-post၊ ဒါမှမဟုတ် difference ကို correction</text></g>
+        </svg>
+    - id: iv-3
+      contentType: html
+      name: "Interview 3/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Post လုပ်ပြီးသား entry မှားနေရင် ဘယ်လို ပြင်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Fix forward — original ကို မထိဘဲ compensating entry အသစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">reversal နဲ့ re-post၊ ဒါမှမဟုတ် difference ကို correction</text></g><g class="in"><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Link — entry အသစ်ကနေ original ကို ချိတ်၊ နောက်ပြန်ကို lookup နဲ့</text><text x="188" y="443" font-size="26" fill="#8a94a8">report က တကယ့် activity နဲ့ cleanup ကို ခွဲနိုင်တယ်</text></g>
+        </svg>
+    - id: iv-4
+      contentType: html
+      name: "Interview 4/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Post လုပ်ပြီးသား entry မှားနေရင် ဘယ်လို ပြင်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Fix forward — original ကို မထိဘဲ compensating entry အသစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">reversal နဲ့ re-post၊ ဒါမှမဟုတ် difference ကို correction</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Link — entry အသစ်ကနေ original ကို ချိတ်၊ နောက်ပြန်ကို lookup နဲ့</text><text x="188" y="443" font-size="26" fill="#8a94a8">report က တကယ့် activity နဲ့ cleanup ကို ခွဲနိုင်တယ်</text></g><g class="in"><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Period — ပိတ်ပြီးသား period ထဲ backdate မလုပ်</text><text x="188" y="575" font-size="26" fill="#8a94a8">လက်ရှိ period မှာ book လုပ်ပြီး link နဲ့ attribute</text></g>
+        </svg>
+    - id: iv-5
+      contentType: html
+      name: "Interview 5/5"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#b794f6" stop-opacity="0.13"/><stop offset="1" stop-color="#b794f6" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-check" viewBox="0 0 48 48"><path d="M9 25l10 10 20-22"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#b794f6" font-weight="700" letter-spacing="0.14em">INTERVIEW</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Post လုပ်ပြီးသား entry မှားနေရင် ဘယ်လို ပြင်မလဲ</text>
+        <g><circle cx="138" cy="249" r="25" fill="#f6c453"/><text x="138" y="259" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">1</text><text x="188" y="261" font-size="34" fill="#e9edf5" font-weight="600">Fix forward — original ကို မထိဘဲ compensating entry အသစ်</text><text x="188" y="311" font-size="26" fill="#8a94a8">reversal နဲ့ re-post၊ ဒါမှမဟုတ် difference ကို correction</text></g><g><circle cx="138" cy="381" r="25" fill="#4fd1c5"/><text x="138" y="391" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">2</text><text x="188" y="393" font-size="34" fill="#e9edf5" font-weight="600">Link — entry အသစ်ကနေ original ကို ချိတ်၊ နောက်ပြန်ကို lookup နဲ့</text><text x="188" y="443" font-size="26" fill="#8a94a8">report က တကယ့် activity နဲ့ cleanup ကို ခွဲနိုင်တယ်</text></g><g><circle cx="138" cy="513" r="25" fill="#f6ad55"/><text x="138" y="523" font-size="28" text-anchor="middle" fill="#0b0e14" font-weight="800">3</text><text x="188" y="525" font-size="34" fill="#e9edf5" font-weight="600">Period — ပိတ်ပြီးသား period ထဲ backdate မလုပ်</text><text x="188" y="575" font-size="26" fill="#8a94a8">လက်ရှိ period မှာ book လုပ်ပြီး link နဲ့ attribute</text></g><g class="in"><use href="#i-check" x="114" y="621" width="48" height="48" style="color:#68d391"/><text x="188" y="657" font-size="34" fill="#e9edf5" font-weight="600">ledger API မှာ reverse၊ correct ပဲ ရှိ၊ edit မရှိ</text><text x="188" y="707" font-size="26" fill="#8a94a8">chargeback လို အပြင်က reversal တွေလည်း ဒီလမ်းကြောင်းပဲ</text></g>
+        </svg>
+    - id: period-1
+      contentType: html
+      name: "Reporting period 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">REPORTING PERIOD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ပိတ်ပြီးသား period ထဲကို backdate မလုပ်ရဘူး</text>
+        <g class="in"><rect x="70" y="205" width="680" height="400" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="92" y="241" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">OCTOBER · REPORTED</text></g>
+        <g class="in"><use href="#i-lock" x="652" y="234" width="56" height="56" style="color:#b794f6"/></g>
+        <g class="in"><rect x="110" y="290" width="300" height="130" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="260" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-1</text><text x="260" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">+1000.00 · 30 Oct</text></g>
+        <g class="in"><rect x="830" y="205" width="700" height="400" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="852" y="241" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NOVEMBER · OPEN</text></g>
+        </svg>
+    - id: period-2
+      contentType: html
+      name: "Reporting period 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">REPORTING PERIOD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ပိတ်ပြီးသား period ထဲကို backdate မလုပ်ရဘူး</text>
+        <rect x="70" y="205" width="680" height="400" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="92" y="241" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">OCTOBER · REPORTED</text>
+        <use href="#i-lock" x="652" y="234" width="56" height="56" style="color:#b794f6"/>
+        <rect x="110" y="290" width="300" height="130" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="260" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-1</text><text x="260" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">+1000.00 · 30 Oct</text>
+        <rect x="830" y="205" width="700" height="400" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="852" y="241" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NOVEMBER · OPEN</text>
+        <g class="in"><rect x="420" y="440" width="300" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5" stroke-dasharray="10 8"/><text x="570" y="495.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">reversal</text><text x="570" y="536.6" font-size="24" text-anchor="middle" fill="#8a94a8">dated 30 Oct</text></g>
+        <g class="in"><circle cx="714" cy="446" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="700.2" y="432.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/></g>
+        <g class="in"><rect x="70" y="650" width="654.6" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="70" y="650" width="654.6" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="397.3" y="684.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">Oct 31 balance 0.00 ≠ reported 1000.00</text></g>
+        </svg>
+    - id: period-3
+      contentType: html
+      name: "Reporting period 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6ad55" stop-opacity="0.13"/><stop offset="1" stop-color="#f6ad55" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern><marker id="ah-gray" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="5.500" markerHeight="5.500" orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="#9aa5b8" stroke="#9aa5b8" stroke-width="1.500" stroke-linejoin="round"/></marker><symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v6"/></symbol><symbol id="i-cross" viewBox="0 0 48 48"><path d="M11 11l26 26M37 11 11 37"/></symbol></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6ad55" font-weight="700" letter-spacing="0.14em">REPORTING PERIOD</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ပိတ်ပြီးသား period ထဲကို backdate မလုပ်ရဘူး</text>
+        <rect x="70" y="205" width="680" height="400" rx="22" fill="#9aa5b8" fill-opacity="0.05" stroke="#9aa5b8" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="92" y="241" font-size="24" fill="#9aa5b8" font-weight="700" letter-spacing="0.06em">OCTOBER · REPORTED</text>
+        <use href="#i-lock" x="652" y="234" width="56" height="56" style="color:#b794f6"/>
+        <rect x="110" y="290" width="300" height="130" rx="18" fill="#121824" stroke="#f6c453" stroke-width="2.5"/><text x="260" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-1</text><text x="260" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">+1000.00 · 30 Oct</text>
+        <rect x="830" y="205" width="700" height="400" rx="22" fill="#4fd1c5" fill-opacity="0.05" stroke="#4fd1c5" stroke-width="2" stroke-opacity="0.75" stroke-dasharray="10 9"/><text x="852" y="241" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.06em">NOVEMBER · OPEN</text>
+        <rect x="420" y="440" width="300" height="130" rx="18" fill="#121824" stroke="#fc8181" stroke-width="2.5" stroke-dasharray="10 8"/><text x="570" y="495.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">reversal</text><text x="570" y="536.6" font-size="24" text-anchor="middle" fill="#8a94a8">dated 30 Oct</text>
+        <circle cx="714" cy="446" r="24" fill="#0b0e14" stroke="#fc8181" stroke-width="3"/><use href="#i-cross" x="700.2" y="432.2" width="27.599999999999998" height="27.599999999999998" style="color:#fc8181" stroke-width="5"/>
+        <g class="in"><rect x="870" y="290" width="300" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="1020" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-2</text><text x="1020" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">−1000.00 · 3 Nov</text></g>
+        <g class="in"><rect x="1200" y="290" width="300" height="130" rx="18" fill="#121824" stroke="#68d391" stroke-width="2.5"/><text x="1350" y="345.8" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600" class="mono">tx-3</text><text x="1350" y="386.6" font-size="24" text-anchor="middle" fill="#8a94a8">+100.00 · 3 Nov</text></g>
+        <path d="M860 355L424 355" fill="none" stroke="#9aa5b8" stroke-width="3.5" stroke-linecap="round" pathLength="1" marker-end="url(#ah-gray)" class="dr"/><text x="642" y="338.8" font-size="26" text-anchor="middle" fill="#9aa5b8" font-weight="600">corrects</text>
+        <rect x="70" y="650" width="654.6" height="50" rx="25" fill="#fc8181" opacity="0.16"/><rect x="70" y="650" width="654.6" height="50" rx="25" fill="none" stroke="#fc8181" stroke-width="2"/><text x="397.3" y="684.1" font-size="26" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">Oct 31 balance 0.00 ≠ reported 1000.00</text>
+        <g class="in"><rect x="70" y="740" width="898.7" height="50" rx="25" fill="#68d391" opacity="0.16"/><rect x="70" y="740" width="898.7" height="50" rx="25" fill="none" stroke="#68d391" stroke-width="2"/><text x="519.4" y="774.1" font-size="26" text-anchor="middle" fill="#68d391" font-weight="700" class="mono">Oct 31 balance 1000.00 = reported · fix in Nov → tx-1</text></g>
+        </svg>
+    - id: report-1
+      contentType: html
+      name: "Reporting 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">REPORTING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Link မပါရင် cleanup က activity လို ဖြစ်သွားတယ်</text>
+        <g class="in"><text x="80" y="270" font-size="32" fill="#fc8181" font-weight="700">November report · link မပါ</text></g>
+        <g class="in"><rect x="80" y="310" width="680" height="292" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="345" font-size="22" fill="#8a94a8" font-weight="700">deposits</text><text x="738" y="345" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M80 362H760" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="412" font-size="28" fill="#e9edf5" class="mono">tx-2 reversal</text><text x="738" y="412" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">−1000.00</text></g><g><path d="M96 442H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="492" font-size="28" fill="#e9edf5" class="mono">tx-3 re-post</text><text x="738" y="492" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">+100.00</text></g><g><rect x="86" y="527" width="668" height="70" rx="10" fill="#fc8181" opacity="0.14"/><path d="M96 522H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="572" font-size="28" fill="#e9edf5" font-weight="700" class="mono">total</text><text x="738" y="572" font-size="28" text-anchor="end" fill="#fc8181" font-weight="700" class="mono">−900.00</text></g></g>
+        <g class="in"><text x="80" y="650" font-size="26" fill="#8a94a8">November မှာ deposit တွေ အနုတ် ဖြစ်နေသလို</text></g>
+        </svg>
+    - id: report-2
+      contentType: html
+      name: "Reporting 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">REPORTING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Link မပါရင် cleanup က activity လို ဖြစ်သွားတယ်</text>
+        <text x="80" y="270" font-size="32" fill="#fc8181" font-weight="700">November report · link မပါ</text>
+        <rect x="80" y="310" width="680" height="292" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="345" font-size="22" fill="#8a94a8" font-weight="700">deposits</text><text x="738" y="345" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M80 362H760" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="412" font-size="28" fill="#e9edf5" class="mono">tx-2 reversal</text><text x="738" y="412" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">−1000.00</text></g><g><path d="M96 442H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="492" font-size="28" fill="#e9edf5" class="mono">tx-3 re-post</text><text x="738" y="492" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">+100.00</text></g><g><rect x="86" y="527" width="668" height="70" rx="10" fill="#fc8181" opacity="0.14"/><path d="M96 522H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="572" font-size="28" fill="#e9edf5" font-weight="700" class="mono">total</text><text x="738" y="572" font-size="28" text-anchor="end" fill="#fc8181" font-weight="700" class="mono">−900.00</text></g>
+        <text x="80" y="650" font-size="26" fill="#8a94a8">November မှာ deposit တွေ အနုတ် ဖြစ်နေသလို</text>
+        <g class="in"><text x="840" y="270" font-size="32" fill="#68d391" font-weight="700">November report · link ပါ</text></g>
+        <g class="in"><rect x="840" y="310" width="680" height="212" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="862" y="345" font-size="22" fill="#8a94a8" font-weight="700">line</text><text x="1498" y="345" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M840 362H1520" stroke="#2a3345" stroke-width="2"/><g><text x="862" y="412" font-size="28" fill="#e9edf5" class="mono">new deposits</text><text x="1498" y="412" font-size="28" text-anchor="end" fill="#68d391" class="mono">0.00</text></g><g><rect x="846" y="447" width="668" height="70" rx="10" fill="#f6ad55" opacity="0.14"/><path d="M856 442H1504" stroke="#2a3345" stroke-width="1.5"/><text x="862" y="492" font-size="24" fill="#e9edf5" class="mono">correction of tx-1 (Oct)</text><text x="1498" y="492" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">−900.00</text></g></g>
+        <g class="in"><text x="840" y="650" font-size="26" fill="#8a94a8">တကယ့် activity နဲ့ cleanup ကို ခွဲပြတယ်</text></g>
+        </svg>
+    - id: report-3
+      contentType: html
+      name: "Reporting 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#4fd1c5" stop-opacity="0.13"/><stop offset="1" stop-color="#4fd1c5" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#4fd1c5" font-weight="700" letter-spacing="0.14em">REPORTING</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">Link မပါရင် cleanup က activity လို ဖြစ်သွားတယ်</text>
+        <text x="80" y="270" font-size="32" fill="#fc8181" font-weight="700">November report · link မပါ</text>
+        <rect x="80" y="310" width="680" height="292" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="345" font-size="22" fill="#8a94a8" font-weight="700">deposits</text><text x="738" y="345" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M80 362H760" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="412" font-size="28" fill="#e9edf5" class="mono">tx-2 reversal</text><text x="738" y="412" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">−1000.00</text></g><g><path d="M96 442H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="492" font-size="28" fill="#e9edf5" class="mono">tx-3 re-post</text><text x="738" y="492" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">+100.00</text></g><g><rect x="86" y="527" width="668" height="70" rx="10" fill="#fc8181" opacity="0.14"/><path d="M96 522H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="572" font-size="28" fill="#e9edf5" font-weight="700" class="mono">total</text><text x="738" y="572" font-size="28" text-anchor="end" fill="#fc8181" font-weight="700" class="mono">−900.00</text></g>
+        <text x="80" y="650" font-size="26" fill="#8a94a8">November မှာ deposit တွေ အနုတ် ဖြစ်နေသလို</text>
+        <text x="840" y="270" font-size="32" fill="#68d391" font-weight="700">November report · link ပါ</text>
+        <rect x="840" y="310" width="680" height="212" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="862" y="345" font-size="22" fill="#8a94a8" font-weight="700">line</text><text x="1498" y="345" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M840 362H1520" stroke="#2a3345" stroke-width="2"/><g><text x="862" y="412" font-size="28" fill="#e9edf5" class="mono">new deposits</text><text x="1498" y="412" font-size="28" text-anchor="end" fill="#68d391" class="mono">0.00</text></g><g><rect x="846" y="447" width="668" height="70" rx="10" fill="#f6ad55" opacity="0.14"/><path d="M856 442H1504" stroke="#2a3345" stroke-width="1.5"/><text x="862" y="492" font-size="24" fill="#e9edf5" class="mono">correction of tx-1 (Oct)</text><text x="1498" y="492" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">−900.00</text></g>
+        <text x="840" y="650" font-size="26" fill="#8a94a8">တကယ့် activity နဲ့ cleanup ကို ခွဲပြတယ်</text>
+        <g class="in"><rect x="80" y="730" width="922.5" height="48" rx="24" fill="#f6ad55" opacity="0.16"/><rect x="80" y="730" width="922.5" height="48" rx="24" fill="none" stroke="#f6ad55" stroke-width="2"/><text x="541.3" y="762.4" font-size="24" text-anchor="middle" fill="#f6ad55" font-weight="700" class="mono">chargeback → later period · linked reversal · balance &lt; 0 ?</text></g>
+        <g class="in"><rect x="80" y="800" width="862.4" height="48" rx="24" fill="#fc8181" opacity="0.16"/><rect x="80" y="800" width="862.4" height="48" rx="24" fill="none" stroke="#fc8181" stroke-width="2"/><text x="511.2" y="832.4" font-size="24" text-anchor="middle" fill="#fc8181" font-weight="700" class="mono">write-off → expense:writeoff · a new entry, not an edit</text></g>
+        </svg>
+    - id: two-1
+      contentType: html
+      name: "Reversal vs correction 1/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REVERSAL VS CORRECTION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ပြင်နည်း နှစ်မျိုး၊ balance က အတူတူ</text>
+        <g class="in"><text x="80" y="240" font-size="32" fill="#f6ad55" font-weight="700">reverse + re-post</text></g>
+        <g class="in"><rect x="80" y="275" width="680" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="310" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="266.8" y="310" font-size="22" fill="#8a94a8" font-weight="700">memo</text><text x="738" y="310" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M80 327H760" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="368" font-size="28" fill="#9aa5b8" class="mono">tx-1</text><text x="266.8" y="368" font-size="28" fill="#e9edf5" class="mono">deposit</text><text x="738" y="368" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">+1000.00</text></g><g><path d="M96 389H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="430" font-size="28" fill="#9aa5b8" class="mono">tx-2</text><text x="266.8" y="430" font-size="28" fill="#e9edf5" class="mono">reversal</text><text x="738" y="430" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">−1000.00</text></g><g><path d="M96 451H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="492" font-size="28" fill="#9aa5b8" class="mono">tx-3</text><text x="266.8" y="492" font-size="28" fill="#e9edf5" class="mono">re-post</text><text x="738" y="492" font-size="28" text-anchor="end" fill="#68d391" class="mono">+100.00</text></g></g>
+        <g class="in"><rect x="80" y="560" width="280.2" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="80" y="560" width="280.2" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="220.1" y="594.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Σ 100.00 · 3 tx</text></g>
+        </svg>
+    - id: two-2
+      contentType: html
+      name: "Reversal vs correction 2/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REVERSAL VS CORRECTION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ပြင်နည်း နှစ်မျိုး၊ balance က အတူတူ</text>
+        <text x="80" y="240" font-size="32" fill="#f6ad55" font-weight="700">reverse + re-post</text>
+        <rect x="80" y="275" width="680" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="310" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="266.8" y="310" font-size="22" fill="#8a94a8" font-weight="700">memo</text><text x="738" y="310" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M80 327H760" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="368" font-size="28" fill="#9aa5b8" class="mono">tx-1</text><text x="266.8" y="368" font-size="28" fill="#e9edf5" class="mono">deposit</text><text x="738" y="368" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">+1000.00</text></g><g><path d="M96 389H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="430" font-size="28" fill="#9aa5b8" class="mono">tx-2</text><text x="266.8" y="430" font-size="28" fill="#e9edf5" class="mono">reversal</text><text x="738" y="430" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">−1000.00</text></g><g><path d="M96 451H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="492" font-size="28" fill="#9aa5b8" class="mono">tx-3</text><text x="266.8" y="492" font-size="28" fill="#e9edf5" class="mono">re-post</text><text x="738" y="492" font-size="28" text-anchor="end" fill="#68d391" class="mono">+100.00</text></g>
+        <rect x="80" y="560" width="280.2" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="80" y="560" width="280.2" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="220.1" y="594.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Σ 100.00 · 3 tx</text>
+        <g class="in"><text x="840" y="240" font-size="32" fill="#6cb2f5" font-weight="700">correction by the difference</text></g>
+        <g class="in"><rect x="840" y="275" width="680" height="176" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="862" y="310" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="1026.8" y="310" font-size="22" fill="#8a94a8" font-weight="700">memo</text><text x="1498" y="310" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M840 327H1520" stroke="#2a3345" stroke-width="2"/><g><text x="862" y="368" font-size="28" fill="#9aa5b8" class="mono">tx-1</text><text x="1026.8" y="368" font-size="28" fill="#e9edf5" class="mono">deposit</text><text x="1498" y="368" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">+1000.00</text></g><g><path d="M856 389H1504" stroke="#2a3345" stroke-width="1.5"/><text x="862" y="430" font-size="28" fill="#9aa5b8" class="mono">tx-2</text><text x="1026.8" y="430" font-size="28" fill="#e9edf5" class="mono">adjust</text><text x="1498" y="430" font-size="28" text-anchor="end" fill="#6cb2f5" class="mono">−900.00</text></g></g>
+        <g class="in"><rect x="840" y="560" width="280.2" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="840" y="560" width="280.2" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="980.1" y="594.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Σ 100.00 · 2 tx</text></g>
+        </svg>
+    - id: two-3
+      contentType: html
+      name: "Reversal vs correction 3/3"
+      content: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" style="display:block;width:100vw;height:100vh">
+        <style>svg{font-family:Inter,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans Myanmar","Myanmar Text","Myanmar Sangam MN",sans-serif}.mono{font-family:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Text",monospace}symbol *{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}@keyframes in{from{opacity:0;transform:translateY(16px)}}.in{animation:in .5s ease-out both}@keyframes dr{from{stroke-dasharray:1;stroke-dashoffset:1;opacity:.2}to{stroke-dasharray:1;stroke-dashoffset:0;opacity:1}}.dr{animation:dr .7s ease-out}.fl{opacity:0;animation:fl 2.2s linear infinite}@keyframes fl{0%{offset-distance:0%;opacity:0}12%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+        <defs><pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.600" fill="#1a2130"/></pattern><radialGradient id="glow" cx="0" cy="0" r="1"><stop offset="0" stop-color="#f6c453" stop-opacity="0.13"/><stop offset="1" stop-color="#f6c453" stop-opacity="0"/></radialGradient><pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V14" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="5"/></pattern></defs>
+        <rect width="1600" height="900" fill="#0b0e14"/><rect width="1600" height="900" fill="url(#dots)"/><rect width="1100" height="700" fill="url(#glow)"/>
+        <text x="80" y="86" font-size="24" fill="#f6c453" font-weight="700" letter-spacing="0.14em">REVERSAL VS CORRECTION</text>
+        <text x="80" y="150" font-size="50" fill="#e9edf5" font-weight="700">ပြင်နည်း နှစ်မျိုး၊ balance က အတူတူ</text>
+        <text x="80" y="240" font-size="32" fill="#f6ad55" font-weight="700">reverse + re-post</text>
+        <rect x="80" y="275" width="680" height="238" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="102" y="310" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="266.8" y="310" font-size="22" fill="#8a94a8" font-weight="700">memo</text><text x="738" y="310" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M80 327H760" stroke="#2a3345" stroke-width="2"/><g><text x="102" y="368" font-size="28" fill="#9aa5b8" class="mono">tx-1</text><text x="266.8" y="368" font-size="28" fill="#e9edf5" class="mono">deposit</text><text x="738" y="368" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">+1000.00</text></g><g><path d="M96 389H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="430" font-size="28" fill="#9aa5b8" class="mono">tx-2</text><text x="266.8" y="430" font-size="28" fill="#e9edf5" class="mono">reversal</text><text x="738" y="430" font-size="28" text-anchor="end" fill="#f6ad55" class="mono">−1000.00</text></g><g><path d="M96 451H744" stroke="#2a3345" stroke-width="1.5"/><text x="102" y="492" font-size="28" fill="#9aa5b8" class="mono">tx-3</text><text x="266.8" y="492" font-size="28" fill="#e9edf5" class="mono">re-post</text><text x="738" y="492" font-size="28" text-anchor="end" fill="#68d391" class="mono">+100.00</text></g>
+        <rect x="80" y="560" width="280.2" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="80" y="560" width="280.2" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="220.1" y="594.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Σ 100.00 · 3 tx</text>
+        <text x="840" y="240" font-size="32" fill="#6cb2f5" font-weight="700">correction by the difference</text>
+        <rect x="840" y="275" width="680" height="176" rx="16" fill="#121824" stroke="#2a3345" stroke-width="2"/><text x="862" y="310" font-size="22" fill="#8a94a8" font-weight="700">tx</text><text x="1026.8" y="310" font-size="22" fill="#8a94a8" font-weight="700">memo</text><text x="1498" y="310" font-size="22" text-anchor="end" fill="#8a94a8" font-weight="700">amount</text><path d="M840 327H1520" stroke="#2a3345" stroke-width="2"/><g><text x="862" y="368" font-size="28" fill="#9aa5b8" class="mono">tx-1</text><text x="1026.8" y="368" font-size="28" fill="#e9edf5" class="mono">deposit</text><text x="1498" y="368" font-size="28" text-anchor="end" fill="#e9edf5" class="mono">+1000.00</text></g><g><path d="M856 389H1504" stroke="#2a3345" stroke-width="1.5"/><text x="862" y="430" font-size="28" fill="#9aa5b8" class="mono">tx-2</text><text x="1026.8" y="430" font-size="28" fill="#e9edf5" class="mono">adjust</text><text x="1498" y="430" font-size="28" text-anchor="end" fill="#6cb2f5" class="mono">−900.00</text></g>
+        <rect x="840" y="560" width="280.2" height="50" rx="25" fill="#f6c453" opacity="0.16"/><rect x="840" y="560" width="280.2" height="50" rx="25" fill="none" stroke="#f6c453" stroke-width="2"/><text x="980.1" y="594.1" font-size="26" text-anchor="middle" fill="#f6c453" font-weight="700" class="mono">Σ 100.00 · 2 tx</text>
+        <g class="in"><rect x="80" y="660" width="680" height="130" rx="18" fill="#121824" stroke="#f6ad55" stroke-width="2.5"/><text x="420" y="715.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">record တိုင်းက event တစ်ခုလုံး</text><text x="420" y="761.7" font-size="24" text-anchor="middle" fill="#8a94a8">fee၊ limit၊ report တွေ ပြန်တွက်ဖို့ လွယ်</text></g>
+        <g class="in"><rect x="840" y="660" width="680" height="130" rx="18" fill="#121824" stroke="#6cb2f5" stroke-width="2.5"/><text x="1180" y="715.3" font-size="32" text-anchor="middle" fill="#e9edf5" font-weight="600">entry နည်းတယ်</text><text x="1180" y="761.7" font-size="24" text-anchor="middle" fill="#8a94a8">100.00 လို့ ရေးထားတဲ့ record မရှိ</text></g>
+        </svg>
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 9515
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "tx-1 2026-10-30 deposit   1000.00\nbalance today: 1000.00\nOct 31 balance: 1000.00 reported: 1000.00\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "reversal dated 2026-10-30: <nil>\ntx-1 2026-10-30 deposit   1000.00  corrected by tx-2\ntx-2 2026-10-30 reversal -1000.00  corrects tx-1\nbalance today: 0.00\nOct 31 balance: 0.00 reported: 1000.00\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "reversal dated 2026-10-30: period closed through 2026-10-31\ntx-1 2026-10-30 deposit   1000.00\nbalance today: 1000.00\nOct 31 balance: 1000.00 reported: 1000.00\n"
+      run-4:
+        status: success
+        exitCode: 0
+        output: "reversal dated 2026-10-30: period closed through 2026-10-31\ntx-1 2026-10-30 deposit   1000.00  corrected by tx-2 tx-3\ntx-2 2026-11-03 reversal -1000.00  corrects tx-1\ntx-3 2026-11-03 re-post    100.00  corrects tx-1\nbalance today: 100.00\nOct 31 balance: 1000.00 reported: 1000.00\n"
+
+scenes:
+  - id: hook
+    chapter: Post လုပ်ပြီးသား entry မှားနေရင်
+    narration: >-
+      user တစ်ယောက်က ယူရို ၁၀၀ သွင်းတာကို system က ယူရို ၁၀၀၀ လို့ book လုပ်မိတယ် ဆိုပါစို့။
+      [[mark:sel-tx1]] ဒီ line က အဲဒီ deposit ပါ၊ ဆင့်နဲ့ ရေးထားတဲ့ ပမာဏမှာ သုည တစ်လုံး ပိုနေပါတယ်။
+      [[mark:sel-close]] အောက်က line က October ကို ပိတ်လိုက်တာပါ၊ October ရဲ့ statement တွေ ပို့ပြီးသွားပြီ
+      ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ ပိတ်ခါနီးမှာ ledger ပြတဲ့ balance ကိုလည်း report လုပ်ပြီးသား တန်ဖိုးအဖြစ်
+      မှတ်ထားပါတယ်။ [[mark:run-1]] run လိုက်ရအောင်။ [[mark:pt-bal1]] user ရဲ့ balance က ယူရို ၁၀၀၀
+      ဖြစ်နေပါတယ်။ ဆိုလိုတာက ယူရို ၉၀၀ က ဘဏ်ထဲမှာ မရှိဘဲ ledger ထဲမှာပဲ ပေါ်လာတဲ့ ငွေပါ၊ user က
+      ထုတ်ယူသွားရင် တကယ့် ငွေ ဆုံးပါပြီ။ [[mark:dock-1]] post လုပ်ပြီးသား entry ကို UPDATE နဲ့ ပြင်လို့
+      မရတာ သိပြီးသားပါ။ ဒါဆို ဘယ်လို ပြင်မလဲ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-tx1
+        type: editor.select
+        at: { mark: sel-tx1 }
+        target:
+          {
+            file: main.go,
+            text: 'must(l.Post(Book("tx-1", "deposit", 100000, oct30, "")))',
+            occurrence: 1,
+          }
+      - id: sel-close
+        type: editor.select
+        at: { mark: sel-close }
+        target:
+          {
+            file: main.go,
+            text: "l.Close(oct31) // October's statements have been sent",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "balance today: 1000.00",
+          timeoutMs: 8000,
+        }
+      - id: pt-bal1
+        type: console.point
+        at: { mark: pt-bal1 }
+        target: { text: "balance today: 1000.00", occurrence: 1 }
+      - { id: dock-1, type: runtime.collapseDock, at: { mark: dock-1 } }
+  - id: forward
+    chapter: Fix forward
+    narration: >-
+      [[mark:show-forward]] အဖြေက fix forward ပါ။ အတိတ်ကို ပြန်မပြင်ဘဲ entry အသစ်တွေ ရှေ့ဆက်ရေးပြီး
+      ပြင်တာပါ။ [[mark:pt-bal-1]] မှားနေတဲ့ entry ကို လုံးဝ မထိပါဘူး။ [[mark:forward-2]] ပထမ အဆင့်က
+      reversal ပါ။ reversal ဆိုတာ original ရဲ့ line တိုင်းကို debit နဲ့ credit ဘက် လဲပြီး ပမာဏ အပြည့်
+      ပြန်ချေတဲ့ transaction ပါ။ [[mark:pt-bal-2]] economically ကြည့်ရင် original မဖြစ်ခဲ့သလို balance
+      သုည ပြန်ဖြစ်ပေမဲ့၊ transaction နှစ်ခုလုံး history ထဲမှာ မြင်နေရဆဲပါ။ [[mark:forward-3]] ပြီးမှ မှန်တဲ့
+      ပမာဏ ယူရို ၁၀၀ နဲ့ re-post လုပ်ပါတယ်။ entry အသစ် နှစ်ခုလုံးက original ကို ညွှန်ထားပါတယ်။
+      [[mark:forward-4]] link ကို နှစ်ဖက်လုံး ထားရပါမယ်။ ဒါပေမဲ့ original က immutable ဖြစ်လို့ သူ့ထဲကို
+      corrected by ဆိုတဲ့ field နောက်မှ ဖြည့်လို့ မရပါဘူး။ ဒါကြောင့် entry အသစ်က link ကို သိမ်းပြီး၊
+      နောက်ပြန် link ကိုတော့ ledger ထဲမှာ ရှာတာ၊ ဒါမှမဟုတ် append-only ဖြစ်တဲ့ link table တစ်ခုမှာ
+      ထားတာပါ။
+      [[mark:close-forward]] code မှာ ဒီ အဆင့်တွေကို function တွေအဖြစ် ရေးထားပါတယ်။ [[mark:open-corr]]
+      ပြင်ဆင်မှုနဲ့ ဆိုင်တာတွေက သီးသန့် ဖိုင်မှာပါ။ [[mark:sel-swap]] reversal က original ရဲ့ line တိုင်းကို
+      ယူပြီး debit နဲ့ credit ကို လဲထားပါတယ်။ ပမာဏကို အနုတ် မလုပ်ဘဲ ဘက် လဲတာက line တိုင်းကို
+      အပေါင်း ပမာဏနဲ့ပဲ ထားချင်လို့ပါ။ [[mark:sel-link]] ပြီးတော့ original ရဲ့ id ကို ထည့်ပါတယ်၊ ဒါက ရှေ့ကို
+      ညွှန်တဲ့ link ပါ။ [[mark:sel-back]] နောက်ပြန် link ကိုတော့ ledger ထဲမှာ ရှာပြီး ပြန်ပေးတာပါ၊ original
+      ကို ဘယ်တော့မှ မပြင်ပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Principles (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#principles",
+        }
+    actions:
+      - {
+          id: show-forward,
+          type: slide.show,
+          at: { mark: show-forward, offsetMs: -700 },
+          slideId: forward-1,
+        }
+      - { id: pt-bal-1, type: slide.point, at: { mark: pt-bal-1 }, target: { x: 0.175, y: 0.42 } }
+      - { id: forward-2, type: slide.show, at: { mark: forward-2 }, slideId: forward-2 }
+      - {
+          id: pt-tx2,
+          type: slide.point,
+          at: { afterAction: forward-2 },
+          target: { x: 0.513, y: 0.653 },
+        }
+      - { id: pt-bal-2, type: slide.point, at: { mark: pt-bal-2 }, target: { x: 0.077, y: 0.864 } }
+      - { id: forward-3, type: slide.show, at: { mark: forward-3 }, slideId: forward-3 }
+      - {
+          id: pt-tx3,
+          type: slide.point,
+          at: { afterAction: forward-3 },
+          target: { x: 0.825, y: 0.653 },
+        }
+      - { id: forward-4, type: slide.show, at: { mark: forward-4 }, slideId: forward-4 }
+      - {
+          id: pt-back,
+          type: slide.point,
+          at: { afterAction: forward-4 },
+          target: { x: 0.72, y: 0.82 },
+        }
+      - { id: close-forward, type: slide.close, at: { mark: close-forward } }
+      - { id: open-corr, type: workspace.openFile, at: { mark: open-corr }, path: corrections.go }
+      - id: sel-swap
+        type: editor.select
+        at: { mark: sel-swap }
+        target:
+          {
+            file: corrections.go,
+            text: "Line{Account: line.Account, Debit: line.Credit, Credit: line.Debit}",
+            occurrence: 1,
+          }
+      - id: sel-link
+        type: editor.select
+        at: { mark: sel-link }
+        target: { file: corrections.go, text: "Corrects: orig.ID", occurrence: 1 }
+      - id: sel-back
+        type: editor.select
+        at: { mark: sel-back }
+        target: { file: corrections.go, text: "if tx.Corrects == id {", occurrence: 1 }
+  - id: backdate
+    chapter: Reversal ကို ဘယ်နေ့စွဲနဲ့ post လုပ်မလဲ
+    narration: >-
+      [[mark:open-main-2]] reversal ကို ဘယ်နေ့စွဲနဲ့ post လုပ်မလဲ။ original မဖြစ်ခဲ့သလို ဖြစ်ချင်ရင်
+      original ရဲ့ နေ့စွဲ အတိုင်း October သုံးဆယ်ရက်နဲ့ ထားချင်စရာပါ။ [[mark:type-back]] ဒီ line နှစ်ကြောင်းက
+      value date ကို October သုံးဆယ်ရက် ထားပြီး reversal ကို post လုပ်ကြည့်ပြီး၊ ledger ပြန်ပေးတဲ့ error ကို
+      ထုတ်ပြပါတယ်။ ledger က လက်ခံမလား၊ လက်ခံရင် ဘာဖြစ်မလဲ။ run မလုပ်ခင် ခန့်မှန်းကြည့်ပါ။
+      [[mark:run-2]] run လိုက်ရအောင်။ [[mark:pt-nil]] error မရှိပါဘူး၊ ledger က လက်ခံလိုက်ပါတယ်။
+      [[mark:pt-oct]] ဒါပေမဲ့ October ကုန်က balance က အခု သုည ဖြစ်သွားပြီး၊ report လုပ်ခဲ့တဲ့ ယူရို ၁၀၀၀
+      နဲ့ မကိုက်တော့ပါဘူး။ [[mark:dock-2]] user ဆီ ပို့ပြီးသား statement က ledger နဲ့ မတူတော့တာပါ၊
+      ပြင်ဆင်မှု တစ်ခုက အတိတ်ကို တိတ်တိတ်လေး ပြောင်းလိုက်တာပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+    actions:
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: type-back
+        type: editor.type
+        at: { mark: type-back }
+        target:
+          {
+            file: main.go,
+            after: "\tl.Close(oct31) // October's statements have been sent\n",
+            occurrence: 1,
+          }
+        text: "\n\terr := l.Post(Reversal(l.Get(\"tx-1\"), \"tx-2\", oct30))\n\tfmt.Println(\"reversal dated 2026-10-30:\", err)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "Oct 31 balance: 0.00 reported: 1000.00",
+          timeoutMs: 8000,
+        }
+      - id: pt-nil
+        type: console.point
+        at: { mark: pt-nil }
+        target: { text: "reversal dated 2026-10-30: <nil>", occurrence: 1 }
+      - id: pt-oct
+        type: console.point
+        at: { mark: pt-oct }
+        target: { text: "Oct 31 balance: 0.00", occurrence: 1 }
+      - { id: dock-2, type: runtime.collapseDock, at: { mark: dock-2 } }
+  - id: period
+    chapter: ပိတ်ပြီးသား period
+    narration: >-
+      [[mark:show-period]] ပြဿနာက reporting period ပါ။ [[mark:pt-oct-box]] October ရဲ့ statement နဲ့
+      report တွေကို user တွေ၊ auditor တွေ၊ အခွန်ရုံးလို အပြင်ကို ပို့ပြီးသားပါ။ အဲဒီ period ထဲကို entry
+      အသစ် ဝင်လာရင် ပို့ပြီးသား report တွေက ledger နဲ့ မကိုက်တော့ပါဘူး။ [[mark:period-2]] ဒါကြောင့် value
+      time ကို အတိတ်က နေ့စွဲ ထားတဲ့ backdating ကို period ဖွင့်ထားတုန်းမှာပဲ လုပ်လို့ ရပါတယ်။ ပိတ်ပြီးသား
+      period ထဲကို backdate လုပ်ခွင့် များသောအားဖြင့် မရှိပါဘူး။ [[mark:period-3]] အဲဒီအစား correction
+      ကို လက်ရှိ period ဖြစ်တဲ့ November ထဲမှာ book လုပ်ပြီး October က original နဲ့ link လုပ်ပါတယ်။
+      [[mark:pt-kept]] October ရဲ့ ဂဏန်းတွေ မှားနေပေမဲ့ ပို့တုန်းကအတိုင်း ကျန်ပြီး၊ ပြင်ဆင်မှုက November
+      မှာ မြင်ရပါတယ်။
+      [[mark:close-period]] ဒီ စည်းမျဉ်းကို ledger ကိုယ်တိုင် စစ်ရပါမယ်၊ caller တိုင်းက မှတ်မိနေမယ်လို့ ယူဆလို့ မရပါဘူး။
+      [[mark:open-ledger]] ledger မှာ period ပိတ်တဲ့ နေ့ကို မှတ်ထားပေမဲ့ post လုပ်တဲ့အခါ မစစ်သေးပါဘူး။
+      [[mark:type-guard]] ဒီ စစ်ချက်က value date က ပိတ်ပြီးသား နေ့ထက် နောက်ကျမှ လက်ခံပြီး၊ မဟုတ်ရင်
+      error ပြန်ပေးပါတယ်။ debit နဲ့ credit ညီသလား စစ်တာနဲ့ အတူ post လုပ်တဲ့ တစ်နေရာတည်းမှာ ထားလို့ ဘယ်
+      code path ကမှ ကျော်လို့ မရပါဘူး။ [[mark:run-3]] run လိုက်ရအောင်။ [[mark:pt-closed]] ဒီတစ်ခါ ledger
+      က October ပိတ်ပြီးပြီ ဆိုပြီး လက်မခံပါဘူး။ [[mark:dock-3]] October ကုန်က balance လည်း report
+      လုပ်ခဲ့တဲ့ တန်ဖိုးအတိုင်း ပြန်ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Value time vs booking time vs settlement time (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#value-time-vs-booking-time-vs-settlement-time",
+        }
+    actions:
+      - {
+          id: show-period,
+          type: slide.show,
+          at: { mark: show-period, offsetMs: -700 },
+          slideId: period-1,
+        }
+      - {
+          id: pt-oct-box,
+          type: slide.point,
+          at: { mark: pt-oct-box },
+          target: { x: 0.163, y: 0.476 },
+        }
+      - { id: period-2, type: slide.show, at: { mark: period-2 }, slideId: period-2 }
+      - {
+          id: pt-broke,
+          type: slide.point,
+          at: { afterAction: period-2 },
+          target: { x: 0.242, y: 0.787 },
+        }
+      - { id: period-3, type: slide.show, at: { mark: period-3 }, slideId: period-3 }
+      - {
+          id: pt-tx2-nov,
+          type: slide.point,
+          at: { afterAction: period-3 },
+          target: { x: 0.638, y: 0.476 },
+        }
+      - { id: pt-kept, type: slide.point, at: { mark: pt-kept }, target: { x: 0.318, y: 0.887 } }
+      - { id: close-period, type: slide.close, at: { mark: close-period } }
+      - { id: open-ledger, type: workspace.openFile, at: { mark: open-ledger }, path: ledger.go }
+      - id: type-guard
+        type: editor.type
+        at: { mark: type-guard }
+        target: { file: ledger.go, after: "cents(debit), cents(credit))\n\t}\n", occurrence: 1 }
+        text: "\tif !tx.Value.After(l.closed) {\n\t\treturn fmt.Errorf(\"period closed through %s\", day(l.closed))\n\t}\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "period closed through 2026-10-31",
+          timeoutMs: 8000,
+        }
+      - id: pt-closed
+        type: console.point
+        at: { mark: pt-closed }
+        target: { text: "period closed through 2026-10-31", occurrence: 1 }
+      - { id: dock-3, type: runtime.collapseDock, at: { mark: dock-3 } }
+      - {
+          id: expect-file-guard,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: ledger.go,
+          contains: "if !tx.Value.After(l.closed) {",
+        }
+  - id: fix
+    chapter: လက်ရှိ period မှာ ပြင်မယ်
+    narration: >-
+      [[mark:open-main-3]] အခု မှန်တဲ့ နည်းနဲ့ ပြင်ရအောင်။ [[mark:type-fix]] reversal ကို November
+      သုံးရက်နေ့စွဲနဲ့ post လုပ်ပြီး၊ မှန်တဲ့ ပမာဏ ယူရို ၁၀၀ ကို re-post လုပ်ပါတယ်။ နှစ်ခုလုံးက original
+      ကို link လုပ်ထားပြီး၊ ledger က လက်မခံရင် program က ချက်ချင်း ရပ်ပါတယ်။ [[mark:run-4]] run
+      လိုက်ရအောင်။ [[mark:pt-tx1]] original က October မှာ ယူရို ၁၀၀၀ အတိုင်း ကျန်နေပြီး၊ ဘယ်
+      transaction တွေက သူ့ကို ပြင်လဲ ဆိုတာ ပြပါတယ်။ [[mark:pt-tx2-run]] reversal နဲ့ re-post က November
+      မှာ ရှိပြီး original ကို ညွှန်ပါတယ်။ [[mark:pt-bal4]] ဒီနေ့ balance က ယူရို ၁၀၀ ဖြစ်သွားပါပြီ။
+      [[mark:pt-oct4]] October ကုန်က balance ကတော့ report လုပ်ခဲ့တဲ့ အတိုင်းပါပဲ။ [[mark:dock-4]] ဘာမှားခဲ့လဲ၊
+      ဘယ်တော့ ပြင်လဲ ဆိုတာ transaction သုံးခုလုံးနဲ့ history ထဲမှာ ကျန်ပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+    actions:
+      - { id: open-main-3, type: workspace.openFile, at: { mark: open-main-3 }, path: main.go }
+      - id: type-fix
+        type: editor.type
+        at: { mark: type-fix }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"reversal dated 2026-10-30:\", err)\n",
+            occurrence: 1,
+          }
+        text: "\tmust(l.Post(Reversal(l.Get(\"tx-1\"), \"tx-2\", nov3)))\n\tmust(l.Post(Book(\"tx-3\", \"re-post\", 10000, nov3, \"tx-1\")))\n"
+        cadence: line-by-line
+      - { id: run-4, type: runtime.run, at: { mark: run-4, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-4,
+          type: expect.output,
+          at: { afterAction: run-4 },
+          contains: "balance today: 100.00",
+          timeoutMs: 8000,
+        }
+      - id: pt-tx1
+        type: console.point
+        at: { mark: pt-tx1 }
+        target: { text: "tx-1 2026-10-30", occurrence: 1 }
+      - id: pt-tx2-run
+        type: console.point
+        at: { mark: pt-tx2-run }
+        target: { text: "tx-2 2026-11-03", occurrence: 1 }
+      - id: pt-bal4
+        type: console.point
+        at: { mark: pt-bal4 }
+        target: { text: "balance today: 100.00", occurrence: 1 }
+      - id: pt-oct4
+        type: console.point
+        at: { mark: pt-oct4 }
+        target: { text: "Oct 31 balance: 1000.00", occurrence: 1 }
+      - { id: dock-4, type: runtime.collapseDock, at: { mark: dock-4 } }
+  - id: two
+    chapter: Reversal လား correction လား
+    narration: >-
+      [[mark:show-two]] ပြင်နည်း နှစ်မျိုး ရှိပါတယ်။ ခုနက လုပ်ခဲ့တာက reverse လုပ်ပြီး re-post လုပ်တာပါ။
+      [[mark:two-2]] နောက်တစ်နည်းက correction ပါ၊ adjustment လို့လည်း ခေါ်ပါတယ်။ မှတ်ခဲ့တာနဲ့
+      မှန်ရမယ့် ပမာဏ ကွာတာ၊ ဒီမှာဆိုရင် ယူရို ၉၀၀ ကို entry တစ်ခုတည်းနဲ့ ပြန်နုတ်တာပါ။ balance ကတော့
+      ယူရို ၁၀၀ အတူတူပါပဲ။ [[mark:two-3]] ကွာတာက ဒီလိုပါ။ reverse နဲ့ re-post မှာ entry ပိုများပေမဲ့
+      record တစ်ခုစီက business event တစ်ခုလုံးကို ကိုယ်စားပြုပါတယ်၊ ဒါကြောင့် fee ဒါမှမဟုတ် limit လို
+      transaction တစ်ခုချင်းပေါ် မူတည်တဲ့ တွက်ချက်မှုတွေကို ပြန်တွက်ဖို့ အဆင်ပြေပါတယ်။ [[mark:pt-rnote]]
+      difference နဲ့ ပြင်ရင် entry နည်းပေမဲ့၊ ယူရို ၁၀၀ လို့ ရေးထားတဲ့ record တစ်ခုမှ မရှိပါဘူး။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Transactions, timing & settlement (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#appendix-a-know-your-domain",
+        }
+    actions:
+      - { id: show-two, type: slide.show, at: { mark: show-two, offsetMs: -700 }, slideId: two-1 }
+      - {
+          id: pt-l,
+          type: slide.point,
+          at: { afterAction: show-two },
+          target: { x: 0.101, y: 0.494 },
+        }
+      - { id: two-2, type: slide.show, at: { mark: two-2 }, slideId: two-2 }
+      - { id: pt-r, type: slide.point, at: { afterAction: two-2 }, target: { x: 0.576, y: 0.494 } }
+      - { id: two-3, type: slide.show, at: { mark: two-3 }, slideId: two-3 }
+      - {
+          id: pt-lnote,
+          type: slide.point,
+          at: { afterAction: two-3 },
+          target: { x: 0.263, y: 0.887 },
+        }
+      - { id: pt-rnote, type: slide.point, at: { mark: pt-rnote }, target: { x: 0.738, y: 0.887 } }
+  - id: report
+    chapter: Link က report ကို ကယ်တယ်
+    narration: >-
+      [[mark:show-report]] ဘယ်နည်းပဲ သုံးသုံး link က မရှိမဖြစ်ပါ။ [[mark:pt-naive]] link မပါရင် November
+      ရဲ့ report က deposit စုစုပေါင်းကို အနုတ် ယူရို ၉၀၀ လို့ ပြပါတယ်၊ November မှာ user တွေ ငွေ ပြန်ထုတ်သွားသလို
+      ဖြစ်နေပါတယ်။ [[mark:report-2]] link ပါရင် November မှာ deposit အသစ် မရှိဘဲ၊ အနုတ် ယူရို ၉၀၀ က
+      October ကို ပြင်တာ ဖြစ်ကြောင်း report က ခွဲပြနိုင်ပါတယ်။ တကယ့် activity နဲ့ cleanup ကို ခွဲပေးတာ
+      link ပါ။ [[mark:chargeback]] ဒီ ပုံစံက ကိုယ့်အမှားအတွက်ပဲ မဟုတ်ပါဘူး။ chargeback ဆိုတာ cardholder
+      ရဲ့ ဘဏ်က card payment ကို အတင်း ပြန်လှည့်တဲ့ reversal ပါ။ ရက်သတ္တပတ်တွေ ကြာမှ ရောက်လာတတ်လို့
+      များသောအားဖြင့် deposit နဲ့ မတူတဲ့ period မှာ link ပါတဲ့ entry အသစ်အဖြစ် ဝင်ပြီး၊ user က ငွေ သုံးပြီးသွားရင် balance
+      အနုတ် ဖြစ်သွားနိုင်ပါတယ်။ [[mark:writeoff]] ပြန်မရတော့ရင် write-off လုပ်ရတာလည်း ပြင်တာ မဟုတ်ဘဲ loss အဖြစ် book
+      လုပ်တဲ့ entry အသစ်ပါ။ [[mark:principle]] ဒါက no invented data ဆိုတဲ့ မူပါ၊ ငွေကို မရှိဘဲ
+      မဖန်တီးရဘူး ဆိုတာပါ။ မှားပြီး ပေါ်လာတဲ့ ငွေကို ဖျက်တာ မဟုတ်ဘဲ link ပါတဲ့ entry နဲ့ ချေပါတယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Flow 2: A card deposit (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#flow-2-a-card-deposit",
+        }
+      - {
+          title: "Fintech Engineering Handbook — Appendix A: Accounting & ledgers (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#appendix-a-know-your-domain",
+        }
+    actions:
+      - {
+          id: show-report,
+          type: slide.show,
+          at: { mark: show-report, offsetMs: -700 },
+          slideId: report-1,
+        }
+      - { id: pt-naive, type: slide.point, at: { mark: pt-naive }, target: { x: 0.101, y: 0.662 } }
+      - { id: report-2, type: slide.show, at: { mark: report-2 }, slideId: report-2 }
+      - {
+          id: pt-linked,
+          type: slide.point,
+          at: { afterAction: report-2 },
+          target: { x: 0.576, y: 0.573 },
+        }
+      - { id: report-3, type: slide.show, at: { mark: chargeback }, slideId: report-3 }
+      - {
+          id: pt-cb,
+          type: slide.point,
+          at: { afterAction: report-3 },
+          target: { x: 0.332, y: 0.873 },
+        }
+      - { id: pt-wo, type: slide.point, at: { mark: writeoff }, target: { x: 0.313, y: 0.951 } }
+  - id: interview
+    chapter: Interview မှာ ဖြေမယ်ဆိုရင်
+    narration: >-
+      [[mark:show-iv]] Fintech interview တွေမှာ post လုပ်ပြီးသား entry မှားနေရင် ဘယ်လို ပြင်မလဲ လို့
+      မေးလေ့ရှိပါတယ်။ UPDATE နဲ့ ပြင်မယ် လို့ ဖြေရင် history ကို ဖျက်ပစ်တဲ့ အဖြေ ဖြစ်သွားပါတယ်။ အချက် သုံးချက်နဲ့ ဖြေပါ။
+      [[mark:iv-a]] ပထမ၊ fix forward ပါ။ original ကို မထိဘဲ compensating entry အသစ်နဲ့ ပြင်တယ်၊
+      reversal နဲ့ re-post ဒါမှမဟုတ် ကွာတာကို correction လုပ်တယ် လို့ ပြောပါ။ [[mark:iv-b]] ဒုတိယ၊ entry
+      အသစ်ကနေ original ကို link လုပ်ပြီး နောက်ပြန် link ကို lookup နဲ့ ရှာတယ်၊ ဒါမှ report က တကယ့်
+      activity နဲ့ cleanup ကို ခွဲနိုင်တယ် လို့ ပြောပါ။ [[mark:iv-c]] တတိယ၊ ပိတ်ပြီးသား period ထဲကို
+      backdate မလုပ်ဘဲ လက်ရှိ period မှာ book လုပ်ပြီး link နဲ့ ဘယ် period ကို ပြင်တာလဲ ဆိုတာ ပြတယ်။
+      [[mark:iv-d]] ပြီးရင် ledger ရဲ့ API မှာ reverse နဲ့ correct ပဲ ရှိပြီး edit မရှိဘူး၊ chargeback လို
+      အပြင်က လာတဲ့ reversal တွေလည်း ဒီလမ်းကြောင်းအတိုင်းပဲ သွားတယ် ဆိုတာ ဆက်ပြောပါ။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+    actions:
+      - { id: show-iv, type: slide.show, at: { mark: show-iv, offsetMs: -700 }, slideId: iv-1 }
+      - {
+          id: pt-iv-q,
+          type: slide.point,
+          at: { afterAction: show-iv },
+          target: { x: 0.125, y: 0.184 },
+        }
+      - { id: iv-a, type: slide.show, at: { mark: iv-a }, slideId: iv-2 }
+      - {
+          id: pt-iv-a,
+          type: slide.point,
+          at: { afterAction: iv-a },
+          target: { x: 0.138, y: 0.359 },
+        }
+      - { id: iv-b, type: slide.show, at: { mark: iv-b }, slideId: iv-3 }
+      - {
+          id: pt-iv-b,
+          type: slide.point,
+          at: { afterAction: iv-b },
+          target: { x: 0.138, y: 0.506 },
+        }
+      - { id: iv-c, type: slide.show, at: { mark: iv-c }, slideId: iv-4 }
+      - {
+          id: pt-iv-c,
+          type: slide.point,
+          at: { afterAction: iv-c },
+          target: { x: 0.138, y: 0.652 },
+        }
+      - { id: iv-d, type: slide.show, at: { mark: iv-d }, slideId: iv-5 }
+      - {
+          id: pt-iv-d,
+          type: slide.point,
+          at: { afterAction: iv-d },
+          target: { x: 0.138, y: 0.799 },
+        }
+  - id: try-it
+    chapter: ကိုယ်တိုင် စမ်းကြည့်ပါ
+    narration: >-
+      [[mark:close-iv]] ကိုယ်တိုင် စမ်းကြည့်ဖို့ တစ်ခု ရှိပါတယ်။ [[mark:sel-try]] ဒီ line နှစ်ကြောင်းကို
+      correction တစ်ခုတည်းနဲ့ အစားထိုးကြည့်ပါ။ reversal line ကို ဖျက်ပြီး၊ re-post line ရဲ့ memo ကို
+      adjust လို့၊ ပမာဏကို အနုတ် ကိုးသောင်း ဆင့် လို့ ပြောင်းပြီး run ကြည့်ပါ။ transaction နှစ်ခုပဲ ကျန်ပြီး
+      ဒီနေ့ balance က ယူရို ၁၀၀ အတိုင်း ဖြစ်ပါလိမ့်မယ်။ [[mark:recap]] ပြန်ချုပ်ရရင်၊ post လုပ်ပြီးသား
+      entry ကို ဘယ်တော့မှ မပြင်ဘဲ link ပါတဲ့ entry အသစ်နဲ့ ပြင်ပြီး၊ ပိတ်ပြီးသား period ကို မထိဘဲ လက်ရှိ
+      period မှာ book လုပ်ပါတယ်။ နောက် lesson မှာတော့ ဘယ်တော့မှ မဖျက်ရတဲ့ ledger နဲ့၊ user က ကိုယ့်
+      data ကို ဖျက်ခိုင်းနိုင်တဲ့ GDPR ရဲ့ right to erasure ကို ဘယ်လို ညှိမလဲ ဆိုတာ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fintech Engineering Handbook — Reversals and corrections (Voytek Pitula, CC BY 4.0)",
+          url: "https://w.pitula.me/fintech-engineering-handbook/#reversals-and-corrections",
+        }
+    actions:
+      - { id: close-iv, type: slide.close, at: { mark: close-iv } }
+      - id: sel-try
+        type: editor.select
+        at: { mark: sel-try }
+        target:
+          {
+            file: main.go,
+            text: "must(l.Post(Reversal(l.Get(\"tx-1\"), \"tx-2\", nov3)))\n\tmust(l.Post(Book(\"tx-3\", \"re-post\", 10000, nov3, \"tx-1\")))",
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
