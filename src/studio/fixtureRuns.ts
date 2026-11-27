@@ -16,7 +16,7 @@
  * (script/consolePoints.ts), the driver deciding whether a run went as pinned,
  * and the QA gate that tells a pinned compile error from a broken render. The
  * per-kind result schemas stay in plan.ts; this module only knows that every
- * result carries a `status`.
+ * result carries a `status`, and that one may carry the `stdin` its run read.
  */
 
 /** The fixture fields this rule reads, for any Playground kind's result shape. */
@@ -69,6 +69,20 @@ export function pinnedRunResult<Result>(
     throw new Error("runtime.fixture holds neither `result` nor `results`");
   }
   return fixture.result;
+}
+
+/**
+ * The lines the run `runActionId` types at its program's prompts, in order:
+ * the `stdin` its pinned result carries. A result says what its run was given
+ * as well as what it printed, so the same pin replays the console and tells a
+ * live run what to type. None for a run whose program read nothing, and for a
+ * language whose results carry no input.
+ */
+export function pinnedRunInput(
+  fixture: PinnedRunFixture<{ status: string; stdin?: readonly string[] }>,
+  runActionId: string,
+): readonly string[] {
+  return pinnedRunResult(fixture, runActionId).stdin ?? [];
 }
 
 /** The status the run `runActionId` is pinned to end with. */

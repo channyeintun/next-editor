@@ -939,7 +939,13 @@ export const kiteRunFixtureSchema = playgroundFixture(
  * the program printed before it failed. `exitCode` is the status Python exited
  * with; `exitDetail` is there instead when the runner stopped the program (too
  * much output, too long); `hint` is the line the runner adds under a traceback
- * it can explain (`input()` with no keyboard, an import of a missing package).
+ * it can explain (`input()` at the end of its input, an import of a missing
+ * package).
+ *
+ * `stdin` is the lines the program read, for a program that calls `input()`.
+ * `output` already shows each of them where a terminal echoes it, so a fixture
+ * render replays the session as it is; a live render types them at the
+ * program's prompts (fixtureRuns.ts's `pinnedRunInput`).
  */
 export const pythonRunFixtureSchema = playgroundFixture(
   ["unavailable"] as const,
@@ -947,6 +953,7 @@ export const pythonRunFixtureSchema = playgroundFixture(
     .strictObject({
       status: z.enum(["success", "runtime-error"]),
       output: z.string(),
+      stdin: z.array(z.string()).optional(),
       exitCode: z.number().int().optional(),
       exitDetail: z.string().optional(),
       hint: z.string().optional(),

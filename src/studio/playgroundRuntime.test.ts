@@ -1,4 +1,22 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+// A live run reaches the language's client. Python's is replaced by one that
+// reads its terminal to the end and answers with what it was given, so a test
+// can see the lines a live run types; everything else of the module is real.
+const liveRuns = vi.hoisted(() => ({ linesRead: [] as (string | null)[][] }));
+vi.mock("../runtime/pythonPlayground/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../runtime/pythonPlayground/client")>()),
+  PythonPlaygroundClient: class {
+    async run(_request: unknown, terminal?: { readLine(): Promise<string | null> }) {
+      const lines: (string | null)[] = [];
+      while (terminal && lines.at(-1) !== null) lines.push(await terminal.readLine());
+      liveRuns.linesRead.push(lines);
+      return { status: "success", output: "" };
+    }
+    dispose() {}
+  },
+}));
+
 import { createWorkspaceFile } from "../starters/shared";
 import { StudioActionError } from "./async";
 import { fixtureRunConsoleLines } from "./fixtureConsoleLines";
@@ -280,6 +298,61 @@ describe("preparePlaygroundRun", () => {
     });
   });
 
+  // A program that asked for input: the lines it read are in the pinned
+  // output, where a terminal echoed them, so the fixture replays the session.
+  const SESSION = {
+    status: "success",
+    output: "Name: Chan\nAge: 29\nHello, Chan\n",
+    stdin: ["Chan", "29"],
+  } as const;
+
+  function sessionRuntime(): StudioRuntime {
+    return studioRuntimeSchema.parse({
+      kind: "python-playground",
+      defaultMode: "live",
+      fixture: { latencyMs: 5, result: SESSION },
+    });
+  }
+
+  it("replays a pinned Python session, each typed line after its prompt", async () => {
+    await expect(prepare(sessionRuntime(), projectWith("main.py")).run()).resolves.toMatchObject({
+      ok: true,
+      resultLines: ["Name: Chan", "Age: 29", "Hello, Chan", "[python-run] Program exited"],
+    });
+  });
+
+  it("types a live Python run the lines its result pins, and then ends its input", async () => {
+    const runtime = sessionRuntime();
+    if (!isPlaygroundRuntime(runtime)) throw new Error("test misuse");
+    liveRuns.linesRead.length = 0;
+
+    const live = (runActionId: string, fixtureRuntime = runtime) =>
+      preparePlaygroundRun({
+        runtime: fixtureRuntime,
+        runActionId,
+        mode: "live",
+        project: projectWith("main.py") as Parameters<typeof preparePlaygroundRun>[0]["project"],
+        timeoutMs: 1_000,
+        signal: new AbortController().signal,
+        clock: REAL_RENDER_CLOCK,
+      }).run();
+    await live("run");
+    // A run whose result pins no input is given none: its input ends at once.
+    const perRun = studioRuntimeSchema.parse({
+      kind: "python-playground",
+      defaultMode: "live",
+      fixture: {
+        latencyMs: 5,
+        results: { "run-1": { status: "success", output: "" }, "run-2": SESSION },
+      },
+    });
+    if (!isPlaygroundRuntime(perRun)) throw new Error("test misuse");
+    await live("run-1", perRun);
+    await live("run-2", perRun);
+
+    expect(liveRuns.linesRead).toEqual([["Chan", "29", null], [null], ["Chan", "29", null]]);
+  });
+
   it("lets the Python client pick the script, refusing what it would refuse", async () => {
     // A single script is the program whatever it is called; the notes are not one.
     await expect(
@@ -553,6 +626,35 @@ describe("run fixture schemas", () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  it("holds a Python fixture's input to the output that echoes it", () => {
+    const parses = (result: Record<string, unknown>) =>
+      studioRuntimeSchema.safeParse({
+        kind: "python-playground",
+        defaultMode: "fixture",
+        fixture: { latencyMs: 5, result: { status: "success", ...result } },
+      }).success;
+
+    expect(parses({ output: "Name: Chan\nHello, Chan\n", stdin: ["Chan"] })).toBe(true);
+    // The line was edited in `stdin` and not in `output`: no run prints this.
+    expect(parses({ output: "Name: Chan\nHello, Chan\n", stdin: ["Aung"] })).toBe(false);
+    expect(parses({ output: "Name: Chan\n", stdin: [] })).toBe(false);
+    expect(parses({ output: "Name: Chan\n", stdin: "Chan" })).toBe(false);
+  });
+
+  it("gives no other language a place to pin input", () => {
+    const accepted = Object.entries(PLAYGROUND_FIXTURE_INPUTS)
+      .filter(([kind]) => kind !== "python-playground")
+      .filter(([kind, pinned]) => {
+        const fixture = pinned as { result: Record<string, unknown> };
+        const withInput = { ...fixture, result: { ...fixture.result, stdin: ["Chan"] } };
+        return studioRuntimeSchema.safeParse({ kind, defaultMode: "fixture", fixture: withInput })
+          .success;
+      })
+      .map(([kind]) => kind);
+
+    expect(accepted).toEqual([]);
   });
 
   it("keeps accepting every minimal valid fixture", () => {

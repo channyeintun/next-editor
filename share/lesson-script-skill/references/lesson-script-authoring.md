@@ -327,14 +327,15 @@ and cannot use:
   `pandas`, `requests` and every other package fail with
   `ModuleNotFoundError`. `sqlite3`, `json`, `csv`, `dataclasses`, `asyncio` and
   the rest of the standard library are there.
-- **No keyboard.** `input()` raises `EOFError`. Put a program's values in the
-  code, never in a prompt.
+- **`input()` reads the lines the fixture pins.** In the editor a learner
+  types them in the runner; a lesson has no keyboard, so the result of a
+  program that calls `input()` carries `stdin`, the lines it read, in order.
 - **No threads, processes, sockets or network**, and files a program writes are
   gone when it exits.
 - **A program is stopped** when it prints more than 256 KiB or runs for more
   than 10 seconds, so keep a `time.sleep` demonstration short.
 
-Three things follow for authoring:
+Four things follow for authoring:
 
 - **One `output`, in the order written.** Standard output and standard error
   reach the console as one stream, as a terminal shows them. A fixture pins a
@@ -351,6 +352,33 @@ Three things follow for authoring:
   the program and paste what it prints: `bun scripts/python-run.ts <folder>`
   runs the folder's `main.py` on the same interpreter and prints the fixture
   `result` as YAML. Use it for every Python fixture, clean runs included.
+- **A program that asks for input is pinned as the session it was.** Give
+  `python-run.ts` one `--stdin` for each `input()`, in order:
+
+  ```bash
+  bun scripts/python-run.ts --stdin Chan --stdin 29 <folder>
+  ```
+
+  ```yaml
+  result:
+    status: success
+    output: |
+      Name: Chan
+      Age: 29
+      Hello, Chan. Next year you are 30.
+    stdin:
+      - Chan
+      - "29"
+  ```
+
+  `output` shows each typed line after its prompt, where a terminal echoes it,
+  so the console reads `Name: Chan` and a `console.point` can land on it. Paste
+  `stdin` with the rest: a live render types those lines, and a fixture whose
+  `stdin` and `output` disagree is refused when the script is parsed. A program
+  that asks for more lines than `stdin` holds ends with `EOFError` and a hint
+  line that says how many it was given. The whole session prints at once after
+  `latencyMs`, as any other output does: the render does not stop at a prompt,
+  so let the narration say what was typed.
 
 A fixture holds **exactly one** of `result` or `results`:
 
@@ -407,13 +435,15 @@ Per-kind fixture result shapes (`result`, or each `results` entry; all fields ex
   (`assemble-error`, not `compile-error` — nothing is compiled; `registers` is a
   list of `{ name, value }` with `value` a **decimal string**, because a 64-bit
   value does not survive JSON as a number)
-- `python-playground` — `{ status: success | runtime-error, output, exitCode?, exitDetail?, hint? }`
-  (one `output` field: stdout and stderr in the order written. A
-  `runtime-error` has **either** a non-zero `exitCode`, when Python exited by
-  itself, **or** an `exitDetail`, when the runner stopped the program. `hint` is
-  the line the runner adds under a traceback it can explain — `input()` with no
-  keyboard, an import of a module that is not there — and `python-run.ts`
-  prints it when there is one)
+- `python-playground` — `{ status: success | runtime-error, output, stdin?, exitCode?, exitDetail?, hint? }`
+  (one `output` field: stdout and stderr in the order written, with each line
+  the program read echoed after its prompt. `stdin` is those lines, for a
+  program that calls `input()`, and is left out otherwise. A `runtime-error`
+  has **either** a non-zero `exitCode`, when Python exited by itself, **or** an
+  `exitDetail`, when the runner stopped the program. `hint` is the line the
+  runner adds under a traceback it can explain — `input()` with no line left to
+  read, an import of a module that is not there — and `python-run.ts` prints it
+  when there is one)
 
 Language formatting rules carry over from the real editors: Go files use tabs;
 Kotlin, Rust, Zig, and Python use 4-space indentation, Haskell 2-space. Rust

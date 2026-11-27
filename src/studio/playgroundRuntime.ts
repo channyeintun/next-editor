@@ -1,9 +1,10 @@
 import type { PlaygroundFile } from "../runtime/playgroundFiles";
+import type { PlaygroundRunTerminal } from "../runtime/playgroundLanguage";
 import { PLAYGROUND_LANGUAGES } from "../runtime/playgroundLanguages";
 import type { WorkspaceProject } from "../types/workspace";
 import { StudioActionError, abortableSleep, cancelledError } from "./async";
 import { fixtureRunConsoleLines } from "./fixtureConsoleLines";
-import { CLEAN_RUN_STATUS, pinnedRunStatus } from "./fixtureRuns";
+import { CLEAN_RUN_STATUS, pinnedRunInput, pinnedRunStatus } from "./fixtureRuns";
 import {
   PLAYGROUND_TRANSIENT_ERROR_KINDS,
   type StudioPlaygroundRuntime,
@@ -25,6 +26,10 @@ import type { RenderClock } from "./renderClock";
  * history) — only a *final* failure surfaces error lines. Fixture mode
  * replays the running action's pinned result (fixtureRuns.ts), optionally
  * simulating transient failures first.
+ *
+ * A program that reads input (Python's `input()`) is given the lines its
+ * pinned result carries as `stdin`: a live run types them ahead, and a fixture
+ * run replays the pinned output, where each of them is already echoed.
  */
 
 const RETRYABLE_KINDS = new Set<string>(PLAYGROUND_TRANSIENT_ERROR_KINDS);
@@ -73,10 +78,12 @@ interface PlaygroundEngine {
    */
   checkEntry(files: PlaygroundFile[]): void;
   startedLines(files: PlaygroundFile[]): string[];
+  /** `stdin` is what the program reads, for a language whose run is interactive. */
   runLive(
     files: PlaygroundFile[],
     timeoutMs: number,
     signal: AbortSignal,
+    stdin: readonly string[],
   ): Promise<{ resultLines: string[]; ok: boolean; status: string }>;
   /** Console lines for a terminal service failure. */
   serviceErrorLines(kind: string, message: string): string[];
@@ -141,6 +148,20 @@ function serviceErrorLinesFor(engine: PlaygroundEngine, kind: string, message: s
     : [`[${engine.label}-run error] The run could not be completed (${message})`];
 }
 
+/**
+ * The terminal of a run nobody types at: its input is `lines`, as if typed
+ * ahead, and then its end, so a program that asks for more than the lesson
+ * pins fails as it would with a closed keyboard instead of waiting out the
+ * run's deadline. What the program prints is taken from its result.
+ */
+function typedAheadTerminal(lines: readonly string[]): PlaygroundRunTerminal {
+  let next = 0;
+  return {
+    print: () => {},
+    readLine: async () => (next < lines.length ? lines[next++] : null),
+  };
+}
+
 /** Internal normalized service failure (any playground). */
 class ServiceFailure extends Error {
   readonly kind: string;
@@ -181,11 +202,15 @@ function engineFor(kind: StudioPlaygroundRuntimeKind): PlaygroundEngine {
       }
     },
     startedLines: language.run.startedLines,
-    runLive: async (files, timeoutMs, signal) => {
+    runLive: async (files, timeoutMs, signal, stdin) => {
       client ??= language.client.create();
       const activeClient = client;
+      const { interactive } = language.run;
       const result: { status: string } = await liveAttempt(
-        () => language.run.execute(activeClient, files),
+        () =>
+          interactive
+            ? interactive.execute(activeClient, files, typedAheadTerminal(stdin))
+            : language.run.execute(activeClient, files),
         () => language.client.stop(activeClient),
         serviceErrorOf,
         timeoutMs,
@@ -265,7 +290,12 @@ export function preparePlaygroundRun(input: PlaygroundRunInput): PlaygroundRunPr
             transientFailures,
           };
         }
-        const outcome = await engine.runLive(files, input.timeoutMs, input.signal);
+        const outcome = await engine.runLive(
+          files,
+          input.timeoutMs,
+          input.signal,
+          pinnedRunInput(input.runtime.fixture, input.runActionId),
+        );
         return { ...outcome, attempts: attempt, transientFailures };
       } catch (error) {
         if (error instanceof ServiceFailure) {

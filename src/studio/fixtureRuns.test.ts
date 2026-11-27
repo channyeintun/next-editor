@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   pinnedRunFixtureShapeIssue,
   pinnedRunIdIssues,
+  pinnedRunInput,
   pinnedRunResult,
   pinnedRunStatus,
   runOutcomeIssue,
@@ -24,6 +25,22 @@ describe("pinnedRunResult", () => {
     expect(() => pinnedRunResult(fixture, "run-3")).toThrow(/no result for runtime.run "run-3"/);
     // An own-key lookup: a prototype key is not a run.
     expect(() => pinnedRunResult(fixture, "constructor")).toThrow(/no result/);
+  });
+});
+
+describe("pinnedRunInput", () => {
+  it("is the lines the running run's result says it read", () => {
+    const asked = { status: "success", stdin: ["Chan", "29"] };
+    expect(pinnedRunInput({ result: asked }, "run-1")).toEqual(["Chan", "29"]);
+    expect(pinnedRunInput({ results: { "run-1": clean, "run-2": asked } }, "run-2")).toEqual([
+      "Chan",
+      "29",
+    ]);
+  });
+
+  it("is nothing for a run whose program read nothing", () => {
+    expect(pinnedRunInput({ result: clean }, "run-1")).toEqual([]);
+    expect(pinnedRunInput({ results: { "run-1": clean } }, "run-1")).toEqual([]);
   });
 });
 
