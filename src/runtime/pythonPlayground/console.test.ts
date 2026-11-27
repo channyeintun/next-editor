@@ -66,11 +66,11 @@ describe("pythonRunResultToConsoleLines", () => {
         status: "runtime-error",
         output: "EOFError: EOF when reading a line\n",
         exitCode: 1,
-        hint: "input() has nothing to read",
+        hint: "input() has nothing left to read",
       }),
     ).toEqual([
       "EOFError: EOF when reading a line",
-      "[python-run] input() has nothing to read",
+      "[python-run] input() has nothing left to read",
       "[python-run error] Program exited with status 1",
     ]);
   });

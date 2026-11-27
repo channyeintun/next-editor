@@ -1,8 +1,14 @@
 import { wrap } from "comlink";
 import { PLAYGROUND_SOURCE_RULES } from "../playgroundFiles";
+import type { PlaygroundRunTerminal } from "../playgroundLanguage";
 import { findPythonRunEntry } from "./files";
 import { PYTHON_MAX_RUN_MS, PYTHON_STOPPED_DETAIL, PYTHON_TIME_LIMIT_DETAIL } from "./interpreter";
 import { createPythonOperations, type PythonOperations } from "./operations";
+import {
+  openPythonTerminal,
+  type PythonTerminalLink,
+  type PythonTerminalView,
+} from "./terminalMemory";
 import {
   parsePythonPlaygroundRunResult,
   type PythonPlaygroundFile,
@@ -60,6 +66,12 @@ export function pickPythonRunEntry(files: readonly PythonPlaygroundFile[]): Pyth
  * `terminate`. Exported so tests can hand the client a fake one.
  */
 export interface PythonEngine extends PythonOperations {
+  /**
+   * Whether the interpreter runs off this thread, so a program on it can block
+   * until the learner has typed a line without freezing the page. Only such an
+   * engine is given a terminal's memory.
+   */
+  readonly offThread?: boolean;
   /** Stop whatever it is running, for good, and free the interpreter. */
   terminate(): void;
 }
@@ -106,8 +118,10 @@ function workerPythonEngine(): PythonEngine | null {
 
   const api = wrap<PythonOperations>(worker);
   return {
+    offThread: true,
     load: () => Promise.race([api.load(), failed]),
-    run: (files, entryPath) => Promise.race([api.run(files, entryPath), failed]),
+    run: (files, entryPath, terminalMemory) =>
+      Promise.race([api.run(files, entryPath, terminalMemory), failed]),
     terminate: () => worker.terminate(),
   };
 }
@@ -137,28 +151,110 @@ function unavailableError(cause: unknown): PythonPlaygroundServiceError {
 /**
  * A run whose interpreter died under it, told as the program's own error
  * rather than an interpreter that would not load: running the same program
- * again ends it the same way. What it printed before is lost with the worker.
+ * again ends it the same way. What it printed before is lost with the worker,
+ * unless a terminal's memory holds it: then `output` is what the page read.
  */
-const STOPPED_RUN_RESULT: PythonPlaygroundRunResult = {
-  status: "runtime-error",
-  output: "",
-  exitDetail: PYTHON_STOPPED_DETAIL,
-};
+function stoppedRunResult(output: string): PythonPlaygroundRunResult {
+  return { status: "runtime-error", output, exitDetail: PYTHON_STOPPED_DETAIL };
+}
 
 /**
  * When the client ends a run the interpreter did not end by itself. The
  * interpreter stops a program at {@link PYTHON_MAX_RUN_MS} from the inside, and
  * keeps what it printed; it can only do so between bytecodes, so a program
  * waiting inside one call — `time.sleep(3600)` — is past its reach. Two seconds
- * later the worker is terminated instead, and the output is lost with it.
+ * later the worker is terminated instead, and the output goes with it, again
+ * unless a terminal's memory holds it.
  */
 const HARD_STOP_MS = PYTHON_MAX_RUN_MS + 2_000;
 
-const HARD_STOPPED_RUN_RESULT: PythonPlaygroundRunResult = {
-  status: "runtime-error",
-  output: "",
-  exitDetail: PYTHON_TIME_LIMIT_DETAIL,
-};
+function hardStoppedRunResult(output: string): PythonPlaygroundRunResult {
+  return { status: "runtime-error", output, exitDetail: PYTHON_TIME_LIMIT_DETAIL };
+}
+
+/**
+ * How often the page reads a running program's terminal. The program's thread
+ * cannot say when it has printed, so the page looks: often enough that a
+ * prompt is on screen as the program starts to wait, seldom enough to cost
+ * nothing while it waits for a minute.
+ */
+const TERMINAL_POLL_MS = 30;
+
+/** A timeout that can stand still. */
+interface Countdown {
+  pause(): void;
+  resume(): void;
+  stop(): void;
+}
+
+function startCountdown(ms: number, onDone: () => void): Countdown {
+  let remaining = ms;
+  let startedAt = performance.now();
+  let timer: ReturnType<typeof setTimeout> | undefined = setTimeout(onDone, ms);
+  let stopped = false;
+  return {
+    pause() {
+      if (timer === undefined) return;
+      clearTimeout(timer);
+      timer = undefined;
+      remaining -= performance.now() - startedAt;
+    },
+    resume() {
+      if (stopped || timer !== undefined) return;
+      startedAt = performance.now();
+      timer = setTimeout(onDone, Math.max(remaining, 0));
+    },
+    stop() {
+      stopped = true;
+      clearTimeout(timer);
+      timer = undefined;
+    },
+  };
+}
+
+/**
+ * Carries a running program's terminal to whoever drives the run: prints what
+ * the program has written as it grows, and when the program waits for a line,
+ * asks for one and hands it over. The hard stop stands still while a line is
+ * awaited — the interpreter's own limit does the same (interpreter.ts) — so a
+ * learner who takes a minute to type is not a program that ran for a minute.
+ * Returns what stops it; a line that arrives afterwards is dropped.
+ */
+function watchPythonTerminal(
+  view: PythonTerminalView,
+  terminal: PlaygroundRunTerminal,
+  hardStop: Countdown,
+  pollMs: number,
+): () => void {
+  let printed = "";
+  let asked = false;
+  let stopped = false;
+  const answer = (line: string | null) => {
+    if (stopped) return;
+    asked = false;
+    view.answer(line);
+    hardStop.resume();
+  };
+  const look = () => {
+    const waiting = view.isWaiting();
+    const output = view.output();
+    if (output !== printed) {
+      printed = output;
+      terminal.print(output);
+    }
+    if (waiting && !asked) {
+      asked = true;
+      hardStop.pause();
+      // A terminal that fails to give a line has no more of them.
+      terminal.readLine().then(answer, () => answer(null));
+    }
+  };
+  const timer = setInterval(look, pollMs);
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
+}
 
 /**
  * One run at a time, each in an interpreter of its own.
@@ -178,22 +274,38 @@ const HARD_STOPPED_RUN_RESULT: PythonPlaygroundRunResult = {
  * background: by the time the learner presses Run again it is ready, and only
  * the first Run of a lesson waits for a start. Leaving the lesson ends that
  * one too, so no interpreter outlives the panel that used it.
+ *
+ * A run given a terminal prints as it goes and can wait for a typed line
+ * (terminalMemory.ts). A program parked at `input()` is ended the way any
+ * other is: by the next Run, a cancel or an unmount, which terminate its
+ * worker.
  */
 export class PythonPlaygroundClient {
   readonly #createEngine: () => PythonEngine;
   readonly #hardStopMs: number;
+  readonly #openTerminal: () => PythonTerminalLink | null;
+  readonly #terminalPollMs: number;
   /** The interpreter of the run in flight, or the one started for the next run. */
   #engine: PythonEngine | null = null;
   /** Rejects the run in flight as superseded; null while idle. */
   #supersede: (() => void) | null = null;
 
-  /** Both options are for tests; the defaults start a worker and stop it at the limit. */
+  /** The options are for tests; the defaults start a worker and stop it at the limit. */
   constructor({
     createEngine = createPythonEngine,
     hardStopMs = HARD_STOP_MS,
-  }: { createEngine?: () => PythonEngine; hardStopMs?: number } = {}) {
+    openTerminal = openPythonTerminal,
+    terminalPollMs = TERMINAL_POLL_MS,
+  }: {
+    createEngine?: () => PythonEngine;
+    hardStopMs?: number;
+    openTerminal?: () => PythonTerminalLink | null;
+    terminalPollMs?: number;
+  } = {}) {
     this.#createEngine = createEngine;
     this.#hardStopMs = hardStopMs;
+    this.#openTerminal = openTerminal;
+    this.#terminalPollMs = terminalPollMs;
   }
 
   /** End whatever is running or waiting. Called on cancel and on unmount. */
@@ -213,13 +325,26 @@ export class PythonPlaygroundClient {
     return engine;
   }
 
-  async run(request: PythonPlaygroundRunRequest): Promise<PythonPlaygroundRunResult> {
+  /**
+   * Run the program. With `terminal`, on an interpreter that can wait and a
+   * page that can share memory with it, the program prints to the terminal as
+   * it runs and `input()` asks it for a line. Anywhere else, and with no
+   * terminal, the output comes with the result and `input()` meets the end of
+   * its input.
+   */
+  async run(
+    request: PythonPlaygroundRunRequest,
+    terminal?: PlaygroundRunTerminal,
+  ): Promise<PythonPlaygroundRunResult> {
     // Superseding comes first, so even a Run the client refuses replaces the
     // one before it. The interpreter waiting for the next run is not in flight
     // and is kept.
     if (this.#supersede) this.dispose();
     const entry = pickPythonRunEntry(request.files);
     const engine = (this.#engine ??= this.#createEngine());
+    const link = terminal && engine.offThread ? this.#openTerminal() : null;
+    /** What the program printed, as far as this page can tell without a result. */
+    const printed = () => link?.view.output() ?? "";
 
     let supersede: () => void = () => {};
     const superseded = new Promise<never>((_, reject) => {
@@ -228,7 +353,13 @@ export class PythonPlaygroundClient {
     this.#supersede = supersede;
 
     let loaded = false;
-    let hardStop: ReturnType<typeof setTimeout> | undefined;
+    let hardStop: Countdown | undefined;
+    let stopWatching = () => {};
+    /** The run is over, however it ended: nothing of it may fire afterwards. */
+    const settle = () => {
+      hardStop?.stop();
+      stopWatching();
+    };
     const work = engine.load().then(
       () => {
         // Superseded while the interpreter was starting: the program must not
@@ -236,9 +367,22 @@ export class PythonPlaygroundClient {
         if (this.#supersede !== supersede) throw supersededError();
         loaded = true;
         return Promise.race([
-          engine.run(request.files, entry.path),
+          link
+            ? engine.run(request.files, entry.path, link.memory)
+            : engine.run(request.files, entry.path),
           new Promise<PythonPlaygroundRunResult>((resolve) => {
-            hardStop = setTimeout(() => resolve(HARD_STOPPED_RUN_RESULT), this.#hardStopMs);
+            const countdown = startCountdown(this.#hardStopMs, () =>
+              resolve(hardStoppedRunResult(printed())),
+            );
+            hardStop = countdown;
+            if (link && terminal) {
+              stopWatching = watchPythonTerminal(
+                link.view,
+                terminal,
+                countdown,
+                this.#terminalPollMs,
+              );
+            }
           }),
         ]);
       },
@@ -253,15 +397,15 @@ export class PythonPlaygroundClient {
     try {
       result = await Promise.race([work, superseded]);
     } catch (cause) {
-      clearTimeout(hardStop);
+      settle();
       if (this.#supersede !== supersede) throw supersededError();
       this.#retire(engine, { startNext: loaded });
       if (cause instanceof PythonPlaygroundServiceError) throw cause;
       // The worker died after Python had started: the program's doing.
-      return STOPPED_RUN_RESULT;
+      return stoppedRunResult(printed());
     }
 
-    clearTimeout(hardStop);
+    settle();
     if (this.#supersede !== supersede) throw supersededError();
     this.#retire(engine, { startNext: true });
 

@@ -29,8 +29,9 @@ export const PYTHON_OUTPUT_LIMIT_DETAIL =
 
 /**
  * How long a program may run, counted from its first line, not from the
- * interpreter's start. The dock has no Stop button, and the mistake a Python
- * lesson meets most is a loop that never ends: without a limit it would hold a
+ * interpreter's start, and not while it waits at `input()`: that time is the
+ * learner's. The dock has no Stop button, and the mistake a Python lesson
+ * meets most is a loop that never ends: without a limit it would hold a
  * processor until the next Run. Ten seconds is the Rust Playground's limit too.
  */
 export const PYTHON_MAX_RUN_MS = 10_000;
@@ -75,7 +76,7 @@ def exit_status(code):
 def explain(error):
     # The two failures that are this runner's doing, not the program's.
     if type(error) is EOFError:
-        return {"kind": "no-input"}
+        return {"kind": "end-of-input"}
     if isinstance(error, ModuleNotFoundError) and error.name:
         return {"kind": "no-module", "name": error.name}
     return None
@@ -116,15 +117,28 @@ def finish_program():
 /** What `run_program` answers with. */
 interface DriverAnswer {
   status: number;
-  hint: { kind: "no-input" } | { kind: "no-module"; name: string } | null;
+  hint: { kind: "end-of-input" } | { kind: "no-module"; name: string } | null;
 }
 
-function hintText(hint: DriverAnswer["hint"], readStandardInput: boolean): string | undefined {
-  if (hint?.kind === "no-input") {
+/**
+ * Why a program that read standard input found its end: nothing here can wait
+ * for a typed line, or the lines it was given ran out.
+ */
+type EndOfInput = { kind: "no-keyboard" } | { kind: "no-more-lines"; read: number };
+
+function endOfInputHint(end: EndOfInput): string {
+  if (end.kind === "no-keyboard") {
+    return "input() has nothing to read: this page cannot wait for a typed line";
+  }
+  const given =
+    end.read === 0 ? "no input" : `${end.read} line${end.read === 1 ? "" : "s"} of input`;
+  return `input() has nothing left to read: the run was given ${given} and asked for another line`;
+}
+
+function hintText(hint: DriverAnswer["hint"], endOfInput: EndOfInput | null): string | undefined {
+  if (hint?.kind === "end-of-input") {
     // An EOFError the program raised by itself is its own business.
-    return readStandardInput
-      ? "input() has nothing to read: there is no keyboard here, so put the values in the code"
-      : undefined;
+    return endOfInput ? endOfInputHint(endOfInput) : undefined;
   }
   if (hint?.kind === "no-module") {
     return (
@@ -146,16 +160,46 @@ export interface PythonInterpreterOptions {
   maxRunMs?: number;
 }
 
+/**
+ * What a run has in place of a screen and a keyboard. Both are optional: with
+ * no `write` the output is only in the result, and with no `readLine` there is
+ * nothing to read, so `input()` meets the end of its input at once.
+ */
+export interface PythonRunTerminal {
+  /**
+   * Takes the program's output as it is written: the bytes the output budget
+   * keeps, in order, a typed line's echo among them. The bytes are a view the
+   * next write reuses, so they are copied before this returns.
+   */
+  write?(bytes: Uint8Array): void;
+  /**
+   * The next line for the program, without its line break, or null at the end
+   * of the input. It may block for as long as a learner takes to type: the run
+   * limit does not count the time spent in it.
+   */
+  readLine?(): string | null;
+}
+
+/** A terminal whose input is `lines` and then its end: a run with its input typed ahead. */
+export function pythonTerminalOfLines(lines: readonly string[]): PythonRunTerminal {
+  let next = 0;
+  return { readLine: () => (next < lines.length ? lines[next++] : null) };
+}
+
 export interface PythonInterpreter {
   /**
    * Run the script at `entryPath` with `files` written beside it, as
-   * `python <entryPath>` in the lesson's folder would.
+   * `python <entryPath>` in the lesson's folder would, on `terminal`.
    *
    * An interpreter keeps whatever a program did to it — its imported modules,
    * a changed `sys.path`, the files it wrote — so only a first run is the run
    * of a new `python` process. The client gives every run its own interpreter.
    */
-  run(files: readonly PlaygroundFile[], entryPath: string): Promise<PythonPlaygroundRunResult>;
+  run(
+    files: readonly PlaygroundFile[],
+    entryPath: string,
+    terminal?: PythonRunTerminal,
+  ): Promise<PythonPlaygroundRunResult>;
 }
 
 /** Whether this JavaScript engine can suspend a WebAssembly call on a promise. */
@@ -166,9 +210,15 @@ function hasStackSwitching(): boolean {
 /** The program's output, collected in the order it was written and cut at the budget. */
 class OutputBuffer {
   readonly #chunks: Uint8Array[] = [];
+  readonly #terminal: PythonRunTerminal | undefined;
   #length = 0;
   #sealed = false;
   overBudget = false;
+
+  /** `terminal` is shown what the buffer keeps, as it keeps it. */
+  constructor(terminal?: PythonRunTerminal) {
+    this.#terminal = terminal;
+  }
 
   /** Takes what still fits, and nothing once the buffer is sealed. */
   write(bytes: Uint8Array): void {
@@ -181,6 +231,7 @@ class OutputBuffer {
       // next write reuses.
       this.#chunks.push(kept.slice());
       this.#length += kept.length;
+      this.#terminal?.write?.(kept);
     }
   }
 
@@ -219,20 +270,46 @@ export async function bootPythonInterpreter({
   // by no other.
   const { loadPyodide } = await import("pyodide");
 
-  let readStandardInput = false;
+  /** The running program's terminal, its output, and the lines it has read. */
+  let terminal: PythonRunTerminal | undefined;
+  let output = new OutputBuffer();
+  let linesRead: string[] = [];
+  let endOfInput: EndOfInput | null = null;
+  /** When the running program is out of time; null while none is running. */
+  let deadline: number | null = null;
+
+  // Python asks for one line at a time, after writing the prompt. This blocks
+  // the interpreter's thread until the terminal has the line.
+  const readLine = (): string | null => {
+    if (!terminal?.readLine) {
+      endOfInput = { kind: "no-keyboard" };
+      return null;
+    }
+    const askedAt = performance.now();
+    const line = terminal.readLine();
+    // Waiting for a person is not running: the limit moves by the time waited.
+    if (deadline !== null) deadline += performance.now() - askedAt;
+    if (line === null) {
+      endOfInput = { kind: "no-more-lines", read: linesRead.length };
+      return null;
+    }
+    linesRead.push(line);
+    // Echoed as a terminal echoes what is typed, so the output reads as the
+    // session did: the prompt, the answer on the same line, then what followed.
+    const typed = `${line}\n`;
+    output.write(new TextEncoder().encode(typed));
+    return typed;
+  };
+
   const pyodide = await loadPyodide({
     ...(indexURL ? { indexURL } : {}),
     // Unbuffered streams: each write reaches the page as it is made, which is
-    // what keeps a traceback after the prints that came before it.
+    // what keeps a traceback after the prints that came before it, and a
+    // prompt on the screen before the program waits for its answer.
     env: { PYTHONUNBUFFERED: "1" },
-    // No keyboard: reading standard input finds its end at once.
-    stdin: () => {
-      readStandardInput = true;
-      return null;
-    },
+    stdin: readLine,
   });
 
-  let output = new OutputBuffer();
   const write = (bytes: Uint8Array): number => {
     output.write(bytes);
     return bytes.length;
@@ -248,8 +325,6 @@ export async function bootPythonInterpreter({
   // memory, as soon as it is over its output budget or its time. It answers
   // the signal for as long as that holds, so a program that swallows one
   // interrupt meets the next.
-  /** When the running program is out of time; null while none is running. */
-  let deadline: number | null = null;
   let outOfTime = false;
   const interrupt = {
     get 0(): number {
@@ -271,6 +346,7 @@ export async function bootPythonInterpreter({
   const run = async (
     files: readonly PlaygroundFile[],
     entryPath: string,
+    runTerminal?: PythonRunTerminal,
   ): Promise<PythonPlaygroundRunResult> => {
     for (const file of files) {
       const path = `${LESSON_ROOT}/${file.path}`;
@@ -279,8 +355,10 @@ export async function bootPythonInterpreter({
     }
     pyodide.FS.chdir(LESSON_ROOT);
 
-    output = new OutputBuffer();
-    readStandardInput = false;
+    terminal = runTerminal;
+    output = new OutputBuffer(runTerminal);
+    linesRead = [];
+    endOfInput = null;
     outOfTime = false;
     let answer: DriverAnswer | null = null;
     deadline = performance.now() + maxRunMs;
@@ -303,25 +381,28 @@ export async function bootPythonInterpreter({
       // A dead interpreter cannot flush; what it printed is already here.
     }
 
+    // The lines the program read are part of what the run was, when it read any.
+    const ran = { output: output.text(), ...(linesRead.length > 0 ? { stdin: linesRead } : {}) };
+
     // A program can print past the budget and exit before the interpreter
     // next looks at the interrupt cell: its output is cut all the same.
     if (output.overBudget || outOfTime) {
       return {
         status: "runtime-error",
-        output: output.text(),
+        ...ran,
         exitDetail: output.overBudget ? PYTHON_OUTPUT_LIMIT_DETAIL : PYTHON_TIME_LIMIT_DETAIL,
       };
     }
     if (!answer) {
-      return { status: "runtime-error", output: output.text(), exitDetail: PYTHON_STOPPED_DETAIL };
+      return { status: "runtime-error", ...ran, exitDetail: PYTHON_STOPPED_DETAIL };
     }
     if (answer.status === 0) {
-      return { status: "success", output: output.text() };
+      return { status: "success", ...ran };
     }
-    const hint = hintText(answer.hint, readStandardInput);
+    const hint = hintText(answer.hint, endOfInput);
     return {
       status: "runtime-error",
-      output: output.text(),
+      ...ran,
       exitCode: answer.status,
       ...(hint ? { hint } : {}),
     };

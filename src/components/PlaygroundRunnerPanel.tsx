@@ -13,7 +13,9 @@ import {
 } from "./terminalPanel/runtimeDockHelpers";
 import { useRuntimeDockRecording } from "./terminalPanel/useRuntimeDockRecording";
 import type { PlaygroundConsoleTags, PlaygroundRunnerLanguage } from "./playgroundRunnerLanguage";
+import RunInputRow from "./playgroundRunner/RunInputRow";
 import { usePlaygroundFormatting } from "./playgroundRunner/usePlaygroundFormatting";
+import { usePlaygroundRunTerminal } from "./playgroundRunner/usePlaygroundRunTerminal";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import {
@@ -40,6 +42,7 @@ import {
   STUDIO_TARGET_ATTRIBUTE,
   STUDIO_RUN_BUTTON_TARGET_ID,
 } from "../studio/targets";
+import type { PlaygroundRunTerminal } from "../runtime/playgroundLanguage";
 import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
 
 /**
@@ -51,6 +54,11 @@ import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtim
  * snapshot captures it and playback replays it without any live execution.
  * The Format flow, Monaco's formatting provider included, lives in
  * usePlaygroundFormatting; the panel keeps the dock, the console and Run.
+ * A language whose run is interactive runs on the dock as a terminal
+ * (usePlaygroundRunTerminal): its output is printed as it arrives, and an
+ * input row is shown while the program waits for a line. Those lines are
+ * console lines like any other, so a recording replays the session — prompt,
+ * typed line, the rest — with no program and no input row.
  * The dock also hosts the Agent tab: the agent runs with file tools only in
  * Playground lessons (no bash or runtime observation — see
  * agent/tools/index.ts).
@@ -127,6 +135,9 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   >(language.client);
   const isRunning = activeOperation === "run";
   const isFormatting = activeOperation === "format";
+  const runTerminal = usePlaygroundRunTerminal(runtimePanelStore);
+  // Only a run in flight waits: one that was cancelled never withdrew its ask.
+  const isWaitingForLine = isRunning && runTerminal.isWaitingForLine;
   // The finished Run or Format, for the status region; the busy text replaces it.
   const [outcomeText, setOutcomeText] = useState("");
 
@@ -220,15 +231,30 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       return;
     }
 
+    // A program that waits for a line is not the request a new Run repeats:
+    // the learner wants it over, and the program started again.
+    if (isWaitingForLine) {
+      cancel();
+    }
+
     // A repeat click on unchanged sources joins the Run in flight rather than
     // replacing it, so it prints no second header and spends no second request.
-    const outcome = await request("run", (client) => run.execute(client, files), {
-      files,
-      onStart: () => {
-        setOutcomeText("");
-        beginRunnerOperation(runtimePanelStore, run.startedLines(files));
+    let terminal: PlaygroundRunTerminal | null = null;
+    const outcome = await request(
+      "run",
+      (client) =>
+        terminal && run.interactive
+          ? run.interactive.execute(client, files, terminal)
+          : run.execute(client, files),
+      {
+        files,
+        onStart: () => {
+          setOutcomeText("");
+          beginRunnerOperation(runtimePanelStore, run.startedLines(files));
+          terminal = run.interactive ? runTerminal.open() : null;
+        },
       },
-    });
+    );
 
     // A newer Run, or a repeat that joined this one, owns the console from here on.
     if (outcome.kind === "superseded") {
@@ -237,10 +263,16 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
 
     if (outcome.kind === "result") {
       const lines = run.resultLines(outcome.result);
-      appendOutcomeLines(lines, run.statusLines?.(outcome.result) ?? lines);
+      // The terminal of an interactive run already shows the output these
+      // lines begin with, so there they replace it instead of following it.
+      if (!runTerminal.finish(lines)) {
+        appendRunnerConsoleLines(runtimePanelStore, lines);
+      }
+      setOutcomeText(describeOutcome(run.statusLines?.(outcome.result) ?? lines, consoleTags));
       return;
     }
 
+    runTerminal.close();
     appendOutcomeLines(run.serviceErrorLines(outcome.errorKind, outcome.message));
   };
 
@@ -364,6 +396,9 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
               onScroll={updateScrollLine}
             />
           </div>
+          {isWaitingForLine && !isPlaybackSnapshotActive ? (
+            <RunInputRow onSubmit={runTerminal.submitLine} />
+          ) : null}
         </div>
       )}
 
@@ -371,7 +406,13 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
           from the editor, or a Run that ends after a switch to the Agent tab, is
           still announced, and a tab switch never re-announces an old result. */}
       <span role="status" className="sr-only">
-        {format && isFormatting ? format.busyLabel : isRunning ? "Program is running" : outcomeText}
+        {format && isFormatting
+          ? format.busyLabel
+          : isWaitingForLine
+            ? "Program is waiting for a line of input"
+            : isRunning
+              ? "Program is running"
+              : outcomeText}
       </span>
     </div>
   );

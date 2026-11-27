@@ -27,6 +27,9 @@ import type { PythonPlaygroundRunResult } from "./types";
  * `main.py`). Every run gets an interpreter of its own, so what one program
  * did never reaches the next.
  *
+ * A run is interactive: on a terminal the program prints as it goes, and
+ * `input()` waits for the line typed there.
+ *
  * There is no Format: Python's standard library has no formatter, and the
  * ones people use are packages this runtime does not carry.
  */
@@ -49,6 +52,9 @@ export const PYTHON_PLAYGROUND: PlaygroundLanguage<
     // guess here.
     pickEntry: pickPythonRunEntry,
     execute: (client, files) => client.run({ files }),
+    interactive: {
+      execute: (client, files, terminal) => client.run({ files }, terminal),
+    },
     startedLines: pythonRunStartedConsoleLines,
     resultLines: pythonRunResultToConsoleLines,
     serviceErrorLines: pythonRunServiceErrorToConsoleLines,

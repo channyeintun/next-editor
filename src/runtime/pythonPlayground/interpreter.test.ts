@@ -6,7 +6,9 @@ import {
   PYTHON_MAX_OUTPUT_BYTES,
   PYTHON_OUTPUT_LIMIT_DETAIL,
   PYTHON_TIME_LIMIT_DETAIL,
+  pythonTerminalOfLines,
   type PythonInterpreter,
+  type PythonRunTerminal,
 } from "./interpreter";
 import { parsePythonPlaygroundRunResult } from "./types";
 
@@ -21,14 +23,16 @@ import { parsePythonPlaygroundRunResult } from "./types";
  */
 describe("the Python interpreter", () => {
   let python: PythonInterpreter;
-  const run = (source: string, files: Record<string, string> = {}) =>
+  const run = (source: string, files: Record<string, string> = {}, terminal?: PythonRunTerminal) =>
     python.run(
       [
         { path: "main.py", content: source },
         ...Object.entries(files).map(([path, content]) => ({ path, content })),
       ],
       "main.py",
+      terminal,
     );
+  const GREETING = 'name = input("Name: ")\nprint(f"Hello, {name}")\n';
 
   beforeAll(async () => {
     python = await bootPythonInterpreter({ maxRunMs: 1_500 });
@@ -128,13 +132,118 @@ describe("the Python interpreter", () => {
     expect(result).toEqual({ status: "success", output: "hi\nbye\n" });
   });
 
-  it("has no keyboard: input() meets the end of input, and the result says why", async () => {
-    const result = await run('name = input("Name: ")\nprint(name)\n');
+  it("reads a typed line, echoed after the prompt as a terminal echoes it", async () => {
+    const result = await run(GREETING, {}, pythonTerminalOfLines(["Chan"]));
+    expect(result).toEqual({
+      status: "success",
+      output: "Name: Chan\nHello, Chan\n",
+      stdin: ["Chan"],
+    });
+  });
+
+  it("reads one line for each input(), readline() and loop over standard input", async () => {
+    const result = await run(
+      [
+        "import sys",
+        "first = input()",
+        "second = sys.stdin.readline()",
+        "rest = [line for line in sys.stdin]",
+        "print(repr(first), repr(second), rest)",
+      ].join("\n"),
+      {},
+      pythonTerminalOfLines(["one", "two", "ဆယ်", ""]),
+    );
+    expect(result).toEqual({
+      status: "success",
+      output: "one\ntwo\nဆယ်\n\n'one' 'two\\n' ['ဆယ်\\n', '\\n']\n",
+      stdin: ["one", "two", "ဆယ်", ""],
+    });
+  });
+
+  it("shows a terminal the output as it is written: the prompt before the wait", async () => {
+    const decoder = new TextDecoder();
+    let shown = "";
+    const shownWhenAsked: string[] = [];
+    const result = await run(
+      'print("ready")\n' + GREETING,
+      {},
+      {
+        write: (bytes) => {
+          shown += decoder.decode(bytes, { stream: true });
+        },
+        readLine: () => {
+          shownWhenAsked.push(shown);
+          return "Chan";
+        },
+      },
+    );
+    expect(shownWhenAsked).toEqual(["ready\nName: "]);
+    expect(shown).toBe(result.output);
+    expect(shown).toBe("ready\nName: Chan\nHello, Chan\n");
+  });
+
+  it("does not count the time a line was waited for against the run limit", async () => {
+    // Longer than the interpreter's limit in this file, and no bytecode runs
+    // while it lasts, exactly as while a learner types.
+    const wait = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2_000);
+    const result = await run(
+      GREETING + "print(sum(range(100_000)))\n",
+      {},
+      {
+        readLine: () => {
+          wait();
+          return "Chan";
+        },
+      },
+    );
+    expect(result).toEqual({
+      status: "success",
+      output: "Name: Chan\nHello, Chan\n4999950000\n",
+      stdin: ["Chan"],
+    });
+  });
+
+  it("still stops a program that loops after its line was read", async () => {
+    const result = await run(
+      GREETING + "while True:\n    pass\n",
+      {},
+      pythonTerminalOfLines(["Chan"]),
+    );
+    expect(result).toEqual({
+      status: "runtime-error",
+      output: "Name: Chan\nHello, Chan\n",
+      stdin: ["Chan"],
+      exitDetail: PYTHON_TIME_LIMIT_DETAIL,
+    });
+  });
+
+  it("meets the end of input when the lines run out, and says how many it was given", async () => {
+    const result = await run(
+      'input("First: ")\ninput("Second: ")\n',
+      {},
+      pythonTerminalOfLines(["one"]),
+    );
     expect(result.status).toBe("runtime-error");
     expect(result.exitCode).toBe(1);
+    expect(result.stdin).toEqual(["one"]);
+    expect(result.output).toContain("First: one\nSecond: ");
+    expect(result.output).toContain("EOFError: EOF when reading a line");
+    expect(result.hint).toBe(
+      "input() has nothing left to read: the run was given 1 line of input and asked for another line",
+    );
+    expect((await run(GREETING, {}, pythonTerminalOfLines([]))).hint).toBe(
+      "input() has nothing left to read: the run was given no input and asked for another line",
+    );
+  });
+
+  it("has nothing to read where no terminal can wait, and the result says why", async () => {
+    const result = await run(GREETING);
+    expect(result.status).toBe("runtime-error");
+    expect(result.exitCode).toBe(1);
+    expect(result.stdin).toBeUndefined();
     expect(result.output).toContain("Name: ");
     expect(result.output).toContain("EOFError: EOF when reading a line");
-    expect(result.hint).toContain("input() has nothing to read");
+    expect(result.hint).toBe("input() has nothing to read: this page cannot wait for a typed line");
   });
 
   it("leaves an EOFError the program raised by itself unexplained", async () => {
@@ -194,8 +303,8 @@ describe("the Python interpreter", () => {
   });
 
   it("answers only with results the contract accepts", async () => {
-    for (const source of ['print("ok")\n', "1 / 0\n", "import sys\nsys.exit(2)\n"]) {
-      const result = await run(source);
+    for (const source of ['print("ok")\n', "1 / 0\n", "import sys\nsys.exit(2)\n", GREETING]) {
+      const result = await run(source, {}, pythonTerminalOfLines(["Chan"]));
       expect(parsePythonPlaygroundRunResult(result)).toEqual(result);
     }
   });

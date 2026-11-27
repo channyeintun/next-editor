@@ -86,7 +86,7 @@ const PLAYGROUND_STACK_EXPECTATIONS: Record<
     entryFilePath: "main.py",
     expectedStack: "Supported stack: Python 3.14 only",
     expectedRunner: "Python Runner panel",
-    expectedSpecific: "input() raises EOFError",
+    expectedSpecific: "input() waits for a line the user types",
   },
 };
 

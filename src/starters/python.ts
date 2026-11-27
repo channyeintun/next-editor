@@ -97,11 +97,14 @@ Linus,75
    in the workspace.
 4. The whole standard library is here, and nothing else: there is no \`pip\`,
    so packages such as \`numpy\` or \`requests\` cannot be imported.
-5. There is no keyboard. \`input()\` raises \`EOFError\`, so put the values a
-   program needs in the code.
+5. \`input()\` waits for you. When a program asks for a line, a field opens
+   under the console: type the line, press Enter, and the program goes on.
+   Ctrl+D on an empty line ends the input, as in a terminal. Press **Run**
+   again to start the program over.
 6. There are no threads, no sockets and no network. A program talks through
    what it prints. One that prints more than 256 KiB, or runs for more than
-   10 seconds, is stopped — so a loop that never ends does end.
+   10 seconds, is stopped — so a loop that never ends does end. The time a
+   program waits for you to type is not counted.
 7. There is no **Format** button.
 
 ## An error is output too

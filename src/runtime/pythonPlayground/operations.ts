@@ -4,6 +4,7 @@ import {
   type PythonInterpreter,
   type PythonInterpreterOptions,
 } from "./interpreter";
+import { programPythonTerminal } from "./terminalMemory";
 import type { PythonPlaygroundRunResult } from "./types";
 
 // What a Run asks of an interpreter, written once for both places it runs:
@@ -32,12 +33,22 @@ export function createPythonOperations(options: PythonInterpreterOptions = {}) {
     async load(): Promise<void> {
       await interpreter();
     },
-    /** Run the script at `entryPath`, with `files` written beside it. */
+    /**
+     * Run the script at `entryPath`, with `files` written beside it. With
+     * `terminalMemory` (terminalMemory.ts) the program prints into it as it
+     * runs and `input()` blocks this thread until the page answers, so only a
+     * worker is ever given one.
+     */
     async run(
       files: readonly PlaygroundFile[],
       entryPath: string,
+      terminalMemory?: SharedArrayBuffer,
     ): Promise<PythonPlaygroundRunResult> {
-      return (await interpreter()).run(files, entryPath);
+      return (await interpreter()).run(
+        files,
+        entryPath,
+        terminalMemory && programPythonTerminal(terminalMemory),
+      );
     },
   };
 }

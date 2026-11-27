@@ -92,3 +92,48 @@ export function beginRunnerOperation(store: RuntimePanelStoreInstance, lines: st
 export function appendRunnerConsoleLines(store: RuntimePanelStoreInstance, lines: string[]): void {
   appendLines(store, lines, false);
 }
+
+/** A running operation's lines in the console, replaced as more of them arrive. */
+export interface RunnerConsoleStream {
+  /**
+   * Shows `lines` as everything the operation has printed so far, in place of
+   * what the last call showed. A program's output arrives in pieces, and a
+   * piece can end in the middle of a line (a prompt waiting for its answer),
+   * so the lines are given whole each time rather than appended: the line left
+   * open is simply longer in the next call.
+   */
+  show(lines: readonly string[]): void;
+}
+
+/**
+ * Opens the console for an operation that prints while it runs, after its
+ * started lines (`beginRunnerOperation`). The lines sit after whatever the
+ * console held at the first `show`. When something else writes the console in
+ * between — the Clear button — the lines shown until then are gone for good:
+ * later calls show only what came after them, so a Clear is never undone.
+ */
+export function openRunnerConsoleStream(store: RuntimePanelStoreInstance): RunnerConsoleStream {
+  /** The console under the operation's lines. */
+  let base: readonly string[] = [];
+  /** How many of the operation's lines a Clear took, and how many the last call held. */
+  let cleared = 0;
+  let held = 0;
+  /** The array this stream last put in the store, which nothing else holds. */
+  let shown: string[] | null = null;
+
+  return {
+    show(lines) {
+      const current = store.getSnapshot().context.consoleLines;
+      if (current !== shown) {
+        base = current;
+        cleared = held;
+      }
+      held = lines.length;
+      // Only the last lines can stay, so no more than those are copied: a
+      // program can print 256 KiB of one-character lines.
+      const kept = lines.slice(Math.max(cleared, lines.length - MAX_RUNNER_CONSOLE_LINES));
+      shown = [...base, ...kept].slice(-MAX_RUNNER_CONSOLE_LINES);
+      store.trigger.setConsoleLines({ consoleLines: shown });
+    },
+  };
+}

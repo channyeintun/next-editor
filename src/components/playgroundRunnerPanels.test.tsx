@@ -39,9 +39,16 @@ const harness = vi.hoisted(() => {
     format: vi.fn<(language: string, request: unknown) => Promise<unknown>>(),
     stop: vi.fn<(language: string) => void>(),
   };
+  // The terminal each interactive run was given, in order; a language whose
+  // run is one request and one answer adds none.
+  const terminals: {
+    print: (output: string) => void;
+    readLine: () => Promise<string | null>;
+  }[] = [];
   const clientClass = (language: string) =>
     class FakePlaygroundClient {
-      run(request: unknown) {
+      run(request: unknown, terminal?: (typeof terminals)[number]) {
+        if (terminal) terminals.push(terminal);
         return client.run(language, request);
       }
       format(request: unknown) {
@@ -65,7 +72,7 @@ const harness = vi.hoisted(() => {
     provide: (model: unknown, options: unknown, token: unknown) => Promise<unknown>;
     disposed: boolean;
   }[] = [];
-  return { state, client, clientClass, workspace, actions, providers, reactive };
+  return { state, client, terminals, clientClass, workspace, actions, providers, reactive };
 });
 
 vi.mock("@next-editor/infra", async () => {
@@ -533,6 +540,7 @@ describe("playground runner panels", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     harness.providers.length = 0;
+    harness.terminals.length = 0;
     harness.state.auth = { isSignedIn: true, isLoading: false };
     harness.state.metadata = { currentRecording: null, isRecording: false, isPlaying: false };
     harness.state.loadVersion = 1;
@@ -1133,6 +1141,215 @@ describe("playground runner panels", () => {
       "[kitefmt error] kitec could not format this program",
       "Format would remove code from shapes.kite; fix the errors first",
     ]);
+  });
+
+  // Python is the language whose run is interactive: it prints while it runs
+  // and can wait for a typed line.
+  describe("a run on the dock as a terminal", () => {
+    const PYTHON = CASES.find((panel) => panel.kind === "python-playground")!;
+    const HEADER = "[python-run] python main.py";
+    const inputRow = () => screen.queryByRole("textbox", { name: "Input for the program" });
+
+    /** Starts a Run that stays in flight; `finish` ends it with a result. */
+    async function startRun(panel = PYTHON) {
+      setFiles({ [panel.entry]: SOURCE });
+      let finish: (result: unknown) => void = () => {};
+      harness.client.run.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+      await renderPanel(panel);
+      await click(screen.getByRole("button", { name: "Run" }));
+      return {
+        terminal: harness.terminals.at(-1)!,
+        finish: (result: unknown) => act(async () => finish(result)),
+      };
+    }
+
+    it.each(CASES.filter((panel) => panel !== PYTHON))(
+      "$kind: is one request and one answer, with no terminal and no input row",
+      async (panel) => {
+        await startRun(panel);
+
+        expect(harness.terminals).toEqual([]);
+        expect(inputRow()).toBeNull();
+      },
+    );
+
+    it("prints what the program has written while it still runs", async () => {
+      const { terminal } = await startRun();
+
+      act(() => terminal.print("one\n"));
+      expect(consoleLines()).toEqual([HEADER, "one"]);
+      act(() => terminal.print("one\ntwo\nthr"));
+
+      expect(consoleLines()).toEqual([HEADER, "one", "two", "thr"]);
+      expect(inputRow()).toBeNull();
+      expect(screen.getByRole("status").textContent).toBe("Program is running");
+    });
+
+    it("shows an input row while the program waits, and hands over the typed line", async () => {
+      const { terminal, finish } = await startRun();
+      act(() => terminal.print("Name: "));
+      let line: Promise<string | null> = Promise.resolve(null);
+      act(() => {
+        line = terminal.readLine();
+      });
+
+      expect(consoleLines()).toEqual([HEADER, "Name: "]);
+      expect(inputRow()).toHaveFocus();
+      expect(screen.getByRole("status").textContent).toBe("Program is waiting for a line of input");
+
+      fireEvent.change(inputRow()!, { target: { value: "Chan" } });
+      await click(screen.getByRole("button", { name: "Enter" }));
+
+      await expect(line).resolves.toBe("Chan");
+      expect(inputRow()).toBeNull();
+      expect(screen.getByRole("status").textContent).toBe("Program is running");
+
+      // The program echoes the line where it was typed, and goes on.
+      act(() => terminal.print("Name: Chan\nHello, Chan\n"));
+      await finish({ status: "success", output: "Name: Chan\nHello, Chan\n", stdin: ["Chan"] });
+
+      expect(consoleLines()).toEqual([
+        HEADER,
+        "Name: Chan",
+        "Hello, Chan",
+        "[python-run] Program exited",
+      ]);
+      expect(screen.getByRole("status").textContent).toBe("Program exited");
+    });
+
+    it("hands over an empty line when Enter is pressed on an empty row", async () => {
+      const { terminal } = await startRun();
+      let line: Promise<string | null> = Promise.resolve(null);
+      act(() => {
+        line = terminal.readLine();
+      });
+
+      fireEvent.submit(inputRow()!.closest("form")!);
+
+      await expect(line).resolves.toBe("");
+    });
+
+    it("ends the program's input on Ctrl+D, on an empty row only", async () => {
+      const { terminal } = await startRun();
+      let line: Promise<string | null> = Promise.resolve("unanswered");
+      act(() => {
+        line = terminal.readLine();
+      });
+
+      fireEvent.change(inputRow()!, { target: { value: "text" } });
+      fireEvent.keyDown(inputRow()!, { key: "d", ctrlKey: true });
+      expect(inputRow()).toHaveValue("text");
+
+      fireEvent.change(inputRow()!, { target: { value: "" } });
+      await act(async () => {
+        fireEvent.keyDown(inputRow()!, { key: "d", ctrlKey: true });
+      });
+
+      await expect(line).resolves.toBeNull();
+      expect(inputRow()).toBeNull();
+    });
+
+    it("leaves the keyboard with a learner who is typing outside the dock", async () => {
+      const { terminal } = await startRun();
+      const editor = document.body.appendChild(document.createElement("textarea"));
+      editor.focus();
+
+      act(() => void terminal.readLine());
+
+      expect(inputRow()).not.toBeNull();
+      expect(editor).toHaveFocus();
+      editor.remove();
+    });
+
+    it("ends the run with its result's lines, in place of the output shown", async () => {
+      const { terminal, finish } = await startRun();
+      // The page read the output in the middle of a line the result cut.
+      act(() => terminal.print("whole\nhalf a li"));
+
+      await finish({ status: "runtime-error", output: "whole\n", exitDetail: "stopped" });
+
+      expect(consoleLines()).toEqual([HEADER, "whole", "[python-run error] stopped"]);
+    });
+
+    it("says a run printed nothing only when it did", async () => {
+      const { finish } = await startRun();
+
+      await finish({ status: "success", output: "" });
+
+      expect(consoleLines()).toEqual([
+        HEADER,
+        "[python-run] (no output)",
+        "[python-run] Program exited",
+      ]);
+    });
+
+    it("starts the program again when Run is pressed while it waits", async () => {
+      const { terminal } = await startRun();
+      act(() => terminal.print("Name: "));
+      act(() => void terminal.readLine());
+      fireEvent.change(inputRow()!, { target: { value: "half typed" } });
+
+      await click(screen.getByRole("button", { name: "Run" }));
+
+      // The same files, yet a new run: the waiting one is ended, not joined.
+      expect(harness.client.stop).toHaveBeenCalledTimes(1);
+      expect(harness.client.run).toHaveBeenCalledTimes(2);
+      expect(consoleLines()).toEqual([HEADER, "Name: ", "", HEADER]);
+      expect(inputRow()).toBeNull();
+
+      // The run that was ended can no longer print or ask.
+      act(() => terminal.print("Name: late"));
+      act(() => void terminal.readLine());
+      expect(consoleLines()).toEqual([HEADER, "Name: ", "", HEADER]);
+      expect(inputRow()).toBeNull();
+
+      const fresh = harness.terminals.at(-1)!;
+      act(() => void fresh.readLine());
+      expect(inputRow()).toHaveValue("");
+    });
+
+    it("keeps a Clear pressed while the program runs", async () => {
+      const { terminal, finish } = await startRun();
+      act(() => terminal.print("one\ntwo\n"));
+
+      await click(screen.getByRole("button", { name: "Clear" }));
+      act(() => terminal.print("one\ntwo\nthree\n"));
+      await finish({ status: "success", output: "one\ntwo\nthree\n" });
+
+      expect(consoleLines()).toEqual(["three", "[python-run] Program exited"]);
+    });
+
+    it("takes the input row away when playback takes over", async () => {
+      const { terminal } = await startRun();
+      act(() => void terminal.readLine());
+      expect(inputRow()).not.toBeNull();
+
+      harness.state.metadata = {
+        isPlaying: true,
+        isRecording: false,
+        currentRecording: { runtimeSnapshot: { mode: "single-file", status: "idle" } },
+      };
+      act(() => harness.reactive.notify());
+
+      expect(inputRow()).toBeNull();
+      expect(harness.client.stop).toHaveBeenCalledTimes(1);
+    });
+
+    it("records each step of the session as a console change", async () => {
+      harness.state.metadata = { currentRecording: null, isRecording: true, isPlaying: false };
+      const { terminal, finish } = await startRun();
+      harness.actions.handleRuntimeEvent.mockClear();
+
+      act(() => terminal.print("Name: "));
+      expect(harness.actions.handleRuntimeEvent).toHaveBeenCalledTimes(1);
+      // The same output again is no change, so no event.
+      act(() => terminal.print("Name: "));
+      expect(harness.actions.handleRuntimeEvent).toHaveBeenCalledTimes(1);
+      act(() => terminal.print("Name: Chan\nHello, Chan\n"));
+      expect(harness.actions.handleRuntimeEvent).toHaveBeenCalledTimes(2);
+      await finish({ status: "success", output: "Name: Chan\nHello, Chan\n", stdin: ["Chan"] });
+      expect(harness.actions.handleRuntimeEvent).toHaveBeenCalledTimes(3);
+    });
   });
 
   it.each(CASES)("$kind: replays the recorded dock during playback", async (panel) => {

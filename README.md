@@ -39,8 +39,9 @@ header). Each runs in one of three places:
   requests from inside the preview frame (same origin, so no CORS), with a response viewer and a
   request history.
 - A Python lesson runs on Pyodide (CPython built to WebAssembly) in a worker of the page, served
-  from the app's own origin: the standard library only, a new interpreter for every run, no
-  keyboard input, and a stop at 10 seconds or 256 KiB of output.
+  from the app's own origin: the standard library only, a new interpreter for every run, and a
+  stop at 10 seconds of running or 256 KiB of output. The program prints as it runs, and
+  `input()` waits for a line typed in the runner.
 - Monaco carries first-party grammars for Zig, Haskell, Kite, and x86-64 assembly.
 - In the code editor, Tab types a tab. Escape, then Tab (or Shift+Tab), moves focus out of it;
   Tab indents again the next time the editor is entered.

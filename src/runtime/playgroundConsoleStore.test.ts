@@ -38,6 +38,7 @@ import {
   appendRunnerConsoleLines,
   beginRunnerOperation,
   clearRunnerConsole,
+  openRunnerConsoleStream,
   resetRunnerConsoleForProject,
 } from "./playgroundConsoleStore";
 
@@ -140,6 +141,83 @@ describe("clearRunnerConsole", () => {
     clearRunnerConsole(store, "go-runner");
 
     expect(store.getSnapshot().context).toBe(before);
+  });
+});
+
+describe("openRunnerConsoleStream", () => {
+  const HEADER = "[python-run] python main.py";
+
+  function runningStream() {
+    const store = createRuntimePanelStore();
+    beginRunnerOperation(store, [HEADER]);
+    return { store, stream: openRunnerConsoleStream(store), lines: () => consoleLinesOf(store) };
+  }
+  const consoleLinesOf = (store: ReturnType<typeof createRuntimePanelStore>) =>
+    store.getSnapshot().context.consoleLines;
+
+  it("shows a run's lines after what the console held, each call in place of the last", () => {
+    const { stream, lines } = runningStream();
+
+    stream.show(["one"]);
+    stream.show(["one", "two"]);
+
+    expect(lines()).toEqual([HEADER, "one", "two"]);
+  });
+
+  // A prompt is a line with no end yet: the answer and the rest come later.
+  it("lets the line a run left open grow", () => {
+    const { stream, lines } = runningStream();
+
+    stream.show(["Name: "]);
+    expect(lines()).toEqual([HEADER, "Name: "]);
+    stream.show(["Name: Chan", "Hello, Chan"]);
+
+    expect(lines()).toEqual([HEADER, "Name: Chan", "Hello, Chan"]);
+  });
+
+  it("takes back a line a later call no longer holds", () => {
+    const { stream, lines } = runningStream();
+
+    stream.show(["whole", "half a li"]);
+    stream.show(["whole", "[python-run error] stopped"]);
+
+    expect(lines()).toEqual([HEADER, "whole", "[python-run error] stopped"]);
+  });
+
+  it("keeps a Clear: the lines it took never come back", () => {
+    const { store, stream, lines } = runningStream();
+
+    stream.show(["one", "two"]);
+    clearRunnerConsole(store, "python-runner");
+    stream.show(["one", "two"]);
+    expect(lines()).toEqual([]);
+    stream.show(["one", "two", "three"]);
+    stream.show(["one", "two", "three", "[python-run] Program exited"]);
+
+    expect(lines()).toEqual(["three", "[python-run] Program exited"]);
+  });
+
+  it("goes on after lines something else appended", () => {
+    const { store, stream, lines } = runningStream();
+
+    stream.show(["one"]);
+    appendRunnerConsoleLines(store, ["[gofmt] note"]);
+    stream.show(["one", "two"]);
+
+    expect(lines()).toEqual([HEADER, "one", "[gofmt] note", "two"]);
+  });
+
+  it("caps the recorded scrollback, whatever a run prints", () => {
+    const { stream, lines } = runningStream();
+    const printed = Array.from({ length: 100_000 }, (_, index) => `line ${index}`);
+
+    stream.show(printed);
+
+    expect(lines()).toHaveLength(MAX_RUNNER_CONSOLE_LINES);
+    expect(lines().at(-1)).toBe("line 99999");
+    stream.show([...printed, "last"]);
+    expect(lines()).toHaveLength(MAX_RUNNER_CONSOLE_LINES);
+    expect(lines().at(-1)).toBe("last");
   });
 });
 

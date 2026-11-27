@@ -13,9 +13,11 @@ export const PYTHON_AGENT_STACK: PlaygroundAgentStack = {
     "the workspace beside it: other .py files import as modules, and data files open by " +
     "their workspace path. There is no pip and no package index, so keep every solution " +
     "to the standard library — numpy, pandas, requests and the like cannot be imported. " +
-    "There is no keyboard: input() raises EOFError, so put a program's values in the " +
-    "code. There are no threads, processes, sockets or network access, and no preview " +
+    "input() waits for a line the user types in the Python Runner panel, which shows a " +
+    "field under the console while the program waits; you cannot type it for them. " +
+    "There are no threads, processes, sockets or network access, and no preview " +
     "surface — a program communicates through what it prints, standard output and " +
-    "standard error together, up to 256 KiB, and is stopped after 10 seconds. Files a program writes are gone when it " +
-    "exits and never reach the workspace. There is no Format action.",
+    "standard error together, up to 256 KiB, and is stopped after 10 seconds of " +
+    "running (waiting for input is not counted). Files a program writes are gone when " +
+    "it exits and never reach the workspace. There is no Format action.",
 };
