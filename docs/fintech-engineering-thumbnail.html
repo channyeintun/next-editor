@@ -1,0 +1,2514 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fintech Engineering thumbnail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&family=JetBrains+Mono:wght@400..700&family=Noto+Sans+Myanmar:wght@400;500;600;700&display=block"
+    />
+    <!--
+      Fintech Engineering course (Burmese) lesson thumbnail, 1280×720 (16:9, the lesson card
+      ratio). Click a stop on the route under the frame, or press ← / →, to load another lesson
+      from LESSONS, or render the whole set with `bun docs/fintech-engineering-thumbnails/render.ts`.
+
+      A thumbnail is the cover of its lesson, so it is drawn in the lessons' own figure style
+      (the figure engine's: ~/Documents/fintech-course-work/tools/fig.ts): the dark ink ground
+      with a dot grid and a corner glow, rounded cards with a toned outline, a small-caps kicker,
+      a sans face plus a mono face, and the three principle chips.
+
+      - Tones keep the one job each has on the figures: gold = money, blue = a message,
+        teal = stored facts, violet = controls, orange = pending, red = failure,
+        green = correct, gray = neutral or external.
+      - The big number, the part line and the glow take the part's tone, so the nine parts band
+        the gallery: rules violet, money gold, ledger teal, flows orange, the outside world blue,
+        controls violet, testing green, the domain gold, end to end violet.
+      - The board holds one small diagram drawn for the lesson from the shapes in the DSL below,
+        and under it one real line of the lesson: a line its program prints, a line of its code,
+        or a line one of its figures shows.
+      - Nothing on the board is invented. Every word and number in a diagram, and the line
+        under it, is in the lesson's YAML; render.ts checks that, and the title too.
+      - No people, no mascots, no logos of real companies.
+    -->
+    <style>
+      :root {
+        --ground: #0b0e14;
+        --card: #121824;
+        --rule: #2a3345;
+        --muted: #8a94a8;
+        --ink: #e9edf5;
+        --gold: #f6c453;
+        --teal: #4fd1c5;
+        --violet: #b794f6;
+        --gray: #9aa5b8;
+        --accent: var(--gold);
+        --sans:
+          Inter, "SF Pro Display", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+          "Noto Sans Myanmar", sans-serif;
+        --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+        --mm: "Noto Sans Myanmar", Inter, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* The frame sits at the top rather than centered vertically: centering can land it
+         on a half pixel, and a screenshot then picks up a line of the page background. */
+      body {
+        margin: 0;
+        min-width: max-content;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 32px 16px;
+        background: #2b2b2e;
+        font-family: var(--sans);
+      }
+
+      #thumb {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        flex: none;
+        overflow: hidden;
+        color: var(--ink);
+        background-color: var(--ground);
+        background-image: radial-gradient(#1b2232 1.3px, transparent 1.3px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      /* The corner glow of a figure, in the part's tone. */
+      #thumb::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 960px;
+        height: 620px;
+        background: radial-gradient(
+          ellipse at 0 0,
+          color-mix(in srgb, var(--accent) 17%, transparent),
+          transparent 70%
+        );
+      }
+
+      .mm {
+        font-family: var(--mm);
+        letter-spacing: 0;
+      }
+
+      .series {
+        position: absolute;
+        left: 64px;
+        top: 44px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 21px/1 var(--sans);
+        letter-spacing: 0.14em;
+      }
+
+      .series svg {
+        width: 36px;
+        height: 36px;
+      }
+
+      /* A figure's chip: a tinted pill with an outline. */
+      .lang {
+        position: absolute;
+        right: 64px;
+        top: 36px;
+        padding: 7px 24px 10px;
+        border: 2px solid var(--gray);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--gray) 15%, transparent);
+        font: 600 23px/1.4 var(--mm);
+      }
+
+      /* The left column hangs between the board's top and bottom edges: the number at
+         the top, the part and the title at the bottom. */
+      .left {
+        position: absolute;
+        left: 64px;
+        top: 132px;
+        width: 548px;
+        height: 448px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .num-label {
+        font: 700 18px/1 var(--sans);
+        letter-spacing: 0.22em;
+        color: var(--muted);
+      }
+
+      .num {
+        margin: 14px 0 0 -6px;
+        font: 800 168px/0.8 var(--sans);
+        letter-spacing: -0.045em;
+        color: var(--accent);
+      }
+
+      .part {
+        width: max-content;
+        font: 700 18px/1.4 var(--sans);
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        color: var(--accent);
+      }
+
+      .title {
+        margin-top: 8px;
+        font-weight: 700;
+        font-family: var(--sans);
+        line-height: 1.42;
+        letter-spacing: -0.015em;
+      }
+
+      /* A title breaks only where LESSONS breaks it. */
+      .title .line {
+        display: block;
+        width: max-content;
+        white-space: nowrap;
+      }
+
+      .board {
+        position: absolute;
+        left: 648px;
+        top: 132px;
+        width: 568px;
+        height: 448px;
+        border: 2px solid var(--rule);
+        border-radius: 24px;
+        background: rgb(14 19 29 / 0.78);
+      }
+
+      .board svg {
+        position: absolute;
+        inset: -2px;
+        width: 568px;
+        height: 448px;
+        font-family: var(--sans);
+      }
+
+      .board svg .mono {
+        font-family: var(--mono);
+      }
+
+      .board svg .mm {
+        font-family: var(--mm);
+      }
+
+      /* The lesson's real line, set the way a figure highlights a line of code. */
+      .real {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 18px;
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--accent) 15%, transparent);
+        font-family: var(--mono);
+        font-weight: 600;
+      }
+
+      .real i {
+        flex: none;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .real span {
+        flex: 1;
+        min-width: 0;
+        white-space: pre;
+      }
+
+      /* The handbook's three principles, the chips a figure carries in its corner. */
+      .principles {
+        position: absolute;
+        left: 64px;
+        top: 630px;
+        display: flex;
+        gap: 12px;
+      }
+
+      .principles span {
+        padding: 0 16px;
+        border: 2px solid var(--tone);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--tone) 15%, transparent);
+        color: var(--tone);
+        font: 700 15px/32px var(--sans);
+        letter-spacing: 0.06em;
+        white-space: nowrap;
+      }
+
+      /* The route is the page's own control, under the frame: it is not in the picture. */
+      .route {
+        width: 860px;
+        height: 44px;
+      }
+
+      .route circle {
+        cursor: pointer;
+      }
+
+      .brand {
+        position: absolute;
+        right: 64px;
+        top: 624px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 27px/1 var(--sans);
+        letter-spacing: -0.01em;
+      }
+
+      .brand svg {
+        width: 46px;
+        height: 46px;
+      }
+
+      .hint {
+        color: #b9b9bd;
+        font: 400 14px/1.4 var(--sans);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="thumb">
+      <div class="series">
+        <!-- The course's mark: a T-account. -->
+        <svg viewBox="0 0 36 36" aria-hidden="true">
+          <rect
+            x="2"
+            y="2"
+            width="32"
+            height="32"
+            rx="9"
+            fill="#121824"
+            stroke="var(--accent)"
+            stroke-width="2.5"
+          />
+          <path
+            d="M9 13.500H27M18 13.500V27"
+            fill="none"
+            stroke="var(--accent)"
+            stroke-width="3"
+            stroke-linecap="round"
+          />
+        </svg>
+        FINTECH ENGINEERING
+      </div>
+      <div class="lang">မြန်မာလို</div>
+
+      <div class="left">
+        <div>
+          <div class="num-label">LESSON</div>
+          <div class="num" id="num">01</div>
+        </div>
+        <div>
+          <div class="part" id="part"></div>
+          <div class="title" id="title"></div>
+        </div>
+      </div>
+
+      <div class="board">
+        <svg id="glyph" viewBox="0 0 568 448" aria-hidden="true"></svg>
+        <div class="real"><i></i><span id="real"></span></div>
+      </div>
+
+      <div class="principles" aria-label="The three principles">
+        <span style="--tone: var(--gold)">NO INVENTED DATA</span>
+        <span style="--tone: var(--teal)">NO LOST DATA</span>
+        <span style="--tone: var(--violet)">NO TRUST</span>
+      </div>
+
+      <div class="brand">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient
+              id="g2c"
+              x1="300"
+              y1="312"
+              x2="724"
+              y2="712"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#4DE5D6" />
+              <stop offset="0.5" stop-color="#FFD255" />
+              <stop offset="1" stop-color="#6D57FF" />
+            </linearGradient>
+          </defs>
+          <rect
+            x="72"
+            y="72"
+            width="880"
+            height="880"
+            rx="200"
+            fill="#0B0E14"
+            stroke="#2a3345"
+            stroke-width="36"
+          />
+          <polygon
+            points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+            fill="url(#g2c)"
+          />
+        </svg>
+        Next Editor
+      </div>
+    </div>
+
+    <svg class="route" id="route" viewBox="0 0 860 44" aria-label="Lesson in the course"></svg>
+    <div class="hint">Click a stop on the route, or press ← / →, to load another lesson.</div>
+
+    <script>
+      // The nine parts of the course, in order: the name the course guide uses, and the tone
+      // the part's covers take.
+      const PARTS = [
+        { name: "The rules of the game", tone: "violet" },
+        { name: "Representing money", tone: "gold" },
+        { name: "Recording money: the ledger", tone: "teal" },
+        { name: "Executing money flows", tone: "orange" },
+        { name: "The external world", tone: "blue" },
+        { name: "Controls and access", tone: "violet" },
+        { name: "Testing", tone: "green" },
+        { name: "Know your domain", tone: "gold" },
+        { name: "End to end", tone: "violet" },
+      ];
+      window.PARTS = PARTS;
+
+      // One entry per lesson: [number, slug, part, title lines, real line].
+      // The title lines joined by a space are the lesson's title after "Fintech Engineering NN: "
+      // and the real line is a line of the lesson (render.ts checks both against the lesson's
+      // YAML); the title's breaks are chosen by hand.
+      const LESSONS = [
+        [
+          1,
+          "fintech-01-three-principles",
+          1,
+          ["ငွေကိုင်တဲ့ software ရဲ့", "မူ ၃ ချက်"],
+          "STOP: books 150.00 ≠ bank 100.00",
+        ],
+        [2, "fintech-02-floats", 2, ["Float နဲ့ ငွေ", "မတွက်ရတဲ့ အကြောင်း"], "fmt.Println(a+b == 0.3)"],
+        [
+          3,
+          "fintech-03-minor-units",
+          2,
+          ["Minor unit နဲ့", "ကိန်းပြည့် ငွေ"],
+          "10 ETH → -8446744073709551616",
+        ],
+        [
+          4,
+          "fintech-04-money-in-json",
+          2,
+          ["JSON ထဲက", "ငွေပမာဏ"],
+          "map[string]any: 9007199254740992 (float64)",
+        ],
+        [
+          5,
+          "fintech-05-rounding",
+          2,
+          ["Rounding က", "business ဆုံးဖြတ်ချက်"],
+          "allocate:   3334 + 3333 + 3333 = 10000",
+        ],
+        [
+          6,
+          "fintech-06-money-type",
+          2,
+          ["Money type", "နဲ့ currency"],
+          'boundary: unsupported currency "XYZ"',
+        ],
+        [
+          7,
+          "fintech-07-fx-rates",
+          2,
+          ["FX rate ကို", "နားလည်ခြင်း"],
+          "buy at ask:  1098.90 USD -> 998.00 EUR",
+        ],
+        [8, "fintech-08-double-entry", 3, ["Double-entry", "ledger"], "Σ balances = 0"],
+        [
+          9,
+          "fintech-09-account-types",
+          3,
+          ["Debit၊ credit နဲ့", "account type"],
+          "debits 101.50 = credits 101.50",
+        ],
+        [
+          10,
+          "fintech-10-postings",
+          3,
+          ["Transaction တစ်ခု၊", "posting အများ"],
+          "Dr 2.90 + 97.10 = Cr 100.00",
+        ],
+        [
+          11,
+          "fintech-11-three-times",
+          3,
+          ["Value၊ booking၊", "settlement အချိန်"],
+          "jan by settlement: 50.00",
+        ],
+        [12, "fintech-12-audit-trail", 3, ["Audit trail"], "same decision: true"],
+        [13, "fintech-13-event-sourcing", 3, ["Event sourcing"], "balance = fold(events) = 82.10"],
+        [
+          14,
+          "fintech-14-immutability",
+          3,
+          ["Immutability နဲ့", "hash chain"],
+          "edit: broken at #2: hash does not match",
+        ],
+        [
+          15,
+          "fintech-15-reversals",
+          3,
+          ["Reversal နဲ့", "correction"],
+          "period closed through 2026-10-31",
+        ],
+        [16, "fintech-16-gdpr", 3, ["Immutable ledger", "နဲ့ GDPR"], "owed to all users: 150.00"],
+        [
+          17,
+          "fintech-17-invariants",
+          4,
+          ["Invariant ကို ထိန်းတဲ့", "နည်း ၃ မျိုး"],
+          "nightly: tx t3 is not balanced",
+        ],
+        [
+          18,
+          "fintech-18-funds-reservation",
+          4,
+          ["Funds", "reservation"],
+          "total 100.00  reserved 80.00  available 20.00",
+        ],
+        [
+          19,
+          "fintech-19-overdrafts",
+          4,
+          ["Overdraft ကို", "ကိုင်တွယ်ခြင်း"],
+          "booked: user 1042 -30.00  bank 70.00",
+        ],
+        [
+          20,
+          "fintech-20-idempotency",
+          4,
+          ["Idempotency", "key"],
+          "first: 201 tx-1   retry: 201 tx-1",
+        ],
+        [
+          21,
+          "fintech-21-idempotency-edges",
+          4,
+          ["Idempotency ရဲ့", "ခက်တဲ့ အပိုင်း"],
+          "if saved.fingerprint != fingerprint {",
+        ],
+        [
+          22,
+          "fintech-22-resumability",
+          4,
+          ["Crash ဖြစ်လည်း", "ဆက်သွားတဲ့ flow"],
+          "process died after: sent",
+        ],
+        [
+          23,
+          "fintech-23-consuming-apis",
+          5,
+          ["Provider API ကို", "မယုံဘဲ သုံးခြင်း"],
+          "naive: po_1 paid, po_2 paid, po_3 paid",
+        ],
+        [
+          24,
+          "fintech-24-webhooks",
+          5,
+          ["Webhook ကို", "လက်ခံခြင်း"],
+          "worker: pay_7 captured, credited 100.00",
+        ],
+        [25, "fintech-25-outbox-cdc", 5, ["Outbox နဲ့ CDC"], "tx.Outbox(event(id))"],
+        [26, "fintech-26-reconciliation", 5, ["Reconciliation"], "missing in ledger: pi_106 12.00"],
+        [27, "fintech-27-four-eyes", 6, ["Four-eyes နဲ့", "တာဝန်ခွဲခြင်း"], "if checker == r.Maker {"],
+        [28, "fintech-28-access-control", 6, ["Access control"], "u-42 funds.move: false"],
+        [
+          29,
+          "fintech-29-change-trail",
+          6,
+          ["Code ကနေ production", "အထိ trail"],
+          "7be03d1 blocked: no second reviewer",
+        ],
+        [
+          30,
+          "fintech-30-property-testing",
+          7,
+          ["Property-based", "testing"],
+          "counterexample: 396.99 in 4 parts",
+        ],
+        [
+          31,
+          "fintech-31-testing-menu",
+          7,
+          ["ငွေ system အတွက်", "test နည်းများ"],
+          "crash after fee, resume: false",
+        ],
+        [
+          32,
+          "fintech-32-card-payments",
+          8,
+          ["Card payment", "အလုပ်လုပ်ပုံ"],
+          "merchant receives:      99.66",
+        ],
+        [33, "fintech-33-bank-rails", 8, ["Bank rail နဲ့", "settlement"], "net moved: 60.00"],
+        [
+          34,
+          "fintech-34-trading",
+          8,
+          ["Order book", "နဲ့ trading"],
+          "market buy 10 -> 5@100.10 a1, 5@100.20 a2",
+        ],
+        [
+          35,
+          "fintech-35-custody-crypto",
+          8,
+          ["Custody နဲ့", "crypto"],
+          "K=3 credited [dep-b] -> all on chain",
+        ],
+        [
+          36,
+          "fintech-36-compliance",
+          8,
+          ["Engineer အတွက်", "compliance"],
+          "withdraw 100.00 by 2077 (pending): block",
+        ],
+        [
+          37,
+          "fintech-37-flow-withdrawal",
+          9,
+          ["Flow ၁၊ crypto", "withdrawal"],
+          "recon: chain wallet 0.4985, ledger 0.4985",
+        ],
+        [
+          38,
+          "fintech-38-flow-card-deposit",
+          9,
+          ["Flow ၂၊", "card deposit"],
+          "evt_1 → API: pi_1 captured, credited 100.00",
+        ],
+        [
+          39,
+          "fintech-39-flow-conversion",
+          9,
+          ["Flow ၃၊ conversion", "နဲ့ cashback"],
+          "1000.00 ÷ 0.92340 = 1082.9542993286…",
+        ],
+        [
+          40,
+          "fintech-40-system-design-interview",
+          9,
+          ["Fintech system", "design interview"],
+          "retry: key seen -> replay => 200 tx-2",
+        ],
+      ].map(([number, slug, part, lines, real]) => ({ number, slug, part, lines, real }));
+      window.LESSONS = LESSONS;
+
+      /* ---------- The drawing DSL: the figure engine's shapes, at cover size ---------- */
+
+      const TONE = {
+        gold: "#f6c453",
+        teal: "#4fd1c5",
+        violet: "#b794f6",
+        blue: "#6cb2f5",
+        red: "#fc8181",
+        green: "#68d391",
+        orange: "#f6ad55",
+        gray: "#9aa5b8",
+        ink: "#e9edf5",
+      };
+      const BG = "#0b0e14";
+      const CARD = "#121824";
+      const RULE = "#2a3345";
+      const MUTED = "#8a94a8";
+      const INK = "#e9edf5";
+      // An arrow's kind names what moves along it.
+      const KIND = { money: "gold", msg: "blue", plain: "gray", bad: "red", ok: "green" };
+
+      // The figure engine's line icons, on a 48 grid.
+      const ICONS = {
+        bank: '<path d="M5 18 24 6l19 12z"/><path d="M11 22v13M20 22v13M28 22v13M37 22v13M6 40h36"/>',
+        card: '<rect x="5" y="11" width="38" height="26" rx="4"/><path d="M5 19h38M11 29h9"/>',
+        phone: '<rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 37h6"/>',
+        server:
+          '<rect x="7" y="7" width="34" height="14" rx="3"/><rect x="7" y="27" width="34" height="14" rx="3"/><path d="M13 14h3M13 34h3"/>',
+        db: '<ellipse cx="24" cy="11" rx="15" ry="6"/><path d="M9 11v26c0 3.3 6.7 6 15 6s15-2.7 15-6V11M9 24c0 3.3 6.7 6 15 6s15-2.7 15-6"/>',
+        ledger:
+          '<rect x="9" y="5" width="30" height="38" rx="3"/><path d="M16 5v38M22 15h11M22 23h11M22 31h7"/>',
+        doc: '<path d="M12 5h17l8 8v30H12z"/><path d="M29 5v8h8M18 24h12M18 32h12"/>',
+        key: '<circle cx="14" cy="24" r="8"/><path d="M22 24h21M36 24v7M42 24v5"/>',
+        shield:
+          '<path d="M24 4l16 6v12c0 10-7 17-16 22C15 39 8 32 8 22V10z"/><path d="M17 23l5 5 9-10"/>',
+        coin: '<circle cx="24" cy="24" r="18"/><path d="M29.5 18c-1-2.2-3-3.5-5.5-3.5-3.3 0-6 1.8-6 4.6 0 6.3 12 3.3 12 9.6 0 2.9-2.7 4.8-6 4.800-2.800 0-5-1.300-6-3.500M24 10v4.500M24 33.500V38"/>',
+        queue:
+          '<rect x="6" y="8" width="36" height="8" rx="2"/><rect x="6" y="20" width="36" height="8" rx="2"/><rect x="6" y="32" width="36" height="8" rx="2"/>',
+        eye: '<path d="M4 24c5-9 12-13 20-13s15 4 20 13c-5 9-12 13-20 13S9 33 4 24z"/><circle cx="24" cy="24" r="6"/>',
+        warn: '<path d="M24 5l20 36H4z"/><path d="M24 19v10M24 35v.500"/>',
+        check: '<path d="M9 25l10 10 20-22"/>',
+        cross: '<path d="M11 11l26 26M37 11 11 37"/>',
+        globe:
+          '<circle cx="24" cy="24" r="18"/><path d="M6 24h36M24 6c7 6 7 30 0 36M24 6c-7 6-7 30 0 36"/>',
+        gear: '<circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.600 10.600l4.200 4.200M33.200 33.200l4.200 4.200M10.600 37.400l4.200-4.200M33.200 14.800l4.200-4.200"/>',
+        shop: '<path d="M6 20l4-12h28l4 12M8 22v20h32V22"/><path d="M6 20a4.500 4.500 0 0 0 9 0 4.500 4.500 0 0 0 9 0 4.500 4.500 0 0 0 9 0 4.500 4.500 0 0 0 9 0M20 42V31h8v11"/>',
+        code: '<path d="M17 14 7 24l10 10M31 14l10 10-10 10M27 9l-6 30"/>',
+        cloud: '<path d="M14 37a9 9 0 0 1-1-18 12 12 0 0 1 23 2 8 8 0 0 1-1 16z"/>',
+        cpu: '<rect x="12" y="12" width="24" height="24" rx="3"/><path d="M19 6v6M29 6v6M19 36v6M29 36v6M6 19h6M6 29h6M36 19h6M36 29h6"/>',
+        retry: '<path d="M39 14A17 17 0 1 0 41 24"/><path d="M40 5v10H30"/>',
+        mail: '<rect x="6" y="11" width="36" height="26" rx="3"/><path d="M6 13l18 14 18-14"/>',
+        pen: '<path d="M8 40l4-12L32 8l8 8-20 20z"/><path d="M27 13l8 8"/>',
+        building:
+          '<rect x="10" y="6" width="28" height="36" rx="2"/><path d="M17 14h4M27 14h4M17 22h4M27 22h4M17 30h4M27 30h4M21 42v-6h6v6"/>',
+      };
+
+      const esc = (text) =>
+        String(text).replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      const n1 = (value) => Math.round(value * 10) / 10;
+
+      // How wide a run of Latin text is, in em: only for sizing a chip before it is drawn.
+      function em(text, mono, bold) {
+        if (mono) return String(text).length * 0.602;
+        let n = 0;
+        for (const ch of String(text)) {
+          if (ch === " ") n += 0.3;
+          else if ("iljtfr.,:;|!'`()[]".includes(ch)) n += 0.33;
+          else if ("mwMW@%".includes(ch)) n += 0.88;
+          else if (/[A-Z]/.test(ch)) n += 0.69;
+          else if (/[0-9]/.test(ch)) n += 0.6;
+          else n += 0.56;
+        }
+        return n * (bold ? 1.06 : 1);
+      }
+
+      // Every size a diagram names is multiplied by this: the one knob for the board's type.
+      const TS = 1.1;
+
+      // A text is a string, or parts [[string, { tone }], …] set one after another.
+      // maxw marks a label that sits inside a shape; cardProblems() checks it fits.
+      function txt(x, y, s, o = {}) {
+        const fill = o.tone ? TONE[o.tone] : o.muted ? MUTED : o.dark ? BG : INK;
+        const body = Array.isArray(s)
+          ? s
+              .map(
+                ([part, po = {}]) =>
+                  `<tspan${po.tone ? ` fill="${TONE[po.tone]}"` : ""}>${esc(part)}</tspan>`,
+              )
+              .join("")
+          : esc(s);
+        return (
+          `<text x="${n1(x)}" y="${n1(y)}" text-anchor="${o.a || "middle"}" dominant-baseline="central"` +
+          ` font-size="${n1((o.fs || 16) * TS)}" font-weight="${o.fw || 500}" fill="${fill}" style="white-space:pre"` +
+          (o.mono ? ' class="mono"' : o.mm ? ' class="mm"' : "") +
+          (o.ls ? ` letter-spacing="${o.ls}"` : "") +
+          (o.maxw ? ` data-maxw="${Math.round(o.maxw)}"` : "") +
+          (o.free ? ' data-free="1"' : "") +
+          `>${body}</text>`
+        );
+      }
+
+      function icon(name, cx, cy, size, tn = "gray", sw) {
+        const k = size / 48;
+        return (
+          `<g transform="translate(${n1(cx - size / 2)} ${n1(cy - size / 2)}) scale(${k.toFixed(3)})"` +
+          ` fill="none" stroke="${TONE[tn]}" stroke-width="${n1(sw ?? Math.max(3, 2.3 / k))}"` +
+          ` stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</g>`
+        );
+      }
+
+      // A labelled box. The icon sits on top in a tall card and on the left in a low one.
+      function card(x, y, w, h, o = {}) {
+        const c = TONE[o.tone || "gray"];
+        const rx = o.rx ?? 14;
+        const out = [
+          `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${CARD}" stroke="${c}"` +
+            ` stroke-width="2.5"${o.dash ? ' stroke-dasharray="8 7"' : ""}/>`,
+        ];
+        if (o.tint)
+          out.push(
+            `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${c}" opacity="0.13"/>`,
+          );
+        const lines = Array.isArray(o.label)
+          ? [o.label]
+          : o.label
+            ? String(o.label).split("\n")
+            : [];
+        const subs = o.sub ? String(o.sub).split("\n") : [];
+        const fs = o.fs ?? 17;
+        const sfs = o.sfs ?? 13;
+        const lh = fs * TS * 1.28;
+        const slh = sfs * TS * 1.4;
+        const size = o.icon ? (o.is ?? Math.min(32, h - 24)) : 0;
+        const side = o.icon && (o.side ?? h < 84);
+        const textH = lines.length * lh + (subs.length ? 3 + subs.length * slh : 0);
+        const gap = textH ? 8 : 0;
+        let cy = y + (h - (o.icon && !side ? size + gap : 0) - textH) / 2;
+        const pad = 12;
+        const left = side ? x + pad + size + 10 : x + pad;
+        const room = x + w - pad - left;
+        const cx = left + room / 2;
+        if (o.icon && side) out.push(icon(o.icon, x + pad + size / 2, y + h / 2, size, o.tone));
+        if (o.icon && !side) {
+          out.push(icon(o.icon, x + w / 2, cy + size / 2, size, o.tone));
+          cy += size + gap;
+        }
+        for (const text of lines) {
+          out.push(
+            txt(cx, cy + lh / 2, text, {
+              fs,
+              fw: o.fw ?? 600,
+              mono: o.mono,
+              tone: o.lt,
+              ls: o.ls,
+              maxw: room,
+            }),
+          );
+          cy += lh;
+        }
+        if (subs.length) cy += 3;
+        for (const text of subs) {
+          out.push(
+            txt(cx, cy + slh / 2, text, {
+              fs: sfs,
+              mono: o.smono,
+              tone: o.st,
+              muted: !o.st,
+              maxw: room,
+            }),
+          );
+          cy += slh;
+        }
+        return out.join("");
+      }
+
+      // A pill. (x, y) is its top-left corner unless a says "middle" or "end".
+      function chip(x, y, s, o = {}) {
+        const fs = o.fs ?? 15;
+        const mono = o.mono !== 0;
+        const c = TONE[o.tone || "gray"];
+        const w = Math.ceil(em(s, mono, true) * fs * TS + 26);
+        const h = Math.round(fs * TS + 15);
+        const left = o.a === "middle" ? x - w / 2 : o.a === "end" ? x - w : x;
+        const rect = `x="${n1(left)}" y="${y}" width="${w}" height="${h}" rx="${h / 2}"`;
+        return (
+          `<rect ${rect} fill="${o.solid ? c : CARD}"/>` +
+          (o.solid
+            ? ""
+            : `<rect ${rect} fill="${c}" opacity="0.16"/><rect ${rect} fill="none" stroke="${c}" stroke-width="2"/>`) +
+          txt(left + w / 2, y + h / 2 + 0.5, s, {
+            fs,
+            fw: 700,
+            mono,
+            tone: o.solid ? undefined : o.tone || "gray",
+            dark: o.solid,
+            maxw: w - 12,
+          })
+        );
+      }
+
+      const stroke = (o = {}, width = 3) =>
+        `fill="none" stroke="${TONE[o.tone || "gray"]}" stroke-width="${o.w ?? width}" stroke-linecap="round" stroke-linejoin="round"` +
+        (o.dash ? ` stroke-dasharray="${o.dash === 1 ? "8 7" : o.dash}"` : "") +
+        (o.op ? ` opacity="${o.op}"` : "");
+      const line = (points, o = {}) =>
+        `<polyline points="${points.map((p) => p.map(n1).join(",")).join(" ")}" ${stroke(o, 2.5)}/>`;
+      const path = (d, o = {}) =>
+        `<path d="${d}" ${stroke(o)}${o.arrow ? ` marker-end="url(#ah-${o.tone || "gray"})"` : ""}/>`;
+      const dot = (cx, cy, r, tn = "gray", op = 1) =>
+        `<circle cx="${n1(cx)}" cy="${n1(cy)}" r="${r}" fill="${TONE[tn]}"${op < 1 ? ` opacity="${op}"` : ""}/>`;
+      const xMark = (cx, cy, s = 9) =>
+        `<path d="M${n1(cx - s)} ${n1(cy - s)}l${2 * s} ${2 * s}M${n1(cx + s)} ${n1(cy - s)}l${-2 * s} ${2 * s}"` +
+        ` fill="none" stroke="${TONE.red}" stroke-width="4" stroke-linecap="round"/>`;
+
+      // kind: money (gold), msg (blue, dashed), plain (gray), bad (red), ok (green).
+      // lost stops the arrow part-way with a red ✗; curve bends it.
+      function arrow(x1, y1, x2, y2, o = {}) {
+        const tn = o.tone || KIND[o.kind || "plain"];
+        const dashed = o.dash ?? (o.kind === "msg" ? "9 7" : 0);
+        const lost = o.lost ? (o.lost === true ? 0.6 : o.lost) : 0;
+        const ex = lost ? x1 + (x2 - x1) * lost : x2;
+        const ey = lost ? y1 + (y2 - y1) * lost : y2;
+        let d = `M${n1(x1)} ${n1(y1)}L${n1(ex)} ${n1(ey)}`;
+        let mid = [(x1 + ex) / 2, (y1 + ey) / 2];
+        if (o.curve) {
+          const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+          const ux = (x2 - x1) / len;
+          const uy = (y2 - y1) / len;
+          d = `M${n1(x1)} ${n1(y1)}Q${n1((x1 + x2) / 2 - uy * o.curve)} ${n1((y1 + y2) / 2 + ux * o.curve)} ${n1(x2)} ${n1(y2)}`;
+          mid = [(x1 + x2) / 2 - (uy * o.curve) / 2, (y1 + y2) / 2 + (ux * o.curve) / 2];
+        }
+        const out = [
+          `<path d="${d}" ${stroke({ tone: tn, w: o.w, dash: dashed, op: o.op })}` +
+            (lost ? "" : ` marker-end="url(#ah-${tn})"`) +
+            (o.both ? ` marker-start="url(#ah-${tn})"` : "") +
+            "/>",
+        ];
+        if (lost) out.push(xMark(ex, ey));
+        if (o.label)
+          out.push(
+            txt(mid[0] + (o.ldx ?? 0), mid[1] + (o.ldy ?? -13), o.label, {
+              fs: o.fs ?? 14,
+              fw: 600,
+              mono: o.mono,
+              tone: o.lt || tn,
+            }),
+          );
+        return out.join("");
+      }
+
+      // A ✓ / ✗ / ⚠ badge.
+      function mark(cx, cy, kind = "check", r = 14) {
+        const [name, tn] = {
+          check: ["check", "green"],
+          cross: ["cross", "red"],
+          warn: ["warn", "orange"],
+        }[kind];
+        return (
+          `<circle cx="${n1(cx)}" cy="${n1(cy)}" r="${r}" fill="${BG}" stroke="${TONE[tn]}" stroke-width="2.5"/>` +
+          icon(name, cx, cy, r * 1.15, tn, 5.5)
+        );
+      }
+
+      // A dashed region that groups things: a boundary, one transaction, a book.
+      function region(x, y, w, h, o = {}) {
+        const c = TONE[o.tone || "gray"];
+        return (
+          `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="18" fill="${c}" fill-opacity="0.05" stroke="${c}"` +
+          ` stroke-width="2" stroke-opacity="0.75"${o.solid ? "" : ' stroke-dasharray="8 7"'}/>` +
+          (o.label
+            ? txt(x + 14, y + 19, o.label, {
+                a: "start",
+                fs: 12.5,
+                fw: 700,
+                tone: o.tone || "gray",
+                ls: "0.08em",
+                maxw: w - 24,
+              })
+            : "")
+        );
+      }
+
+      // An emphasis outline around a box.
+      function ring(x, y, w, h, tn = "gold", pad = 7) {
+        const rect = `x="${x - pad}" y="${y - pad}" width="${w + 2 * pad}" height="${h + 2 * pad}" rx="20" fill="none" stroke="${TONE[tn]}"`;
+        return `<rect ${rect} stroke-width="8" opacity="0.18"/><rect ${rect} stroke-width="2.5"/>`;
+      }
+
+      // Rows in a card; the ledger's natural form. A row is a list of cells or
+      // { cells, hl: tone }; a cell is a string or { v, tone, bold, mono, muted, mark }.
+      function table(x, y, w, o) {
+        const rowH = o.rowH ?? 44;
+        const headH = o.head ? 30 : 0;
+        const fs = o.fs ?? 15;
+        const pad = 16;
+        const total = o.cols.reduce((n, col) => n + (col.w ?? 1), 0);
+        const xs = [x];
+        for (const col of o.cols) xs.push(xs[xs.length - 1] + (w * (col.w ?? 1)) / total);
+        const rows = o.rows.map((row) => (Array.isArray(row) ? { cells: row } : row));
+        const h = headH + rows.length * rowH;
+        const out = [
+          `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="${CARD}" stroke="${RULE}" stroke-width="2"/>`,
+        ];
+        const place = (ci) => {
+          const align = o.cols[ci].align || "left";
+          return {
+            x:
+              align === "right"
+                ? xs[ci + 1] - pad
+                : align === "center"
+                  ? (xs[ci] + xs[ci + 1]) / 2
+                  : xs[ci] + pad,
+            a: align === "right" ? "end" : align === "center" ? "middle" : "start",
+            maxw: xs[ci + 1] - xs[ci] - 2 * pad + 6,
+          };
+        };
+        if (o.head) {
+          o.head.forEach((text, ci) => {
+            if (!text) return;
+            const at = place(ci);
+            out.push(txt(at.x, y + headH / 2 + 1, text, { a: at.a, fs: 12, fw: 700, muted: 1 }));
+          });
+          out.push(
+            `<path d="M${x} ${y + headH}H${x + w}" stroke="${RULE}" stroke-width="2" fill="none"/>`,
+          );
+        }
+        rows.forEach((row, i) => {
+          const top = y + headH + i * rowH;
+          if (row.hl)
+            out.push(
+              `<rect x="${x + 5}" y="${top + 4}" width="${w - 10}" height="${rowH - 8}" rx="8" fill="${TONE[row.hl]}" opacity="0.14"/>`,
+            );
+          if (i > 0)
+            out.push(
+              `<path d="M${x + 12} ${top}H${x + w - 12}" stroke="${RULE}" stroke-width="1.5" fill="none"/>`,
+            );
+          row.cells.forEach((value, ci) => {
+            if (value === "" || value == null) return;
+            const c = typeof value === "object" ? value : { v: value };
+            const col = o.cols[ci];
+            const at = place(ci);
+            if (c.mark) {
+              out.push(
+                mark(at.a === "start" ? at.x + 12 : at.x, top + rowH / 2, c.mark, c.r ?? 14),
+              );
+              return;
+            }
+            out.push(
+              txt(at.x, top + rowH / 2 + 0.5, c.v, {
+                a: at.a,
+                fs: c.fs ?? fs,
+                mono: c.mono ?? col.mono,
+                fw: (c.bold ?? col.bold) ? 700 : 500,
+                tone: c.tone ?? col.tone,
+                muted: c.muted,
+                maxw: at.maxw,
+              }),
+            );
+          });
+        });
+        return out.join("");
+      }
+
+      // A T-account: debits on the left, credits on the right.
+      function tacct(x, y, w, h, o) {
+        const c = TONE[o.tone || "ink"];
+        const top = y + 36;
+        const out = [
+          txt(x + w / 2, y + 14, o.name, { fs: 15, fw: 700, mono: 1, tone: o.tone, maxw: w - 8 }),
+          `<path d="M${x} ${top}H${x + w}M${x + w / 2} ${top}V${y + h}" stroke="${c}" stroke-width="3" stroke-linecap="round" fill="none"/>`,
+          txt(x + w / 4, top + 20, "Debit", { fs: 12.5, fw: 700, muted: 1 }),
+          txt(x + (3 * w) / 4, top + 20, "Credit", { fs: 12.5, fw: 700, muted: 1 }),
+        ];
+        const column = (items, cx) =>
+          (items || []).forEach((value, i) =>
+            out.push(
+              txt(cx, top + 58 + i * 32, value, { fs: 19, fw: 600, mono: 1, maxw: w / 2 - 16 }),
+            ),
+          );
+        column(o.left, x + w / 4);
+        column(o.right, x + (3 * w) / 4);
+        return out.join("");
+      }
+
+      // One bar split into segments; a hatched segment is held, not spent.
+      function bar(x, y, w, h, segs) {
+        const total = segs.reduce((n, seg) => n + seg.v, 0);
+        const out = [
+          `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="${CARD}" stroke="${RULE}" stroke-width="2"/>`,
+        ];
+        let left = x;
+        for (const seg of segs) {
+          const sw = (w * seg.v) / total;
+          const c = TONE[seg.tone];
+          const rect = `x="${n1(left + 4)}" y="${y + 4}" width="${n1(sw - 8)}" height="${h - 8}" rx="8"`;
+          out.push(`<rect ${rect} fill="${c}" opacity="${seg.hatch ? 0.28 : 0.82}"/>`);
+          if (seg.hatch)
+            out.push(`<rect ${rect} fill="url(#hatch)" stroke="${c}" stroke-width="2.5"/>`);
+          out.push(
+            txt(left + sw / 2, y + h / 2 + 0.5, seg.value, {
+              fs: 19,
+              fw: 700,
+              mono: 1,
+              dark: !seg.hatch,
+              maxw: sw - 14,
+            }),
+            txt(left + sw / 2, y + h + 18, seg.label, { fs: 14.5, fw: 600, tone: seg.tone }),
+          );
+          left += sw;
+        }
+        return out.join("");
+      }
+
+      // A brace: under a width (pointing down), or beside a height (pointing right).
+      function brace(x, y, o) {
+        const q = 10;
+        let d;
+        if (o.w) {
+          const m = x + o.w / 2;
+          d = `M${x} ${y}q0 ${q} ${q} ${q}H${m - q}q${q} 0 ${q} ${q}q0 ${-q} ${q} ${-q}H${x + o.w - q}q${q} 0 ${q} ${-q}`;
+        } else {
+          const m = y + o.h / 2;
+          d = `M${x} ${y}q${q} 0 ${q} ${q}V${m - q}q0 ${q} ${q} ${q}q${-q} 0 ${-q} ${q}V${y + o.h - q}q0 ${q} ${-q} ${q}`;
+        }
+        return path(d, { tone: o.tone || "gray", w: 2.5 });
+      }
+
+      // A line of time with ticks (label under it, sub under the label) and spans over it.
+      function timeline(x, y, w, ticks, spans = []) {
+        const out = [
+          `<path d="M${x} ${y}H${x + w}" stroke="${MUTED}" stroke-width="3" stroke-linecap="round" fill="none" marker-end="url(#ah-gray)"/>`,
+        ];
+        for (const span of spans) {
+          const x1 = x + w * span.from;
+          const x2 = x + w * span.to;
+          out.push(
+            `<path d="M${n1(x1)} ${y - 16}H${n1(x2)}" stroke="${TONE[span.tone]}" stroke-width="9" stroke-linecap="round" fill="none" opacity="0.85"/>`,
+            txt((x1 + x2) / 2, y - 38, span.label, { fs: 17, fw: 700, tone: span.tone }),
+          );
+        }
+        for (const tick of ticks) {
+          const tx = x + w * tick.at;
+          out.push(
+            `<path d="M${n1(tx)} ${y}V${y + 28}" stroke="${TONE[tick.tone]}" stroke-width="2.5" fill="none"/>`,
+            dot(tx, y, 7, tick.tone),
+            txt(tx, y + 46, tick.label, { fs: 16, fw: 700, tone: tick.tone }),
+          );
+          if (tick.sub) out.push(txt(tx, y + 70, tick.sub, { fs: 15, mono: 1, muted: 1 }));
+        }
+        return out.join("");
+      }
+
+      // The head of a sequence diagram's lifeline, and the lifeline.
+      const lifeline = (x, y1, y2) =>
+        line(
+          [
+            [x, y1],
+            [x, y2],
+          ],
+          { tone: "gray", w: 2, dash: "5 8", op: 0.5 },
+        );
+
+      /* ---------- One diagram per lesson, on a 568×448 board (the real line takes the
+         bottom 76) ---------- */
+
+      const GLYPHS = {
+        // The three principles every pattern in the course protects.
+        1: () =>
+          [
+            ["gold", "coin", "NO INVENTED\nDATA", 24],
+            ["teal", "db", "NO LOST\nDATA", 204],
+            ["violet", "shield", "NO\nTRUST", 384],
+          ].map(([tn, name, label, x]) =>
+            card(x, 70, 160, 216, {
+              tone: tn,
+              tint: 1,
+              icon: name,
+              is: 60,
+              label,
+              fs: 15.5,
+              fw: 700,
+              lt: tn,
+              ls: "0.05em",
+            }),
+          ),
+        // Two decimal amounts go through a float64 and come out with digits nobody put in.
+        2: () => [
+          card(124, 34, 130, 58, { tone: "gold", label: "0.1", mono: 1, fs: 26 }),
+          txt(284, 63, "+", { fs: 28, fw: 600, muted: 1, free: 1 }),
+          card(314, 34, 130, 58, { tone: "gold", label: "0.2", mono: 1, fs: 26 }),
+          arrow(189, 98, 250, 138, { kind: "plain" }),
+          arrow(379, 98, 318, 138, { kind: "plain" }),
+          card(184, 146, 200, 58, { tone: "gray", icon: "cpu", label: "float64", mono: 1, fs: 19 }),
+          arrow(284, 210, 284, 250, { kind: "bad" }),
+          txt(
+            258,
+            296,
+            [
+              ["0.3", {}],
+              ["0000000000000004", { tone: "red" }],
+            ],
+            { fs: 30, fw: 700, mono: 1 },
+          ),
+          mark(488, 296, "cross", 15),
+        ],
+        // Three currencies with three different decimals, each stored as the same integer.
+        3: () => [
+          card(24, 44, 196, 62, { tone: "gold", label: "12.34 USD", mono: 1, fs: 19 }),
+          card(24, 157, 196, 62, { tone: "gold", label: "1234 JPY", mono: 1, fs: 19 }),
+          card(24, 270, 196, 62, { tone: "gold", label: "1.234 BHD", mono: 1, fs: 19 }),
+          arrow(228, 75, 350, 160, { kind: "money" }),
+          arrow(228, 188, 350, 188, { kind: "money" }),
+          arrow(228, 301, 350, 216, { kind: "money" }),
+          card(360, 118, 184, 140, {
+            tone: "teal",
+            tint: 1,
+            label: "1234",
+            mono: 1,
+            fs: 44,
+            fw: 700,
+            sub: "int64",
+            sfs: 16,
+            smono: 1,
+          }),
+        ],
+        // An integer crosses a JSON boundary and comes back one off.
+        4: () => [
+          card(54, 44, 460, 82, {
+            tone: "teal",
+            label: "9007199254740993",
+            mono: 1,
+            fs: 30,
+            sub: "int64",
+            sfs: 14,
+            smono: 1,
+          }),
+          arrow(284, 134, 284, 226, { kind: "msg" }),
+          txt(264, 180, "JSON", { a: "end", fs: 18, fw: 700, tone: "blue" }),
+          chip(304, 164, "2^53", { tone: "gray" }),
+          card(54, 236, 460, 82, {
+            tone: "red",
+            label: [
+              ["900719925474099", {}],
+              ["2", { tone: "red" }],
+            ],
+            mono: 1,
+            fs: 30,
+            sub: "float64",
+            st: "red",
+            sfs: 14,
+            smono: 1,
+          }),
+          mark(514, 236, "cross", 15),
+        ],
+        // A hundred split in three: one part has to take the extra cent.
+        5: () => [
+          card(194, 36, 180, 60, { tone: "gold", tint: 1, label: "100.00", mono: 1, fs: 25 }),
+          arrow(244, 102, 118, 152, { kind: "money" }),
+          arrow(284, 102, 284, 152, { kind: "money" }),
+          arrow(324, 102, 450, 152, { kind: "money" }),
+          card(24, 160, 160, 60, { tone: "gold", label: "33.34", mono: 1, fs: 22, lt: "gold" }),
+          card(204, 160, 160, 60, { tone: "gold", label: "33.33", mono: 1, fs: 22 }),
+          card(384, 160, 160, 60, { tone: "gold", label: "33.33", mono: 1, fs: 22 }),
+          ring(24, 160, 160, 60, "gold"),
+          txt(28, 296, "round down", { a: "start", fs: 15.5, muted: 1 }),
+          chip(134, 279, "9999", { tone: "red", fs: 16 }),
+          mark(226, 296, "cross", 13),
+          txt(296, 296, "allocate", { a: "start", fs: 15.5, muted: 1 }),
+          chip(372, 279, "10000", { tone: "green", fs: 16 }),
+          mark(478, 296, "check", 13),
+        ],
+        // Two bare numbers add up to nonsense; the Money type refuses.
+        6: () => [
+          card(24, 36, 150, 86, {
+            tone: "gold",
+            label: "1000",
+            mono: 1,
+            fs: 28,
+            sub: "USD",
+            sfs: 15,
+            smono: 1,
+          }),
+          txt(194, 79, "+", { fs: 28, fw: 600, muted: 1, free: 1 }),
+          card(214, 36, 150, 86, {
+            tone: "gold",
+            label: "1000",
+            mono: 1,
+            fs: 28,
+            sub: "JPY",
+            sfs: 15,
+            smono: 1,
+          }),
+          arrow(372, 79, 404, 79, { kind: "bad" }),
+          card(414, 36, 130, 86, {
+            tone: "red",
+            dash: 1,
+            label: "2000",
+            mono: 1,
+            fs: 28,
+            lt: "red",
+            sub: "plain int64",
+            sfs: 12.5,
+            smono: 1,
+          }),
+          arrow(99, 130, 99, 210, { kind: "plain" }),
+          arrow(289, 130, 170, 210, { kind: "plain" }),
+          card(24, 220, 176, 84, {
+            tone: "violet",
+            tint: 1,
+            icon: "shield",
+            label: "Money",
+            fs: 19,
+          }),
+          arrow(206, 262, 230, 262, { tone: "violet" }),
+          card(240, 226, 304, 72, {
+            tone: "violet",
+            label: "cannot add JPY to USD",
+            mono: 1,
+            fs: 14.5,
+          }),
+          mark(530, 226, "check", 13),
+        ],
+        // Not one rate but two prices; there and back costs the spread twice.
+        7: () => [
+          txt(40, 44, "ask", { a: "start", fs: 16, fw: 700, tone: "gold" }),
+          txt(372, 44, "1.1011", { a: "end", fs: 17, fw: 600, mono: 1, tone: "gold" }),
+          line(
+            [
+              [40, 62],
+              [372, 62],
+            ],
+            { tone: "gold", w: 3 },
+          ),
+          txt(40, 124, "mid", { a: "start", fs: 16, fw: 700, muted: 1 }),
+          txt(372, 124, "1.100000", { a: "end", fs: 17, mono: 1, muted: 1 }),
+          line(
+            [
+              [40, 142],
+              [372, 142],
+            ],
+            { tone: "gray", w: 2.5, dash: 1 },
+          ),
+          txt(40, 204, "bid", { a: "start", fs: 16, fw: 700, tone: "gold" }),
+          txt(372, 204, "1.0989", { a: "end", fs: 17, fw: 600, mono: 1, tone: "gold" }),
+          line(
+            [
+              [40, 222],
+              [372, 222],
+            ],
+            { tone: "gold", w: 3 },
+          ),
+          brace(388, 62, { h: 160 }),
+          txt(430, 132, "spread", { a: "start", fs: 17, fw: 700 }),
+          txt(430, 156, "20 bp", { a: "start", fs: 15, mono: 1, muted: 1 }),
+          txt(177, 282, "sell at bid", { fs: 12, muted: 1 }),
+          txt(358, 282, "buy at ask", { fs: 12, muted: 1 }),
+          chip(24, 296, "1000.00 EUR", { tone: "gold" }),
+          arrow(155, 311.5, 199, 311.5, { kind: "money" }),
+          chip(205, 296, "1098.90 USD", { tone: "gold" }),
+          arrow(336, 311.5, 380, 311.5, { kind: "money" }),
+          chip(386, 296, "998.00 EUR", { tone: "red" }),
+        ],
+        // Four balances around a zero line: what the outside is down, the accounts are up.
+        8: () => {
+          const base = 140;
+          const out = [];
+          for (const [name, value, label, cx, barTone, textTone] of [
+            ["external:bank", -100, "-100.00", 100, "gray", "red"],
+            ["user:1042", 58.5, "58.50", 232, "gold", "gold"],
+            ["user:2077", 40, "40.00", 356, "gold", "gold"],
+            ["revenue:fees", 1.5, "1.50", 476, "gold", "gold"],
+          ]) {
+            const h = Math.max(5, Math.abs(value) * 1.3);
+            const y = value < 0 ? base : base - h;
+            out.push(
+              `<rect x="${cx - 38}" y="${n1(y)}" width="76" height="${n1(h)}" rx="${Math.min(8, h / 2)}" fill="${TONE[barTone]}" opacity="${value < 0 ? 0.5 : 0.88}"/>`,
+              txt(cx, value < 0 ? y + h + 17 : y - 15, label, {
+                fs: 17,
+                fw: 700,
+                mono: 1,
+                tone: textTone,
+              }),
+              txt(cx, 326, name, { fs: 13, mono: 1, muted: 1 }),
+            );
+          }
+          out.push(
+            line(
+              [
+                [46, base],
+                [536, base],
+              ],
+              { tone: "ink", w: 2.5 },
+            ),
+            txt(32, base, "0", { fs: 14, mono: 1, muted: 1 }),
+          );
+          return out;
+        },
+        // The same hundred on two T-accounts: a debit here, a credit there.
+        9: () => [
+          tacct(24, 52, 248, 220, { name: "asset:bank", tone: "teal", left: ["100.00"] }),
+          tacct(296, 52, 248, 220, {
+            name: "liability:user:1042",
+            tone: "teal",
+            left: ["1.50"],
+            right: ["100.00"],
+          }),
+          chip(284, 300, "assets = liabilities + equity", { a: "middle", tone: "teal", fs: 14 }),
+        ],
+        // One deposit, three postings, and the two columns still agree.
+        10: () => [
+          chip(24, 30, "dep-1", { tone: "blue" }),
+          table(24, 76, 520, {
+            cols: [
+              { w: 2.7, mono: 1 },
+              { w: 1, align: "right", mono: 1 },
+              { w: 1, align: "right", mono: 1 },
+            ],
+            head: ["account", "debit", "credit"],
+            rowH: 50,
+            fs: 14.5,
+            rows: [
+              ["asset:psp-receivable", "97.10", ""],
+              ["expense:processing-fee", "2.90", ""],
+              ["liability:user:1042", "", "100.00"],
+              {
+                cells: [
+                  { mark: "check", r: 12 },
+                  { v: "100.00", bold: 1, tone: "green" },
+                  { v: "100.00", bold: 1, tone: "green" },
+                ],
+                hl: "green",
+              },
+            ],
+          }),
+        ],
+        // One payment, three times, and a month that ends between them.
+        11: () => [
+          line(
+            [
+              [343.5, 70],
+              [343.5, 322],
+            ],
+            { tone: "gray", w: 2, dash: "6 7" },
+          ),
+          txt(331, 84, "Jan", { a: "end", fs: 15, fw: 700, muted: 1 }),
+          txt(356, 84, "Feb", { a: "start", fs: 15, fw: 700, muted: 1 }),
+          timeline(
+            36,
+            214,
+            496,
+            [
+              { at: 0.1, label: "value", sub: "230.00", tone: "gold" },
+              { at: 0.4, label: "booking", sub: "150.00", tone: "teal" },
+              { at: 0.86, label: "settlement", sub: "50.00", tone: "green" },
+            ],
+            [{ from: 0.1, to: 0.86, label: "T+2", tone: "orange" }],
+          ),
+        ],
+        // A decision, and the record that can explain it years later.
+        12: () => [
+          chip(284, 34, "decision: blocked", { a: "middle", tone: "red", fs: 16 }),
+          arrow(284, 72, 284, 96, { kind: "plain" }),
+          table(24, 104, 520, {
+            cols: [
+              { w: 0.8, tone: "teal", bold: 1 },
+              { w: 4, mono: 1 },
+            ],
+            rowH: 54,
+            fs: 14.5,
+            rows: [
+              [{ v: "what", fs: 16 }, "wd-311 withdrawal 800.00"],
+              [{ v: "when", fs: 16 }, "2026-03-02 10:15 UTC"],
+              [{ v: "who", fs: 16 }, "user:1042"],
+              {
+                cells: [{ v: "why", fs: 16, tone: "gold" }, "risk-v7 fired [new-device-over-500]"],
+                hl: "gold",
+              },
+            ],
+          }),
+        ],
+        // The log is the truth; the balance is what you get by folding it.
+        13: () => [
+          txt(26, 52, "EVENT LOG", { a: "start", fs: 12.5, fw: 700, tone: "teal", ls: "0.08em" }),
+          table(24, 70, 316, {
+            cols: [
+              { w: 0.5, mono: 1, tone: "gray" },
+              { w: 1.9, mono: 1 },
+              { w: 1, align: "right", mono: 1 },
+            ],
+            rowH: 56,
+            fs: 14.5,
+            rows: [
+              ["1", "deposited", "10000"],
+              ["2", "fee-charged", "290"],
+              ["3", "withdrawn", "4000"],
+              ["4", "deposited", "2500"],
+            ],
+          }),
+          arrow(348, 182, 390, 182, { tone: "teal", label: "fold" }),
+          card(400, 122, 144, 120, {
+            tone: "gold",
+            tint: 1,
+            label: "82.10 EUR",
+            mono: 1,
+            fs: 18.5,
+            fw: 700,
+            sub: "balance",
+            sfs: 14,
+          }),
+        ],
+        // Each record keeps the hash of the one before it; the head is kept outside.
+        14: () => {
+          const out = [];
+          [
+            ["#1 deposit", "prev 00000000", "hash 977d16f3", 24],
+            ["#2 fee", "prev 977d16f3", "hash d490183c", 208],
+            ["#3 transfer", "prev d490183c", "hash 9ea86dfe", 392],
+          ].forEach(([title, prev, hash, x], i) => {
+            out.push(
+              card(x, 64, 152, 150, { tone: "teal" }),
+              txt(x + 76, 93, title, { fs: 15, fw: 700, maxw: 136 }),
+              `<path d="M${x + 12} 118H${x + 140}" stroke="${RULE}" stroke-width="2" fill="none"/>`,
+              txt(x + 76, 148, prev, { fs: 12.5, mono: 1, muted: 1, maxw: 136 }),
+              txt(x + 76, 182, hash, { fs: 12.5, mono: 1, fw: 600, tone: "teal", maxw: 136 }),
+            );
+            if (i < 2) out.push(arrow(x + 156, 182, x + 178, 152, { tone: "teal", w: 2.5 }));
+          });
+          out.push(
+            chip(24, 268, "verify: ok", { tone: "green" }),
+            arrow(468, 222, 468, 260, { tone: "violet" }),
+            chip(544, 268, "published head", { a: "end", tone: "violet", mono: 0 }),
+          );
+          return out;
+        },
+        // The wrong entry stays; two new entries point back at it and correct it.
+        15: () => [
+          txt(540, 62, "corrects", { a: "end", fs: 13.5, fw: 600, tone: "violet" }),
+          table(24, 70, 400, {
+            cols: [
+              { w: 0.8, mono: 1, tone: "gray" },
+              { w: 1.3 },
+              { w: 1.4, align: "right", mono: 1 },
+            ],
+            rowH: 56,
+            fs: 15.5,
+            rows: [
+              ["tx-1", "deposit", "1000.00"],
+              ["tx-2", "reversal", { v: "-1000.00", tone: "red" }],
+              ["tx-3", "re-post", { v: "100.00", tone: "green" }],
+            ],
+          }),
+          path("M432,154 C478,154 478,104 440,104", { tone: "violet", arrow: 1 }),
+          path("M432,210 C532,210 532,92 440,92", { tone: "violet", arrow: 1 }),
+          chip(24, 264, "balance today: 100.00", { tone: "gold" }),
+        ],
+        // The ledger keeps every amount; one deleted key makes one person's data unreadable.
+        16: () => {
+          const record = (y, tn, first, second, secondTone) =>
+            card(38, y, 298, 82, { tone: tn }) +
+            txt(52, y + 27, first, { a: "start", fs: 13, mono: 1, fw: 600, maxw: 274 }) +
+            txt(52, y + 55, second, {
+              a: "start",
+              fs: 13,
+              mono: 1,
+              tone: secondTone,
+              muted: !secondTone,
+              maxw: 274,
+            });
+          return [
+            region(24, 64, 326, 232, { tone: "teal", label: "EVENT LOG" }),
+            record(98, "teal", "#1 user 1042 deposit 100.00", "receipt: unreadable", "red"),
+            record(196, "teal", "#2 user 2077 deposit 50.00", "receipt: user2077@example.com"),
+            region(398, 64, 146, 232, { tone: "violet", label: "KEY STORE" }),
+            card(410, 98, 122, 82, {
+              tone: "red",
+              dash: 1,
+              icon: "key",
+              side: 0,
+              is: 24,
+              label: "key 1042",
+              mono: 1,
+              fs: 12.5,
+              sub: "deleted",
+              st: "red",
+              sfs: 12,
+            }),
+            card(410, 196, 122, 82, {
+              tone: "violet",
+              icon: "key",
+              side: 0,
+              is: 26,
+              label: "key 2077",
+              mono: 1,
+              fs: 13,
+            }),
+            arrow(404, 139, 344, 139, { tone: "red", lost: 0.5 }),
+            arrow(404, 237, 344, 237, { tone: "violet" }),
+          ];
+        },
+        // Three moments to check an invariant, and what each one catches.
+        17: () =>
+          [
+            ["code", "by construction", "construct -5.00", "မဖြစ်ခင်", 24],
+            ["gear", "runtime check", "post t2", "ဖြစ်နေတုန်း", 208],
+            ["db", "post-factum", "nightly: tx t3", "သိမ်းပြီးမှ", 392],
+          ].flatMap(([name, label, caught, when, x], i) => [
+            txt(x + 76, 58, when, { fs: 15, muted: 1, mm: 1 }),
+            card(x, 86, 152, 114, {
+              tone: "violet",
+              tint: 1,
+              icon: name,
+              is: 36,
+              label,
+              fs: 13.5,
+            }),
+            i < 2 ? arrow(x + 158, 143, x + 178, 143, { kind: "plain" }) : "",
+            arrow(x + 76, 206, x + 76, 246, { kind: "bad" }),
+            chip(x + 76, 256, caught, { a: "middle", tone: "red", fs: 12.5 }),
+          ]),
+        // Two requests for the same money: the first holds it, the second sees what is left.
+        18: () => [
+          card(142, 30, 180, 60, {
+            tone: "blue",
+            label: "w1",
+            mono: 1,
+            fs: 18,
+            sub: "reserve 80.00",
+            smono: 1,
+          }),
+          card(404, 30, 140, 60, {
+            tone: "blue",
+            label: "w2",
+            mono: 1,
+            fs: 18,
+            sub: "reserve 80.00",
+            smono: 1,
+          }),
+          arrow(232, 96, 232, 170, { kind: "ok" }),
+          arrow(474, 96, 494, 170, { kind: "bad", lost: 0.62 }),
+          bar(24, 180, 520, 60, [
+            { v: 80, label: "reserved", value: "80.00", tone: "orange", hatch: 1 },
+            { v: 20, label: "available", value: "20.00", tone: "teal" },
+          ]),
+          brace(24, 278, { w: 520 }),
+          txt(284, 318, "total 100.00", { fs: 16, fw: 600, mono: 1 }),
+        ],
+        // A balance that goes below zero: wrap it, hide it, or book it.
+        19: () =>
+          [
+            ["uint64", "18446744073709548616", "red", "cross"],
+            ["clamped", "invented 30.00", "red", "cross"],
+            ["booked", "-30.00", "green", "check"],
+          ].flatMap(([name, value, tn, kind], i) => {
+            const y = 48 + i * 92;
+            return [
+              card(24, y, 520, 68, { tone: tn, tint: i === 2 }),
+              txt(48, y + 34, name, { a: "start", fs: 19, fw: 700, tone: tn }),
+              txt(480, y + 34, value, { a: "end", fs: 16.5, fw: 600, mono: 1 }),
+              mark(512, y + 34, kind, 14),
+            ];
+          }),
+        // The answer is lost, the client retries, and the key replays the first result.
+        20: () => [
+          lifeline(99, 78, 346),
+          lifeline(459, 78, 346),
+          card(24, 30, 150, 48, { tone: "blue", icon: "phone", label: "Client", fs: 16 }),
+          card(374, 30, 170, 48, { tone: "violet", icon: "server", label: "Payment API", fs: 15 }),
+          arrow(107, 120, 451, 120, { kind: "msg", label: "POST  key=k-1", mono: 1 }),
+          arrow(451, 172, 107, 172, { kind: "msg", label: "201 tx-1", mono: 1, lost: 0.55 }),
+          arrow(107, 224, 451, 224, {
+            kind: "msg",
+            tone: "orange",
+            label: "retry  key=k-1",
+            mono: 1,
+          }),
+          chip(459, 248, "k-1 → 201 tx-1", { a: "middle", tone: "teal", fs: 14 }),
+          arrow(451, 322, 107, 322, { kind: "ok", label: "201 tx-1", mono: 1 }),
+        ],
+        // The same key with a different request is not a retry.
+        21: () => [
+          card(24, 50, 170, 66, {
+            tone: "blue",
+            label: "k-2",
+            mono: 1,
+            fs: 18,
+            sub: "25.00",
+            sfs: 15,
+            smono: 1,
+          }),
+          card(24, 240, 170, 66, {
+            tone: "blue",
+            label: "k-2",
+            mono: 1,
+            fs: 18,
+            sub: "30.00",
+            sfs: 15,
+            smono: 1,
+            st: "orange",
+          }),
+          arrow(200, 88, 254, 156, { kind: "plain" }),
+          arrow(200, 268, 254, 200, { kind: "plain" }),
+          card(262, 132, 156, 92, {
+            tone: "violet",
+            tint: 1,
+            icon: "key",
+            side: 0,
+            is: 30,
+            label: "fingerprint",
+            fs: 15.5,
+          }),
+          arrow(424, 156, 462, 104, { kind: "ok" }),
+          arrow(424, 200, 462, 252, { kind: "bad" }),
+          chip(446, 62, "201 tx-1", { tone: "green" }),
+          chip(446, 262, "422", { tone: "red" }),
+        ],
+        // A flow can die between any two states; a driver picks it up and pushes it on.
+        22: () => {
+          const out = [];
+          [
+            ["new", "gray"],
+            ["reserved", "orange"],
+            ["screened", "violet"],
+            ["sent", "gold"],
+            ["settled", "green"],
+          ].forEach(([name, tn], i) => {
+            const x = 24 + i * 107;
+            out.push(
+              card(x, 112, 92, 52, { tone: tn, tint: i === 4, label: name, mono: 1, fs: 12.5 }),
+            );
+            if (i < 4) out.push(arrow(x + 95, 138, x + 104, 138, { kind: "plain", w: 2.5 }));
+          });
+          out.push(
+            ring(345, 112, 92, 52, "gold", 6),
+            line(
+              [
+                [444.5, 92],
+                [444.5, 190],
+              ],
+              { tone: "red", w: 2.5, dash: "4 7" },
+            ),
+            icon("warn", 444.5, 68, 30, "red"),
+            arrow(391, 176, 330, 228, { kind: "plain", dash: "5 6" }),
+            card(186, 236, 196, 64, { tone: "orange", icon: "retry", label: "driver", fs: 18 }),
+            path("M390,268 C474,268 498,236 498,178", { tone: "orange", arrow: 1 }),
+            txt(452, 292, "resume", { fs: 14.5, fw: 600, tone: "orange" }),
+          );
+          return out;
+        },
+        // A provider's answer is checked at the boundary before it may touch the ledger.
+        23: () => [
+          region(214, 36, 330, 300, { tone: "teal", label: "OUR SYSTEM" }),
+          card(24, 140, 112, 92, { tone: "gray", icon: "cloud", is: 34, label: "PSP API", fs: 15 }),
+          arrow(142, 186, 232, 186, { kind: "msg" }),
+          txt(174, 168, "HTTP 200", { fs: 12, fw: 600, mono: 1, tone: "blue" }),
+          card(240, 140, 116, 92, {
+            tone: "violet",
+            tint: 1,
+            icon: "shield",
+            is: 34,
+            label: "parse()",
+            mono: 1,
+            fs: 15,
+          }),
+          arrow(362, 168, 398, 120, { kind: "ok" }),
+          arrow(362, 204, 398, 252, { kind: "bad" }),
+          card(404, 70, 126, 84, {
+            tone: "teal",
+            icon: "ledger",
+            side: 1,
+            is: 30,
+            label: "ledger",
+            fs: 15,
+            sub: "po_1",
+            smono: 1,
+          }),
+          card(404, 222, 126, 84, {
+            tone: "red",
+            label: "reject + alert",
+            fs: 14,
+            lt: "red",
+            sub: "po_2 · po_3",
+            sfs: 12.5,
+            smono: 1,
+          }),
+        ],
+        // The endpoint only verifies, stores and answers; a worker fetches the truth later.
+        24: () => {
+          const step = (x, y, label, tn, mono) =>
+            card(x, y, 104, 56, { tone: tn, label, fs: mono ? 14 : 14.5, mono });
+          return [
+            path("M352,290 V318 Q352,338 332,338 H100 Q80,338 80,318 V152", {
+              tone: "blue",
+              dash: "9 7",
+              arrow: 1,
+            }),
+            card(24, 68, 112, 74, {
+              tone: "gray",
+              icon: "cloud",
+              side: 0,
+              is: 26,
+              label: "Provider",
+              fs: 14.5,
+            }),
+            arrow(142, 105, 168, 105, { kind: "msg" }),
+            region(160, 44, 384, 106, { tone: "violet", label: "ENDPOINT · FAST" }),
+            step(176, 78, "verify", "violet"),
+            arrow(284, 106, 294, 106, { kind: "plain", w: 2.5 }),
+            step(300, 78, "store raw", "teal"),
+            arrow(408, 106, 418, 106, { kind: "plain", w: 2.5 }),
+            step(424, 78, "2xx", "green", 1),
+            arrow(352, 140, 352, 186, { kind: "plain" }),
+            region(160, 194, 384, 106, { tone: "orange", label: "WORKER · ASYNC" }),
+            step(176, 228, "dedupe", "orange"),
+            arrow(284, 256, 294, 256, { kind: "plain", w: 2.5 }),
+            step(300, 228, "GET state", "blue"),
+            arrow(408, 256, 418, 256, { kind: "plain", w: 2.5 }),
+            step(424, 228, "ledger", "teal"),
+          ];
+        },
+        // The event is written in the same transaction as the money; two ways carry it out.
+        25: () => [
+          region(24, 44, 220, 272, { tone: "teal", label: "ONE DB TRANSACTION" }),
+          card(42, 82, 184, 88, {
+            tone: "teal",
+            icon: "ledger",
+            side: 1,
+            label: "postings",
+            sub: "INSERT p3",
+            smono: 1,
+          }),
+          card(42, 198, 184, 88, {
+            tone: "orange",
+            icon: "queue",
+            side: 1,
+            label: "outbox",
+            sub: "sent=false",
+            smono: 1,
+          }),
+          arrow(232, 118, 270, 108, { kind: "msg" }),
+          card(278, 66, 266, 80, {
+            tone: "blue",
+            icon: "db",
+            label: "CDC",
+            fs: 19,
+            sub: "WAL",
+            smono: 1,
+          }),
+          arrow(232, 242, 270, 242, { kind: "plain" }),
+          card(278, 204, 116, 76, {
+            tone: "gray",
+            icon: "retry",
+            side: 0,
+            is: 24,
+            label: "relay",
+            fs: 15,
+          }),
+          arrow(400, 242, 420, 242, { kind: "msg" }),
+          card(428, 204, 116, 76, {
+            tone: "blue",
+            icon: "mail",
+            side: 0,
+            is: 24,
+            label: "consumer",
+            fs: 15,
+          }),
+          arrow(486, 152, 486, 196, { kind: "msg" }),
+        ],
+        // Our ledger beside the provider's: one match and the three kinds of break.
+        26: () => {
+          const W = 170;
+          const row = (x, y, id, amount, tn) =>
+            card(x, y, W, 44, { tone: tn }) +
+            txt(x + 16, y + 22, id, { a: "start", fs: 15, fw: 600, mono: 1 }) +
+            (amount
+              ? txt(x + W - 16, y + 22, amount, { a: "end", fs: 15, mono: 1, tone: "red" })
+              : "");
+          const ghost = (x, y) =>
+            `<rect x="${x}" y="${y}" width="${W}" height="44" rx="14" fill="none" stroke="${MUTED}" stroke-width="2" stroke-dasharray="5 7" opacity="0.7"/>`;
+          const link = (y, tn, label, dashed) =>
+            line(
+              [
+                [202, y + 22],
+                [366, y + 22],
+              ],
+              { tone: tn, w: 3, dash: dashed ? "5 7" : 0 },
+            ) + (label ? txt(284, y + 8, label, { fs: 12.5, fw: 600, tone: tn }) : "");
+          return [
+            txt(109, 46, "ledger", { fs: 15, fw: 700, tone: "teal" }),
+            txt(459, 46, "provider", { fs: 15, fw: 700, tone: "gray" }),
+            row(24, 76, "tx-1", "", "teal"),
+            row(374, 76, "tx-1", "", "gray"),
+            link(76, "green"),
+            mark(284, 98, "check", 13),
+            row(24, 142, "tx-3", "50.00", "red"),
+            row(374, 142, "tx-3", "5.00", "red"),
+            link(142, "red", "amount differs"),
+            row(24, 208, "tx-5", "", "orange"),
+            ghost(374, 208),
+            link(208, "orange", "missing at provider", 1),
+            ghost(24, 274),
+            row(374, 274, "pi_106", "12.00", "orange"),
+            link(274, "orange", "missing in ledger", 1),
+          ];
+        },
+        // One makes the request, another approves it; nobody approves their own.
+        27: () => [
+          card(24, 56, 130, 80, {
+            tone: "blue",
+            icon: "pen",
+            side: 0,
+            is: 24,
+            label: "maker",
+            fs: 15,
+            sub: "u-17",
+            smono: 1,
+          }),
+          arrow(160, 96, 211, 96, { kind: "msg", label: "request", fs: 11.5 }),
+          card(219, 56, 130, 80, {
+            tone: "orange",
+            dash: 1,
+            icon: "doc",
+            side: 0,
+            is: 24,
+            label: "adj-2",
+            mono: 1,
+            fs: 15,
+            sub: "pending",
+          }),
+          arrow(408, 96, 357, 96, { tone: "violet", label: "approve", fs: 11.5 }),
+          card(414, 56, 130, 80, {
+            tone: "violet",
+            icon: "eye",
+            side: 0,
+            is: 24,
+            label: "checker",
+            fs: 15,
+            sub: "u-42",
+            smono: 1,
+          }),
+          path("M89,142 C89,204 236,204 236,146", { tone: "red", dash: "5 7", arrow: 1 }),
+          mark(162, 189, "cross", 12),
+          txt(110, 214, "refused", { fs: 13.5, fw: 600, tone: "red" }),
+          arrow(304, 142, 304, 214, { kind: "ok" }),
+          card(224, 222, 160, 70, {
+            tone: "teal",
+            icon: "ledger",
+            label: "ledger",
+            sub: "posted",
+            st: "green",
+          }),
+        ],
+        // People get roles, roles get permissions; an old grant still reaches the money.
+        28: () => {
+          const box = (x, y, label, tn, o = {}) =>
+            card(x, y, o.w ?? 130, o.h ?? 50, { tone: tn, label, mono: 1, fs: o.fs ?? 14, ...o });
+          return [
+            box(24, 40, "u-42", "blue"),
+            box(24, 112, "u-17", "blue"),
+            box(24, 184, "u-91", "blue"),
+            box(24, 264, "svc-recon", "orange", {
+              h: 62,
+              dash: 1,
+              sub: "idle 139 days",
+              st: "orange",
+              sfs: 12,
+            }),
+            arrow(160, 65, 211, 65, { kind: "plain" }),
+            arrow(160, 137, 211, 137, { kind: "plain" }),
+            arrow(160, 209, 211, 226, { kind: "plain" }),
+            arrow(160, 290, 211, 250, { tone: "orange", dash: "6 6" }),
+            box(219, 40, "support", "violet", { mono: 0, fs: 15 }),
+            box(219, 112, "ops", "violet", { mono: 0, fs: 15 }),
+            box(219, 212, "treasury", "violet", { mono: 0, fs: 15, tint: 1 }),
+            arrow(355, 65, 394, 65, { kind: "plain" }),
+            arrow(355, 137, 394, 137, { kind: "plain" }),
+            arrow(355, 237, 394, 237, { kind: "money" }),
+            box(402, 40, "ledger.read", "teal", { w: 142, fs: 12.5 }),
+            box(402, 112, "payout.approve", "teal", { w: 142, fs: 12.5 }),
+            box(402, 212, "funds.move", "gold", { w: 142, fs: 12.5, lt: "gold" }),
+          ];
+        },
+        // Three changes meet three gates; only the one with a full trail is merged.
+        29: () => {
+          const gates = [
+            ["ticket", 232],
+            ["review", 332],
+            ["checks", 432],
+          ];
+          const out = gates.flatMap(([name, x]) => [
+            line(
+              [
+                [x, 88],
+                [x, 312],
+              ],
+              { tone: "violet", w: 3, dash: "3 8" },
+            ),
+            txt(x, 62, name, { fs: 15, fw: 700, tone: "violet" }),
+          ]);
+          [
+            ["a41f9c2", 122, 3],
+            ["7be03d1", 200, 1],
+            ["c90e5aa", 278, 0],
+          ].forEach(([sha, y, passed]) => {
+            out.push(chip(24, y - 15, sha, { tone: "blue", fs: 14 }));
+            if (passed === 3) out.push(arrow(118, y, 456, y, { kind: "ok" }));
+            else
+              out.push(
+                line(
+                  [
+                    [118, y],
+                    [gates[passed][1] - 16, y],
+                  ],
+                  { tone: "gray", w: 3 },
+                ),
+              );
+            gates.slice(0, passed).forEach(([, x]) => out.push(dot(x, y, 7, "green")));
+            if (passed < 3) out.push(mark(gates[passed][1], y, "cross", 13));
+          });
+          out.push(chip(544, 107, "merged", { a: "end", tone: "green", mono: 0 }));
+          return out;
+        },
+        // Three hand-written examples are three dots; the generator finds the one that fails.
+        30: () => {
+          const out = [region(24, 36, 520, 300, { tone: "gray", label: "INPUTS: AMOUNT × PARTS" })];
+          let seed = 11;
+          const next = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+          const taken = [
+            [40, 36, 250, 70],
+            [60, 226, 250, 336],
+            [330, 76, 500, 196],
+          ];
+          for (let i = 0; out.length < 78 && i < 400; i++) {
+            const x = 44 + next() * 480;
+            const y = 62 + next() * 256;
+            if (taken.some(([x1, y1, x2, y2]) => x > x1 && x < x2 && y > y1 && y < y2)) continue;
+            out.push(dot(x, y, 3.2, "gray", 0.5));
+          }
+          out.push(
+            dot(96, 262, 7, "green"),
+            dot(140, 296, 7, "green"),
+            dot(84, 306, 7, "green"),
+            txt(112, 262, "100.00 / 4", { a: "start", fs: 13.5, mono: 1, tone: "green" }),
+            txt(158, 300, "hand-written", { a: "start", fs: 13.5, muted: 1 }),
+            `<circle cx="414" cy="136" r="17" fill="none" stroke="${TONE.red}" stroke-width="2.5"/>`,
+            `<circle cx="414" cy="136" r="26" fill="none" stroke="${TONE.red}" stroke-width="7" opacity="0.18"/>`,
+            dot(414, 136, 7, "red"),
+            txt(414, 94, "396.99", { fs: 19, fw: 700, mono: 1, tone: "red" }),
+            txt(414, 178, "counterexample", { fs: 13.5, fw: 600, tone: "red" }),
+          );
+          return out;
+        },
+        // Run every operation twice, and crash after every step: the fee fails both.
+        31: () => {
+          const ok = { mark: "check", r: 16 };
+          const bad = { mark: "cross", r: 16 };
+          return [
+            table(24, 64, 520, {
+              cols: [
+                { w: 1.25, bold: 1 },
+                { w: 1, align: "center" },
+                { w: 1, align: "center" },
+                { w: 1, align: "center" },
+              ],
+              head: ["", "deposit", "fee", "payout"],
+              rowH: 96,
+              rows: [
+                [{ v: "twice", fs: 19 }, ok, bad, ok],
+                [{ v: "crash", fs: 19 }, ok, bad, ok],
+              ],
+            }),
+            `<rect x="278" y="100" width="118" height="184" rx="10" fill="${TONE.red}" opacity="0.1"/>`,
+          ];
+        },
+        // The four parties of a card payment, and the fee each one keeps on the way.
+        32: () => [
+          card(24, 36, 170, 70, { tone: "blue", icon: "card", label: "Cardholder", fs: 15 }),
+          card(374, 36, 170, 70, { tone: "gray", icon: "shop", label: "Merchant", fs: 15 }),
+          arrow(200, 71, 366, 71, { kind: "msg", label: "100.00 EUR", mono: 1 }),
+          arrow(99, 112, 99, 198, { kind: "money" }),
+          card(24, 208, 150, 70, { tone: "teal", icon: "bank", label: "Issuer", fs: 15 }),
+          arrow(180, 243, 201, 243, { kind: "money" }),
+          card(209, 208, 150, 70, {
+            tone: "violet",
+            icon: "globe",
+            label: "Card\nnetwork",
+            fs: 14.5,
+          }),
+          arrow(365, 243, 386, 243, { kind: "money" }),
+          card(394, 208, 150, 70, { tone: "teal", icon: "building", label: "Acquirer", fs: 15 }),
+          arrow(469, 198, 469, 114, { kind: "money", label: "99.66", mono: 1, ldx: -34, ldy: 0 }),
+          ...[
+            [99, "0.20", "interchange"],
+            [284, "0.04", "scheme fee"],
+            [469, "0.10", "acquirer margin"],
+          ].flatMap(([x, fee, name]) => [
+            chip(x, 288, fee, { a: "middle", tone: "gold", fs: 14 }),
+            txt(x, 334, name, { fs: 12, muted: 1 }),
+          ]),
+        ],
+        // Six payments between three banks settle as two transfers.
+        33: () => [
+          chip(544, 268, "gross: 6 payments", { a: "end", tone: "gray", fs: 13.5 }),
+          card(24, 40, 150, 72, {
+            tone: "teal",
+            label: "Bank A",
+            fs: 16,
+            sub: "-50.00",
+            sfs: 14,
+            st: "red",
+            smono: 1,
+          }),
+          card(24, 248, 150, 72, {
+            tone: "teal",
+            label: "Bank B",
+            fs: 16,
+            sub: "-10.00",
+            sfs: 14,
+            st: "red",
+            smono: 1,
+          }),
+          card(394, 144, 150, 72, {
+            tone: "teal",
+            tint: 1,
+            label: "Bank C",
+            fs: 16,
+            sub: "+60.00",
+            sfs: 14,
+            st: "green",
+            smono: 1,
+          }),
+          arrow(180, 82, 386, 166, {
+            kind: "money",
+            w: 4,
+            label: "50.00",
+            mono: 1,
+            fs: 15,
+            ldy: -18,
+          }),
+          arrow(180, 278, 386, 194, {
+            kind: "money",
+            w: 4,
+            label: "10.00",
+            mono: 1,
+            fs: 15,
+            ldy: 20,
+          }),
+        ],
+        // Asks above, bids below, the spread between them.
+        34: () => {
+          const out = [
+            txt(24, 101, "asks", { a: "start", fs: 15, fw: 700, tone: "orange" }),
+            txt(24, 271, "bids", { a: "start", fs: 15, fw: 700, tone: "blue" }),
+            chip(284, 170, "spread 0.20", { a: "middle", tone: "gold", solid: 1 }),
+          ];
+          [
+            ["100.40", 10, 44, "orange"],
+            ["100.20", 8, 86, "orange"],
+            ["100.10", 5, 128, "orange"],
+            ["99.90", 4, 214, "blue"],
+            ["99.80", 6, 256, "blue"],
+            ["99.50", 10, 298, "blue"],
+          ].forEach(([price, size, y, tn]) => {
+            const rect = `x="176" y="${y}" width="${size * 34}" height="30" rx="7"`;
+            out.push(
+              txt(160, y + 15, price, { a: "end", fs: 16.5, fw: 600, mono: 1, tone: tn }),
+              `<rect ${rect} fill="${TONE[tn]}" opacity="0.22"/><rect ${rect} fill="none" stroke="${TONE[tn]}" stroke-width="2"/>`,
+              txt(190, y + 15.5, String(size), { a: "start", fs: 14, fw: 600, mono: 1 }),
+            );
+          });
+          return out;
+        },
+        // A longer branch replaces two blocks: the shallow deposit is gone, the deep one stays.
+        35: () => {
+          const block = (x, y, label, tn, o = {}) =>
+            card(x, y, 68, 58, { tone: tn, label, mono: 1, fs: 15, sfs: 12, smono: 1, ...o });
+          return [
+            chip(24, 88, "dep-b: 5 confirmations", { tone: "green", fs: 12.5 }),
+            line(
+              [
+                [92, 179],
+                [104, 179],
+              ],
+              { tone: "teal", w: 3 },
+            ),
+            line(
+              [
+                [172, 179],
+                [184, 179],
+              ],
+              { tone: "teal", w: 3 },
+            ),
+            line(
+              [
+                [254, 168],
+                [290, 102],
+              ],
+              { tone: "red", w: 2.5, dash: "5 6" },
+            ),
+            line(
+              [
+                [360, 95],
+                [372, 95],
+              ],
+              { tone: "red", w: 2.5, dash: "3 4" },
+            ),
+            line(
+              [
+                [254, 190],
+                [290, 256],
+              ],
+              { tone: "green", w: 3 },
+            ),
+            line(
+              [
+                [360, 263],
+                [372, 263],
+              ],
+              { tone: "green", w: 3 },
+            ),
+            line(
+              [
+                [440, 263],
+                [452, 263],
+              ],
+              { tone: "green", w: 3 },
+            ),
+            block(24, 150, "101", "teal", { sub: "dep-b", st: "green" }),
+            block(104, 150, "102", "teal"),
+            block(184, 150, "103", "teal"),
+            block(292, 66, "104", "red", { dash: 1, sub: "dep-a", st: "red" }),
+            block(372, 66, "105", "red", { dash: 1 }),
+            txt(456, 95, "reorg", { a: "start", fs: 15.5, fw: 700, tone: "red" }),
+            block(292, 234, "104'", "green"),
+            block(372, 234, "105'", "green"),
+            block(452, 234, "106'", "green", { tint: 1 }),
+            txt(24, 318, "a longer branch wins", { a: "start", fs: 13.5, muted: 1 }),
+          ];
+        },
+        // Every withdrawal passes one gate; the customer's state decides what comes out.
+        36: () => [
+          chip(24, 62, "verified", { mono: 0, tone: "blue" }),
+          chip(24, 162, "pending", { mono: 0, tone: "blue" }),
+          chip(24, 262, "restricted", { mono: 0, tone: "blue" }),
+          arrow(146, 77.5, 220, 77.5, { kind: "money" }),
+          arrow(146, 177.5, 220, 177.5, { kind: "money" }),
+          arrow(146, 277.5, 220, 277.5, { kind: "money" }),
+          card(230, 36, 108, 296, {
+            tone: "violet",
+            tint: 1,
+            icon: "shield",
+            side: 0,
+            is: 44,
+            label: "KYC\nsanctions\nrules",
+            fs: 15,
+          }),
+          arrow(346, 77.5, 396, 77.5, { kind: "ok" }),
+          chip(406, 62, "allow", { mono: 0, tone: "green" }),
+          arrow(484, 77.5, 540, 77.5, { kind: "money" }),
+          arrow(346, 177.5, 396, 177.5, { kind: "bad" }),
+          chip(406, 162, "block", { mono: 0, tone: "red" }),
+          arrow(346, 277.5, 396, 277.5, { tone: "orange" }),
+          chip(406, 262, "hold", { mono: 0, tone: "orange" }),
+          txt(476, 278, "case C-1", { a: "start", fs: 13, mono: 1, muted: 1 }),
+        ],
+        // The six steps of a crypto withdrawal, in order.
+        37: () => {
+          const steps = [
+            [1, "withdraw", "blue", 100, 110],
+            [2, "reserve", "orange", 284, 110],
+            [3, "screen", "violet", 468, 110],
+            [4, "broadcast", "gold", 468, 236],
+            [5, "wait for finality", "blue", 284, 236],
+            [6, "reconciliation", "teal", 100, 236],
+          ];
+          return [
+            arrow(134, 110, 248, 110, { kind: "plain" }),
+            arrow(318, 110, 432, 110, { kind: "plain" }),
+            arrow(468, 144, 468, 200, { kind: "plain" }),
+            arrow(434, 236, 320, 236, { kind: "plain" }),
+            arrow(250, 236, 136, 236, { kind: "plain" }),
+            ...steps.flatMap(([n, label, tn, x, y]) => [
+              `<circle cx="${x}" cy="${y}" r="28" fill="${TONE[tn]}"/>`,
+              txt(x, y + 1, String(n), { fs: 23, fw: 800, dark: 1 }),
+              txt(x, y < 200 ? y - 50 : y + 52, label, { fs: 15, fw: 600 }),
+            ]),
+          ];
+        },
+        // The webhook is a hint: ask the API, credit once, reconcile with the payout.
+        38: () => [
+          lifeline(89, 78, 346),
+          lifeline(284, 78, 346),
+          lifeline(479, 78, 346),
+          card(24, 30, 130, 48, { tone: "gray", icon: "building", label: "PSP", fs: 16 }),
+          card(214, 30, 140, 48, { tone: "violet", icon: "server", label: "Our API", fs: 15 }),
+          card(414, 30, 130, 48, { tone: "teal", icon: "ledger", label: "Ledger", fs: 16 }),
+          arrow(97, 126, 276, 126, { kind: "msg", label: "webhook: captured (a hint)", fs: 12.5 }),
+          arrow(276, 186, 97, 186, {
+            kind: "msg",
+            label: "GET pi_1 → captured",
+            fs: 12.5,
+            mono: 1,
+          }),
+          arrow(292, 246, 471, 246, { kind: "money", label: "credit via receivable", fs: 12.5 }),
+          arrow(471, 310, 97, 310, { tone: "teal", label: "batch T+2 → reconcile", fs: 12.5 }),
+        ],
+        // One conversion, two books: each currency sums to zero by itself.
+        39: () => [
+          region(24, 44, 236, 282, { tone: "teal", label: "EUR" }),
+          region(308, 44, 236, 282, { tone: "teal", label: "USDC" }),
+          card(38, 130, 92, 70, { tone: "blue", label: "user", fs: 15 }),
+          arrow(136, 172, 196, 172, { kind: "money" }),
+          txt(167, 154, "1000.00", { fs: 12, fw: 600, mono: 1, tone: "gold" }),
+          arrow(370, 152, 406, 120, { kind: "money" }),
+          arrow(370, 178, 406, 220, { kind: "money" }),
+          card(204, 130, 160, 70, {
+            tone: "violet",
+            tint: 1,
+            label: "fx-conversion",
+            mono: 1,
+            fs: 14,
+            sub: "÷ 0.92340",
+            sfs: 13,
+            smono: 1,
+          }),
+          card(414, 76, 118, 66, {
+            tone: "blue",
+            label: "user",
+            fs: 15,
+            sub: "1082.954299",
+            sfs: 12,
+            smono: 1,
+            st: "gold",
+          }),
+          card(414, 196, 118, 66, {
+            tone: "gold",
+            label: "spread",
+            fs: 15,
+            sub: "1.350390",
+            sfs: 12,
+            smono: 1,
+            st: "gold",
+          }),
+          chip(142, 280, "EUR Σ 0", { a: "middle", tone: "green", fs: 14 }),
+          chip(426, 280, "USDC Σ 0", { a: "middle", tone: "green", fs: 14 }),
+        ],
+        // The architecture of a wallet transfer: key, ledger and outbox in one commit.
+        40: () => [
+          card(24, 36, 122, 60, { tone: "blue", icon: "phone", label: "Client", fs: 15 }),
+          arrow(152, 66, 176, 66, { kind: "msg" }),
+          card(184, 36, 180, 60, { tone: "violet", icon: "server", label: "Transfer API", fs: 15 }),
+          arrow(274, 102, 274, 124, { kind: "plain" }),
+          region(24, 132, 388, 124, { tone: "teal", label: "ONE DB TRANSACTION" }),
+          card(40, 168, 110, 72, {
+            tone: "violet",
+            icon: "key",
+            side: 0,
+            is: 24,
+            label: "key store",
+            fs: 14,
+          }),
+          card(162, 168, 110, 72, {
+            tone: "teal",
+            icon: "ledger",
+            side: 0,
+            is: 24,
+            label: "ledger",
+            fs: 14,
+          }),
+          card(284, 168, 112, 72, {
+            tone: "orange",
+            icon: "queue",
+            side: 0,
+            is: 24,
+            label: "outbox",
+            fs: 14,
+          }),
+          arrow(402, 204, 428, 204, { kind: "msg" }),
+          card(436, 168, 108, 72, {
+            tone: "blue",
+            icon: "mail",
+            side: 0,
+            is: 24,
+            label: "consumers",
+            fs: 14,
+          }),
+          arrow(217, 246, 217, 284, { tone: "teal", both: 1 }),
+          txt(232, 272, "reconcile", { a: "start", fs: 13, fw: 600, tone: "teal" }),
+          card(120, 292, 194, 52, { tone: "gray", icon: "bank", label: "bank statement", fs: 14 }),
+        ],
+      };
+      window.GLYPHS = GLYPHS;
+
+      const defs =
+        Object.entries(TONE)
+          .map(
+            ([key, colour]) =>
+              `<marker id="ah-${key}" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="4.6" markerHeight="4.6"` +
+              ` orient="auto-start-reverse"><path d="M1 1.500 10.500 6 1 10.500z" fill="${colour}" stroke="${colour}" stroke-width="1.500" stroke-linejoin="round"/></marker>`,
+          )
+          .join("") +
+        '<pattern id="hatch" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+        '<path d="M0 0V12" stroke="#e9edf5" stroke-opacity="0.28" stroke-width="4.500"/></pattern>';
+
+      /* ---------- The frame ---------- */
+
+      const $ = (id) => document.getElementById(id);
+      const MYANMAR = /[က-႟ꧠ-꧿ꩠ-ꩿ]+/g;
+      // Burmese shapes only when one font holds the whole run, so every Myanmar run is
+      // wrapped in .mm.
+      const withMyanmar = (text) =>
+        esc(text).replace(MYANMAR, (run) => `<span class="mm">${run}</span>`);
+      const accentOf = (lesson) => TONE[PARTS[lesson.part - 1].tone];
+
+      // The route: 40 stops in nine groups, one group per part.
+      const STOP_STEP = 18;
+      const PART_GAP = 16;
+      const stopX = LESSONS.map((lesson, i) => 10 + i * STOP_STEP + (lesson.part - 1) * PART_GAP);
+
+      function renderRoute(current) {
+        const accent = accentOf(current);
+        const inPart = LESSONS.filter((lesson) => lesson.part === current.part);
+        const from = stopX[inPart[0].number - 1];
+        const to = stopX[inPart[inPart.length - 1].number - 1];
+        const out = [
+          `<line x1="${stopX[0]}" y1="22" x2="${n1(stopX[stopX.length - 1])}" y2="22" stroke="#5a6478" stroke-width="2.5" stroke-linecap="round"/>`,
+          `<line x1="${n1(from)}" y1="22" x2="${n1(to)}" y2="22" stroke="${accent}" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>`,
+        ];
+        LESSONS.forEach((lesson, i) => {
+          const x = n1(stopX[i]);
+          if (lesson.number === current.number)
+            out.push(
+              `<circle cx="${x}" cy="22" r="14" fill="none" stroke="${accent}" stroke-width="2.5" opacity="0.5"/>`,
+              `<circle cx="${x}" cy="22" r="8.5" fill="${accent}" data-lesson="${lesson.number}"/>`,
+            );
+          else
+            out.push(
+              `<circle cx="${x}" cy="22" r="5" fill="${lesson.number < current.number ? INK : "#5a6478"}" data-lesson="${lesson.number}"/>`,
+            );
+        });
+        $("route").innerHTML = out.join("");
+      }
+
+      const TITLE_MIN = 38;
+      const REAL_MIN = 15;
+
+      // The widest title that fits the column and the room under the number.
+      function fitTitle() {
+        const title = $("title");
+        const room = 448 - $("num").parentElement.offsetHeight - $("part").offsetHeight - 30;
+        let size = 70;
+        const tooBig = () =>
+          title.offsetHeight > room ||
+          [...title.children].some((lineElement) => lineElement.offsetWidth > 548);
+        title.style.fontSize = `${size}px`;
+        while (size > TITLE_MIN && tooBig()) {
+          size -= 2;
+          title.style.fontSize = `${size}px`;
+        }
+      }
+
+      // The real line at the largest size that keeps it on one line.
+      function fitReal() {
+        const real = $("real");
+        let size = 21;
+        real.style.fontSize = `${size}px`;
+        while (size > REAL_MIN && real.scrollWidth > real.clientWidth) {
+          size -= 0.5;
+          real.style.fontSize = `${size}px`;
+        }
+      }
+
+      // A diagram is drawn where its numbers are easy to write, then set in the middle of the
+      // room above the real line.
+      function centerArt() {
+        const art = $("art");
+        const box = art.getBBox();
+        const dx = Math.round(284 - (box.x + box.width / 2));
+        const dy = Math.round(188 - (box.y + box.height / 2));
+        art.setAttribute("transform", `translate(${dx} ${dy})`);
+      }
+
+      let shown = 1;
+      window.setThumb = ({ lesson }) => {
+        const current = LESSONS.find((entry) => entry.number === lesson);
+        if (!current) throw new Error(`no lesson ${lesson}`);
+        shown = lesson;
+        $("thumb").style.setProperty("--accent", accentOf(current));
+        $("num").textContent = String(current.number).padStart(2, "0");
+        $("part").textContent = `Part ${current.part} · ${PARTS[current.part - 1].name}`;
+        $("title").innerHTML = current.lines
+          .map((text) => `<span class="line">${withMyanmar(text)}</span>`)
+          .join("");
+        $("real").textContent = current.real;
+        $("glyph").innerHTML =
+          `<defs>${defs}</defs><g id="art">${[GLYPHS[current.number]()].flat(Infinity).join("")}</g>`;
+        centerArt();
+        renderRoute(current);
+        fitTitle();
+        fitReal();
+      };
+
+      // What is wrong with the card on screen: a shape or a word outside the board's safe
+      // area, a label wider than the shape it sits in, two labels on top of each other, a
+      // title or a real line that does not fit. render.ts fails on any.
+      window.cardProblems = () => {
+        const svg = $("glyph");
+        const frame = svg.getBoundingClientRect();
+        const problems = [];
+        const texts = [];
+        for (const node of svg.querySelectorAll(
+          "rect, circle, ellipse, path, line, polyline, polygon, text",
+        )) {
+          if (node.closest("defs")) continue;
+          const b = node.getBoundingClientRect();
+          const x = b.left - frame.left;
+          const y = b.top - frame.top;
+          const name = node.tagName === "text" ? `"${node.textContent}"` : node.tagName;
+          if (x < 15 || y < 15 || x + b.width > 553 || y + b.height > 362)
+            problems.push(
+              `${name} leaves the safe area (${Math.round(x)},${Math.round(y)} ${Math.round(b.width)}×${Math.round(b.height)})`,
+            );
+          if (node.tagName !== "text") continue;
+          const maxw = Number(node.getAttribute("data-maxw"));
+          if (maxw && b.width > maxw)
+            problems.push(`${name} is ${Math.round(b.width)} wide in a ${maxw} space`);
+          // The ink of a line of text is shorter than its box.
+          const inset = b.height * 0.18;
+          texts.push({ name, l: x, r: x + b.width, t: y + inset, b: y + b.height - inset });
+        }
+        texts.forEach((a, i) =>
+          texts.slice(i + 1).forEach((b) => {
+            const w = Math.min(a.r, b.r) - Math.max(a.l, b.l);
+            const h = Math.min(a.b, b.b) - Math.max(a.t, b.t);
+            if (w > 2 && h > 2) problems.push(`${a.name} overlaps ${b.name}`);
+          }),
+        );
+
+        const title = $("title");
+        if (parseFloat(title.style.fontSize) <= TITLE_MIN)
+          problems.push("the title is at its smallest size");
+        for (const lineElement of title.children)
+          if (lineElement.offsetWidth > 548)
+            problems.push(`the title line "${lineElement.textContent}" is wider than the column`);
+        if ($("part").offsetWidth > 548) problems.push("the part line is wider than the column");
+        if ($("part").getBoundingClientRect().top < $("num").getBoundingClientRect().bottom + 12)
+          problems.push("the part and title run into the number");
+        const real = $("real");
+        if (real.scrollWidth > real.clientWidth)
+          problems.push(`the real line "${real.textContent}" does not fit its strip`);
+        return problems;
+      };
+
+      // Every word and number the diagram shows, for render.ts to look up in the lesson.
+      window.cardLabels = () =>
+        [...$("glyph").querySelectorAll("text:not([data-free])")]
+          .map((node) => node.textContent)
+          .filter((text) => /[\p{L}\p{N}]/u.test(text));
+
+      $("route").addEventListener("click", (event) => {
+        const lesson = Number(event.target.getAttribute("data-lesson"));
+        if (lesson) window.setThumb({ lesson });
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowRight" && shown < LESSONS.length)
+          window.setThumb({ lesson: shown + 1 });
+        if (event.key === "ArrowLeft" && shown > 1) window.setThumb({ lesson: shown - 1 });
+      });
+
+      window.setThumb({ lesson: 1 });
+      window.thumbReady = Promise.all(
+        [
+          "800 36px Inter",
+          "700 36px Inter",
+          "600 36px Inter",
+          "500 36px Inter",
+          '700 36px "JetBrains Mono"',
+          '600 36px "JetBrains Mono"',
+          '500 36px "JetBrains Mono"',
+          '700 36px "Noto Sans Myanmar"',
+          '600 36px "Noto Sans Myanmar"',
+        ].map((face) => document.fonts.load(face, "Aa မြန်မာ").catch(() => [])),
+      )
+        .then(() => document.fonts.ready)
+        .then(() => window.setThumb({ lesson: shown }));
+    </script>
+  </body>
+</html>

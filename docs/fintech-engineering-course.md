@@ -168,7 +168,7 @@ These were decided while building the course. They are decisions, not open quest
 - **Not advice.** Nothing in the course is legal, compliance or financial advice; legal statements
   are limited to what the fact sheets support.
 
-Not done: the studio renders with the Burmese voice (the owner's step), thumbnails, the
+Not done: the studio renders with the Burmese voice (the owner's step), the
 `fintech-engineering` playlist, publishing, and any lexicon respelling (wait for a render).
 
 ## Rendering
@@ -180,6 +180,34 @@ animations and a moving dot on some money arrows; they play in the lesson player
 appears, and were checked in Chrome inside the same sandbox and content security policy the slide
 frame uses. What only a render can show is still open: the pacing against the real voice, and how
 the voice says the English terms.
+
+## Thumbnails
+
+One 1280×720 PNG per lesson in `docs/fintech-engineering-thumbnails/`, named `NN-<topic>.png` (the
+end of the lesson's slug, which is how the studio workflow pairs a thumbnail with its lesson). All
+40 are drawn by one page, `docs/fintech-engineering-thumbnail.html`, in the lessons' own figure
+style: the dark ground with the dot grid, toned cards, and the three principle chips. A thumbnail
+shows the lesson number, its part (the number and the glow take the part's tone), the Burmese
+title, one small diagram drawn for the lesson, and under it one real line of the lesson (a line
+its program prints, a line of its code, or a line one of its figures shows).
+
+```bash
+bun docs/fintech-engineering-thumbnails/render.ts          # render all 40
+bun docs/fintech-engineering-thumbnails/render.ts 3 18     # just lessons 3 and 18
+bun docs/fintech-engineering-thumbnails/render.ts --check  # check every card, write nothing
+```
+
+It needs Google Chrome and a network connection (the fonts are Inter, JetBrains Mono and Noto Sans
+Myanmar from Google Fonts). To change a card, edit its entry in `LESSONS` (title lines, real line)
+or its diagram in `GLYPHS` in the page, open the page in a browser to look (← / → or the route
+under the frame changes the lesson), then render and commit the PNG.
+
+The check fails when a card's title is not the lesson's title in its YAML, when the real line or
+any word or number in a diagram is not in the lesson's YAML, when a label is wider than its box,
+leaves the board or sits on another label, when the title or the real line does not fit, when a
+part's name or a lesson's part differs from this guide, and when a lesson has no PNG or a PNG has
+no lesson. After a lesson's title changes, change the card's title lines and render that lesson
+again.
 
 ## Pronunciation candidates
 
